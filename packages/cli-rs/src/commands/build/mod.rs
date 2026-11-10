@@ -201,6 +201,11 @@ fn print_playbook(out: &mut Out, playbook: &Value, cwd: &Path) {
 
 /// The `build` handler.
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
+    // Read-only: list each folder once (as the JS command's withListingCache).
+    crate::discovery::listing_cache::with_listing_cache(|| run_uncached(inv, out))
+}
+
+fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
     let cwd = inv.cwd.clone();
     let json = inv.json();
     let kind = inv.opt_str("type");

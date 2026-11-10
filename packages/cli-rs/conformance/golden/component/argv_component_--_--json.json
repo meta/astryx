@@ -1,0 +1,13 @@
+{
+ "id": "argv_component_--_--json",
+ "args": [
+  "component",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"--json\"\n",
+ "exit": 1,
+ "files": []
+}

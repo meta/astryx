@@ -3,6 +3,10 @@
 
 pub mod api;
 pub mod authoring;
+pub mod add;
+pub mod generated;
+pub mod library;
+pub mod writer;
 pub mod ranking;
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out, Suggestion};
@@ -242,7 +246,12 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
 
 /// The set an authoring subcommand edits: its own `--set`, else the parent's.
 fn set_of(inv: &Invocation) -> Option<String> {
-    inv.opt_str("set").map(String::from)
+    // `experimental icon` declares --set too, so a --set written after the
+    // subcommand's name lands on the parent.
+    inv.opt_str("set").map(String::from).or_else(|| match inv.parent_opt("experimental icon", "set") {
+        Some(crate::cli::command::OptValue::Str(s)) => Some(s.clone()),
+        _ => None,
+    })
 }
 
 fn passed(v: Option<&str>) -> bool {
@@ -252,7 +261,7 @@ fn passed(v: Option<&str>) -> bool {
 pub fn use_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
     let cwd = cwd_of(inv);
     let selector = inv.arg(0).unwrap_or("");
-    let r = (|| -> Result<(), IconError> {
+    let r = (|| -> Result<Value, IconError> {
         if selector.trim().is_empty() {
             return Err(ierr(
                 "Name the icon set to use",
@@ -261,15 +270,86 @@ pub fn use_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
             ));
         }
         api::refuse_outside_project(&cwd, "experimental icon use", "the app project")?;
-        let sets = api::load_icon_sets(&cwd);
+        let sets = api::load_icon_sets(&cwd)?;
         let named = api::sets_named(&sets.sets, selector);
         if named.is_empty() {
             return Err(api::unusable_set(&sets.sets, &sets.withdrawn, selector));
         }
-        Err(ierr("experimental icon use is not cloned yet", vec![], "ERR_UNKNOWN"))
+        if named.len() > 1 {
+            return Err(ierr(
+                format!("Two installed packages ship an icon set named \"{selector}\"; name it with its package."),
+                named.iter().map(|s| Suggestion::new(api::icon_set_key(s), format!("the set in {}", s.package))).collect(),
+                "ERR_INVALID_ARGUMENT",
+            ));
+        }
+        let project_dir = {
+            let mut dir = crate::discovery::nodepath::resolve1(&cwd);
+            let start = dir.clone();
+            let mut found = None;
+            for _ in 0..50 {
+                if crate::discovery::nodepath::exists(&crate::discovery::nodepath::join2(&dir, "package.json")) {
+                    found = Some(dir.clone());
+                    break;
+                }
+                let parent = crate::discovery::nodepath::dirname(&dir);
+                if parent == dir {
+                    break;
+                }
+                dir = parent;
+            }
+            found.unwrap_or(start)
+        };
+        let written = crate::discovery::config_writer::set_config_string(&project_dir, "experimental.iconSet", selector).map_err(|e| {
+            let code = match e.code.as_deref() {
+                Some(c @ ("ERR_CODEMOD_PROTECTED" | "ERR_CODEMOD_PROTECTION_SOURCE")) => c.to_string(),
+                _ => "ERR_WRITE_FAILED".to_string(),
+            };
+            ierr(e.message, vec![], &code)
+        })?;
+        let warning = crate::discovery::nodepath::read_json(&crate::discovery::nodepath::join2(&project_dir, "package.json"))
+            .and_then(|pkg| crate::discovery::cli_requirement::project_icon_set_cli_warning(&pkg));
+        let mut d = Map::new();
+        d.insert("iconSet".into(), Value::String(selector.to_string()));
+        d.insert("set".into(), Value::String(api::icon_set_key(named[0])));
+        d.insert("config".into(), Value::String(crate::discovery::nodepath::relative(&project_dir, &written.file)));
+        d.insert("created".into(), Value::Bool(written.created));
+        d.insert("previous".into(), written.previous.clone().map(Value::String).unwrap_or(Value::Null));
+        d.insert("changed".into(), Value::Bool(written.changed));
+        if let Some(w) = warning {
+            d.insert("warning".into(), Value::String(w));
+        }
+        Ok(Value::Object(d))
     })();
     match r {
-        Ok(()) => Ok(()),
+        Ok(d) => {
+            if inv.json() {
+                out.json_out("icon.use", None, d, None);
+                return Ok(());
+            }
+            let st = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let changed = d["changed"] == Value::Bool(true);
+            let mut blocks = vec![text(&if changed {
+                format!(
+                    "[ok] experimental.iconSet is now \"{}\" ({}) in {}{}.",
+                    st("iconSet"),
+                    st("set"),
+                    st("config"),
+                    if d["created"] == Value::Bool(true) { ", created" } else { "" }
+                )
+            } else {
+                format!("[ok] experimental.iconSet already names \"{}\" in {}.", st("iconSet"), st("config"))
+            })];
+            if let Some(p) = d.get("previous").and_then(|v| v.as_str()).filter(|p| !p.is_empty()) {
+                if changed {
+                    blocks.push(text(&format!("It was \"{p}\".")));
+                }
+            }
+            if let Some(w) = d.get("warning").and_then(|v| v.as_str()) {
+                blocks.push(text(&format!("[warn] {w}")));
+            }
+            out.emit(&blocks);
+            Ok(())
+        }
         Err(e) => fail(out, e),
     }
 }
@@ -280,7 +360,7 @@ pub fn map_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
     let icon = inv.arg(1);
     let remove = inv.flag("remove");
     let pairs = inv.opt_str("pairs");
-    let r = (|| -> Result<(), IconError> {
+    let r = (|| -> Result<Value, IconError> {
         api::refuse_outside_project(&cwd, "experimental icon map", "the icon-set package")?;
         refuse_ignored_pairs(
             &[
@@ -291,9 +371,8 @@ pub fn map_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
             ],
             &[("--pairs", "a definition"), ("--pairs", "an icon"), ("--pairs", "--remove"), ("--remove", "an icon")],
         )?;
-        if pairs.is_some() {
-            api::find_local_icon_set(&cwd, set_of(inv).as_deref())?;
-            return Ok(());
+        if let Some(p) = pairs {
+            return writer::icon_map_many(&cwd, set_of(inv).as_deref(), p);
         }
         if definition.is_none_or(|d| d.trim().is_empty()) {
             return Err(ierr(
@@ -305,10 +384,60 @@ pub fn map_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
         if !remove && icon.is_none_or(|d| d.trim().is_empty()) {
             return Err(ierr("Name the icon id to map it to, or pass --remove", vec![], "ERR_MISSING_ARGUMENT"));
         }
-        api::find_local_icon_set(&cwd, set_of(inv).as_deref())
+        writer::icon_map(&cwd, set_of(inv).as_deref(), definition.unwrap(), icon, remove)
     })();
     match r {
-        Ok(()) => Ok(()),
+        Ok(d) => {
+            let many = d.get("entries").is_some();
+            if inv.json() {
+                out.json_out(if many { "icon.mapMany" } else { "icon.map" }, None, d, None);
+                return Ok(());
+            }
+            let st = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let changed = d.get("changed").and_then(|v| v.as_bool()) == Some(true);
+            if many {
+                let entries = d["entries"].as_array().cloned().unwrap_or_default();
+                let n = entries.iter().filter(|e| e["changed"] == Value::Bool(true)).count();
+                let lines: Vec<String> = entries
+                    .iter()
+                    .map(|e| {
+                        let icon = e["icon"].as_str().unwrap_or("");
+                        let was = match e["previous"].as_str() {
+                            Some(p) if !p.is_empty() && p != icon => format!(" (was \"{p}\")"),
+                            _ => String::new(),
+                        };
+                        format!("{} = \"{icon}\"{was}", e["definition"].as_str().unwrap_or(""))
+                    })
+                    .collect();
+                out.emit(&[
+                    crate::cli::format::text(&format!("[ok] {n} of {} map entries changed in {}.", entries.len(), st("file"))),
+                    crate::cli::format::list(&lines),
+                ]);
+            } else {
+                let def = st("definition");
+                let file = st("file");
+                let prev = d.get("previous").and_then(|v| v.as_str()).map(String::from);
+                let line = match d.get("icon").and_then(|v| v.as_str()) {
+                    None => {
+                        if changed {
+                            format!("[ok] Removed map.{def} (was \"{}\") from {file}.", prev.unwrap_or_default())
+                        } else {
+                            format!("[ok] {file} has no map.{def}.")
+                        }
+                    }
+                    Some(icon) => {
+                        if changed {
+                            let was = prev.filter(|p| !p.is_empty()).map(|p| format!(" (was \"{p}\")")).unwrap_or_default();
+                            format!("[ok] map.{def} = \"{icon}\" in {file}{was}.")
+                        } else {
+                            format!("[ok] map.{def} is already \"{icon}\".")
+                        }
+                    }
+                };
+                out.emit(&[crate::cli::format::text(&line)]);
+            }
+            Ok(())
+        }
         Err(e) => fail(out, e),
     }
 }
@@ -344,94 +473,93 @@ fn is_identifier(s: &str) -> bool {
 
 pub fn add_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
     let cwd = cwd_of(inv);
-    let export_name = inv.arg(0);
-    let from = inv.opt_str("from");
-    let given_definition = inv.opt_str("definition");
-    let new_definition = inv.opt_str("newDefinition").map(definition_name_from_input);
-    let description = inv.opt_str("description");
-    // `--words` splits on commas, so `--words ""` is `['']`, which is passed.
-    let words = inv.opt_str("words");
-    let use_default = inv.flag("default");
-    let variant = inv.opt_str("variant");
-    let given_id = inv.opt_str("id");
-    let all = inv.flag("all");
-    let r = (|| -> Result<(), IconError> {
-        api::refuse_outside_project(&cwd, "experimental icon add", "the icon-set package")?;
-        refuse_ignored_pairs(
-            &[
-                ("an export name", passed(export_name)),
-                ("--definition", passed(given_definition)),
-                ("--new-definition", passed(new_definition.as_deref())),
-                ("--description", passed(description)),
-                ("--words", words.is_some()),
-                ("--default", use_default),
-                ("--id", passed(given_id)),
-                ("--all", all),
-            ],
-            &[
-                ("--all", "an export name"),
-                ("--all", "--definition"),
-                ("--all", "--new-definition"),
-                ("--all", "--description"),
-                ("--all", "--words"),
-                ("--all", "--default"),
-                ("--all", "--id"),
-                ("--definition", "--new-definition"),
-                ("--definition", "--description"),
-                ("--definition", "--words"),
-            ],
-        )?;
-        for (flag, given) in [("--description", passed(description)), ("--words", words.is_some())] {
-            if given && !passed(new_definition.as_deref()) {
-                return Err(ierr(
-                    format!("{flag} describes a new definition, so it needs --new-definition"),
-                    vec![Suggestion::new(
-                        "--new-definition <name> --description '<what it is for>' --words a,b",
-                        "add your own definition",
-                    )],
-                    "ERR_INVALID_OPTION",
-                ));
-            }
-        }
-        if all {
-            if variant.is_none_or(|v| v.is_empty()) {
-                return Err(ierr(
-                    "--all adds one variant for every icon: pass --variant with the variant, such as solid.",
-                    vec![],
-                    "ERR_MISSING_ARGUMENT",
-                ));
-            }
-            if from.is_none_or(|f| f.trim().is_empty()) {
-                return Err(ierr(
-                    "Pass --from with the module that exports the variant, such as @heroicons/react/24/solid.",
-                    vec![],
-                    "ERR_MISSING_ARGUMENT",
-                ));
-            }
-            return api::find_local_icon_set(&cwd, set_of(inv).as_deref());
-        }
-        if !export_name.is_some_and(is_identifier) {
-            return Err(ierr(
-                format!(
-                    "Name the icon's export, such as TrashIcon; received \"{}\".",
-                    export_name.unwrap_or("undefined")
-                ),
-                vec![],
-                "ERR_INVALID_ARGUMENT",
-            ));
-        }
-        if from.is_none_or(|f| f.trim().is_empty()) {
-            return Err(ierr(
-                "Pass --from with the module the icon is exported from: a package, a package subpath, or a relative path in this package.",
-                vec![],
-                "ERR_MISSING_ARGUMENT",
-            ));
-        }
-        api::find_local_icon_set(&cwd, set_of(inv).as_deref())
-    })();
-    match r {
-        Ok(()) => Ok(()),
+    let selector = set_of(inv);
+    let o = add::AddOptions {
+        from: inv.opt_str("from"),
+        selector: selector.as_deref(),
+        definition: inv.opt_str("definition"),
+        new_definition: inv.opt_str("newDefinition"),
+        description: inv.opt_str("description"),
+        words: inv.opt_str("words").map(|w| w.split(',').map(String::from).collect()),
+        use_default: inv.flag("default"),
+        variant: inv.opt_str("variant"),
+        id: inv.opt_str("id"),
+        all: inv.flag("all"),
+    };
+    match add::icon_add(&cwd, inv.arg(0), &o) {
         Err(e) => fail(out, e),
+        Ok(result) => {
+            let kind = result["type"].as_str().unwrap_or("").to_string();
+            let data = result["data"].clone();
+            if inv.json() {
+                out.json_out(&kind, None, data, None);
+                return Ok(());
+            }
+            let st = |k: &str| data.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let strs = |k: &str| -> Vec<String> {
+                data.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+            };
+            if kind == "icon.definitionMatches" {
+                let cli = cli_invocation(&inv.cwd);
+                let matches = data["matches"].as_array().cloned().unwrap_or_default();
+                let mut blocks = vec![section(&format!("Icon definitions for {} ({})", st("export"), matches.len()), None)];
+                if matches.is_empty() {
+                    blocks.push(text("No icon definition fits it."));
+                } else {
+                    let rows: Vec<Fields> = matches
+                        .iter()
+                        .map(|m| {
+                            let mut f: Fields = vec![];
+                            for k in ["name", "source", "score", "reason", "description", "command"] {
+                                let v = &m[k];
+                                let sv = match v {
+                                    Value::String(x) if k == "command" => format_cli_command_at(&inv.cwd, x),
+                                    Value::String(x) => x.clone(),
+                                    Value::Null => continue,
+                                    other => crate::json::stringify(other, 0),
+                                };
+                                f.push((k.to_string(), Field::Str(sv)));
+                            }
+                            f
+                        })
+                        .collect();
+                    blocks.push(records(&rows));
+                }
+                if let Some(nd) = data.get("newDefinition").and_then(|v| v.as_str()) {
+                    blocks.push(text(&format!("None fits well? Add your own: {}", format_cli_command_at(&inv.cwd, nd))));
+                }
+                if let Some(v) = data.get("variant").and_then(|v| v.as_str()) {
+                    blocks.push(text(&format!("The set already has this glyph in another look. Add this one as its variant: {}", format_cli_command_at(&inv.cwd, v))));
+                }
+                blocks.push(text(&format!("All icon definitions: {cli} docs cli/experimental/icon-definitions")));
+                out.emit(&blocks);
+                return Ok(());
+            }
+            let icon = &data["icon"];
+            let changed = data["changed"] == Value::Bool(true);
+            let def = data.get("definition").and_then(|v| v.as_str());
+            let id = icon["id"].as_str().unwrap_or("");
+            let ex = icon["export"].as_str().unwrap_or("");
+            let line = if changed {
+                format!(
+                    "[ok] Added {ex} as \"{id}\"{}{}.",
+                    data.get("variant").and_then(|v| v.as_str()).map(|v| format!(" (variant {v})")).unwrap_or_default(),
+                    def.map(|d| format!(", map.{d} = \"{id}\"")).unwrap_or_default()
+                )
+            } else {
+                format!("[ok] {ex} is already \"{id}\"{}.", def.map(|d| format!(" and map.{d} names it")).unwrap_or_default())
+            };
+            let mut blocks = vec![text(&line)];
+            let files = strs("files");
+            if !files.is_empty() {
+                blocks.push(list(&files));
+            }
+            if let Some(n) = data.get("note").and_then(|v| v.as_str()) {
+                blocks.push(text(&format!("[next] {n}")));
+            }
+            out.emit(&blocks);
+            Ok(())
+        }
     }
 }
 
@@ -626,12 +754,28 @@ fn print_new(out: &mut Out, what: &str, data: &Value) {
 
 pub fn new_definition_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
     let cwd = cwd_of(inv);
-    let r = (|| -> Result<(), IconError> {
+    let words: Option<Vec<String>> = inv.opt_str("words").map(|w| w.split(',').map(String::from).collect());
+    let r = (|| -> Result<Value, IconError> {
         api::refuse_outside_project(&cwd, "experimental icon new-definition", "the icon-set package")?;
-        api::find_local_icon_set(&cwd, set_of(inv).as_deref())
+        writer::add_icon_definition(
+            &cwd,
+            set_of(inv).as_deref(),
+            inv.arg(0).unwrap_or(""),
+            inv.opt_str("description"),
+            words.as_deref(),
+            inv.opt_str("icon"),
+            inv.flag("dryRun"),
+        )
     })();
     match r {
-        Ok(()) => Ok(()),
+        Ok(data) => {
+            if inv.json() {
+                out.json_out("icon.newDefinition", None, data, None);
+            } else {
+                print_new(out, "icon definition", &data);
+            }
+            Ok(())
+        }
         Err(e) => fail(out, e),
     }
 }

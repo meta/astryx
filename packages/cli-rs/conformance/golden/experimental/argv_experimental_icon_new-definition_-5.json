@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_new-definition_-5",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

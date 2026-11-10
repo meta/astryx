@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_fresh_map_empty",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "close",
+  "x-mark"
+ ],
+ "fixture": "iconfresh",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"outline\" has no icon \"x-mark\". Name an icon by its id, its export name, or another name its library exports it as; a word it carries is not its name.\n",
+ "exit": 1,
+ "files": []
+}

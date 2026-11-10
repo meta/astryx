@@ -4,6 +4,7 @@
 //! calls these for `integration check`.
 
 pub mod examples;
+pub mod names_check;
 pub mod public_imports;
 pub mod validate;
 
@@ -483,8 +484,7 @@ pub fn check_response_blocks(response: &Value, seen: Option<&mut std::collection
 
 /// `--built` goes with `doctor` alone.
 fn refuse_built(inv: &Invocation, out: &mut Out) -> Option<CmdResult> {
-    let at = inv.argv.iter().position(|a| a == "integration").unwrap_or(inv.argv.len());
-    let given = inv.opt_str("built").is_some() || inv.argv[..at].iter().any(|a| a == "--built" || a.starts_with("--built="));
+    let given = matches!(inv.parent_opt("doctor", "built"), Some(v) if !matches!(v, crate::cli::command::OptValue::Bool(false)));
     if given {
         Some(out.cli_error(
             "`--built` checks a finished build and goes with `doctor` alone, not with a `doctor integration` check",
@@ -505,7 +505,7 @@ pub fn run_validate(inv: &Invocation, out: &mut Out) -> CmdResult {
         return r;
     }
     let cwd = inv.cwd.to_string_lossy().into_owned();
-    let response = validate::validate_integration(inv.arg(0), &cwd);
+    let response = validate::validate_integration(inv.arg(0).filter(|p| !p.is_empty()), &cwd);
     let data = response.get("data").cloned().unwrap_or(Value::Null);
     if inv.json() {
         emit_response(out, &response);
@@ -534,9 +534,9 @@ fn run_authoring(inv: &Invocation, out: &mut Out, kind: &str) -> CmdResult {
     }
     let cwd = inv.cwd.to_string_lossy().into_owned();
     let response = match kind {
-        "templates" => validate::template_conflicts(inv.arg(0), &cwd),
-        "components" => validate::component_conflicts(inv.arg(0), &cwd),
-        _ => validate::doc_conflicts(inv.arg(0), &cwd),
+        "templates" => validate::template_conflicts(inv.arg(0).filter(|p| !p.is_empty()), &cwd),
+        "components" => validate::component_conflicts(inv.arg(0).filter(|p| !p.is_empty()), &cwd),
+        _ => validate::doc_conflicts(inv.arg(0).filter(|p| !p.is_empty()), &cwd),
     };
     let data = response.get("data").cloned().unwrap_or(Value::Null);
     if inv.json() {

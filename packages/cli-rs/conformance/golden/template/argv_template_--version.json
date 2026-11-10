@@ -1,0 +1,12 @@
+{
+ "id": "argv_template_--version",
+ "args": [
+  "template",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

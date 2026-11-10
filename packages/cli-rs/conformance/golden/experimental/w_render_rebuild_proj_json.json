@@ -1,0 +1,23 @@
+{
+ "id": "w_render_rebuild_proj_json",
+ "args": [
+  "--json",
+  "experimental",
+  "render",
+  "--reverse",
+  "proj/stripped.html",
+  "--out",
+  "proj/rebuilt/page.tsx"
+ ],
+ "fixture": "renderpages",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.reverse\",\n  \"data\": {\n    \"input\": \"proj/stripped.html\",\n    \"mode\": \"rebuilt\",\n    \"output\": \"proj/rebuilt/page.tsx\",\n    \"files\": [\n      \"proj/rebuilt/page.tsx\"\n    ],\n    \"exact\": false,\n    \"components\": [\n      \"Badge\",\n      \"Button\",\n      \"Card\",\n      \"Divider\",\n      \"Field\",\n      \"FieldLabel\",\n      \"HStack\",\n      \"Heading\",\n      \"Link\",\n      \"Text\",\n      \"TextInput\",\n      \"VStack\"\n    ],\n    \"elements\": 14,\n    \"unknown\": [],\n    \"omitted\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "renderpages/proj/rebuilt/page.tsx",
+   "status": "created",
+   "text": "// Rebuilt by astryx experimental render --reverse from rendered markup: Dash {x} & co.\n// Text and layout come from the markup; styling, state and behavior do not,\n// so review it before use.\n\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Divider} from '@astryxdesign/core/Divider';\nimport {Field, FieldLabel} from '@astryxdesign/core/Field';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {Link} from '@astryxdesign/core/Link';\nimport {Text} from '@astryxdesign/core/Text';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {VStack} from '@astryxdesign/core/VStack';\n\nexport default function Page() {\n  return (\n    <>\n      <VStack gap={4}>\n        <Heading level={1} color=\"primary\">Dash {'{'}x{'}'}</Heading>\n        <HStack>\n          <Badge label=\"New\" variant=\"neutral\" />\n          <Text type=\"body\" color=\"primary\">Hello \"q\" bold</Text>\n        </HStack>\n        <Card variant=\"default\" elevation=\"none\">\n          <Text type=\"body\" color=\"primary\">In card</Text>\n          <Button variant=\"primary\" size=\"md\" elevation=\"none\" label=\"Save\">Save</Button>\n          <Link color=\"accent\" href=\"/x\">\n            <Text type=\"body\" color=\"inherit\">Go</Text>\n          </Link>\n        </Card>\n        <Field label=\"Name\" inputID=\"\">\n          <FieldLabel label=\"Name\" inputID=\"\" />\n          <TextInput size=\"md\" label=\"\" value=\"\" />\n        </Field>\n        <Divider variant=\"subtle\" orientation=\"horizontal\" />\n        <p>plain</p>\n        <img src=\"data:image/png;base64,AA\" alt=\"i\" />\n      </VStack>\n    </>\n  );\n}\n"
+  }
+ ]
+}

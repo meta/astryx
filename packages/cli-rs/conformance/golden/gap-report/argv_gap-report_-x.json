@@ -1,0 +1,12 @@
+{
+ "id": "argv_gap-report_-x",
+ "args": [
+  "gap-report",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

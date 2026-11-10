@@ -1,0 +1,14 @@
+{
+ "id": "argv-negval_search_table_--type_-1",
+ "args": [
+  "search",
+  "table",
+  "--type",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown --type \"-1\"\n\n  component  (valid type)\n  hook  (valid type)\n  doc  (valid type)\n  template  (valid type)\n  theme  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_eject_--_--json",
+ "args": [
+  "theme",
+  "eject",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown theme \"--json\"\n\n  butter --package @astryxdesign/cli  (bundled theme)\n  chocolate --package @astryxdesign/cli  (bundled theme)\n  gothic --package @astryxdesign/cli  (bundled theme)\n  matcha --package @astryxdesign/cli  (bundled theme)\n  neutral --package @astryxdesign/cli  (bundled theme)\n  stone --package @astryxdesign/cli  (bundled theme)\n  y2k --package @astryxdesign/cli  (bundled theme)\n",
+ "exit": 1,
+ "files": []
+}

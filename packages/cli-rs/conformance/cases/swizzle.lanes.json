@@ -1,0 +1,39 @@
+[
+  {
+    "id": "w_output_file",
+    "args": [
+      "swizzle",
+      "DateInput",
+      "--output",
+      "src/App.tsx"
+    ]
+  },
+  {
+    "id": "w_output_file_json",
+    "args": [
+      "swizzle",
+      "Button",
+      "--output",
+      "src/App.tsx",
+      "--json"
+    ]
+  },
+  {
+    "id": "w_output_below_file",
+    "args": [
+      "swizzle",
+      "Badge",
+      "--output",
+      "package.json/x"
+    ]
+  },
+  {
+    "id": "w_output_existing_file_name",
+    "args": [
+      "swizzle",
+      "Badge",
+      "--output",
+      "src/App.tsx/../ui"
+    ]
+  }
+]

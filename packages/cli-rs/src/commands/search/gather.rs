@@ -81,14 +81,15 @@ pub fn preload_docs(docs: Vec<(PathBuf, &'static str)>) {
     }
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
     let next = std::sync::atomic::AtomicUsize::new(0);
+    let listings = crate::discovery::listing_cache::scope();
     std::thread::scope(|scope| {
         for _ in 0..threads {
-            scope.spawn(|| loop {
+            scope.spawn(|| listings.enter(|| loop {
                 let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let Some((path, root)) = docs.get(i) else { break };
                 let v = read_doc(path, root);
                 doc_cache().lock().unwrap().insert((path.clone(), *root), v);
-            });
+            }));
         }
     });
 }
@@ -673,21 +674,10 @@ pub fn gather_themes(cli_root: &Path, cwd: &Path) -> Vec<Value> {
         .collect()
 }
 
-// ── Integration docs ────────────────────────────────────────────────
-// TEMP: a project's integration topics, read here until the docs lane's
-// runtime catalog serves them: a generic topic with no namespace, placed in
-// the guides level, as the docs tree places it.
-
-/// `sectionTitleKey` / `sectionKey`.
-fn section_key(section: &Value) -> String {
-    if let Some(id) = section.get("id").and_then(|v| v.as_str()) {
-        return id.to_string();
-    }
-    crate::commands::docs::sections::section_title_key(section.get("title").and_then(|v| v.as_str()).unwrap_or(""))
-}
+// ── Doc text (`_doc-text.mjs`, `docs-section-key.mjs`) ──────────────
 
 /// `sectionSummary(section)`.
-fn section_summary(section: &Value) -> String {
+pub fn section_summary(section: &Value) -> String {
     let empty = Vec::new();
     let content = section.get("content").and_then(|c| c.as_array()).unwrap_or(&empty);
     let first = content.iter().find(|b| {
@@ -713,7 +703,7 @@ fn section_summary(section: &Value) -> String {
     format!("{}…", kept.trim_end())
 }
 
-fn headings(section: &Value) -> Vec<String> {
+pub fn headings(section: &Value) -> Vec<String> {
     section
         .get("content")
         .and_then(|c| c.as_array())
@@ -726,13 +716,13 @@ fn headings(section: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn plain_cell(v: &Value) -> String {
+pub fn plain_cell(v: &Value) -> String {
     let s = if v.is_null() { String::new() } else { super::cand::js_str(v) };
-    super::words::unlink_text(&s).replace('`', "")
+    crate::discovery::doc_compiler::links::unlink_text(&s).replace('`', "")
 }
 
 /// `sectionProse(section)`.
-fn section_prose(section: &Value) -> Vec<String> {
+pub fn section_prose(section: &Value) -> Vec<String> {
     let mut out = Vec::new();
     if super::cand::truthy(&section["title"]) {
         out.push(super::cand::js_str(&section["title"]));
@@ -767,7 +757,7 @@ fn section_prose(section: &Value) -> Vec<String> {
 }
 
 /// `codeTerms(part)`: identifiers in code ticks, 2 to 40 non-space chars.
-fn code_terms(part: &Value) -> Vec<String> {
+pub fn code_terms(part: &Value) -> Vec<String> {
     let mut terms: Vec<String> = Vec::new();
     let mut scan = |text: &str| {
         let mut rest = text;
@@ -810,121 +800,8 @@ fn code_terms(part: &Value) -> Vec<String> {
     terms
 }
 
-/// `topicCandidates(...)` for a flat topic.
-fn topic_candidates(name: &str, doc: &Value, path: &str, parent: &str, pkg: &str) -> Vec<Value> {
-    let sections: Vec<Value> = doc.get("sections").and_then(|s| s.as_array()).cloned().unwrap_or_default();
-    let split = sections.len() > 1;
-    let title = doc.get("title").filter(|t| super::cand::truthy(t)).map(super::cand::js_str);
-    let doc_title = path.to_string();
-    let leaf = &name[name.rfind('/').map_or(0, |i| i + 1)..];
-    let mut keywords: Vec<Value> = Vec::new();
-    if leaf != name {
-        keywords.push(Value::String(leaf.replace('-', " ")));
-    }
-    if let Some(t) = &title {
-        keywords.push(Value::String(t.clone()));
-    }
-    let declared = arr(doc.get("keywords"));
-    keywords.extend(declared.as_array().cloned().unwrap_or_default());
-    let mut titles: Vec<Value> = vec![Value::String(title.clone().unwrap_or_else(|| name.to_string()))];
-    let prose: Vec<Value> = if split {
-        sections.iter().filter(|s| super::cand::truthy(&s["title"])).map(|s| s["title"].clone()).collect()
-    } else {
-        sections.iter().flat_map(section_prose).map(Value::String).collect()
-    };
-    if !split {
-        for s in &sections {
-            if super::cand::truthy(&s["title"]) {
-                titles.push(s["title"].clone());
-            }
-            titles.extend(headings(s).into_iter().map(Value::String));
-        }
-    }
-    let mut m = Map::new();
-    m.insert("domain".into(), "doc".into());
-    m.insert("name".into(), Value::String(name.into()));
-    m.insert("keywords".into(), Value::Array(keywords));
-    m.insert("_declared".into(), declared);
-    m.insert("description".into(), doc.get("description").filter(|d| super::cand::truthy(d)).cloned().unwrap_or(Value::String(String::new())));
-    m.insert("prose".into(), Value::Array(prose));
-    m.insert("titles".into(), Value::Array(titles));
-    m.insert("_topic".into(), Value::String(name.into()));
-    m.insert("_title".into(), Value::String(doc_title.clone()));
-    m.insert(
-        "_command".into(),
-        Value::String(if split { format!("astryx docs {name} --index") } else { format!("astryx docs {name}") }),
-    );
-    m.insert("_parent".into(), Value::String(parent.into()));
-    m.insert("_package".into(), Value::String(pkg.into()));
-    let mut out = vec![Value::Object(m)];
-    if !split {
-        return out;
-    }
-    for s in &sections {
-        let key = section_key(s);
-        let st = super::cand::js_str(&s["title"]);
-        let mut kw: Vec<Value> = Vec::new();
-        if super::cand::truthy(&s["title"]) {
-            kw.push(s["title"].clone());
-        }
-        kw.extend(headings(s).into_iter().map(Value::String));
-        kw.extend(code_terms(s).into_iter().map(Value::String));
-        let mut titles: Vec<Value> = Vec::new();
-        if super::cand::truthy(&s["title"]) {
-            titles.push(s["title"].clone());
-        }
-        titles.extend(headings(s).into_iter().map(Value::String));
-        let mut m = Map::new();
-        m.insert("domain".into(), "doc".into());
-        m.insert("name".into(), Value::String(key.clone()));
-        m.insert("keywords".into(), Value::Array(kw));
-        m.insert("description".into(), Value::String(section_summary(s)));
-        m.insert("prose".into(), Value::Array(section_prose(s).into_iter().map(Value::String).collect()));
-        m.insert("titles".into(), Value::Array(titles));
-        m.insert("_topic".into(), Value::String(name.into()));
-        m.insert("_section".into(), Value::String(key.clone()));
-        m.insert("_title".into(), Value::String(format!("{doc_title} › {st}")));
-        m.insert("_command".into(), Value::String(format!("astryx docs {name} {key}")));
-        m.insert("_parent".into(), Value::String(format!("astryx docs {name} --index")));
-        m.insert("_package".into(), Value::String(pkg.into()));
-        out.push(Value::Object(m));
-    }
-    out
+/// The experimental self-docs whose sections search never shows.
+pub fn own_docs_hidden() -> Vec<String> {
+    own()["hidden"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
 }
 
-/// The doc candidates a project's integrations add, and where they go among
-/// the CLI's own (after its topics).
-pub fn integration_docs(cwd: &Path) -> Vec<Value> {
-    let Ok(project) = crate::discovery::project::Project::load(&cwd.to_string_lossy()) else { return Vec::new() };
-    let mut out = Vec::new();
-    for r in project.contributing() {
-        let Some(dir) = crate::discovery::integrations::s(r, "docs").map(String::from) else { continue };
-        let pkg = crate::discovery::integrations::s(r, "name").unwrap_or("").to_string();
-        let mut files: Vec<String> = list_dir(Path::new(&dir))
-            .into_iter()
-            .filter(|f| f.ends_with(".doc.mjs") || f.ends_with(".doc.ts") || f.ends_with(".doc.js"))
-            .collect();
-        files.sort();
-        for f in files {
-            let path = Path::new(&dir).join(&f);
-            let Ok(ns) = crate::js::import_module(&path, &crate::js::ImportOptions::default()) else { continue };
-            let Some(doc) = ns.get("default").filter(|d| d.is_object()) else { continue };
-            if doc["type"] != "generic" || doc.get("namespace").is_some_and(|n| !n.is_null()) {
-                continue;
-            }
-            if doc.get("stability").and_then(|s| s.as_str()) == Some("experimental") {
-                continue;
-            }
-            let stem = f.split(".doc.").next().unwrap_or(&f).to_string();
-            let name = doc.get("name").and_then(|n| n.as_str()).map(String::from).unwrap_or(stem);
-            let title = doc.get("title").filter(|t| super::cand::truthy(t)).map(super::cand::js_str).unwrap_or_else(|| name.clone());
-            out.extend(topic_candidates(&name, doc, &format!("Guides › {title}"), "astryx docs guides", &pkg));
-        }
-    }
-    out
-}
-
-/// Where integration topics go among the CLI's own doc candidates.
-pub fn own_topic_count() -> usize {
-    own()["topicCount"].as_u64().unwrap_or(0) as usize
-}

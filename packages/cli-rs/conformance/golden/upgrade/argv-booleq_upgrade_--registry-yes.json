@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_upgrade_--registry-yes",
+ "args": [
+  "upgrade",
+  "--registry=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--registry=yes'\n",
+ "exit": 1,
+ "files": []
+}

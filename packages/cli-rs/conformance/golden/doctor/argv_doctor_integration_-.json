@@ -1,0 +1,13 @@
+{
+ "id": "argv_doctor_integration_-",
+ "args": [
+  "doctor",
+  "integration",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor integration ü中文'\n\n  validate  (available subcommand)\n  templates  (available subcommand)\n  components  (available subcommand)\n  docs  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

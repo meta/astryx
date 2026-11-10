@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_pack_-5",
+ "args": [
+  "integration",
+  "pack",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,16 @@
+{
+ "id": "argv-negval_experimental_icon_new-set_useClipboard_--default-variant_-1",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--default-variant",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --default-variant names one of the set's variants, so it needs --variants.\n\n  --variants -1,<other>  (declare the variants)\n",
+ "exit": 1,
+ "files": []
+}

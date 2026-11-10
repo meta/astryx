@@ -1,0 +1,22 @@
+{
+ "id": "w_icon_glyphs_map_pairs_json",
+ "args": [
+  "--json",
+  "experimental",
+  "icon",
+  "map",
+  "--pairs",
+  "close=home check=trash"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.mapMany\",\n  \"data\": {\n    \"set\": \"glyphs\",\n    \"package\": \"@acme/glyphs\",\n    \"file\": \"icon-sets/glyphs/glyphs.icons.json\",\n    \"entries\": [\n      {\n        \"definition\": \"close\",\n        \"icon\": \"home\",\n        \"previous\": \"x\",\n        \"changed\": true\n      },\n      {\n        \"definition\": \"check\",\n        \"icon\": \"trash\",\n        \"previous\": null,\n        \"changed\": true\n      }\n    ],\n    \"changed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "iconglyphs/icon-sets/glyphs/glyphs.icons.json",
+   "status": "changed",
+   "text": "{\n  \"schemaVersion\": 1,\n  \"module\": \"@acme/glyphs\",\n  \"variants\": [\n    \"outline\",\n    \"solid\"\n  ],\n  \"default\": {\n    \"variant\": \"outline\"\n  },\n  \"themeMap\": \"themeIcons\",\n  \"map\": {\n    \"check\": \"trash\",\n    \"close\": \"home\",\n    \"search\": \"search\"\n  },\n  \"icons\": [\n    {\n      \"id\": \"x\",\n      \"export\": \"XIcon\",\n      \"words\": [\n        \"close\",\n        \"cancel\",\n        \"dismiss\",\n        \"remove\",\n        \"times\"\n      ]\n    },\n    {\n      \"id\": \"search\",\n      \"export\": \"SearchIcon\",\n      \"words\": [\n        \"find\",\n        \"magnifier\",\n        \"lookup\",\n        \"search\"\n      ]\n    },\n    {\n      \"id\": \"trash\",\n      \"export\": \"TrashIcon\",\n      \"words\": [\n        \"delete\",\n        \"remove\",\n        \"bin\",\n        \"garbage\"\n      ],\n      \"variants\": [\n        {\n          \"variant\": \"solid\",\n          \"export\": \"TrashSolidIcon\"\n        }\n      ]\n    },\n    {\n      \"id\": \"home\",\n      \"export\": \"HomeIcon\",\n      \"words\": [\n        \"house\",\n        \"start\",\n        \"main\"\n      ]\n    }\n  ]\n}\n"
+  }
+ ]
+}

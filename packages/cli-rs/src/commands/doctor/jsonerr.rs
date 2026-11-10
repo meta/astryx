@@ -272,3 +272,17 @@ mod tests {
         assert_eq!(json_parse_error("{\"a\":\n tx}").as_deref(), Some("Unexpected token 'x', \"{\"a\":\n tx}\" is not valid JSON"));
     }
 }
+
+#[cfg(test)]
+mod ts_probe {
+    #[test]
+    #[ignore]
+    fn typescript_in_boa() {
+        let t = std::time::Instant::now();
+        let r = crate::js::call_export(std::path::Path::new("/tmp/tsboa/probe.mjs"), &["run"], &[], &Default::default());
+        match r {
+            Ok(v) => eprintln!("OK {:?} in {:?}", v.value, t.elapsed()),
+            Err(e) => eprintln!("ERR {:?} in {:?}", e, t.elapsed()),
+        }
+    }
+}

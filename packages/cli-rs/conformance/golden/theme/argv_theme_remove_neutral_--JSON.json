@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_remove_neutral_--JSON",
+ "args": [
+  "theme",
+  "remove",
+  "neutral",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_integration_verify_--json_--help",
+ "args": [
+  "integration",
+  "verify",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx integration verify\",\n    \"description\": \"Check the package the way npm will publish it, before you publish\",\n    \"usage\": \"astryx integration verify [options]\",\n    \"options\": [],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

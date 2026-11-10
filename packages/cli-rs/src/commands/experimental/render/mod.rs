@@ -5,8 +5,10 @@
 pub mod charts;
 pub mod css;
 pub mod page;
+pub mod rebuild;
 pub mod reverse;
 pub mod texts;
+pub mod ts_paths;
 pub mod worker;
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out, Suggestion};

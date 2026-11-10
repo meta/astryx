@@ -1,0 +1,20 @@
+{
+ "id": "argv-repeat_experimental_icon_--list_--list",
+ "args": [
+  "experimental",
+  "icon",
+  "--list",
+  "--list"
+ ],
+ "fixture": "app",
+ "stdout": "Icon sets\n\nstatus: none\nreason: No icon set is installed.\n\nFind one: npx @astryxdesign/cli@0.7.12 experimental icon <words>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

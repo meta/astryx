@@ -1,0 +1,12 @@
+{
+ "id": "argv_gap-report_-V",
+ "args": [
+  "gap-report",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

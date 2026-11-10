@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_add_-",
+ "args": [
+  "integration",
+  "add",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'name'\n",
+ "exit": 1,
+ "files": []
+}

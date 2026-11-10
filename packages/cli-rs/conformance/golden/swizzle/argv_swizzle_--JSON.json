@@ -1,0 +1,12 @@
+{
+ "id": "argv_swizzle_--JSON",
+ "args": [
+  "swizzle",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

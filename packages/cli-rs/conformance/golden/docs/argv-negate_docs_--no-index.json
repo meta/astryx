@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_docs_--no-index",
+ "args": [
+  "docs",
+  "--no-index"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-index'\n(Did you mean --index?)\n",
+ "exit": 1,
+ "files": []
+}

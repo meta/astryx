@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_experimental_icon_--all-icons_table",
+ "args": [
+  "experimental",
+  "icon",
+  "--all-icons",
+  "table"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --all-icons and a query cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

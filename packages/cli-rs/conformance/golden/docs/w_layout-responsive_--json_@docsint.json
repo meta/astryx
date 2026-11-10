@@ -1,0 +1,13 @@
+{
+ "id": "w_layout-responsive_--json_@docsint",
+ "args": [
+  "docs",
+  "layout/responsive",
+  "--json"
+ ],
+ "fixture": "docsint",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"name\": \"layout/responsive\",\n    \"description\": \"Responsive, the Acme way. See `astryx docs acme-colors`.\",\n    \"type\": \"generic\",\n    \"title\": \"Acme responsive\",\n    \"sections\": [\n      {\n        \"id\": \"breakpoints\",\n        \"title\": \"Breakpoints\",\n        \"package\": \"@acme/docs\",\n        \"content\": [\n          {\n            \"type\": \"prose\",\n            \"text\": \"Two of them.\"\n          }\n        ]\n      }\n    ],\n    \"replaces\": \"layout/responsive\",\n    \"replacedPackage\": \"@astryxdesign/cli\",\n    \"links\": {\n      \"up\": \"astryx docs layout\",\n      \"previous\": \"astryx docs layout/layout-spacing\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

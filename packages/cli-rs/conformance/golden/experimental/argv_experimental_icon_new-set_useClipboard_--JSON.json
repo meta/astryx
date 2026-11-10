@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-set_useClipboard_--JSON",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

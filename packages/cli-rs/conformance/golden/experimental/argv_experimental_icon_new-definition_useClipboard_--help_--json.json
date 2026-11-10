@@ -1,0 +1,16 @@
+{
+ "id": "argv_experimental_icon_new-definition_useClipboard_--help_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "useClipboard",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx experimental icon new-definition\",\n    \"description\": \"[experimental] Add your icon set's own icon definition\",\n    \"usage\": \"astryx experimental icon new-definition [options] <name>\",\n    \"options\": [\n      {\n        \"flags\": \"--dry-run\",\n        \"description\": \"Validate and show planned writes without changing files\"\n      },\n      {\n        \"flags\": \"--set <name>\",\n        \"description\": \"The icon set to add it to, when the package ships several\"\n      },\n      {\n        \"flags\": \"--description <text>\",\n        \"description\": \"One sentence on what an icon with this definition is for\"\n      },\n      {\n        \"flags\": \"--words <list>\",\n        \"description\": \"Comma-separated words people search for\"\n      },\n      {\n        \"flags\": \"--icon <id>\",\n        \"description\": \"Also map it to this icon of the set (its `map` entry)\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

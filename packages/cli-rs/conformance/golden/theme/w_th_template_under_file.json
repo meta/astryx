@@ -1,0 +1,13 @@
+{
+ "id": "w_th_template_under_file",
+ "args": [
+  "theme",
+  "template",
+  "package.json/t.ts"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Failed to write the theme template to package.json/t.ts: EEXIST: file already exists, mkdir '/tmp/astryx-conformance/work/app/package.json'\n",
+ "exit": 1,
+ "files": []
+}

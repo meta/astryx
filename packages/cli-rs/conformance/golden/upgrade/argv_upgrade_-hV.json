@@ -1,0 +1,12 @@
+{
+ "id": "argv_upgrade_-hV",
+ "args": [
+  "upgrade",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

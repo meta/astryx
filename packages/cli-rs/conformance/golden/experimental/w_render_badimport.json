@@ -1,0 +1,15 @@
+{
+ "id": "w_render_badimport",
+ "args": [
+  "experimental",
+  "render",
+  "badimport.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: broken.css, imported by bad.css, is not valid CSS: Unclosed block\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat2_gap-report_--additional-context_hello-world_--additional-context_other",
+ "args": [
+  "gap-report",
+  "--additional-context",
+  "hello world",
+  "--additional-context",
+  "other"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

@@ -143,7 +143,7 @@ fn scan_module(source: &str, file: &str) -> (Vec<String>, Vec<String>) {
     (s.imports, s.assets)
 }
 
-fn posix_normalize(p: &str) -> String {
+pub fn posix_normalize(p: &str) -> String {
     let mut out: Vec<&str> = vec![];
     let abs = p.starts_with('/');
     for seg in p.split('/') {
@@ -555,8 +555,38 @@ pub fn reverse_to_file(cwd: &str, input: &str, output: Option<&str>, overwrite: 
             confined(&target, cwd, "The page")?;
             refuse_runnable(&[target.clone()], cwd, input)?;
             refuse_existing(&[target.clone()])?;
-            // TEMP: rebuilding a page from its markup is not cloned yet.
-            Err(err("experimental render --reverse of a page without embedded source is not cloned yet", vec![], "ERR_UNKNOWN"))
+            let resolves_core = |dir: &str| -> bool {
+                let mut d = dir.to_string();
+                while !np::exists(&d) && np::dirname(&d) != d {
+                    d = np::dirname(&d);
+                }
+                matches!(
+                    crate::js::resolve::resolve("@astryxdesign/core", std::path::Path::new(&np::join2(&d, "noop.js")), crate::js::resolve::Mode::Cjs),
+                    Ok(crate::js::resolve::Resolved::File(_))
+                )
+            };
+            let candidates = [np::dirname(&target), np::dirname(input), cwd.to_string()];
+            let from = candidates.iter().find(|d| resolves_core(d)).cloned().unwrap_or_else(|| cwd.to_string());
+            let rebuilt = super::rebuild::rebuild_page(&html, &from);
+            for n in [&target] {
+                super::refuse_symlinks(n, cwd)?;
+            }
+            if let Some(parent) = std::path::Path::new(&target).parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&target, &rebuilt.source).map_err(|e| err(format!("Could not write {}: {e}", shown(cwd, &target)), vec![], "ERR_WRITE_FAILED"))?;
+            let strs = |v: &[String]| Value::Array(v.iter().cloned().map(Value::String).collect());
+            let mut m = Map::new();
+            m.insert("input".into(), Value::String(shown(cwd, input)));
+            m.insert("mode".into(), Value::String("rebuilt".into()));
+            m.insert("output".into(), Value::String(shown(cwd, &target)));
+            m.insert("files".into(), Value::Array(vec![Value::String(shown(cwd, &target))]));
+            m.insert("exact".into(), Value::Bool(false));
+            m.insert("components".into(), strs(&rebuilt.components));
+            m.insert("elements".into(), Value::from(rebuilt.elements));
+            m.insert("unknown".into(), strs(&rebuilt.unknown));
+            m.insert("omitted".into(), strs(&rebuilt.omitted));
+            Ok(Value::Object(m))
         }
     }
 }

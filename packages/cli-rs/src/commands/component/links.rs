@@ -21,54 +21,6 @@ pub fn component_link_provider(owner: &str, provider_id: Option<&str>) -> String
     }
 }
 
-/// The docs a link can open, read once per call.
-/// TEMP: replace with the docs lane's `crate::commands::docs::link_resolver`.
-struct Finder {
-    docs: crate::commands::docs::api::Docs,
-}
-
-impl Finder {
-    fn load(cwd: &Path) -> Finder {
-        let pm = crate::discovery::package_manager::doc_package_manager(Some(&cwd.to_string_lossy()));
-        Finder { docs: crate::commands::docs::api::Docs::load_project(&pm, &cwd.to_string_lossy()) }
-    }
-
-    fn resolve(&self, target: &str, from: &str) -> Result<Value, String> {
-        let parts: Vec<&str> = target.trim().split(':').collect();
-        if parts.len() < 2 || parts.len() > 3 || parts.iter().any(|p| p.trim().is_empty()) {
-            return Err(format!("\"{target}\" is not `[<provider>:]<kind>:<name>`"));
-        }
-        let provider = if parts.len() == 3 { parts[0].trim() } else { from };
-        let kind = parts[parts.len() - 2].trim();
-        let name = parts[parts.len() - 1].trim();
-        if !LINK_KINDS.contains(&kind) {
-            return Err(format!("\"{target}\" names the kind \"{kind}\""));
-        }
-        let same = |a: &str| if kind == "generic" { a.to_lowercase() == name.to_lowercase() } else { a == name };
-        let link = |route: &str| {
-            let mut m = Map::new();
-            m.insert("target".into(), Value::String(target.into()));
-            m.insert("route".into(), Value::String(route.into()));
-            m.insert("command".into(), Value::String(format!("astryx docs {route}")));
-            Value::Object(m)
-        };
-        for n in &self.docs.tree.nodes {
-            if n.v.get("id").is_some_and(|i| !i.is_null()) && n.provider() == provider && n.kind() == kind && same(n.name()) {
-                return Ok(link(n.route()));
-            }
-        }
-        if kind == "generic" {
-            for t in &self.docs.topics {
-                let tp = t.v.get("providerId").and_then(|v| v.as_str()).unwrap_or(t.package());
-                if t.name().to_lowercase() == name.to_lowercase() && tp == provider {
-                    return Ok(link(t.name()));
-                }
-            }
-        }
-        Err(format!("\"{target}\" names no doc"))
-    }
-}
-
 /// `linkComponentResponse(response, cwd)`.
 pub fn link_component_response(response: Response, cwd: &Path) -> Response {
     if !matches!(response.kind.as_str(), "component.detail" | "component.detail.props" | "component.list") {
@@ -77,7 +29,7 @@ pub fn link_component_response(response: Response, cwd: &Path) -> Response {
     if !crate::json::stringify(&response.data, 0).contains("{@") {
         return response;
     }
-    let finder = Finder::load(cwd);
+    let finder = crate::commands::docs::link_resolver(&cwd.to_string_lossy());
     let declared: Vec<(String, String)> = deps::load_integrations_safely(cwd)
         .into_iter()
         .filter_map(|i| i.provider_id.clone().map(|p| (i.name.clone(), p)))

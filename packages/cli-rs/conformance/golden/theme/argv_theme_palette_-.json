@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_palette_-",
+ "args": [
+  "theme",
+  "palette",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette ü中文'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

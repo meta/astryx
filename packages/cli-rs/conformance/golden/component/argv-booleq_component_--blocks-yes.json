@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_component_--blocks-yes",
+ "args": [
+  "component",
+  "--blocks=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--blocks=yes'\n",
+ "exit": 1,
+ "files": []
+}

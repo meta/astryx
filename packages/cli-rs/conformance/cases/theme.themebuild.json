@@ -1,0 +1,2485 @@
+[
+  {
+    "id": "pg_palette-basic-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-stops-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-stops.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-stops-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-stops.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-dark-only-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/dark-only.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-dark-only-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/dark-only.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-anchors-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/anchors.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-anchors-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/anchors.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-neutral-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-neutral.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-neutral-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-neutral.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-id-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-id.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-id-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-id.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-reserved-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/reserved.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-reserved-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/reserved.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-dup-anchor-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/dup-anchor.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-dup-anchor-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/dup-anchor.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-endpoint-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/endpoint.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-endpoint-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/endpoint.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bounded-missing-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bounded-missing.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bounded-missing-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bounded-missing.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-stops-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-stops.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-stops-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-stops.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-vibrancy-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-vibrancy.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-vibrancy-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-vibrancy.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-color-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-color.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-bad-color-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/bad-color.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-not-monotonic-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/not-monotonic.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-not-monotonic-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/not-monotonic.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-empty-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/empty.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-empty-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/empty.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-array-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/array.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-array-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/array.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-broken-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/broken.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-broken-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/broken.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-empty-file-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/empty-file.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-empty-file-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/empty-file.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-missing-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/missing.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-missing-json_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/missing.json",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_palette-out-basic-palette-ts",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "palette/out/basic.palette.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_palette-out-basic-json_--preview_palette-out-basic-html",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "palette/out/basic.json",
+      "--preview",
+      "palette/out/basic.html"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--preview_palette-out-basic-html_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--preview",
+      "palette/out/basic.html",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-anchors-json_--out_palette-out-anchors-palette-ts",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/anchors.json",
+      "--out",
+      "palette/out/anchors.palette.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-anchors-json_--out_palette-out-anchors-json_--preview_palette-out-anchors-html",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/anchors.json",
+      "--out",
+      "palette/out/anchors.json",
+      "--preview",
+      "palette/out/anchors.html"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-anchors-json_--preview_palette-out-anchors-html_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/anchors.json",
+      "--preview",
+      "palette/out/anchors.html",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-stops-json_--out_palette-out-custom-stops-palette-ts",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-stops.json",
+      "--out",
+      "palette/out/custom-stops.palette.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-stops-json_--out_palette-out-custom-stops-json_--preview_palette-out-custom-stops-html",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-stops.json",
+      "--out",
+      "palette/out/custom-stops.json",
+      "--preview",
+      "palette/out/custom-stops.html"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-custom-stops-json_--preview_palette-out-custom-stops-html_--json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/custom-stops.json",
+      "--preview",
+      "palette/out/custom-stops.html",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_palette-out-x-txt",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "palette/out/x.txt"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--preview_palette-out-x-htm",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--preview",
+      "palette/out/x.htm"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_---escape-ts",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "../escape.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_-tmp-abs-ts",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "/tmp/abs.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_---outside-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "../outside.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_--out_palette-basic-json",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "--out",
+      "palette/basic.json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "pg_palette-basic-json_-o_palette-out-b-ts_after",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "-o",
+      "palette/out/b.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "palette",
+        "generate",
+        "palette/basic.json",
+        "-o",
+        "palette/out/b.ts"
+      ]
+    ]
+  },
+  {
+    "id": "pg_palette-basic-json_-o_palette-out-b-ts_-f_after",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "-o",
+      "palette/out/b.ts",
+      "-f"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "palette",
+        "generate",
+        "palette/basic.json",
+        "-o",
+        "palette/out/b.ts"
+      ]
+    ]
+  },
+  {
+    "id": "pg_palette-basic-json_-o_palette-out-b-ts_--overwrite_--json_after",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "palette/basic.json",
+      "-o",
+      "palette/out/b.ts",
+      "--overwrite",
+      "--json"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "palette",
+        "generate",
+        "palette/anchors.json",
+        "-o",
+        "palette/out/b.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_outside_template_build",
+    "args": [
+      "theme",
+      "build",
+      "mytheme.ts"
+    ],
+    "fixture": "empty",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "mytheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_outside_template_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "mytheme.ts"
+    ],
+    "fixture": "empty",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "mytheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_outside_template_build_full",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "mytheme.ts"
+    ],
+    "fixture": "empty",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "mytheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_outside_template_check",
+    "args": [
+      "theme",
+      "build",
+      "mytheme.ts",
+      "--check"
+    ],
+    "fixture": "empty",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "mytheme.ts"
+      ],
+      [
+        "theme",
+        "build",
+        "mytheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_inside_template_build",
+    "args": [
+      "theme",
+      "build",
+      "src/mytheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/mytheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_watch_initial",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--watch"
+    ],
+    "fixture": "themes",
+    "timeoutMs": 6000
+  },
+  {
+    "id": "tb_icons_basic-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/basic.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_basic-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/basic.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_default-import-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/default-import.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_default-import-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/default-import.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_namespace-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/namespace.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_namespace-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/namespace.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_spread-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/spread.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_spread-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/spread.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_aliased-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/aliased.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_aliased-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/aliased.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_inline-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/inline.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_inline-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/inline.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_mutated-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/mutated.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_mutated-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/mutated.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_child-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/child.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_child-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/child.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_child-own-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/child-own.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_child-own-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/child-own.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_fn-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/fn.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_fn-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/fn.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/slots.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/slots.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-local-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/slots-local.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-local-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/slots-local.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-static-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/slots-static.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slots-static-mjs_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/slots-static.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_basic_spec",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/basic.ts",
+      "--icons-specifier",
+      "./icons.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_ns_spec",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/icons/namespace.ts",
+      "--icons-specifier",
+      "@acme/icons"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_child_spec",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/child.ts",
+      "--icons-specifier",
+      "./x.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_fn_full",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/icons/fn.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_basic_check",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/basic.ts",
+      "--check"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/icons/basic.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_icons_basic_check_spec",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/basic.ts",
+      "--check",
+      "--icons-specifier",
+      "./icons.mjs"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/icons/basic.ts"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_butter_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/butter/butterTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "butter",
+        "src/theme/butter"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_butter_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/butter/butterTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "butter",
+        "src/theme/butter"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_chocolate_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/chocolate/chocolateTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "chocolate",
+        "src/theme/chocolate"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_chocolate_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/chocolate/chocolateTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "chocolate",
+        "src/theme/chocolate"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_gothic_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/gothic/gothicTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "gothic",
+        "src/theme/gothic"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_gothic_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/gothic/gothicTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "gothic",
+        "src/theme/gothic"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_matcha_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/matcha/matchaTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "matcha",
+        "src/theme/matcha"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_matcha_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/matcha/matchaTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "matcha",
+        "src/theme/matcha"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_neutral_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/neutral/neutralTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "neutral",
+        "src/theme/neutral"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_neutral_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/neutral/neutralTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "neutral",
+        "src/theme/neutral"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_stone_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/stone/stoneTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone",
+        "src/theme/stone"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_stone_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/stone/stoneTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone",
+        "src/theme/stone"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_y2k_build",
+    "args": [
+      "theme",
+      "build",
+      "src/theme/y2k/y2kTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "y2k",
+        "src/theme/y2k"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_y2k_build_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "src/theme/y2k/y2kTheme.ts"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "y2k",
+        "src/theme/y2k"
+      ]
+    ]
+  },
+  {
+    "id": "tb_eject_neutral_full",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "src/theme/neutral/neutralTheme.ts",
+      "--out",
+      "src/built/neutral.css"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "neutral",
+        "src/theme/neutral"
+      ]
+    ]
+  },
+  {
+    "id": "tb_icons_slotted-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/slotted.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slotted-ts_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/icons/slotted.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_icons_slotted-whole-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/icons/slotted-whole.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_all",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_all_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_all_full",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family",
+      "--icons-specifier",
+      "./x.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_pair",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-pair"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_missing_root",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_single",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_badkey",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "Bad_Key"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_collide",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_two_roots",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/lone.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_stranger",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/stranger.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_dupe_name",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/dupe.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_dupe_file",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/ocean.mjs",
+      "--family-key",
+      "fam"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_check_missing",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_check_ok",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family",
+      "--check"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "--family",
+        "fam/themes/ocean.mjs",
+        "fam/themes/.hidden/ocean-calm.mjs",
+        "fam/themes/.hidden/ocean-calm-deep.mjs",
+        "fam/themes/ocean-midnight.mjs",
+        "--family-key",
+        "ocean-family"
+      ]
+    ]
+  },
+  {
+    "id": "tb_family_check_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "--family",
+      "fam/themes/ocean.mjs",
+      "fam/themes/.hidden/ocean-calm.mjs",
+      "fam/themes/.hidden/ocean-calm-deep.mjs",
+      "fam/themes/ocean-midnight.mjs",
+      "--family-key",
+      "ocean-family",
+      "--check"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "--family",
+        "fam/themes/ocean.mjs",
+        "fam/themes/.hidden/ocean-calm.mjs",
+        "fam/themes/.hidden/ocean-calm-deep.mjs",
+        "fam/themes/ocean-midnight.mjs",
+        "--family-key",
+        "ocean-family"
+      ]
+    ]
+  },
+  {
+    "id": "tb_family_from_sub",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "ocean.mjs",
+      "ocean-midnight.mjs",
+      "--family-key",
+      "sub-fam"
+    ],
+    "fixture": "themes",
+    "cwd": "themes/fam/themes"
+  },
+  {
+    "id": "tb_watch_two",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "--watch"
+    ],
+    "fixture": "themes",
+    "timeoutMs": 8000
+  },
+  {
+    "id": "tb_watch_full",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--watch"
+    ],
+    "fixture": "themes",
+    "timeoutMs": 8000
+  },
+  {
+    "id": "tb_watch_out",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--watch",
+      "--out",
+      "dist/a.css"
+    ],
+    "fixture": "themes",
+    "timeoutMs": 8000
+  },
+  {
+    "id": "tb_watch_failing",
+    "args": [
+      "theme",
+      "build",
+      "themes/nameless.mjs",
+      "--watch"
+    ],
+    "fixture": "themes",
+    "timeoutMs": 8000
+  },
+  {
+    "id": "tb_family_reg_broken",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/broken.mjs",
+      "reg/broken-child.mjs",
+      "--family-key",
+      "fam-broken"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_broken",
+    "args": [
+      "theme",
+      "build",
+      "reg/broken.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_thin",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/thin.mjs",
+      "reg/thin-child.mjs",
+      "--family-key",
+      "fam-thin"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_thin",
+    "args": [
+      "theme",
+      "build",
+      "reg/thin.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_good",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/good.mjs",
+      "reg/good-child.mjs",
+      "--family-key",
+      "fam-good"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_good",
+    "args": [
+      "theme",
+      "build",
+      "reg/good.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_split",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/split.mjs",
+      "reg/split-child.mjs",
+      "--family-key",
+      "fam-split"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_split",
+    "args": [
+      "theme",
+      "build",
+      "reg/split.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_lmiss",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/lmiss.mjs",
+      "reg/lmiss-child.mjs",
+      "--family-key",
+      "fam-lmiss"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_lmiss",
+    "args": [
+      "theme",
+      "build",
+      "reg/lmiss.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_extless",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/extless.mjs",
+      "reg/extless-child.mjs",
+      "--family-key",
+      "fam-extless"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_extless",
+    "args": [
+      "theme",
+      "build",
+      "reg/extless.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_css",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/css.mjs",
+      "reg/css-child.mjs",
+      "--family-key",
+      "fam-css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_css",
+    "args": [
+      "theme",
+      "build",
+      "reg/css.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_dyn",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/dyn.mjs",
+      "reg/dyn-child.mjs",
+      "--family-key",
+      "fam-dyn"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_dyn",
+    "args": [
+      "theme",
+      "build",
+      "reg/dyn.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_sdyn",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/sdyn.mjs",
+      "reg/sdyn-child.mjs",
+      "--family-key",
+      "fam-sdyn"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_sdyn",
+    "args": [
+      "theme",
+      "build",
+      "reg/sdyn.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_family_reg_star",
+    "args": [
+      "theme",
+      "build",
+      "--family",
+      "reg/star.mjs",
+      "reg/star-child.mjs",
+      "--family-key",
+      "fam-star"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_build_reg_star",
+    "args": [
+      "theme",
+      "build",
+      "reg/star.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_plain",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_plain_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_ordered",
+    "args": [
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_ordered_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_typo",
+    "args": [
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_typo_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_kid",
+    "args": [
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_kid_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_built",
+    "args": [
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_built_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_tla",
+    "args": [
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_tla_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_axes",
+    "args": [
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_axes_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_widths",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_widths_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_widths-custom",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_widths-custom_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.3.0_multi",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs",
+      "themes/typo.mjs",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.3.0"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_plain",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_plain_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_ordered",
+    "args": [
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_ordered_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_typo",
+    "args": [
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_typo_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_kid",
+    "args": [
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_kid_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_built",
+    "args": [
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_built_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_tla",
+    "args": [
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_tla_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_axes",
+    "args": [
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_axes_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_widths",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_widths_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_widths-custom",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_widths-custom_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.5.4_multi",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs",
+      "themes/typo.mjs",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.5.4"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_plain",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_plain_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/plain.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_ordered",
+    "args": [
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_ordered_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_typo",
+    "args": [
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_typo_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/typo.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_kid",
+    "args": [
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_kid_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/kid.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_built",
+    "args": [
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_built_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/built.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_tla",
+    "args": [
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_tla_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/tla.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_axes",
+    "args": [
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_axes_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/axes.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_widths",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_widths_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_widths-custom",
+    "args": [
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_widths-custom_json",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/widths-custom.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_oldcore_0.6.8_multi",
+    "args": [
+      "theme",
+      "build",
+      "themes/plain.mjs",
+      "themes/typo.mjs",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes-core-0.6.8"
+  },
+  {
+    "id": "tb_empty_family_key",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--family-key",
+      ""
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_empty_out",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      ""
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_empty_out_multi",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "--out",
+      ""
+    ],
+    "fixture": "themes"
+  }
+]

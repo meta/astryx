@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_init_--user-yes",
+ "args": [
+  "init",
+  "--user=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--user=yes'\n",
+ "exit": 1,
+ "files": []
+}

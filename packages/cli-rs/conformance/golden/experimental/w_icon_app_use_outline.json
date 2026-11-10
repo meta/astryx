@@ -1,0 +1,25 @@
+{
+ "id": "w_icon_app_use_outline",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "outline"
+ ],
+ "fixture": "iconapp",
+ "stdout": "[ok] experimental.iconSet is now \"outline\" (@acme/outline/outline) in astryx.config.mjs.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/iconapp\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "iconapp/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {\n  integrations: ['@acme/glyphs', '@acme/outline'],\n\n  experimental: {\n    iconSet: 'outline'\n  }\n};\n"
+  }
+ ]
+}

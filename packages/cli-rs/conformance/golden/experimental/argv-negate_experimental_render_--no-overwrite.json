@@ -1,0 +1,13 @@
+{
+ "id": "argv-negate_experimental_render_--no-overwrite",
+ "args": [
+  "experimental",
+  "render",
+  "--no-overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-overwrite'\n(Did you mean --overwrite?)\n",
+ "exit": 1,
+ "files": []
+}

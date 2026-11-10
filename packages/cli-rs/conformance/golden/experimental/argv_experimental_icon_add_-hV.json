@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_add_-hV",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

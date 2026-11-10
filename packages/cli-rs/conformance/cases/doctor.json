@@ -553,6 +553,246 @@
     "gen": true
   },
   {
+    "id": "argv_doctor_--json_--json",
+    "args": [
+      "doctor",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--help_--json",
+    "args": [
+      "doctor",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--json_--help",
+    "args": [
+      "doctor",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-h_--bogus",
+    "args": [
+      "doctor",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--bogus_-h",
+    "args": [
+      "doctor",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-V",
+    "args": [
+      "doctor",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--version",
+    "args": [
+      "doctor",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--JSON",
+    "args": [
+      "doctor",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--jso",
+    "args": [
+      "doctor",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--no-json",
+    "args": [
+      "doctor",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--json-1",
+    "args": [
+      "doctor",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-x",
+    "args": [
+      "doctor",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-hV",
+    "args": [
+      "doctor",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--_--json",
+    "args": [
+      "doctor",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_--_-h",
+    "args": [
+      "doctor",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_x",
+    "args": [
+      "doctor",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-",
+    "args": [
+      "doctor",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_-5",
+    "args": [
+      "doctor",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_---x",
+    "args": [
+      "doctor",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_---json",
+    "args": [
+      "doctor",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_doctor_--built_out_--built_out",
+    "args": [
+      "doctor",
+      "--built",
+      "out",
+      "--built",
+      "out"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_doctor_--built_out_--built_src-theme.ts",
+    "args": [
+      "doctor",
+      "--built",
+      "out",
+      "--built",
+      "src/theme.ts"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_doctor_--built_x",
+    "args": [
+      "doctor",
+      "--built",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_doctor_--built-",
+    "args": [
+      "doctor",
+      "--built="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_doctor_--built_-1",
+    "args": [
+      "doctor",
+      "--built",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "doctor_integration_--help_@author",
     "args": [
       "doctor",
@@ -976,6 +1216,213 @@
     "gen": true
   },
   {
+    "id": "argv_doctor_integration_--json_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--help_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--json_--help",
+    "args": [
+      "doctor",
+      "integration",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-h_--bogus",
+    "args": [
+      "doctor",
+      "integration",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--bogus_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-V",
+    "args": [
+      "doctor",
+      "integration",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--version",
+    "args": [
+      "doctor",
+      "integration",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--JSON",
+    "args": [
+      "doctor",
+      "integration",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--jso",
+    "args": [
+      "doctor",
+      "integration",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--no-json",
+    "args": [
+      "doctor",
+      "integration",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--json-1",
+    "args": [
+      "doctor",
+      "integration",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-x",
+    "args": [
+      "doctor",
+      "integration",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-hV",
+    "args": [
+      "doctor",
+      "integration",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_--_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_x",
+    "args": [
+      "doctor",
+      "integration",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-",
+    "args": [
+      "doctor",
+      "integration",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_-5",
+    "args": [
+      "doctor",
+      "integration",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_---x",
+    "args": [
+      "doctor",
+      "integration",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_---json",
+    "args": [
+      "doctor",
+      "integration",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "doctor_integration_components_--help_@author",
     "args": [
       "doctor",
@@ -1222,6 +1669,233 @@
       "--json"
     ],
     "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--json_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--help_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--json_--help",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-h_--bogus",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--bogus_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-V",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--version",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--JSON",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--jso",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--no-json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--json-1",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-x",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-hV",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_--_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_x",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_-5",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_---x",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_components_---json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "---json"
+    ],
+    "fixture": "app",
     "gen": true
   },
   {
@@ -1485,6 +2159,233 @@
     "gen": true
   },
   {
+    "id": "argv_doctor_integration_docs_--json_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--help_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--json_--help",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-h_--bogus",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--bogus_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-V",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--version",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--JSON",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--jso",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--no-json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--json-1",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-x",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-hV",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_--_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_x",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_-5",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_---x",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_docs_---json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "doctor_integration_docs_nosuchsub",
     "args": [
       "doctor",
@@ -1745,6 +2646,233 @@
     "gen": true
   },
   {
+    "id": "argv_doctor_integration_templates_--json_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--help_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--json_--help",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-h_--bogus",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--bogus_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-V",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--version",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--JSON",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--jso",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--no-json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--json-1",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-x",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-hV",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_--_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_x",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_-5",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_---x",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_templates_---json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "doctor_integration_templates_nosuchsub",
     "args": [
       "doctor",
@@ -2002,6 +3130,233 @@
       "--json"
     ],
     "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--json_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--help_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--json_--help",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-h_--bogus",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--bogus_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-V",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--version",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--JSON",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--jso",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--no-json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--json-1",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-x",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-hV",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--_--json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_--_-h",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_x",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_-5",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_---x",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_doctor_integration_validate_---json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "---json"
+    ],
+    "fixture": "app",
     "gen": true
   },
   {
@@ -2375,1471 +3730,626 @@
     }
   },
   {
-    "id": "w_doctor_config_throws",
+    "id": "doctor_@pm-npm",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/throws"
+    "fixture": "pm-npm",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_throws_json",
+    "id": "doctor_--json_@pm-npm",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/throws"
+    "fixture": "pm-npm",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_multi",
+    "id": "doctor_@pm-pnpm",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/multi"
+    "fixture": "pm-pnpm",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_multi_json",
+    "id": "doctor_--json_@pm-pnpm",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/multi"
+    "fixture": "pm-pnpm",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_number",
+    "id": "doctor_@pm-yarn",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/number"
+    "fixture": "pm-yarn",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_number_json",
+    "id": "doctor_--json_@pm-yarn",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/number"
+    "fixture": "pm-yarn",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_schema",
+    "id": "doctor_@pm-yarnberry",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/schema"
+    "fixture": "pm-yarnberry",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_schema_json",
+    "id": "doctor_--json_@pm-yarnberry",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/schema"
+    "fixture": "pm-yarnberry",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_missing",
+    "id": "doctor_@pm-bun",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/missing"
+    "fixture": "pm-bun",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_missing_json",
+    "id": "doctor_--json_@pm-bun",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/missing"
+    "fixture": "pm-bun",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_ok",
+    "id": "doctor_@monorepo",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/ok"
+    "fixture": "monorepo",
+    "gen": true
   },
   {
-    "id": "w_doctor_config_ok_json",
+    "id": "doctor_--json_@monorepo",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-config",
-    "cwd": "doctor-config/ok"
+    "fixture": "monorepo",
+    "gen": true
   },
   {
-    "id": "w_doctor_agents_good",
+    "id": "in-monorepo.packages.web_doctor_@monorepo",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-agents",
-    "cwd": "doctor-agents/good"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
   },
   {
-    "id": "w_doctor_agents_nomarkers",
+    "id": "in-monorepo.packages.web_doctor_--json_@monorepo",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_doctor_@monorepo",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-agents",
-    "cwd": "doctor-agents/nomarkers"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
   },
   {
-    "id": "w_doctor_agents_dangling",
+    "id": "in-monorepo.packages.web.src_doctor_--json_@monorepo",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_doctor_@monorepo",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-agents",
-    "cwd": "doctor-agents/dangling"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
   },
   {
-    "id": "w_doctor_agents_legacy",
+    "id": "in-monorepo.packages.api_doctor_--json_@monorepo",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "doctor_@monorepo-local",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-agents",
-    "cwd": "doctor-agents/legacy"
+    "fixture": "monorepo-local",
+    "gen": true
   },
   {
-    "id": "w_doctor_agents_good_from_src",
+    "id": "doctor_--json_@monorepo-local",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_doctor_@monorepo-local",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-agents",
-    "cwd": "doctor-agents/good/src"
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
   },
   {
-    "id": "w_doctor_env_peers",
+    "id": "in-monorepo-local.apps.site_doctor_--json_@monorepo-local",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "doctor_@configured",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/peers"
+    "fixture": "configured",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_peers_json",
+    "id": "doctor_--json_@configured",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/peers"
+    "fixture": "configured",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_stray",
+    "id": "doctor_@configts",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/stray"
+    "fixture": "configts",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_stray_json",
+    "id": "doctor_--json_@configts",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/stray"
+    "fixture": "configts",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_ambiguous",
+    "id": "doctor_@badconfig",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/ambiguous"
+    "fixture": "badconfig",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_ambiguous_json",
+    "id": "doctor_--json_@badconfig",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/ambiguous"
+    "fixture": "badconfig",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_evidence",
+    "id": "doctor_@syntaxconfig",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/evidence"
+    "fixture": "syntaxconfig",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_evidence_json",
+    "id": "doctor_--json_@syntaxconfig",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/evidence"
+    "fixture": "syntaxconfig",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_bun",
+    "id": "doctor_@unknownint",
     "args": [
       "doctor"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/bun"
+    "fixture": "unknownint",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_bun_json",
+    "id": "doctor_--json_@unknownint",
     "args": [
       "doctor",
       "--json"
     ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/bun"
+    "fixture": "unknownint",
+    "gen": true
   },
   {
-    "id": "w_doctor_env_yarn",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/yarn"
-  },
-  {
-    "id": "w_doctor_env_yarn_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/yarn"
-  },
-  {
-    "id": "w_doctor_env_cli",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/cli"
-  },
-  {
-    "id": "w_doctor_env_cli_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/cli"
-  },
-  {
-    "id": "w_doctor_env_oldcore",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/oldcore"
-  },
-  {
-    "id": "w_doctor_env_oldcore_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/oldcore"
-  },
-  {
-    "id": "w_doctor_env_workspace",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/workspace"
-  },
-  {
-    "id": "w_doctor_env_workspace_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-env",
-    "cwd": "doctor-env/workspace"
-  },
-  {
-    "id": "w_doctor_themes_unwired",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-themes",
-    "cwd": "doctor-themes/unwired"
-  },
-  {
-    "id": "w_doctor_themes_legacy",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-themes",
-    "cwd": "doctor-themes/legacy"
-  },
-  {
-    "id": "w_doctor_themes_cssimport",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-themes",
-    "cwd": "doctor-themes/cssimport"
-  },
-  {
-    "id": "w_doctor_themes_notgenerated",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-themes",
-    "cwd": "doctor-themes/notgenerated"
-  },
-  {
-    "id": "w_doctor_int_broken",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_broken_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_provider",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_provider_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_clicommand",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_clicommand_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_oneclicommand",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/oneclicommand"
-  },
-  {
-    "id": "w_doctor_int_oneclicommand_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/oneclicommand"
-  },
-  {
-    "id": "w_doctor_int_configured",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_configured_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_alias",
-    "args": [
-      "doctor"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_alias_json",
-    "args": [
-      "doctor",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_validate_bad-throws_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@bad/throws"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_templates_bad-throws_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "@bad/throws"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_components_bad-throws_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@bad/throws"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_docs_bad-throws_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "@bad/throws"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_bad-throws_broken_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@bad/throws",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_bad-messy_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@bad/messy"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_templates_bad-messy_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "@bad/messy"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_components_bad-messy_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@bad/messy"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_docs_bad-messy_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "@bad/messy"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_bad-messy_broken_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@bad/messy",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_dup-two_provider",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@dup/two"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_templates_dup-two_provider",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "@dup/two"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_components_dup-two_provider",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@dup/two"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_docs_dup-two_provider",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "@dup/two"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_validate_dup-two_provider_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@dup/two",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/provider"
-  },
-  {
-    "id": "w_doctor_int_validate_cmd-one_clicommand",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@cmd/one"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_templates_cmd-one_clicommand",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "@cmd/one"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_components_cmd-one_clicommand",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@cmd/one"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_docs_cmd-one_clicommand",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "@cmd/one"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_validate_cmd-one_clicommand_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@cmd/one",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/clicommand"
-  },
-  {
-    "id": "w_doctor_int_validate_kit-alias_alias",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "kit-alias"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_templates_kit-alias_alias",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "kit-alias"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_components_kit-alias_alias",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "kit-alias"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_docs_kit-alias_alias",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "kit-alias"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_validate_kit-alias_alias_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "kit-alias",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/alias"
-  },
-  {
-    "id": "w_doctor_int_validate_nope-absent_configured",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@nope/absent"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_templates_nope-absent_configured",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "@nope/absent"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_components_nope-absent_configured",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@nope/absent"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_docs_nope-absent_configured",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "@nope/absent"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_validate_nope-absent_configured_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@nope/absent",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/configured"
-  },
-  {
-    "id": "w_doctor_int_validate_dotdot-x_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "../x"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_templates_dotdot-x_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "../x"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_components_dotdot-x_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "../x"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_docs_dotdot-x_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "../x"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_dotdot-x_broken_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "../x",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_-abs_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "/abs"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_templates_-abs_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "templates",
-      "/abs"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_components_-abs_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "components",
-      "/abs"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_docs_-abs_broken",
-    "args": [
-      "doctor",
-      "integration",
-      "docs",
-      "/abs"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_int_validate_-abs_broken_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "/abs",
-      "--json"
-    ],
-    "fixture": "doctor-integrations",
-    "cwd": "doctor-integrations/broken"
-  },
-  {
-    "id": "w_doctor_built_dist",
-    "args": [
-      "doctor",
-      "--built",
-      "dist"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_dist-indexdothtml",
-    "args": [
-      "doctor",
-      "--built",
-      "dist/index.html"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_plain-indexdothtml",
-    "args": [
-      "doctor",
-      "--built",
-      "plain/index.html"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_styled-indexdothtml",
-    "args": [
-      "doctor",
-      "--built",
-      "styled/index.html"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src",
-    "args": [
-      "doctor",
-      "--built",
-      "src"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src-Pagedottsx",
-    "args": [
-      "doctor",
-      "--built",
-      "src/Page.tsx"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src-cleandottsx",
-    "args": [
-      "doctor",
-      "--built",
-      "src/clean.tsx"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src-utildotjs",
-    "args": [
-      "doctor",
-      "--built",
-      "src/util.js"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src-brokendottsx",
-    "args": [
-      "doctor",
-      "--built",
-      "src/broken.tsx"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_nojsx",
-    "args": [
-      "doctor",
-      "--built",
-      "nojsx"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_empty",
-    "args": [
-      "doctor",
-      "--built",
-      "empty"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_dot",
-    "args": [
-      "doctor",
-      "--built",
-      "."
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_nope",
-    "args": [
-      "doctor",
-      "--built",
-      "nope"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_dist-assets-appdotcss",
-    "args": [
-      "doctor",
-      "--built",
-      "dist/assets/app.css"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_src_json",
-    "args": [
-      "doctor",
-      "--built",
-      "src",
-      "--json"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_integration_validate",
-    "args": [
-      "doctor",
-      "--built",
-      "src",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-built"
-  },
-  {
-    "id": "w_doctor_built_empty_outside",
-    "args": [
-      "doctor",
-      "--built",
-      "."
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_doctor_author_validate_absolute",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/absolute"
-  },
-  {
-    "id": "w_doctor_author_templates_absolute",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/absolute"
-  },
-  {
-    "id": "w_doctor_author_components_absolute",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/absolute"
-  },
-  {
-    "id": "w_doctor_author_docs_absolute",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/absolute"
-  },
-  {
-    "id": "w_doctor_author_validate_absolute_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/absolute"
-  },
-  {
-    "id": "w_doctor_author_validate_noname",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/noname"
-  },
-  {
-    "id": "w_doctor_author_templates_noname",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/noname"
-  },
-  {
-    "id": "w_doctor_author_components_noname",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/noname"
-  },
-  {
-    "id": "w_doctor_author_docs_noname",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/noname"
-  },
-  {
-    "id": "w_doctor_author_validate_noname_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/noname"
-  },
-  {
-    "id": "w_doctor_author_validate_exports",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/exports"
-  },
-  {
-    "id": "w_doctor_author_templates_exports",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/exports"
-  },
-  {
-    "id": "w_doctor_author_components_exports",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/exports"
-  },
-  {
-    "id": "w_doctor_author_docs_exports",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/exports"
-  },
-  {
-    "id": "w_doctor_author_validate_exports_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/exports"
-  },
-  {
-    "id": "w_doctor_author_validate_badmanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badmanifest"
-  },
-  {
-    "id": "w_doctor_author_templates_badmanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badmanifest"
-  },
-  {
-    "id": "w_doctor_author_components_badmanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badmanifest"
-  },
-  {
-    "id": "w_doctor_author_docs_badmanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badmanifest"
-  },
-  {
-    "id": "w_doctor_author_validate_badmanifest_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badmanifest"
-  },
-  {
-    "id": "w_doctor_author_validate_twomanifests",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/twomanifests"
-  },
-  {
-    "id": "w_doctor_author_templates_twomanifests",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/twomanifests"
-  },
-  {
-    "id": "w_doctor_author_components_twomanifests",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/twomanifests"
-  },
-  {
-    "id": "w_doctor_author_docs_twomanifests",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/twomanifests"
-  },
-  {
-    "id": "w_doctor_author_validate_twomanifests_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/twomanifests"
-  },
-  {
-    "id": "w_doctor_author_validate_nomanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/nomanifest"
-  },
-  {
-    "id": "w_doctor_author_templates_nomanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/nomanifest"
-  },
-  {
-    "id": "w_doctor_author_components_nomanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/nomanifest"
-  },
-  {
-    "id": "w_doctor_author_docs_nomanifest",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/nomanifest"
-  },
-  {
-    "id": "w_doctor_author_validate_nomanifest_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/nomanifest"
-  },
-  {
-    "id": "w_doctor_author_validate_badjson",
-    "args": [
-      "doctor",
-      "integration",
-      "validate"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badjson"
-  },
-  {
-    "id": "w_doctor_author_templates_badjson",
-    "args": [
-      "doctor",
-      "integration",
-      "templates"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badjson"
-  },
-  {
-    "id": "w_doctor_author_components_badjson",
-    "args": [
-      "doctor",
-      "integration",
-      "components"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badjson"
-  },
-  {
-    "id": "w_doctor_author_docs_badjson",
-    "args": [
-      "doctor",
-      "integration",
-      "docs"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badjson"
-  },
-  {
-    "id": "w_doctor_author_validate_badjson_json",
-    "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "--json"
-    ],
-    "fixture": "doctor-author",
-    "cwd": "doctor-author/badjson"
-  },
-  {
-    "id": "w_doctor_from_subdir",
+    "id": "in-app.src_doctor",
     "args": [
       "doctor"
     ],
     "fixture": "app",
+    "gen": true,
     "cwd": "app/src"
   },
   {
-    "id": "w_doctor_integration_validate_from_kit_components",
+    "id": "in-app.src_doctor_--json",
     "args": [
       "doctor",
-      "integration",
-      "validate"
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_doctor_--json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_doctor_@large",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-large.src_doctor_--json_@large",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_doctor_@integration",
+    "args": [
+      "doctor"
     ],
     "fixture": "integration",
-    "cwd": "integration/node_modules/@acme/kit/components"
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
   },
   {
-    "id": "w_doctor_integration_docs_kit_installed",
+    "id": "in-integration.node_modules.@acme.kit_doctor_--json_@integration",
     "args": [
       "doctor",
-      "integration",
-      "docs",
-      "@acme/kit"
+      "--json"
     ],
-    "fixture": "integration"
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
   },
   {
-    "id": "w_doctor_integration_components_kit_installed",
+    "id": "in-._doctor_@empty",
     "args": [
-      "doctor",
-      "integration",
-      "components",
-      "@acme/kit"
+      "doctor"
     ],
-    "fixture": "integration"
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
   },
   {
-    "id": "w_doctor_integration_templates_kit_installed",
+    "id": "in-._doctor_--json_@empty",
     "args": [
       "doctor",
-      "integration",
-      "templates",
-      "@acme/kit"
+      "--json"
     ],
-    "fixture": "integration"
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
   },
   {
-    "id": "w_doctor_integration_validate_charts_large",
+    "id": "env-ua-pnpm_doctor",
     "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@astryxdesign/charts"
+      "doctor"
     ],
-    "fixture": "large"
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
   },
   {
-    "id": "w_doctor_integration_validate_build_large",
+    "id": "env-ua-pnpm_doctor_@empty",
     "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@astryxdesign/build"
+      "doctor"
     ],
-    "fixture": "large"
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
   },
   {
-    "id": "w_doctor_integration_validate_core_app",
+    "id": "env-ua-yarn1_doctor",
     "args": [
-      "doctor",
-      "integration",
-      "validate",
-      "@astryxdesign/core"
+      "doctor"
     ],
-    "fixture": "app"
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_doctor_@empty",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_doctor_@empty",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_doctor_@empty",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_doctor_@empty",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ci-1_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-true_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-false_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-0_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-github_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-xdg_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg-relative_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-node-env-prod_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-agent_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-pnpm-home_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-lang-zh_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  },
+  {
+    "id": "doctor_@icons",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "icons",
+    "gen": true
   }
 ]

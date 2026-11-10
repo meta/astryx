@@ -1,0 +1,11 @@
+[
+  {
+    "id": "fuzz_build_TOKEN-WITH-H@doctor-integrations_1875d6",
+    "args": [
+      "build",
+      "TOKEN-WITH-H"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  }
+]

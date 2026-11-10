@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_integration_check_--strict-yes",
+ "args": [
+  "integration",
+  "check",
+  "--strict=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--strict=yes'\n",
+ "exit": 1,
+ "files": []
+}

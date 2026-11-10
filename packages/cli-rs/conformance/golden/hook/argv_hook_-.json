@@ -1,0 +1,12 @@
+{
+ "id": "argv_hook_-",
+ "args": [
+  "hook",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No hook named \"ü中文\"\n",
+ "exit": 1,
+ "files": []
+}

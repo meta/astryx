@@ -1,0 +1,15 @@
+{
+ "id": "argv-booleq_integration_add_component_useClipboard_--dry-run-yes",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--dry-run=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--dry-run=yes'\n",
+ "exit": 1,
+ "files": []
+}

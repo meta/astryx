@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-set_--_-h",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid icon set name \"-h\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

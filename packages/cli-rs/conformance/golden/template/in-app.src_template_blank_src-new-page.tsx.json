@@ -1,0 +1,19 @@
+{
+ "id": "in-app.src_template_blank_src-new-page.tsx",
+ "args": [
+  "template",
+  "blank",
+  "src/new-page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "Copied template to src/new-page.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/src/src/new-page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Layout, LayoutContent} from '@astryxdesign/core';\nimport {Text} from '@astryxdesign/core';\n\nexport default function Page() {\n  return (\n    <Layout\n      content={\n        <LayoutContent>\n          <Text type=\"large\">New Page</Text>\n        </LayoutContent>\n      }\n    />\n  );\n}\n"
+  }
+ ]
+}

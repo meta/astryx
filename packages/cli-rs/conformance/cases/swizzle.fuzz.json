@@ -1,0 +1,13 @@
+[
+  {
+    "id": "fuzz_swizzle_DateInput_--output_src-App.tsx_--json_c94038",
+    "args": [
+      "swizzle",
+      "DateInput",
+      "--output",
+      "src/App.tsx",
+      "--json"
+    ],
+    "fixture": "app"
+  }
+]

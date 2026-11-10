@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_integration_add_--parent_acme_component_useClipboard",
+ "args": [
+  "integration",
+  "add",
+  "--parent",
+  "acme",
+  "component",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"parent\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

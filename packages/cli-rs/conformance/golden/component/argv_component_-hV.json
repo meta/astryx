@@ -1,0 +1,12 @@
+{
+ "id": "argv_component_-hV",
+ "args": [
+  "component",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

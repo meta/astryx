@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_--json_--help",
+ "args": [
+  "integration",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx integration\",\n    \"description\": \"Author and verify an Astryx integration package\",\n    \"usage\": \"astryx integration [options] [command]\",\n    \"options\": [],\n    \"subcommands\": [\n      {\n        \"name\": \"add\",\n        \"description\": \"Add one working contribution to an integration package\"\n      },\n      {\n        \"name\": \"check\",\n        \"description\": \"The CI check for an integration package's own build: every source check, run in continuous integration or a typecheck script, against the package in the current folder\"\n      },\n      {\n        \"name\": \"verify\",\n        \"description\": \"Check the package the way npm will publish it, before you publish\"\n      },\n      {\n        \"name\": \"pack\",\n        \"description\": \"Deprecated: the old name of `integration verify`\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

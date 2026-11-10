@@ -26,6 +26,7 @@ const {gatherTemplates, gatherThemes} = await imp('api/search/_gather-templates.
 const {runWithDocPackageManager} = await imp('foundation/env/package-manager.mjs');
 const {withListingCache} = await imp('foundation/fs/listing-cache.mjs');
 const {loadDocsCatalog} = await imp('api/docs/_adapter.mjs');
+const {loadAuthoringSelfDocs} = await imp('foundation/discovery/authoring-self-docs.mjs');
 
 const PMS = ['npm', 'pnpm', 'yarn', 'yarn-classic', 'bun'];
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-search-gen-'));
@@ -58,7 +59,12 @@ const entryNames = new Set([...(await loadDocsCatalog(cwd)).entries()].map(e => 
 const topicCount = base.findIndex(c => !entryNames.has(c._topic));
 if (base.slice(topicCount).some(c => entryNames.has(c._topic) && !c._topic.includes('/')))
   throw new Error('a docs-tree candidate shares a topic name');
-const text = `${JSON.stringify({base, diffs, topicCount, templates, themes})}\n`;
+// The experimental self-docs whose sections search never shows: a project
+// whose integrations change the docs gathers them at run time.
+const hidden = (await loadAuthoringSelfDocs()).loaded
+  .filter(({doc}) => doc?.stability === 'experimental')
+  .map(({doc}) => doc.name);
+const text = `${JSON.stringify({base, diffs, topicCount, hidden, templates, themes})}\n`;
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
   if (current !== text) {

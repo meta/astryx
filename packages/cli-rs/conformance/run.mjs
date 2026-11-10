@@ -49,12 +49,19 @@ if (argv.includes('--failed') && fs.existsSync(reportFile)) {
   const prev = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
   onlyFailed = new Set(prev.failures.map(f => `${f.command}/${f.id}`));
 }
+const crashFile = path.join(path.dirname(goldenPath('x', 'x')), '..', 'JS_CRASHES.json');
+const crashes = new Set(fs.existsSync(crashFile) ? JSON.parse(fs.readFileSync(crashFile, 'utf8')) : []);
 const items = [];
 let missing = 0;
+let crashed = 0;
 for (const [command, cases] of Object.entries(all)) {
   for (const c of cases) {
     if (onlyFailed && !onlyFailed.has(`${command}/${c.id}`)) continue;
     const g = goldenPath(command, c.id);
+    if (crashes.has(`${command}/${c.id}`)) {
+      crashed++;
+      continue;
+    }
     if (!fs.existsSync(g)) {
       missing++;
       continue;
@@ -62,7 +69,7 @@ for (const [command, cases] of Object.entries(all)) {
     items.push({command, c, golden: JSON.parse(fs.readFileSync(g, 'utf8'))});
   }
 }
-const bin = {cmd: [binPath], cliRoot: findCliRoot(binPath), timeoutMs: Number(opt('timeout') ?? 60000)};
+const bin = {cmd: [binPath], cliRoot: findCliRoot(binPath), timeoutMs: Number(opt('timeout') ?? 20000)};
 const started = Date.now();
 const stats = {};
 const failures = [];
@@ -104,6 +111,7 @@ for (const k of cmds) {
 rows.push(['TOTAL', String(pass), String(total), total ? ((100 * pass) / total).toFixed(1) : '0']);
 const w = rows[0].map((_, i) => Math.max(...rows.map(r => r[i].length)));
 for (const r of rows) console.log(r.map((v, i) => (i ? v.padStart(w[i]) : v.padEnd(w[i]))).join('  '));
+if (crashed) console.log(`(${crashed} cases skipped: the JS CLI itself crashed there; golden/JS_CRASHES.json)`);
 if (missing) console.log(`(${missing} cases have no golden yet; run record.mjs --missing)`);
 
 failures.sort((a, b) => (a.command + a.id < b.command + b.id ? -1 : 1));

@@ -290,6 +290,193 @@
     "gen": true
   },
   {
+    "id": "argv_experimental_--json_--json",
+    "args": [
+      "experimental",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--help_--json",
+    "args": [
+      "experimental",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--json_--help",
+    "args": [
+      "experimental",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-h_--bogus",
+    "args": [
+      "experimental",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--bogus_-h",
+    "args": [
+      "experimental",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-V",
+    "args": [
+      "experimental",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--version",
+    "args": [
+      "experimental",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--JSON",
+    "args": [
+      "experimental",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--jso",
+    "args": [
+      "experimental",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--no-json",
+    "args": [
+      "experimental",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--json-1",
+    "args": [
+      "experimental",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-x",
+    "args": [
+      "experimental",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-hV",
+    "args": [
+      "experimental",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--_--json",
+    "args": [
+      "experimental",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_--_-h",
+    "args": [
+      "experimental",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_x",
+    "args": [
+      "experimental",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-",
+    "args": [
+      "experimental",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_-5",
+    "args": [
+      "experimental",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_---x",
+    "args": [
+      "experimental",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_---json",
+    "args": [
+      "experimental",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "experimental_icon_--help",
     "args": [
       "experimental",
@@ -1160,6 +1347,468 @@
       "icon",
       "--all-icons",
       "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_x",
+    "args": [
+      "experimental",
+      "icon",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-",
+    "args": [
+      "experimental",
+      "icon",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_--list_table",
+    "args": [
+      "experimental",
+      "icon",
+      "--list",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_--list_--list",
+    "args": [
+      "experimental",
+      "icon",
+      "--list",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_--list-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "--list=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_--no-list",
+    "args": [
+      "experimental",
+      "icon",
+      "--no-list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_--set_Button_table",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "Button",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_--set_Button_--set_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "Button",
+      "--set",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_--set_Button_--set_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "Button",
+      "--set",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_--set_x",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_--set-",
+    "args": [
+      "experimental",
+      "icon",
+      "--set="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_--set_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_--limit_3_table",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      "3",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_--limit_3_--limit_3",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      "3",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_--limit_3_--limit_0",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      "3",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_--limit_x",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_--limit-",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_--definitions_table",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_--definitions_--definitions",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions",
+      "--definitions"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_--definitions-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_--no-definitions",
+    "args": [
+      "experimental",
+      "icon",
+      "--no-definitions"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_--all-icons_table",
+    "args": [
+      "experimental",
+      "icon",
+      "--all-icons",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_--all-icons_--all-icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--all-icons",
+      "--all-icons"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_--all-icons-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "--all-icons=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_--no-all-icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--no-all-icons"
     ],
     "fixture": "app",
     "gen": true
@@ -2713,6 +3362,933 @@
     "gen": true
   },
   {
+    "id": "argv_experimental_icon_add_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_add_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--from_-acme-glyphs_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "@acme/glyphs",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--from_-acme-glyphs_--from_-acme-glyphs",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "@acme/glyphs",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--from_-acme-glyphs_--from_other",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "@acme/glyphs",
+      "--from",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--from_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--from-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--from_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--definition_Button_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition",
+      "Button",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--definition_Button_--definition_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition",
+      "Button",
+      "--definition",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--definition_Button_--definition_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition",
+      "Button",
+      "--definition",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--definition_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--definition-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--definition_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--definition",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--new-definition_Button_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition",
+      "Button",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--new-definition_Button_--new-definition_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition",
+      "Button",
+      "--new-definition",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--new-definition_Button_--new-definition_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition",
+      "Button",
+      "--new-definition",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--new-definition_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--new-definition-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--new-definition_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--new-definition",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--description_hello-world_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description",
+      "hello world",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--description_hello-world_--description_hello-world",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description",
+      "hello world",
+      "--description",
+      "hello world"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--description_hello-world_--description_other",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description",
+      "hello world",
+      "--description",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--description_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--description-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--description_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--description",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--words_a-b_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words",
+      "a,b",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--words_a-b_--words_a-b",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words",
+      "a,b",
+      "--words",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--words_a-b_--words_other",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words",
+      "a,b",
+      "--words",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--words_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--words-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--words_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--words",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--default_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--default",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--default_--default",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--default",
+      "--default"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_add_--default-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--default=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_add_--no-default",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--no-default"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--variant_Button_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "Button",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--variant_Button_--variant_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "Button",
+      "--variant",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--variant_Button_--variant_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "Button",
+      "--variant",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--variant_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--variant-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--variant_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--all_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--all_--all",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "--all"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_add_--all-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_add_--no-all",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--no-all"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--id_dice-5_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id",
+      "dice-5",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--id_dice-5_--id_dice-5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id",
+      "dice-5",
+      "--id",
+      "dice-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--id_dice-5_--id_other",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id",
+      "dice-5",
+      "--id",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--id_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--id-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--id_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--id",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_add_--set_Button_Dice5",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set",
+      "Button",
+      "Dice5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_add_--set_Button_--set_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set",
+      "Button",
+      "--set",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_add_--set_Button_--set_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set",
+      "Button",
+      "--set",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_add_--set_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_add_--set-",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_add_--set_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--set",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "experimental_icon_add_nosuchsub",
     "args": [
       "experimental",
@@ -3385,6 +4961,431 @@
       "--pairs",
       "a,b",
       "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_x",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_map_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_map_--set_Button_random",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "Button",
+      "random"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_map_--set_Button_--set_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "Button",
+      "--set",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_map_--set_Button_--set_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "Button",
+      "--set",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_map_--set_x",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_map_--set-",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_map_--set_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_map_--remove_random",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--remove",
+      "random"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_map_--remove_--remove",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--remove",
+      "--remove"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_map_--remove-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--remove=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_map_--no-remove",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--no-remove"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_map_--pairs_a-b_random",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "a,b",
+      "random"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_map_--pairs_a-b_--pairs_a-b",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "a,b",
+      "--pairs",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_map_--pairs_a-b_--pairs_other",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "a,b",
+      "--pairs",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_map_--pairs_x",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_map_--pairs-",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_map_--pairs_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "-1"
     ],
     "fixture": "app",
     "gen": true
@@ -4101,6 +6102,853 @@
       "--icon",
       "dice-5",
       "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-definition_useClipboard_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-definition_--dry-run_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--dry-run",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-definition_useClipboard_--dry-run_--dry-run",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--dry-run",
+      "--dry-run"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_new-definition_useClipboard_--dry-run-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--dry-run=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_new-definition_useClipboard_--no-dry-run",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--no-dry-run"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-definition_--set_Button_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--set",
+      "Button",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-definition_useClipboard_--set_Button_--set_Button",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--set",
+      "Button",
+      "--set",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-definition_useClipboard_--set_Button_--set_nope",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--set",
+      "Button",
+      "--set",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-definition_useClipboard_--set_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--set",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-definition_useClipboard_--set-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--set="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-definition_useClipboard_--set_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--set",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-definition_--description_hello-world_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--description",
+      "hello world",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-definition_useClipboard_--description_hello-world_--description_hello-world",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--description",
+      "hello world",
+      "--description",
+      "hello world"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-definition_useClipboard_--description_hello-world_--description_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--description",
+      "hello world",
+      "--description",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-definition_useClipboard_--description_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--description",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-definition_useClipboard_--description-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--description="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-definition_useClipboard_--description_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--description",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-definition_--words_a-b_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--words",
+      "a,b",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-definition_useClipboard_--words_a-b_--words_a-b",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--words",
+      "a,b",
+      "--words",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-definition_useClipboard_--words_a-b_--words_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--words",
+      "a,b",
+      "--words",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-definition_useClipboard_--words_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--words",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-definition_useClipboard_--words-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--words="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-definition_useClipboard_--words_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--words",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-definition_--icon_dice-5_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "--icon",
+      "dice-5",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-definition_useClipboard_--icon_dice-5_--icon_dice-5",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--icon",
+      "dice-5",
+      "--icon",
+      "dice-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-definition_useClipboard_--icon_dice-5_--icon_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--icon",
+      "dice-5",
+      "--icon",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-definition_useClipboard_--icon_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--icon",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-definition_useClipboard_--icon-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--icon="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-definition_useClipboard_--icon_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "useClipboard",
+      "--icon",
+      "-1"
     ],
     "fixture": "app",
     "gen": true
@@ -5113,6 +7961,1015 @@
     "gen": true
   },
   {
+    "id": "argv_experimental_icon_new-set_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_new-set_useClipboard_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--dry-run_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--dry-run",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--dry-run_--dry-run",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--dry-run",
+      "--dry-run"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_icon_new-set_useClipboard_--dry-run-yes",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--dry-run=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_icon_new-set_useClipboard_--no-dry-run",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--no-dry-run"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--from_-acme-glyphs_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--from",
+      "@acme/glyphs",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--from_-acme-glyphs_--from_-acme-glyphs",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--from",
+      "@acme/glyphs",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--from_-acme-glyphs_--from_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--from",
+      "@acme/glyphs",
+      "--from",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--from_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--from",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--from-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--from="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--from_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--from",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--exclude_Foo-Bar_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--exclude",
+      "Foo,Bar",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--exclude_Foo-Bar_--exclude_Foo-Bar",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--exclude",
+      "Foo,Bar",
+      "--exclude",
+      "Foo,Bar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--exclude_Foo-Bar_--exclude_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--exclude",
+      "Foo,Bar",
+      "--exclude",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--exclude_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--exclude",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--exclude-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--exclude="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--exclude_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--exclude",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--variants_a-b_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--variants",
+      "a,b",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--variants_a-b_--variants_a-b",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--variants",
+      "a,b",
+      "--variants",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--variants_a-b_--variants_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--variants",
+      "a,b",
+      "--variants",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--variants_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--variants",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--variants-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--variants="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--variants_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--variants",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--default-variant_outline_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--default-variant",
+      "outline",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--default-variant_outline_--default-variant_outline",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--default-variant",
+      "outline",
+      "--default-variant",
+      "outline"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--default-variant_outline_--default-variant_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--default-variant",
+      "outline",
+      "--default-variant",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--default-variant_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--default-variant",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--default-variant-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--default-variant="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--default-variant_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--default-variant",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--display-name_hello-world_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--display-name",
+      "hello world",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--display-name_hello-world_--display-name_hello-world",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--display-name",
+      "hello world",
+      "--display-name",
+      "hello world"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--display-name_hello-world_--display-name_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--display-name",
+      "hello world",
+      "--display-name",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--display-name_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--display-name",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--display-name-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--display-name="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--display-name_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--display-name",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_icon_new-set_--description_hello-world_useClipboard",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "--description",
+      "hello world",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_icon_new-set_useClipboard_--description_hello-world_--description_hello-world",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--description",
+      "hello world",
+      "--description",
+      "hello world"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--description_hello-world_--description_other",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--description",
+      "hello world",
+      "--description",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_icon_new-set_useClipboard_--description_x",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--description",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--description-",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--description="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_icon_new-set_useClipboard_--description_-1",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "useClipboard",
+      "--description",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "experimental_icon_new-set_nosuchsub",
     "args": [
       "experimental",
@@ -5461,6 +9318,480 @@
       "use",
       "@acme/icons/outline",
       "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--json_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--help_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--json_--help",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-h_--bogus",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--bogus_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-V",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--version",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--JSON",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--jso",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--no-json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--json-1",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-hV",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--_--json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_--_-h",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_-5",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_---x",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_icon_use_lucide_---json",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "lucide",
+      "---json"
     ],
     "fixture": "app",
     "gen": true
@@ -6109,6 +10440,437 @@
     "gen": true
   },
   {
+    "id": "argv_experimental_render_--json_--json",
+    "args": [
+      "experimental",
+      "render",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--help_--json",
+    "args": [
+      "experimental",
+      "render",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--json_--help",
+    "args": [
+      "experimental",
+      "render",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-h_--bogus",
+    "args": [
+      "experimental",
+      "render",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--bogus_-h",
+    "args": [
+      "experimental",
+      "render",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-V",
+    "args": [
+      "experimental",
+      "render",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--version",
+    "args": [
+      "experimental",
+      "render",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--JSON",
+    "args": [
+      "experimental",
+      "render",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--jso",
+    "args": [
+      "experimental",
+      "render",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--no-json",
+    "args": [
+      "experimental",
+      "render",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--json-1",
+    "args": [
+      "experimental",
+      "render",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-x",
+    "args": [
+      "experimental",
+      "render",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-hV",
+    "args": [
+      "experimental",
+      "render",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--_--json",
+    "args": [
+      "experimental",
+      "render",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_--_-h",
+    "args": [
+      "experimental",
+      "render",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_x",
+    "args": [
+      "experimental",
+      "render",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-",
+    "args": [
+      "experimental",
+      "render",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_-5",
+    "args": [
+      "experimental",
+      "render",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_---x",
+    "args": [
+      "experimental",
+      "render",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_experimental_render_---json",
+    "args": [
+      "experimental",
+      "render",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_render_--out_out.png_page.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "--out",
+      "out.png",
+      "page.tsx"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_render_--out_out.png_--out_out.png",
+    "args": [
+      "experimental",
+      "render",
+      "--out",
+      "out.png",
+      "--out",
+      "out.png"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_render_--out_out.png_--out_other",
+    "args": [
+      "experimental",
+      "render",
+      "--out",
+      "out.png",
+      "--out",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_render_--out_x",
+    "args": [
+      "experimental",
+      "render",
+      "--out",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_render_--out-",
+    "args": [
+      "experimental",
+      "render",
+      "--out="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_render_--out_-1",
+    "args": [
+      "experimental",
+      "render",
+      "--out",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_render_--reverse_page.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "page.tsx"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_render_--reverse_--reverse",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "--reverse"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_render_--reverse-yes",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_render_--no-reverse",
+    "args": [
+      "experimental",
+      "render",
+      "--no-reverse"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_render_--title_hello-world_page.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "--title",
+      "hello world",
+      "page.tsx"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_render_--title_hello-world_--title_hello-world",
+    "args": [
+      "experimental",
+      "render",
+      "--title",
+      "hello world",
+      "--title",
+      "hello world"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_experimental_render_--title_hello-world_--title_other",
+    "args": [
+      "experimental",
+      "render",
+      "--title",
+      "hello world",
+      "--title",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_experimental_render_--title_x",
+    "args": [
+      "experimental",
+      "render",
+      "--title",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_experimental_render_--title-",
+    "args": [
+      "experimental",
+      "render",
+      "--title="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_experimental_render_--title_-1",
+    "args": [
+      "experimental",
+      "render",
+      "--title",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_experimental_render_--overwrite_page.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "--overwrite",
+      "page.tsx"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_experimental_render_--overwrite_--overwrite",
+    "args": [
+      "experimental",
+      "render",
+      "--overwrite",
+      "--overwrite"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_experimental_render_--overwrite-yes",
+    "args": [
+      "experimental",
+      "render",
+      "--overwrite=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_experimental_render_--no-overwrite",
+    "args": [
+      "experimental",
+      "render",
+      "--no-overwrite"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "experimental_render_nosuchsub",
     "args": [
       "experimental",
@@ -6395,571 +11157,2176 @@
     "gen": true
   },
   {
-    "id": "w_render_inputs_page_app",
+    "id": "experimental_icon_@icons",
+    "args": [
+      "experimental",
+      "icon"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--list_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--list"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--list_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--list",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--definitions_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--definitions_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--all-icons_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--all-icons"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_nope_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "nope"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--limit_1_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      "1"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_dice_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "dice"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_magic_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "magic"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_sparkle_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "sparkle"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_nope_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "nope"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_down_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow",
+      "down"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_glyphs_arrow_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "glyphs",
+      "arrow"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_glyphs_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_nope_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "nope"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_nope_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "nope",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_-acme-glyphs-glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/glyphs/glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_-acme-glyphs-glyphs_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/glyphs/glyphs",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--description_Go-fast._--words_launch-space_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Go fast.",
+      "--words",
+      "launch,space"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--description_Go-fast._--words_launch-space_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Go fast.",
+      "--words",
+      "launch,space",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--dry-run_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--dry-run"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--dry-run_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--dry-run",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_sparkle_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "sparkle"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_sparkle_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "sparkle",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--dry-run_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--dry-run"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--dry-run_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--dry-run",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--from_-acme-glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--from_-acme-glyphs_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_dice-5_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "dice-5"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_dice-5_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "dice-5",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_--remove_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "--remove"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_--remove_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "--remove",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_--pairs_random-dice-5_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "random=dice-5"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_--pairs_random-dice-5_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "random=dice-5",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--definition_random_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--definition",
+      "random"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--definition_random_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--definition",
+      "random",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--new-definition_dice_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--new-definition",
+      "dice"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--new-definition_dice_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--new-definition",
+      "dice",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_--all_--from_-acme-glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_--all_--from_-acme-glyphs_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Nope_--from_-acme-glyphs_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Nope",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Nope_--from_-acme-glyphs_--json_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Nope",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--list_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--list"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--list_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--list",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--definitions_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--definitions_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--definitions",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--all-icons_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--all-icons"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_nope_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "nope"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--limit_1_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--limit",
+      "1"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_dice_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "dice"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_magic_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "magic"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_sparkle_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "sparkle"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_nope_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "nope"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_arrow_down_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "arrow",
+      "down"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_--set_glyphs_arrow_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "--set",
+      "glyphs",
+      "arrow"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_glyphs_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_nope_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "nope"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_nope_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "nope",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_-acme-glyphs-glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/glyphs/glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_use_-acme-glyphs-glyphs_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/glyphs/glyphs",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--description_Go-fast._--words_launch-space_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Go fast.",
+      "--words",
+      "launch,space"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--description_Go-fast._--words_launch-space_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Go fast.",
+      "--words",
+      "launch,space",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--dry-run_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--dry-run"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_rocket_--dry-run_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--dry-run",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_sparkle_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "sparkle"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-definition_sparkle_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "sparkle",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--dry-run_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--dry-run"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--dry-run_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--dry-run",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--from_-acme-glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_new-set_mine_--from_-acme-glyphs_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "mine",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_dice-5_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "dice-5"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_dice-5_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "dice-5",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_--remove_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "--remove"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_random_--remove_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "random",
+      "--remove",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_--pairs_random-dice-5_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "random=dice-5"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_map_--pairs_random-dice-5_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "random=dice-5",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--definition_random_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--definition",
+      "random"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--definition_random_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--definition",
+      "random",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--new-definition_dice_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--new-definition",
+      "dice"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Dice5_--from_-acme-glyphs_--new-definition_dice_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Dice5",
+      "--from",
+      "@acme/glyphs",
+      "--new-definition",
+      "dice",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_--all_--from_-acme-glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_--all_--from_-acme-glyphs_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--all",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Nope_--from_-acme-glyphs_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Nope",
+      "--from",
+      "@acme/glyphs"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "experimental_icon_add_Nope_--from_-acme-glyphs_--json_@icons-unselected",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "Nope",
+      "--from",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "icons-unselected",
+    "gen": true
+  },
+  {
+    "id": "after-experimental-icon-new-set-mine---from--acme-_experimental_icon_--list_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "--list"
+    ],
+    "fixture": "icons",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "icon",
+        "new-set",
+        "mine",
+        "--from",
+        "@acme/glyphs"
+      ]
+    ]
+  },
+  {
+    "id": "after-experimental-icon-map-random-dice-5_experimental_icon_random_@icons",
+    "args": [
+      "experimental",
+      "icon",
+      "random"
+    ],
+    "fixture": "icons",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "icon",
+        "map",
+        "random",
+        "dice-5"
+      ]
+    ]
+  },
+  {
+    "id": "experimental_render_src-App.tsx",
     "args": [
       "experimental",
       "render",
-      "../inputs/page.tsx",
+      "src/App.tsx"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "experimental_render_src-App.tsx_--json",
+    "args": [
+      "experimental",
+      "render",
+      "src/App.tsx",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "experimental_render_src-App.tsx_--out_out-page.html",
+    "args": [
+      "experimental",
+      "render",
+      "src/App.tsx",
       "--out",
-      "page.html"
+      "out/page.html"
     ],
-    "fixture": "app"
+    "fixture": "app",
+    "gen": true
   },
   {
-    "id": "w_render_inputs_page_json_app",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_render_inputs_page_empty",
+    "id": "experimental_render_src-App.tsx_--title_Hello",
     "args": [
       "experimental",
       "render",
-      "../inputs/page.tsx",
-      "--out",
-      "page.html"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_render_inputs_page_json_empty",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_render_inputs_page_large",
-    "args": [
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "page.html"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_render_inputs_page_json_large",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_render_inputs_page_plain",
-    "args": [
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "page.html"
-    ],
-    "fixture": "plain"
-  },
-  {
-    "id": "w_render_inputs_page_json_plain",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "../inputs/page.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "plain"
-  },
-  {
-    "id": "w_render_basic",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_basic_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "basic.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_heading",
-    "args": [
-      "experimental",
-      "render",
-      "heading.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_heading_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "heading.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_local",
-    "args": [
-      "experimental",
-      "render",
-      "local.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_local_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "local.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_styled",
-    "args": [
-      "experimental",
-      "render",
-      "styled.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_styled_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "styled.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_image",
-    "args": [
-      "experimental",
-      "render",
-      "image.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_image_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "image.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_logs",
-    "args": [
-      "experimental",
-      "render",
-      "logs.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_logs_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "logs.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_nodefault",
-    "args": [
-      "experimental",
-      "render",
-      "nodefault.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_nodefault_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "nodefault.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_syntax",
-    "args": [
-      "experimental",
-      "render",
-      "syntax.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_syntax_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "syntax.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_browser",
-    "args": [
-      "experimental",
-      "render",
-      "browser.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_browser_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "browser.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_throws",
-    "args": [
-      "experimental",
-      "render",
-      "throws.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_throws_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "throws.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_missing",
-    "args": [
-      "experimental",
-      "render",
-      "missing.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_missing_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "missing.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_missinglocal",
-    "args": [
-      "experimental",
-      "render",
-      "missinglocal.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_missinglocal_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "missinglocal.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_dropped",
-    "args": [
-      "experimental",
-      "render",
-      "dropped.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_dropped_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "dropped.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_script",
-    "args": [
-      "experimental",
-      "render",
-      "script.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_script_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "script.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_sass",
-    "args": [
-      "experimental",
-      "render",
-      "sass.tsx",
-      "--out",
-      "out.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_sass_json",
-    "args": [
-      "--json",
-      "experimental",
-      "render",
-      "sass.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_title",
-    "args": [
-      "experimental",
-      "render",
-      "heading.tsx",
+      "src/App.tsx",
       "--title",
-      "My <Title> & co",
+      "Hello"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "experimental_render_src-App.tsx_--out_page.txt",
+    "args": [
+      "experimental",
+      "render",
+      "src/App.tsx",
       "--out",
-      "t.html"
+      "page.txt"
     ],
-    "fixture": "renderpages"
+    "fixture": "app",
+    "gen": true
   },
   {
-    "id": "w_render_default_out",
+    "id": "experimental_render_src-App.tsx_--reverse",
     "args": [
       "experimental",
       "render",
-      "basic.tsx"
+      "src/App.tsx",
+      "--reverse"
     ],
-    "fixture": "renderpages"
+    "fixture": "app",
+    "gen": true
   },
   {
-    "id": "w_render_out_subdir",
+    "id": "experimental_render_src-App.tsx_--overwrite",
     "args": [
       "experimental",
       "render",
-      "basic.tsx",
-      "--out",
-      "build/x/page.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_out_outside",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
-      "--out",
-      "../escape.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_out_existing",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
-      "--out",
-      "page.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_out_txt",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
-      "--out",
-      "notes.txt"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_reverse_plain",
-    "args": [
-      "experimental",
-      "render",
-      "--reverse",
-      "page.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_reverse_txt",
-    "args": [
-      "experimental",
-      "render",
-      "--reverse",
-      "notes.txt"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_reverse_title",
-    "args": [
-      "experimental",
-      "render",
-      "--reverse",
-      "page.html",
-      "--title",
-      "x"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_overwrite_forward",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
+      "src/App.tsx",
       "--overwrite"
     ],
-    "fixture": "renderpages"
+    "fixture": "app",
+    "gen": true
   },
   {
-    "id": "w_render_html_forward",
-    "args": [
-      "experimental",
-      "render",
-      "page.html"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_same_out",
-    "args": [
-      "experimental",
-      "render",
-      "basic.tsx",
-      "--out",
-      "basic.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_missing_file",
-    "args": [
-      "experimental",
-      "render",
-      "nothere.tsx"
-    ],
-    "fixture": "renderpages"
-  },
-  {
-    "id": "w_render_reverse_out_bad",
+    "id": "after-experimental-render-src-App.tsx_experimental_render_--reverse_src-App.html",
     "args": [
       "experimental",
       "render",
       "--reverse",
-      "page.html",
-      "--out",
-      "x.css"
+      "src/App.html"
     ],
-    "fixture": "renderpages"
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "render",
+        "src/App.tsx"
+      ]
+    ]
   },
   {
-    "id": "w_render_reverse_out_config",
+    "id": "after-experimental-render-src-App.tsx_experimental_render_--reverse_src-App.html_--out_src-Back.tsx",
     "args": [
       "experimental",
       "render",
       "--reverse",
-      "page.html",
+      "src/App.html",
       "--out",
-      "vite.config.ts"
+      "src/Back.tsx"
     ],
-    "fixture": "renderpages"
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "render",
+        "src/App.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "after-experimental-render-src-App.tsx_experimental_render_--reverse_src-App.html_--out_src-App.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "src/App.html",
+      "--out",
+      "src/App.tsx"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "render",
+        "src/App.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "after-experimental-render-src-App.tsx_experimental_render_--reverse_src-App.html_--out_src-App.tsx_--overwrite",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "src/App.html",
+      "--out",
+      "src/App.tsx",
+      "--overwrite"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "render",
+        "src/App.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "again_after-experimental-render-src-App.tsx_experimental_render_src-App.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "src/App.tsx"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "experimental",
+        "render",
+        "src/App.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "experimental_render_--reverse_package.json",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "package.json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "experimental_render_package.json",
+    "args": [
+      "experimental",
+      "render",
+      "package.json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ai-chat_after-template-ai-chat-src-ai-chat.tsx_experimental_render_src-ai-chat.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/ai-chat.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "ai-chat",
+        "src/ai-chat.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "ai-chat-landing_after-template-ai-chat-landing-src-ai-chat-landing_experimental_render_src-ai-chat-landing.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/ai-chat-landing.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "ai-chat-landing",
+        "src/ai-chat-landing.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "dashboard_after-template-dashboard-src-dashboard.tsx_experimental_render_src-dashboard.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/dashboard.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "dashboard",
+        "src/dashboard.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "login_after-template-login-src-login.tsx_experimental_render_src-login.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/login.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "login",
+        "src/login.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "blank_after-template-blank-src-blank.tsx_experimental_render_src-blank.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/blank.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "blank",
+        "src/blank.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "canvas-editor_after-template-canvas-editor-src-canvas-editor.tsx_experimental_render_src-canvas-editor.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/canvas-editor.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "canvas-editor",
+        "src/canvas-editor.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "library_after-template-library-src-library.tsx_experimental_render_src-library.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/library.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "library",
+        "src/library.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "centered-hero_after-template-centered-hero-src-centered-hero.tsx_experimental_render_src-centered-hero.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/centered-hero.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "centered-hero",
+        "src/centered-hero.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "payment-form_after-template-payment-form-src-payment-form.tsx_experimental_render_src-payment-form.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/payment-form.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "payment-form",
+        "src/payment-form.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "checkout-wizard_after-template-checkout-wizard-src-checkout-wizard_experimental_render_src-checkout-wizard.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/checkout-wizard.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "checkout-wizard",
+        "src/checkout-wizard.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "classic-gallery_after-template-classic-gallery-src-classic-gallery_experimental_render_src-classic-gallery.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/classic-gallery.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "classic-gallery",
+        "src/classic-gallery.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "table-collapsible_after-template-table-collapsible-src-table-collaps_experimental_render_src-table-collapsible.tsx_@larg",
+    "args": [
+      "experimental",
+      "render",
+      "src/table-collapsible.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "table-collapsible",
+        "src/table-collapsible.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "table-comparison_after-template-table-comparison-src-table-comparis_experimental_render_src-table-comparison.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/table-comparison.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "table-comparison",
+        "src/table-comparison.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "contact-form_after-template-contact-form-src-contact-form.tsx_experimental_render_src-contact-form.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/contact-form.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "contact-form",
+        "src/contact-form.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "course-detail_after-template-course-detail-src-course-detail.tsx_experimental_render_src-course-detail.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/course-detail.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "course-detail",
+        "src/course-detail.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "dashboard-comparison_after-template-dashboard-comparison-src-dashboard-_experimental_render_src-dashboard-comparison.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "src/dashboard-comparison.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "dashboard-comparison",
+        "src/dashboard-comparison.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "form-wizard-dialog_after-template-form-wizard-dialog-src-form-wizard-_experimental_render_src-form-wizard-dialog.tsx_@la",
+    "args": [
+      "experimental",
+      "render",
+      "src/form-wizard-dialog.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "form-wizard-dialog",
+        "src/form-wizard-dialog.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "documentation_after-template-documentation-src-documentation.tsx_experimental_render_src-documentation.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/documentation.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "documentation",
+        "src/documentation.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "documentation-design_after-template-documentation-design-src-documentat_experimental_render_src-documentation-design.tsx",
+    "args": [
+      "experimental",
+      "render",
+      "src/documentation-design.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "documentation-design",
+        "src/documentation-design.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "documentation-technical_after-template-documentation-technical-src-documen_experimental_render_src-documentation-technic",
+    "args": [
+      "experimental",
+      "render",
+      "src/documentation-technical.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "documentation-technical",
+        "src/documentation-technical.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "dashboard-scorecard_after-template-dashboard-scorecard-src-dashboard-s_experimental_render_src-dashboard-scorecard.tsx_@",
+    "args": [
+      "experimental",
+      "render",
+      "src/dashboard-scorecard.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "dashboard-scorecard",
+        "src/dashboard-scorecard.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "file-explorer_after-template-file-explorer-src-file-explorer.tsx_experimental_render_src-file-explorer.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/file-explorer.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "file-explorer",
+        "src/file-explorer.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "table-filter_after-template-table-filter-src-table-filter.tsx_experimental_render_src-table-filter.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/table-filter.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "table-filter",
+        "src/table-filter.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "form-wizard_after-template-form-wizard-src-form-wizard.tsx_experimental_render_src-form-wizard.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/form-wizard.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "form-wizard",
+        "src/form-wizard.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "dashboard-cohort-funnel_after-template-dashboard-cohort-funnel-src-dashboa_experimental_render_src-dashboard-cohort-funn",
+    "args": [
+      "experimental",
+      "render",
+      "src/dashboard-cohort-funnel.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "dashboard-cohort-funnel",
+        "src/dashboard-cohort-funnel.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "gallery-hero_after-template-gallery-hero-src-gallery-hero.tsx_experimental_render_src-gallery-hero.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/gallery-hero.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "gallery-hero",
+        "src/gallery-hero.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "table-grouped_after-template-table-grouped-src-table-grouped.tsx_experimental_render_src-table-grouped.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/table-grouped.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "table-grouped",
+        "src/table-grouped.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "ide_after-template-ide-src-ide.tsx_experimental_render_src-ide.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/ide.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "ide",
+        "src/ide.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "table-inbox_after-template-table-inbox-src-table-inbox.tsx_experimental_render_src-table-inbox.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/table-inbox.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "table-inbox",
+        "src/table-inbox.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "incident-console_after-template-incident-console-src-incident-conso_experimental_render_src-incident-console.tsx_@large",
+    "args": [
+      "experimental",
+      "render",
+      "src/incident-console.tsx"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "incident-console",
+        "src/incident-console.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AlertDialogDeleteConfirmation_after-template-AlertDialogDeleteConfirmation-src-A_experimental_render_src-AlertDialogDele",
+    "args": [
+      "experimental",
+      "render",
+      "src/AlertDialogDeleteConfirmation.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AlertDialogDeleteConfirmation",
+        "src/AlertDialogDeleteConfirmation.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AlertDialogAsyncAction_after-template-AlertDialogAsyncAction-src-AlertDia_experimental_render_src-AlertDialogAsyncAction",
+    "args": [
+      "experimental",
+      "render",
+      "src/AlertDialogAsyncAction.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AlertDialogAsyncAction",
+        "src/AlertDialogAsyncAction.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellShowcase_after-template-AppShellShowcase-src-AppShellShowca_experimental_render_src-AppShellShowcase.tsx_--json_",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellShowcase.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellShowcase",
+        "src/AppShellShowcase.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellContentOnly_after-template-AppShellContentOnly-src-AppShellCon_experimental_render_src-AppShellContentOnly.tsx_-",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellContentOnly.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellContentOnly",
+        "src/AppShellContentOnly.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellSideNavOnly_after-template-AppShellSideNavOnly-src-AppShellSid_experimental_render_src-AppShellSideNavOnly.tsx_-",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellSideNavOnly.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellSideNavOnly",
+        "src/AppShellSideNavOnly.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellTopNavOnly_after-template-AppShellTopNavOnly-src-AppShellTopN_experimental_render_src-AppShellTopNavOnly.tsx_--j",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellTopNavOnly.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellTopNavOnly",
+        "src/AppShellTopNavOnly.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellTopNavWithSideNav_after-template-AppShellTopNavWithSideNav-src-AppSh_experimental_render_src-AppShellTopNavWithS",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellTopNavWithSideNav.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellTopNavWithSideNav",
+        "src/AppShellTopNavWithSideNav.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AppShellWithBanner_after-template-AppShellWithBanner-src-AppShellWith_experimental_render_src-AppShellWithBanner.tsx_--j",
+    "args": [
+      "experimental",
+      "render",
+      "src/AppShellWithBanner.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AppShellWithBanner",
+        "src/AppShellWithBanner.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioShowcase_after-template-AspectRatioShowcase-src-AspectRatio_experimental_render_src-AspectRatioShowcase.tsx_-",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioShowcase.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioShowcase",
+        "src/AspectRatioShowcase.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioWidescreen_after-template-AspectRatioWidescreen-src-AspectRat_experimental_render_src-AspectRatioWidescreen.t",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioWidescreen.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioWidescreen",
+        "src/AspectRatioWidescreen.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioCircleImage_after-template-AspectRatioCircleImage-src-AspectRa_experimental_render_src-AspectRatioCircleImage",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioCircleImage.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioCircleImage",
+        "src/AspectRatioCircleImage.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioImageGallery_after-template-AspectRatioImageGallery-src-AspectR_experimental_render_src-AspectRatioImageGalle",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioImageGallery.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioImageGallery",
+        "src/AspectRatioImageGallery.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioWithSkeleton_after-template-AspectRatioWithSkeleton-src-AspectR_experimental_render_src-AspectRatioWithSkelet",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioWithSkeleton.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioWithSkeleton",
+        "src/AspectRatioWithSkeleton.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AspectRatioSquareImage_after-template-AspectRatioSquareImage-src-AspectRa_experimental_render_src-AspectRatioSquareImage",
+    "args": [
+      "experimental",
+      "render",
+      "src/AspectRatioSquareImage.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AspectRatioSquareImage",
+        "src/AspectRatioSquareImage.tsx"
+      ]
+    ]
+  },
+  {
+    "id": "AvatarShowcase_after-template-AvatarShowcase-src-AvatarShowcase.t_experimental_render_src-AvatarShowcase.tsx_--json_@lar",
+    "args": [
+      "experimental",
+      "render",
+      "src/AvatarShowcase.tsx",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "pre": [
+      [
+        "template",
+        "AvatarShowcase",
+        "src/AvatarShowcase.tsx"
+      ]
+    ]
   }
 ]

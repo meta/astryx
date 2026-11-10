@@ -1,0 +1,28 @@
+[
+  {
+    "id": "fuzz_integration@doctor-integrations_5fbc8e",
+    "args": [
+      "integration"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "fuzz_integration_verify@doctor-author2_0fc4d1",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "fuzz_integration_verify@doctor-ts_a91be1",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit"
+  }
+]

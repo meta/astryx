@@ -1,0 +1,16 @@
+{
+ "id": "wide_intcodemods_nested",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.8",
+  "--codemod",
+  "nested/drop-legacy-flag",
+  "--json"
+ ],
+ "fixture": "upgrade-intcodemods",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.7.8\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 1,\n    \"integrations\": [\n      \"@acme/widgets\"\n    ],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 1,\n    \"transformsApplied\": 1,\n    \"modifiedFiles\": [\n      \"src/App.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

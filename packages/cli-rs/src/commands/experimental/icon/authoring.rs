@@ -139,9 +139,14 @@ fn rel(dir: &str, file: &str) -> String {
 /// `entryWiringNote(packageDir, pkg, generated)`, for the package's own
 /// module and the theme map.
 pub fn entry_wiring_note(package_dir: &str, pkg: &Value, generated: &str) -> Option<String> {
+    entry_wiring_note_with(package_dir, pkg, generated, None, None)
+}
+
+/// `entryWiringNote(packageDir, pkg, generated, {module, name})`.
+pub fn entry_wiring_note_with(package_dir: &str, pkg: &Value, generated: &str, module: Option<&str>, name: Option<&str>) -> Option<String> {
     let package_name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let module = package_name;
-    let name = THEME_MAP_NAME;
+    let module = module.unwrap_or(package_name);
+    let name = name.unwrap_or(THEME_MAP_NAME);
     let target = {
         let mut t = generated.to_string();
         for e in [".cjsx", ".mjsx", ".ctsx", ".mtsx", ".cjs", ".mjs", ".cts", ".mts", ".jsx", ".tsx", ".js", ".ts"] {
@@ -298,22 +303,9 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
     let set_dir = within(name, &root, "icon set directory")?;
     let doc_file = within(&format!("{name}.doc.mjs"), &set_dir, "icon set descriptor")?;
     let data_file = within(&format!("{name}.icons.json"), &set_dir, "icon set data file")?;
-    if let Some(from) = &o.from {
-        // resolveIconSource
-        let file = if from.starts_with('.') || from.starts_with('/') {
-            None
-        } else {
-            isd::resolve_icon_module(from, &path_s(&pkg.dir), Some(&pkg_name), Some(&path_s(&pkg.dir)))
-        };
-        if file.is_none() && !(from.starts_with('.') || from.starts_with('/')) {
-            return Err(ierr(
-                format!("\"{from}\" does not resolve from {pkg_name}. Install it as a dependency, or check the specifier."),
-                vec![],
-                "ERR_NOT_FOUND",
-            ));
-        }
-        // TEMP: reading a library's icons is not cloned yet.
-        return Err(ierr("experimental icon new-set --from is not cloned yet", vec![], "ERR_UNKNOWN"));
+    if o.from.is_some() && doc_file.exists() && data_file.exists() {
+        // TEMP: refreshing an existing set from its library is not cloned yet.
+        return Err(ierr("experimental icon new-set --from over an existing set is not cloned yet", vec![], "ERR_UNKNOWN"));
     }
     if doc_file.exists() && data_file.exists() && (o.looks.is_some() || o.display_name.as_deref().is_some_and(|s| !s.trim().is_empty()) || o.description.as_deref().is_some_and(|s| !s.trim().is_empty())) {
         // TEMP: redeclaring an existing set is not cloned yet.
@@ -325,23 +317,107 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
         }
     }
     let generated = format!("./{}", ih::project_path(&pkg.dir, &set_dir.join(format!("{name}.generated.js"))));
+    let package_dir_s = path_s(&pkg.dir);
+    let mut icons: Vec<Value> = vec![];
+    let mut map = Map::new();
+    let mut exports_to_write: Vec<super::generated::GeneratedIcon> = vec![];
+    let mut suggestions: Vec<(String, String, String)> = vec![];
+    let mut skipped: Vec<String> = vec![];
+    let mut library: Option<super::library::Library> = None;
+    let mut summary: Option<super::library::LookSummary> = None;
+    let mut looks = o.looks.clone();
+    if let Some(from) = &o.from {
+        let local = super::writer::LocalSet {
+            package_dir: package_dir_s.clone(),
+            pkg: pkg.pkg.clone(),
+            root: path_s(&root),
+            set: empty_set(),
+            sets: vec![],
+        };
+        let source = super::add::resolve_icon_source(from, &local)?;
+        let mut look_err: Option<IconError> = None;
+        let (found, sum) = super::library::library_icons(&source.file, false, &o.exclude, &mut |positions| {
+            match resolve_default_look(name, o.looks.as_ref(), &source.module, positions) {
+                Ok(l) => {
+                    looks = l.clone();
+                    l.map(|l| vec![l.1]).unwrap_or_default()
+                }
+                Err(e) => {
+                    look_err = Some(e);
+                    vec![]
+                }
+            }
+        });
+        if let Some(e) = look_err {
+            return Err(e);
+        }
+        summary = sum;
+        if found.is_empty() {
+            return Err(ierr(
+                format!("\"{from}\" exports no icon components this command can read. If its icons are data (objects or SVG strings), run `astryx experimental icon new-set {name}`, declare an \"adapter\" in {name}.icons.json, and run this command again; or add icons one at a time with `astryx experimental icon add <Export> --from {from} --set {name}`."),
+                vec![],
+                "ERR_NOT_FOUND",
+            ));
+        }
+        for icon in &found {
+            let mut words: Vec<String> = vec![];
+            for w in id_words(&icon.id).into_iter().chain(icon.aliases.iter().cloned()) {
+                if !words.contains(&w) {
+                    words.push(w);
+                }
+            }
+            let mut m = Map::new();
+            m.insert("id".into(), Value::String(icon.id.clone()));
+            m.insert("export".into(), Value::String(icon.name.clone()));
+            m.insert("words".into(), Value::Array(words.into_iter().map(Value::String).collect()));
+            icons.push(Value::Object(m));
+        }
+        map = exact_definition_map(&icons);
+        skipped = super::library::non_icon_exports(&source.file, false, &o.exclude);
+        suggestions = definition_suggestions(&icons, &map);
+        library = super::library::library_source(&source.module, &package_dir_s);
+        exports_to_write = found
+            .iter()
+            .map(|i| super::generated::GeneratedIcon { name: i.name.clone(), from: source.module.clone(), source: i.export.clone(), adapt: i.adapt })
+            .collect();
+    }
     let mut data = Map::new();
     data.insert("schemaVersion".into(), Value::from(1));
     data.insert("module".into(), Value::String(pkg_name.clone()));
+    if let Some(l) = &library {
+        let mut src = Map::new();
+        src.insert("package".into(), Value::String(l.package.clone()));
+        src.insert("version".into(), Value::String(l.version.clone()));
+        data.insert("source".into(), Value::Object(src));
+    }
+    if !o.exclude.is_empty() {
+        let mut ex: Vec<String> = vec![];
+        for e in &o.exclude {
+            if !ex.contains(e) {
+                ex.push(e.clone());
+            }
+        }
+        ex.sort_by(|a, b| crate::discovery::jsort::cmp_utf16(a, b));
+        data.insert("exclude".into(), Value::Array(ex.into_iter().map(Value::String).collect()));
+    }
     data.insert("generated".into(), Value::String(generated.clone()));
-    if let Some((variants, default, _)) = &o.looks {
+    if let Some((variants, default, _)) = &looks {
         data.insert("variants".into(), Value::Array(variants.iter().cloned().map(Value::String).collect()));
         let mut d = Map::new();
         d.insert("variant".into(), Value::String(default.clone()));
         data.insert("default".into(), Value::Object(d));
     }
     data.insert("themeMap".into(), Value::String(THEME_MAP_NAME.into()));
-    data.insert("map".into(), Value::Object(Map::new()));
-    data.insert("icons".into(), Value::Array(vec![]));
+    data.insert("map".into(), Value::Object(map.clone()));
+    data.insert("icons".into(), Value::Array(icons.clone()));
     let data = Value::Object(data);
-    let (js, dts) = fresh_generated_text(&data, &generated);
+    let (js, dts) = if o.from.is_some() {
+        super::generated::generated_module_text(&package_dir_s, &generated, None, &data, &exports_to_write, &[])?
+    } else {
+        fresh_generated_text(&data, &generated)
+    };
     let display = o.display_name.as_deref().map(|s| crate::commands::gap_report::api::js_trim(s).to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| ih::kebab_to_title(name));
-    let license = pkg.pkg.get("license").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()).map(String::from).unwrap_or_else(|| "UNLICENSED".into());
+    let license = library.as_ref().and_then(|l| l.license.clone()).or_else(|| pkg.pkg.get("license").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()).map(String::from)).unwrap_or_else(|| "UNLICENSED".into());
     let description = o.description.as_deref().map(|s| crate::commands::gap_report::api::js_trim(s).to_string()).filter(|s| !s.is_empty());
     let doc_contents = [
         "/** @type {import('@astryxdesign/cli/authoring').IconSetDoc} */".to_string(),
@@ -361,6 +437,16 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
         ih::WritePlan::create(data_file.clone(), icon_set_data_text(&data)),
         ih::WritePlan::create(within(&generated, &pkg.dir, "generated icons module")?, js),
     ];
+    if let Some(l) = &library {
+        for notice in &l.notices {
+            let target = within(notice, &set_dir, "license notice")?;
+            if target.exists() {
+                continue;
+            }
+            let text = std::fs::read_to_string(np::join2(&l.dir, notice)).unwrap_or_default();
+            plans.push(ih::WritePlan::create(target, text));
+        }
+    }
     if let (Some(tp), Some(d)) = (generated_types_path(&generated), dts) {
         plans.push(ih::WritePlan::create(within(&tp, &pkg.dir, "generated icon types")?, d));
     }
@@ -399,7 +485,45 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
     }
     let result = ih::receipt("icon-set", name, Some(root_receipt), &manifest_path, &written, o.dry_run);
     let mut d = result.get("data").and_then(|v| v.as_object()).cloned().unwrap_or_default();
-    d.insert("icons".into(), Value::from(0));
+    d.insert("icons".into(), Value::from(icons.len()));
+    if o.from.is_some() {
+        d.insert(
+            "mapped".into(),
+            Value::Array(
+                map.iter()
+                    .map(|(k, v)| {
+                        let mut m = Map::new();
+                        m.insert("definition".into(), Value::String(k.clone()));
+                        m.insert("icon".into(), v.clone());
+                        Value::Object(m)
+                    })
+                    .collect(),
+            ),
+        );
+        d.insert(
+            "suggestions".into(),
+            Value::Array(
+                suggestions
+                    .iter()
+                    .map(|(def, icon, word)| {
+                        let mut m = Map::new();
+                        m.insert("definition".into(), Value::String(def.clone()));
+                        m.insert("icon".into(), Value::String(icon.clone()));
+                        m.insert("word".into(), Value::String(word.clone()));
+                        Value::Object(m)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    let set_dir_rel = ih::project_path(&pkg.dir, &set_dir);
+    let missing_notice = library.as_ref().filter(|l| l.notices.is_empty() && !isd::has_license_notice(&package_dir_s)).map(|l| {
+        let named = format!("{}@{}", l.package, l.version);
+        (
+            format!("{named} ships no LICENSE or NOTICE file to copy, so the set has no license notice. {}", isd::license_notice_fix(&set_dir_rel, &named)),
+            named,
+        )
+    });
     let package_dir = path_s(&pkg.dir);
     let package_after = match &pkg_update {
         Some(u) => serde_json::from_str(&u.contents).unwrap_or(pkg.pkg.clone()),
@@ -420,7 +544,196 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
             ih::project_path(&pkg.dir, &doc_file)
         ));
     }
+    if !skipped.is_empty() {
+        notes.push(format!(
+            "Left out {} exports that are not icons: {}{}.",
+            skipped.len(),
+            skipped.iter().take(12).cloned().collect::<Vec<_>>().join(", "),
+            if skipped.len() > 12 { ", …" } else { "" }
+        ));
+    }
+    if let Some(from) = &o.from {
+        match &summary {
+            None => notes.push(format!("Found {} icons in {from}.", icons.len())),
+            Some(sm) => notes.extend(look_notes(sm, icons.len(), from, looks.as_ref(), name)),
+        }
+    }
+    if let Some((note, _)) = &missing_notice {
+        notes.push(note.clone());
+    }
+    if !map.is_empty() {
+        notes.push(format!("{} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with `astryx experimental icon map <definition> <icon> --set {name}`.", map.len()));
+    }
+    if !suggestions.is_empty() {
+        let mut defs: Vec<&String> = vec![];
+        for (d0, _, _) in &suggestions {
+            if !defs.contains(&d0) {
+                defs.push(d0);
+            }
+        }
+        notes.push(format!("{} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: `astryx experimental icon map <definition> <icon> --set {name}`.", defs.len()));
+    }
     notes.push("Run `astryx integration check` to see the icon definitions still to map.".into());
     d.insert("notes".into(), Value::Array(notes.into_iter().map(Value::String).collect()));
+    if let Some((_, named)) = missing_notice {
+        let mut m = Map::new();
+        m.insert("library".into(), Value::String(named));
+        m.insert("path".into(), Value::String(format!("{set_dir_rel}/NOTICE")));
+        d.insert("licenseNoticeMissing".into(), Value::Object(m));
+    }
     Ok(Value::Object(d))
+}
+
+
+fn empty_set() -> isd::DiscoveredIconSet {
+    isd::DiscoveredIconSet {
+        name: String::new(),
+        display_name: String::new(),
+        description: String::new(),
+        maintained: true,
+        license: String::new(),
+        package: String::new(),
+        package_dir: None,
+        dir: String::new(),
+        doc_path: String::new(),
+        data_path: String::new(),
+        data: Value::Null,
+        notices: vec![],
+        definitions: vec![],
+        module_file: None,
+    }
+}
+
+/// `idWords(id)`.
+fn id_words(id: &str) -> Vec<String> {
+    let parts: Vec<String> = id.split('-').map(String::from).collect();
+    let named: Vec<String> = parts.iter().filter(|p| !(!p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))).cloned().collect();
+    if named.is_empty() { parts } else { named }
+}
+
+fn definition_id(name: &str) -> String {
+    let r = regress::Regex::new(r"([a-z0-9])([A-Z])").unwrap();
+    let mut out = String::new();
+    let mut last = 0;
+    for m in r.find_iter(name) {
+        out.push_str(&name[last..m.start()]);
+        out.push_str(&name[m.group(1).unwrap()]);
+        out.push('-');
+        out.push_str(&name[m.group(2).unwrap()]);
+        last = m.end();
+    }
+    out.push_str(&name[last..]);
+    out.to_lowercase()
+}
+
+/// `exactDefinitionMap(icons, {})`.
+fn exact_definition_map(icons: &[Value]) -> Map<String, Value> {
+    let ids: Vec<&str> = icons.iter().filter_map(|i| i.get("id").and_then(|v| v.as_str())).collect();
+    let mut next = Map::new();
+    for d in crate::discovery::icon_definition_discovery::astryx_icon_definitions().definitions {
+        let n = d.name().to_string();
+        if next.contains_key(&n) {
+            continue;
+        }
+        let id = definition_id(&n);
+        if ids.contains(&id.as_str()) {
+            next.insert(n, Value::String(id));
+        }
+    }
+    next
+}
+
+/// `definitionSuggestions(icons, map)`: (definition, icon, word).
+fn definition_suggestions(icons: &[Value], map: &Map<String, Value>) -> Vec<(String, String, String)> {
+    let mut set = empty_set();
+    let mut data = Map::new();
+    data.insert("icons".into(), Value::Array(icons.to_vec()));
+    data.insert("map".into(), Value::Object(map.clone()));
+    set.data = Value::Object(data);
+    let mut out: Vec<(String, String, String)> = vec![];
+    for d in crate::discovery::icon_definition_discovery::astryx_icon_definitions().definitions {
+        let name = d.name().to_string();
+        if map.contains_key(&name) {
+            continue;
+        }
+        let def = crate::discovery::icon_set_checks::Def {
+            name: name.clone(),
+            built_in: d.doc.get("builtIn").and_then(|b| b.as_bool()) == Some(true),
+            description: d.doc.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            words: d.words(),
+        };
+        for (icon, word) in crate::discovery::icon_set_checks::suggested_icons(&set, &def) {
+            out.push((name.clone(), icon, word));
+        }
+    }
+    out.sort_by(|a, b| if a.0 < b.0 { std::cmp::Ordering::Less } else if a.0 > b.0 { std::cmp::Ordering::Greater } else { std::cmp::Ordering::Equal });
+    out
+}
+
+/// `resolveDefaultLook` for a new set read from a library.
+fn resolve_default_look(name: &str, given: Option<&(Vec<String>, String, bool)>, module: &str, positions: &super::add::Positions) -> Result<Option<(Vec<String>, String, bool)>, IconError> {
+    let Some(given) = given else { return Ok(None) };
+    if positions.is_empty() {
+        return Ok(Some(given.clone()));
+    }
+    if given.2 {
+        let chosen = &given.1;
+        if !positions.iter().any(|p| p.contains(chosen)) {
+            let sorted: Vec<Vec<String>> = positions.iter().map(|p| super::add::js_sorted(p)).collect();
+            return Err(ierr(
+                format!("\"{chosen}\" is no look of {module}: its exports name their looks with {}. Name one of these words, so each icon's export draws that look.", super::add::described_looks(&sorted)),
+                super::add::style_words(positions).into_iter().map(|w| crate::cli::command::Suggestion::new(format!("--default-variant {w}"), format!("a look {module} names"))).collect(),
+                "ERR_INVALID_ARGUMENT",
+            ));
+        }
+        return Ok(Some(given.clone()));
+    }
+    let words: Vec<Option<String>> = super::library::preferred_look(positions, &[]).into_iter().map(Some).collect();
+    let look = super::add::drawn_word(positions, &words, &given.0);
+    match look {
+        Some(l) if given.0.contains(&l) => Ok(Some((given.0.clone(), l, given.2))),
+        other => {
+            let shown = other.unwrap_or_else(|| "<look>".into());
+            let mut all = vec![shown.clone()];
+            all.extend(given.0.iter().cloned());
+            Err(ierr(
+                format!("None of --variants ({}) is the look {module} is wrapped in by default (\"{shown}\"), and each icon's own export draws the default variant. List it in --variants, or name the default with --default-variant.", given.0.join(", ")),
+                vec![crate::cli::command::Suggestion::new(
+                    format!("astryx experimental icon new-set {name} --from {} --variants {}", super::add::shell_arg(module), all.join(",")),
+                    format!("declare {shown}, the look each icon draws, as the default"),
+                )],
+                "ERR_INVALID_OPTION",
+            ))
+        }
+    }
+}
+
+/// `lookNotes(summary, count, from, looks, name)`.
+fn look_notes(summary: &super::library::LookSummary, count: usize, from: &str, looks: Option<&(Vec<String>, String, bool)>, name: &str) -> Vec<String> {
+    let described = super::add::described_looks(&summary.positions);
+    let taken: Vec<String> = summary.preferred.iter().rev().cloned().collect();
+    let styles: Vec<&String> = summary.positions.iter().flatten().collect();
+    let others: Vec<String> = looks.map(|l| l.0.iter().filter(|v| **v != l.1 && styles.contains(v)).cloned().collect()).unwrap_or_default();
+    vec![
+        format!(
+            "Found {count} icons in {from}, each drawn in several looks ({described}) by {} exports. The set wraps each icon once, in the {} look, named without the look words (`x`, `XIcon`).",
+            summary.exports,
+            taken.join(" ")
+        ),
+        if !others.is_empty() {
+            let plural = others.len() > 1;
+            format!(
+                "Add the {} look{} as variant{}: {}.",
+                others.join(", "),
+                if plural { "s" } else { "" },
+                if plural { "s" } else { "" },
+                others.iter().map(|v| format!("`astryx experimental icon add --variant {v} --from {from} --all --set {name}`")).collect::<Vec<_>>().join(", ")
+            )
+        } else {
+            format!(
+                "To offer another look as a variant, declare it with `astryx experimental icon new-set {name} --variants {},<look>` (no --from: the set's icons stay as they are) and run `astryx experimental icon add --variant <look> --from {from} --all --set {name}`.",
+                taken.first().cloned().unwrap_or_default()
+            )
+        },
+    ]
 }

@@ -1,0 +1,12 @@
+{
+ "id": "w_widget_@author",
+ "args": [
+  "discover",
+  "widget"
+ ],
+ "fixture": "author",
+ "stdout": "Found 3 matches for \"widget\"\n\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets/WidgetCard\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets/widgets  (doc)\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets  (package)\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

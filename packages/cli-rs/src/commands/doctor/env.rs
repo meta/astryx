@@ -73,7 +73,8 @@ fn version_in_file(file: &Path) -> Option<String> {
 }
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
-    hay.windows(needle.len()).position(|w| w == needle)
+    // The node library is ~80 MB: a SIMD substring search keeps this fast.
+    memchr::memmem::find(hay, needle)
 }
 
 /// `isNodeVersionSupported`.

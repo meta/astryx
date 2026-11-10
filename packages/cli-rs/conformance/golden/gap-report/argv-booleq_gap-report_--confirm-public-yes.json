@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_gap-report_--confirm-public-yes",
+ "args": [
+  "gap-report",
+  "--confirm-public=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--confirm-public=yes'\n",
+ "exit": 1,
+ "files": []
+}

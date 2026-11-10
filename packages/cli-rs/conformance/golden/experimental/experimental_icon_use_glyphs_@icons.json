@@ -1,0 +1,20 @@
+{
+ "id": "experimental_icon_use_glyphs_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "glyphs"
+ ],
+ "fixture": "icons",
+ "stdout": "[ok] experimental.iconSet already names \"glyphs\" in astryx.config.mjs.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/icons\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_template_--skeleton-yes",
+ "args": [
+  "template",
+  "--skeleton=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--skeleton=yes'\n",
+ "exit": 1,
+ "files": []
+}

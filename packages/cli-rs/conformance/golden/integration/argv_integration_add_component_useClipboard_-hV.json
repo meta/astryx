@@ -1,0 +1,15 @@
+{
+ "id": "argv_integration_add_component_useClipboard_-hV",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

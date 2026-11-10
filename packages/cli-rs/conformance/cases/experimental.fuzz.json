@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fuzz_experimental_icon_--json_spacing-dial@badconfig_d54c38",
+    "args": [
+      "experimental",
+      "icon",
+      "--json",
+      "spacing dial"
+    ],
+    "fixture": "badconfig"
+  }
+]

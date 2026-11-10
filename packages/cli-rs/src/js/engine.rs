@@ -34,6 +34,7 @@ thread_local! {
     /// Every module file loaded, in load order, while recording.
     static LOADED: RefCell<Option<Vec<PathBuf>>> = const { RefCell::new(None) };
     static VIRTUAL_IDS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static GENERATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// Resolution failure message -> the specifier that failed.
     static MISSING: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     /// The code `process.exit` was called with, until the caller reads it.
@@ -222,6 +223,9 @@ pub struct Flavor {
     pub profile: u16,
     /// JSX compiles for the automatic runtime (`react/jsx-runtime`).
     pub jsx_auto: bool,
+    /// Module-cache generation: a fresh jiti load starts a new one, so its
+    /// whole graph is read again (jiti `moduleCache: false`). 0: shared.
+    pub gen: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -251,7 +255,7 @@ pub struct Loader {
     builtins: RefCell<HashMap<String, Module>>,
     info: RefCell<HashMap<Module, ModInfo>>,
     /// CommonJS `module` objects by real path (Node's `require.cache`).
-    cjs: RefCell<HashMap<PathBuf, JsObject>>,
+    cjs: RefCell<HashMap<(PathBuf, u32), JsObject>>,
 }
 
 fn loader() -> Rc<Loader> {
@@ -299,7 +303,9 @@ fn coded_error(kind: &str, code: &str, message: &str, context: &mut Context) -> 
     }
     .with_message(message.to_string());
     let obj = native.into_opaque(context);
-    let _ = obj.set(js_string!("code"), JsString::from(code), false, context);
+    if !code.is_empty() {
+        let _ = obj.set(js_string!("code"), JsString::from(code), false, context);
+    }
     boa_engine::JsError::from_opaque(obj.into())
 }
 
@@ -325,7 +331,7 @@ impl Loader {
             Referrer::Module(m) => self.info.borrow().get(m).cloned(),
             _ => None,
         }
-        .unwrap_or_else(|| ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }))
+        .unwrap_or_else(|| ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false, gen: 0 }))
     }
 
     fn builtin(&self, name: &str, context: &mut Context) -> JsResult<Module> {
@@ -344,7 +350,7 @@ impl Loader {
         let module = Module::parse(Source::from_bytes(src).with_path(&path), None, context)?;
         self.info
             .borrow_mut()
-            .insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }));
+            .insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false, gen: 0 }));
         self.builtins.borrow_mut().insert(name.to_string(), module.clone());
         Ok(module)
     }
@@ -410,10 +416,15 @@ impl Loader {
                     return Err(unknown_extension(ext, path, context));
                 }
                 let text = read_source(path, context)?;
+                let original = text.clone();
                 let text = if transform::is_typescript(path) || flavor.jsx || ext == "jsx" {
-                    transform::strip(&text, path, flavor.jsx, flavor.jsx_auto).map_err(|m| {
-                        coded_error("SyntaxError", "", &m, context)
-                    })?
+                    match transform::strip(&text, path, flavor.jsx, flavor.jsx_auto) {
+                        Ok(t) => t,
+                        Err(m) => {
+                            let boa = JsNativeError::syntax().with_message(m).into();
+                            return Err(syntax_failure(&original, path, flavor, boa, context));
+                        }
+                    }
                 } else {
                     text
                 };
@@ -423,7 +434,8 @@ impl Loader {
                         let cx = Barrel { loader: self, from: path, flavor };
                         if let Some(cut) = prune::prune_barrel(&text, w, &cx) {
                             let usage = Rc::new(prune::import_usage(&cut));
-                            let m = Module::parse(Source::from_bytes(cut.as_str()).with_path(path), None, context)?;
+                            let m = Module::parse(Source::from_bytes(cut.as_str()).with_path(path), None, context)
+                                .map_err(|e| syntax_failure(&original, path, flavor, e, context))?;
                             self.info.borrow_mut().insert(m.clone(), ModInfo { flavor, usage });
                             self.pruned.borrow_mut().insert(k.clone(), m.clone());
                             return Ok(m);
@@ -436,16 +448,24 @@ impl Loader {
                     } else {
                         text
                     };
-                    let m = Module::parse(Source::from_bytes(text.as_str()).with_path(path), None, context)?;
+                    let m = Module::parse(Source::from_bytes(text.as_str()).with_path(path), None, context)
+                        .map_err(|e| syntax_failure(&original, path, flavor, e, context))?;
                     self.info.borrow_mut().insert(m.clone(), ModInfo { flavor, usage });
                     if cache {
                         self.files.borrow_mut().insert(key, m.clone());
                     }
                     return Ok(m);
                 } else {
-                    let exports = self.require_cjs(path, Some(text), flavor.mode == Mode::Jiti, context)?;
+                    let exports = self.require_cjs(path, Some(text), flavor.mode == Mode::Jiti, flavor.gen, context)?;
                     cjs_namespace(exports, flavor.mode == Mode::Jiti, path, context)?
                 }
+            }
+            _ if flavor.mode == Mode::Jiti && self.profile(flavor.profile).sync => {
+                // jiti hands an unknown extension to Node's `require`, which
+                // runs it as CommonJS.
+                let text = read_source(path, context)?;
+                let exports = self.require_cjs(path, Some(text), false, flavor.gen, context)?;
+                cjs_namespace(exports, true, path, context)?
             }
             _ => return Err(unknown_extension(ext, path, context)),
         };
@@ -464,9 +484,10 @@ impl Loader {
         path: &Path,
         text: Option<String>,
         jiti: bool,
+        gen: u32,
         context: &mut Context,
     ) -> JsResult<JsValue> {
-        if let Some(m) = self.cjs.borrow().get(path) {
+        if let Some(m) = self.cjs.borrow().get(&(path.to_path_buf(), gen)) {
             return m.get(js_string!("exports"), context);
         }
         let text = match text {
@@ -496,14 +517,17 @@ impl Loader {
             .build();
         let children = JsArray::new(context)?;
         module.set(js_string!("children"), children, false, context)?;
-        self.cjs.borrow_mut().insert(path.to_path_buf(), module.clone());
+        self.cjs.borrow_mut().insert((path.to_path_buf(), gen), module.clone());
         let run = (|| -> JsResult<()> {
-            let require = make_require(path, jiti, context)?;
+            let require = make_require(path, jiti, gen, context)?;
             module.set(js_string!("require"), require.clone(), false, context)?;
             let wrapped = format!(
                 "(function (exports, require, module, __filename, __dirname) {{{text}\n}})"
             );
-            let f = context.eval(Source::from_bytes(wrapped.as_str()).with_path(path))?;
+            let f = context.eval(Source::from_bytes(wrapped.as_str()).with_path(path)).map_err(|e| {
+                let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Cjs }, jsx: false, profile: 0, jsx_auto: false, gen };
+                syntax_failure(&text, path, flavor, e, context)
+            })?;
             let f = f.as_object().expect("wrapper is a function");
             f.call(
                 &exports.clone().into(),
@@ -520,14 +544,14 @@ impl Loader {
             Ok(())
         })();
         if let Err(e) = run {
-            self.cjs.borrow_mut().remove(path);
+            self.cjs.borrow_mut().remove(&(path.to_path_buf(), gen));
             return Err(e);
         }
         module.get(js_string!("exports"), context)
     }
 
     /// `require(specifier)` from the file `from`.
-    fn require(&self, spec: &str, from: &Path, jiti: bool, context: &mut Context) -> JsResult<JsValue> {
+    fn require(&self, spec: &str, from: &Path, jiti: bool, gen: u32, context: &mut Context) -> JsResult<JsValue> {
         let mode = if jiti { Mode::Jiti } else { Mode::Cjs };
         let resolved = resolve::resolve(spec, from, mode).map_err(|e| {
             note_missing(&e.message, spec);
@@ -552,8 +576,8 @@ impl Loader {
                         .call(&json, &[JsString::from(text.as_str()).into()], context)
                         .map_err(|_| json_module_error(&path, &text, context));
                 }
-                if self.cjs.borrow().contains_key(&path) {
-                    return self.require_cjs(&path, None, jiti, context);
+                if self.cjs.borrow().contains_key(&(path.clone(), gen)) {
+                    return self.require_cjs(&path, None, jiti, gen, context);
                 }
                 let text = read_source(&path, context)?;
                 let text = if transform::is_typescript(&path) {
@@ -564,7 +588,7 @@ impl Loader {
                 };
                 if is_esm_source(&path, &text, context) {
                     // require(esm): the namespace, once evaluated.
-                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile: 0, jsx_auto: false };
+                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile: 0, jsx_auto: false, gen };
                     let m = self.load_file(&path, flavor, false, true, context)?;
                     evaluate_now(&m, context)?;
                     let ns = m.namespace(context);
@@ -574,7 +598,7 @@ impl Loader {
                     }
                     return Ok(ns.into());
                 }
-                self.require_cjs(&path, Some(text), jiti, context)
+                self.require_cjs(&path, Some(text), jiti, gen, context)
             }
         }
     }
@@ -597,12 +621,12 @@ fn evaluate_now(m: &Module, context: &mut Context) -> JsResult<()> {
 }
 
 /// A `require` function for the file `from`.
-fn make_require(from: &Path, jiti: bool, context: &mut Context) -> JsResult<JsValue> {
+fn make_require(from: &Path, jiti: bool, gen: u32, context: &mut Context) -> JsResult<JsValue> {
     let from_s = JsString::from(from.to_string_lossy().as_ref());
     let f = boa_engine::object::FunctionObjectBuilder::new(
         context.realm(),
         NativeFunction::from_copy_closure_with_captures(
-            |_, args, (from, jiti): &(JsString, bool), ctx| {
+            |_, args, (from, jiti, gen): &(JsString, bool, u32), ctx| {
                 let spec = args.first().cloned().unwrap_or_default();
                 let Some(spec) = spec.as_string() else {
                     return Err(coded_error(
@@ -613,9 +637,9 @@ fn make_require(from: &Path, jiti: bool, context: &mut Context) -> JsResult<JsVa
                     ));
                 };
                 let from = PathBuf::from(from.to_std_string_lossy());
-                loader().require(&spec.to_std_string_lossy(), &from, *jiti, ctx)
+                loader().require(&spec.to_std_string_lossy(), &from, *jiti, *gen, ctx)
             },
-            (from_s.clone(), jiti),
+            (from_s.clone(), jiti, gen),
         ),
     )
     .name(js_string!("require"))
@@ -788,6 +812,43 @@ impl Drop for Trace<'_> {
     }
 }
 
+/// A module whose source does not parse: the error Node (or jiti) gives for
+/// that source. Boa's own error stands when oxc finds nothing wrong.
+fn syntax_failure(
+    source: &str,
+    path: &Path,
+    flavor: Flavor,
+    boa: boa_engine::JsError,
+    context: &mut Context,
+) -> boa_engine::JsError {
+    use super::syntax::{syntax_error, Dialect};
+    let is_syntax = matches!(boa.as_native().map(|n| n.kind().clone()), Some(boa_engine::JsNativeErrorKind::Syntax));
+    if !is_syntax {
+        return boa;
+    }
+    LAST_SYNTAX_FILE.with(|f| *f.borrow_mut() = Some(path.to_path_buf()));
+    if std::env::var_os("ASTRYX_JS_TRACE").is_some() {
+        eprintln!("[js] syntax error in {}: {}", path.display(), boa);
+    }
+    let dialect = match flavor.mode {
+        Mode::Jiti => Dialect::Jiti,
+        Mode::Cjs => Dialect::V8Script,
+        Mode::Esm => {
+            if path.extension().and_then(|e| e.to_str()) == Some("cjs") {
+                Dialect::V8Script
+            } else {
+                Dialect::V8Module
+            }
+        }
+    };
+    let ts = transform::is_typescript(path);
+    let jsx = flavor.jsx || transform::is_jsx(path);
+    match syntax_error(source, path, dialect, ts, jsx) {
+        Some((name, message)) => coded_error(&name, "", &message, context),
+        None => boa,
+    }
+}
+
 /// A JSON module that does not parse: Node's SyntaxError, `path: message`
 /// with V8's `JSON.parse` message.
 fn json_module_error(path: &Path, text: &str, context: &mut Context) -> boa_engine::JsError {
@@ -913,6 +974,17 @@ import {URL, URLSearchParams} from 'node:url';
 globalThis.URL = URL;
 globalThis.URLSearchParams = URLSearchParams;
 globalThis.global = globalThis;
+process.nextTick = (fn, ...args) => { Promise.resolve().then(() => fn(...args)); };
+process.memoryUsage = () => ({rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0});
+process.memoryUsage.rss = () => 0;
+process.hrtime = (prev) => { const t = __astryx_host.now(); const s = Math.floor(t / 1000), ns = Math.floor((t % 1000) * 1e6); if (!prev) return [s, ns]; let ds = s - prev[0], dn = ns - prev[1]; if (dn < 0) { ds--; dn += 1e9; } return [ds, dn]; };
+process.hrtime.bigint = () => BigInt(Math.floor(__astryx_host.now() * 1e6));
+process.version = 'v22.23.2';
+process.versions = {node: '22.23.2'};
+process.execArgv = [];
+process.exitCode = undefined;
+process.on = () => process; process.once = () => process; process.off = () => process; process.emit = () => false;
+process.removeListener = () => process; process.listeners = () => [];
 const nodePow = Math.pow;
 Object.defineProperty(globalThis, '__astryx_pow', {
   value: (a, b) => (typeof a === 'bigint' || typeof b === 'bigint') ? a ** b : nodePow(+a, +b),
@@ -1152,9 +1224,10 @@ impl Engine {
             aliases: jiti.aliases.clone(),
             extensions: jiti.extensions.clone(),
             virtuals: jiti.virtual_modules.clone(),
+            sync: mode == Mode::Jiti && (jiti.sync || !jiti.virtual_modules.is_empty()),
         });
         let jsx = (opts.jsx || jiti.jsx_automatic) && mode == Mode::Jiti;
-        Flavor { mode, jsx, profile, jsx_auto: jsx && jiti.jsx_automatic }
+        Flavor { mode, jsx, profile, jsx_auto: jsx && jiti.jsx_automatic, gen: 0 }
     }
 
     /// [`Self::load`] with jiti's options.
@@ -1170,8 +1243,15 @@ impl Engine {
             std::env::current_dir().unwrap_or_default().join(path)
         };
         let abs = resolve::normalize(&abs);
-        let flavor = self.flavor_for(&abs, opts, jiti);
+        let mut flavor = self.flavor_for(&abs, opts, jiti);
         let mode = flavor.mode;
+        if opts.fresh && mode == Mode::Jiti {
+            flavor.gen = GENERATIONS.with(|g| {
+                g.set(g.get() + 1);
+                g.get()
+            });
+            self.loader.export_cache.borrow_mut().clear();
+        }
         let fail = |name: &str, code: Option<&str>, message: String| JsError {
             name: name.into(),
             message,
@@ -1188,7 +1268,7 @@ impl Engine {
         let real = resolve::real(&abs);
         let module = self
             .loader
-            .load_file(&real, flavor, false, !opts.fresh, &mut self.ctx)
+            .load_file(&real, flavor, false, !opts.fresh || flavor.gen != 0, &mut self.ctx)
             .map_err(|e| self.to_js_error(e, &abs))?;
         let promise = module.load_link_evaluate(&mut self.ctx);
         match self.settle(&promise, None) {
@@ -1282,7 +1362,7 @@ impl Engine {
             c.set(v);
             v
         });
-        self.loader.info.borrow_mut().insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }));
+        self.loader.info.borrow_mut().insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false, gen: 0 }));
         self.loader.virtuals.borrow_mut().insert(id, module);
         Ok(id)
     }
@@ -1461,8 +1541,20 @@ impl Engine {
     }
 }
 
+thread_local! {
+    /// The file of the last syntax error a load hit.
+    pub static LAST_SYNTAX_FILE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    /// The `stack` of the last error converted (diagnostics).
+    pub static LAST_STACK: RefCell<String> = RefCell::new(String::new());
+}
+
 pub fn error_fields(value: &JsValue, file: &Path, ctx: &mut Context) -> JsError {
     if let Some(obj) = value.as_object() {
+        if let Ok(st) = obj.get(js_string!("stack"), ctx) {
+            if let Ok(st) = st.to_string(ctx) {
+                LAST_STACK.with(|s| *s.borrow_mut() = st.to_std_string_lossy());
+            }
+        }
         let get = |k: &str, ctx: &mut Context| -> Option<String> {
             let v = obj.get(JsString::from(k), ctx).ok()?;
             if v.is_undefined() {
@@ -1729,7 +1821,7 @@ fn install_host(ctx: &mut Context) {
                 } else {
                     PathBuf::from(from)
                 };
-                make_require(&path, false, ctx)
+                make_require(&path, false, 0, ctx)
             }),
             js_string!("createRequire"),
             1,

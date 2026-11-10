@@ -467,10 +467,10 @@ pub fn swizzle_copy(component: &str, opts: &CopyOptions) -> Result<Value, ApiErr
             Err(e) => {
                 let unrestored = undo_copy(&written);
                 for d in created_dirs.iter().rev() {
-                    let _ = std::fs::remove_dir_all(d);
+                    js_rm_rf(d).map_err(|m| api_err(m, vec![], "ERR_UNKNOWN"))?;
                 }
                 if !output_dir_existed {
-                    let _ = std::fs::remove_dir_all(&output_dir);
+                    js_rm_rf(&output_dir).map_err(|m| api_err(m, vec![], "ERR_UNKNOWN"))?;
                 }
                 return Err(write_failed(&o.dest, cwd, &e, &unrestored));
             }
@@ -508,6 +508,19 @@ pub fn swizzle_copy(component: &str, opts: &CopyOptions) -> Result<Value, ApiErr
     resp.insert("package".into(), Value::String(owner_package));
     resp.insert("data".into(), Value::Object(crate::json::js_key_order(data)));
     Ok(Value::Object(resp))
+}
+
+/// `fs.rmSync(path, {recursive: true, force: true})`: a missing path is fine;
+/// a path below a file throws Node's ENOTDIR error.
+fn js_rm_rf(path: &str) -> Result<(), String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(m) => {
+            let _ = if m.is_dir() { std::fs::remove_dir_all(path) } else { std::fs::remove_file(path) };
+            Ok(())
+        }
+        Err(e) if e.raw_os_error() == Some(20) => Err(format!("ENOTDIR: not a directory, unlink '{path}'")),
+        Err(_) => Ok(()),
+    }
 }
 
 /// The outermost folder `mkdirSync(dir, {recursive: true})` would create.

@@ -1,0 +1,12 @@
+{
+ "id": "argv_template_-5",
+ "args": [
+  "template",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

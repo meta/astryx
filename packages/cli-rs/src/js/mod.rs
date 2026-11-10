@@ -19,6 +19,7 @@ pub mod live;
 pub mod jsmath;
 pub mod jsonparse;
 mod prune;
+pub mod syntax;
 pub mod resolve;
 mod transform;
 
@@ -83,6 +84,12 @@ pub struct JitiOptions {
     /// Specifier -> virtual module id (from `Engine::register_virtual`),
     /// for the whole graph (jiti `virtualModules` with live values).
     pub virtual_modules: Vec<(String, u64)>,
+    /// jiti's synchronous path (`jiti(file)`), which the JS CLI takes
+    /// whenever it passes virtual modules (so non-empty `virtual_modules`
+    /// implies it): package `exports` resolve with the require conditions
+    /// first, and a file with an extension jiti does not know loads through
+    /// Node's `require`, as JavaScript.
+    pub sync: bool,
 }
 
 /// A loaded module's namespace: every export, converted to JSON values with
@@ -137,6 +144,11 @@ pub fn capture_console(on: bool) -> Vec<(String, String)> {
 /// Builtins and modules already cached are not listed.
 pub fn record_loads(on: bool) -> Vec<PathBuf> {
     engine::set_load_recording(on)
+}
+
+/// The file the last syntax error came from (a load names only its root).
+pub fn last_syntax_error_file() -> Option<PathBuf> {
+    engine::LAST_SYNTAX_FILE.with(|f| f.borrow().clone())
 }
 
 /// When `err` is a module-not-found error from resolution, the specifier as

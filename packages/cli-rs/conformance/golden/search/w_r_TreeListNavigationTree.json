@@ -1,0 +1,18 @@
+{
+ "id": "w_r_TreeListNavigationTree",
+ "args": [
+  "search",
+  "TreeListNavigationTree"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"TreeListNavigationTree\" (1)\n\nname:        TreeListNavigationTree\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TreeList - Navigation Tree\nkind:        block\ndescription: Navigation tree with a selected item for the current page.\ncommand:     npx @astryxdesign/cli@0.7.12 template TreeListNavigationTree --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover TreeListNavigationTree\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv_experimental_render_--no-json",
+ "args": [
+  "experimental",
+  "render",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

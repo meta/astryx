@@ -5,7 +5,7 @@
   "acme-handbook"
  ],
  "fixture": "docsint",
- "stdout": "Acme handbook\nEverything about Acme. See {@link generic:theme}.\n\npackage: @acme/docs\n\nGuides\n\ndeploying  Ship it with `npm install -D @acme/docs`.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs acme-handbook/<name>\nUp: npx @astryxdesign/cli@0.7.12 docs\n",
+ "stdout": "Acme handbook\nEverything about Acme. See {@link generic:theme}.\n\npackage: @acme/docs\n\nStart with `npx @astryxdesign/cli@0.7.12 docs acme-handbook` or `npx @astryxdesign/cli@0.7.12 docs spacing`.\n\nGuides\n\ndeploying  Ship it with `npm install -D @acme/docs`.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs acme-handbook/<name>\nUp: npx @astryxdesign/cli@0.7.12 docs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,
  "files": [

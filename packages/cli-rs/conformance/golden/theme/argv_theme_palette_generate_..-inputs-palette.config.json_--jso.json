@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_palette_generate_..-inputs-palette.config.json_--jso",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--jso"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--jso'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

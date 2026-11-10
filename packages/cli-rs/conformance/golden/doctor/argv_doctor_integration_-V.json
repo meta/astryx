@@ -1,0 +1,13 @@
+{
+ "id": "argv_doctor_integration_-V",
+ "args": [
+  "doctor",
+  "integration",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

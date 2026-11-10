@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_integration_add_--from_neutral_component_useClipboard",
+ "args": [
+  "integration",
+  "add",
+  "--from",
+  "neutral",
+  "component",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"from\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -181,7 +181,45 @@ async function variant(pm) {
         );
       }
     }
-    return {nodes, topics, reads};
+    // What links and reference blocks in an integration's docs can name of
+    // the CLI's own typed docs: each authoring self-doc (a section of
+    // `astryx docs authoring`), and each schema's fields, row by row.
+    const {linkBlocks, renderTokens} = await imp('foundation/doc-compiler/links.mjs');
+    const authoringMod = await imp('foundation/discovery/authoring-self-docs.mjs');
+    const cliResolve = await adapter.linkResolver(catalog, '@astryxdesign/cli');
+    const fieldRows = async fields => {
+      const out = {};
+      for (const field of fields ?? []) {
+        const table = authoringMod.schemaFieldTable([field]);
+        out[field.name] = table
+          ? (await linkBlocks([table], cliResolve)).content[0].rows
+          : [];
+      }
+      return out;
+    };
+    const authoring = [];
+    for (const {doc} of (await authoringMod.loadAuthoringSelfDocs()).loaded) {
+      authoring.push({
+        type: doc.type,
+        name: doc.name,
+        displayName: doc.displayName ?? null,
+        description: renderTokens(doc.description ?? ''),
+        experimental: authoringMod.isExperimentalSelfDoc(doc),
+        content: (await linkBlocks(authoringMod.selfDocSection(doc).content, cliResolve)).content,
+        fieldOrder: (doc.fields ?? []).map(f => f.name),
+        fields: await fieldRows(doc.fields),
+      });
+    }
+    const schemaFields = {};
+    for (const node of tree.nodes.values()) {
+      const doc = node.ref?.selfDoc;
+      if (doc?.type !== 'schema') continue;
+      schemaFields[node.route] = {
+        fieldOrder: (doc.fields ?? []).map(f => f.name),
+        fields: await fieldRows(doc.fields),
+      };
+    }
+    return {nodes, topics, reads, authoring, schemaFields};
   });
 }
 

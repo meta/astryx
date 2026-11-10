@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_build_--version",
+ "args": [
+  "theme",
+  "build",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

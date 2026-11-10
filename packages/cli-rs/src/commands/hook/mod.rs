@@ -152,6 +152,11 @@ fn package_record(pkg: &str) -> Block {
 
 /// The `hook` command handler.
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
+    // Read-only: list each folder once (as the JS command's withListingCache).
+    crate::discovery::listing_cache::with_listing_cache(|| run_uncached(inv, out))
+}
+
+fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
     let run = crate::cli::env::cli_invocation(&inv.cwd);
     let name = inv.arg(0).map(String::from);
     let zh = inv.globals.zh;
@@ -227,7 +232,7 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
                     let names_of = |v: &Value| -> Vec<String> {
                         v.as_array().map(|a| a.iter().map(|x| crate::cli::format::js_string(x)).collect()).unwrap_or_default()
                     };
-                    if category.is_some() {
+                    if category.as_deref().is_some_and(|c| !c.is_empty()) {
                         if let Some((cat, names)) = groups.iter().next() {
                             out.emit(&[section(&format!("{cat}:"), None), list(&names_of(names))]);
                         }
@@ -269,11 +274,8 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
 
 /// `program.getOptionValueSource('detail')`.
 pub fn inv_detail_source(inv: &Invocation) -> OptSource {
-    inv.opt_sources.get("detail").copied().unwrap_or_else(|| {
-        if inv.argv.iter().any(|a| a == "--detail" || a.starts_with("--detail=")) {
-            OptSource::Cli
-        } else {
-            OptSource::Default
-        }
-    })
+    match inv.global_opt_source("detail") {
+        None | Some("default") => OptSource::Default,
+        Some(_) => OptSource::Cli,
+    }
 }

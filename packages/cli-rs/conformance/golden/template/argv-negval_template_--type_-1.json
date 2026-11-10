@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_template_--type_-1",
+ "args": [
+  "template",
+  "--type",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template type \"-1\". Valid types: page, block.\n\n  page  (valid type)\n  block  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

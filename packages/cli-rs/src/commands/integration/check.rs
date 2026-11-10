@@ -295,21 +295,6 @@ pub fn combine(responses: Vec<Value>, strict: bool, next: bool) -> Value {
     Value::Object(out)
 }
 
-fn base_data(name: Value, version: Value, validated: bool) -> Map<String, Value> {
-    let mut d = Map::new();
-    d.insert("validated".into(), Value::Bool(validated));
-    d.insert("name".into(), name);
-    d.insert("version".into(), version);
-    d
-}
-
-fn envelope(t: &str, data: Map<String, Value>) -> Value {
-    let mut m = Map::new();
-    m.insert("type".into(), Value::String(t.into()));
-    m.insert("data".into(), Value::Object(data));
-    Value::Object(m)
-}
-
 /// The four responses, from the doctor command's integration checks.
 pub fn run_checks(cwd: &Path) -> Vec<Value> {
     use crate::commands::doctor::integration as d;

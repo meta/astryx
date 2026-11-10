@@ -1,0 +1,13 @@
+{
+ "id": "argv_experimental_render_--JSON",
+ "args": [
+  "experimental",
+  "render",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

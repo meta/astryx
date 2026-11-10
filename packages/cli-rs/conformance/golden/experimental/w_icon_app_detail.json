@@ -1,0 +1,19 @@
+{
+ "id": "w_icon_app_detail",
+ "args": [
+  "experimental",
+  "icon",
+  "x"
+ ],
+ "fixture": "iconapp",
+ "stdout": "Icons for \"x\" (3)\n\nset:         glyphs\nid:          x\npackage:     @acme/glyphs\nimport:      import {XIcon} from '@acme/glyphs';\nwords:       close, cancel, dismiss, remove, times\ndefinitions: close\nreason:      id \"x\"\n\nset:         outline\nid:          x\npackage:     @acme/outline\nimport:      import {XIcon} from '@acme/outline';\nwords:       close, cancel, dismiss, remove, times\ndefinitions: close\nreason:      id \"x\"\n\nset:         glyphs\nid:          x\npackage:     @acme/twin\nimport:      import {XIcon} from '@acme/twin';\nwords:       close, cancel, dismiss, remove, times\ndefinitions: close\nreason:      id \"x\"\n\nRead one with its variants: npx @astryxdesign/cli@0.7.12 experimental icon <set>/<id>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/iconapp\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -5,7 +5,7 @@ pub mod api;
 pub mod doc;
 pub mod env;
 pub mod model;
-mod project_temp;
+mod project;
 pub mod scan;
 pub mod sources;
 pub mod util;
@@ -78,7 +78,7 @@ fn build_env(inv: &Invocation, out: &mut Out) -> Result<Env, String> {
     if let Ok(p) = &loaded {
         crate::discovery::integration_warnings::warn_on_integration_issues(p, inv.json(), out);
     }
-    let project = project_temp::from_project(loaded?);
+    let project = project::from_project(loaded?);
     Ok(Env {
         cwd: cwd.clone(),
         cli_root: inv.cli_root.clone(),
@@ -104,12 +104,8 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
             ErrorOpts::code("ERR_INVALID_ARGUMENT"),
         );
     }
-    // Project.load failing is the API's own failure: it has no code.
-    let env = match build_env(inv, out) {
-        Ok(e) => e,
-        Err(message) => return out.cli_error(&message, ErrorOpts::code("ERR_UNKNOWN")),
-    };
-    let queries = api::answers_queries(&env);
+    let env = build_env(inv, out);
+    let queries = env.as_ref().map(api::answers_queries).unwrap_or(true);
     let options = api::Options {
         components: inv.flag("components"),
         type_: inv.opt_str("type").map(String::from),
@@ -119,6 +115,16 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
         limit_raw: inv.opt_str("limit").map(String::from),
         lang: inv.globals.lang.clone(),
         zh: inv.globals.zh,
+    };
+    // discover() checks its options before it loads the project.
+    if let Err(e) = api::check_options(&options, &api::kinds_for_check(env.as_ref().ok(), &options)) {
+        let s = e.suggestions.into_iter().map(|(n, r)| Suggestion::new(n, r)).collect();
+        return out.cli_error(&e.message, ErrorOpts::code(e.code).suggestions(s));
+    }
+    // Project.load failing is the API's own failure: it has no code.
+    let env = match env {
+        Ok(e) => e,
+        Err(message) => return out.cli_error(&message, ErrorOpts::code("ERR_UNKNOWN")),
     };
     let result = match api::discover(&env, query, &options) {
         Ok(r) => r,

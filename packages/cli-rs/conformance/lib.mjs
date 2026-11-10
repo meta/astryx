@@ -67,22 +67,32 @@ export function ensureDirs() {
   }
 }
 
-/** Load cases: {command: [case...]} from cases/*.json. */
+/**
+ * Load cases: {command: [case...]}. `cases/<command>.json` holds the generated
+ * cases; `cases/<command>.<anything>.json` holds hand-written ones (one file
+ * per lane avoids merge conflicts). Ids are unique per command.
+ */
 export function loadCases({command, caseId} = {}) {
   const out = {};
+  const seen = new Map();
   for (const file of fs.readdirSync(CASES_DIR).filter(f => f.endsWith('.json')).sort()) {
-    const name = file.slice(0, -5);
+    const name = file.split('.')[0];
     if (command && !command.split(',').includes(name)) continue;
     let cases = JSON.parse(fs.readFileSync(path.join(CASES_DIR, file), 'utf8'));
+    for (const c of cases) {
+      const key = `${name}/${c.id}`;
+      if (seen.has(key)) throw new Error(`case id ${key} is in both ${seen.get(key)} and ${file}`);
+      seen.set(key, file);
+    }
     if (caseId) cases = cases.filter(c => caseId.split(',').includes(c.id));
-    if (cases.length) out[name] = cases;
+    if (cases.length) (out[name] ??= []).push(...cases);
   }
   return out;
 }
 
 /** The pinned environment every case runs with. */
 export function caseEnv(c) {
-  return {
+  const env = {
     PATH: `${BIN_DIR}:/usr/bin:/bin`,
     HOME: path.join(WORK, 'home'),
     TMPDIR: path.join(WORK, 'tmp'),
@@ -99,6 +109,9 @@ export function caseEnv(c) {
     LD_PRELOAD: SHIM,
     ...(c.env ?? {}),
   };
+  // A null value in a case's env unsets the variable.
+  for (const k of Object.keys(env)) if (env[k] === null) delete env[k];
+  return env;
 }
 
 function fileRecord(abs, replace) {
@@ -222,7 +235,9 @@ export async function runCase(c, bin) {
     inner = ['/bin/sh', '-c', `${pre}exec ${cmdline}`];
   } else inner = argv;
   // WORK = the fixtures (read-only lower layer) + this case's writes (upper).
-  const script = `mount -t overlay overlay -o "lowerdir=${FIXTURES},upperdir=$1/u,workdir=$1/w,userxattr" "$2" && cd "$3" && shift 3 && exec unshare -U --map-user=${UID} --map-group=${GID} "$@"`;
+  // volatile: no sync of the upper layer at unmount (each case's writes are
+  // read right away and then thrown away); a synced unmount cost ~300 ms.
+  const script = `mount -t overlay overlay -o "lowerdir=${FIXTURES},upperdir=$1/u,workdir=$1/w,userxattr,volatile" "$2" && cd "$3" && shift 3 && exec unshare -U --map-user=${UID} --map-group=${GID} "$@"`;
   // -n: no network, so nothing a case runs can reach the outside world.
   const full = ['-rmn', 'sh', '-c', script, 'sh', scratch, WORK, cwd, ...inner];
   const started = Date.now();
@@ -264,11 +279,16 @@ export async function runCase(c, bin) {
   return result;
 }
 
-// overlayfs leaves its workdir/work with mode 000; open it up before removing.
+// overlayfs leaves folders under its workdir with mode 000 (work/, and
+// work/incompat/volatile/ for a volatile mount); open them before removing.
 function openWorkdir(dir) {
-  try {
-    fs.chmodSync(path.join(dir, 'w', 'work'), 0o700);
-  } catch {}
+  const open = d => {
+    try {
+      fs.chmodSync(d, 0o700);
+      for (const e of fs.readdirSync(d, {withFileTypes: true})) if (e.isDirectory()) open(path.join(d, e.name));
+    } catch {}
+  };
+  open(path.join(dir, 'w'));
 }
 
 function removeScratchSync(dir) {

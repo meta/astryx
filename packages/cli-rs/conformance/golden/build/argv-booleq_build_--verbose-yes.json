@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_build_--verbose-yes",
+ "args": [
+  "build",
+  "--verbose=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--verbose=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-negate_integration_add_component_useClipboard_--no-dry-run",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--no-dry-run"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-dry-run'\n(Did you mean --dry-run?)\n",
+ "exit": 1,
+ "files": []
+}

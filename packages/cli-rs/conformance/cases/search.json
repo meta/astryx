@@ -860,6 +860,568 @@
     "gen": true
   },
   {
+    "id": "argv_search_--json_--json",
+    "args": [
+      "search",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--json_--json",
+    "args": [
+      "search",
+      "table",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--help_--json",
+    "args": [
+      "search",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--help_--json",
+    "args": [
+      "search",
+      "table",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--json_--help",
+    "args": [
+      "search",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--json_--help",
+    "args": [
+      "search",
+      "table",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-h_--bogus",
+    "args": [
+      "search",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-h_--bogus",
+    "args": [
+      "search",
+      "table",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--bogus_-h",
+    "args": [
+      "search",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--bogus_-h",
+    "args": [
+      "search",
+      "table",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-V",
+    "args": [
+      "search",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-V",
+    "args": [
+      "search",
+      "table",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--version",
+    "args": [
+      "search",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--version",
+    "args": [
+      "search",
+      "table",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--JSON",
+    "args": [
+      "search",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--JSON",
+    "args": [
+      "search",
+      "table",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--jso",
+    "args": [
+      "search",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--jso",
+    "args": [
+      "search",
+      "table",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--no-json",
+    "args": [
+      "search",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--no-json",
+    "args": [
+      "search",
+      "table",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--json-1",
+    "args": [
+      "search",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--json-1",
+    "args": [
+      "search",
+      "table",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-x",
+    "args": [
+      "search",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-x",
+    "args": [
+      "search",
+      "table",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-hV",
+    "args": [
+      "search",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-hV",
+    "args": [
+      "search",
+      "table",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--_--json",
+    "args": [
+      "search",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--_--json",
+    "args": [
+      "search",
+      "table",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_--_-h",
+    "args": [
+      "search",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_--_-h",
+    "args": [
+      "search",
+      "table",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_x",
+    "args": [
+      "search",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_x",
+    "args": [
+      "search",
+      "table",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-",
+    "args": [
+      "search",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-",
+    "args": [
+      "search",
+      "table",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_-5",
+    "args": [
+      "search",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_-5",
+    "args": [
+      "search",
+      "table",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_---x",
+    "args": [
+      "search",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_---x",
+    "args": [
+      "search",
+      "table",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_---json",
+    "args": [
+      "search",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_search_table_---json",
+    "args": [
+      "search",
+      "table",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_search_--type_component_table",
+    "args": [
+      "search",
+      "--type",
+      "component",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_search_table_--type_component_--type_component",
+    "args": [
+      "search",
+      "table",
+      "--type",
+      "component",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_search_table_--type_component_--type_hook",
+    "args": [
+      "search",
+      "table",
+      "--type",
+      "component",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_search_table_--type_x",
+    "args": [
+      "search",
+      "table",
+      "--type",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_search_table_--type-",
+    "args": [
+      "search",
+      "table",
+      "--type="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_search_table_--type_-1",
+    "args": [
+      "search",
+      "table",
+      "--type",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_search_--limit_3_table",
+    "args": [
+      "search",
+      "--limit",
+      "3",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_search_table_--limit_3_--limit_3",
+    "args": [
+      "search",
+      "table",
+      "--limit",
+      "3",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_search_table_--limit_3_--limit_0",
+    "args": [
+      "search",
+      "table",
+      "--limit",
+      "3",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_search_table_--limit_x",
+    "args": [
+      "search",
+      "table",
+      "--limit",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_search_table_--limit-",
+    "args": [
+      "search",
+      "table",
+      "--limit="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_search_--verbose_table",
+    "args": [
+      "search",
+      "--verbose",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_search_table_--verbose_--verbose",
+    "args": [
+      "search",
+      "table",
+      "--verbose",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_search_table_--verbose-yes",
+    "args": [
+      "search",
+      "table",
+      "--verbose=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_search_table_--no-verbose",
+    "args": [
+      "search",
+      "table",
+      "--no-verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "search_nosuchsub",
     "args": [
       "search",
@@ -7937,1640 +8499,6 @@
     "gen": true
   },
   {
-    "id": "search_button_tty",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "app",
-    "gen": true,
-    "tty": true
-  },
-  {
-    "id": "w_buttn",
-    "args": [
-      "search",
-      "buttn"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dialgo",
-    "args": [
-      "search",
-      "dialgo"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_tabel",
-    "args": [
-      "search",
-      "tabel"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_calender",
-    "args": [
-      "search",
-      "calender"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_navigaton",
-    "args": [
-      "search",
-      "navigaton"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_checkbx",
-    "args": [
-      "search",
-      "checkbx"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_acordion",
-    "args": [
-      "search",
-      "acordion"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_tooltipp",
-    "args": [
-      "search",
-      "tooltipp"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_paginaton",
-    "args": [
-      "search",
-      "paginaton"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_breadcrums",
-    "args": [
-      "search",
-      "breadcrums"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_icon-button-in-a-card-header",
-    "args": [
-      "search",
-      "icon",
-      "button",
-      "in",
-      "a",
-      "card",
-      "header"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-header-with-sticky-columns",
-    "args": [
-      "search",
-      "table",
-      "header",
-      "with",
-      "sticky",
-      "columns"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dropdown-menu-radio",
-    "args": [
-      "search",
-      "dropdown",
-      "menu",
-      "radio"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_top-nav-mega",
-    "args": [
-      "search",
-      "top",
-      "nav",
-      "mega"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_number-field",
-    "args": [
-      "search",
-      "number",
-      "field"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-of-contents",
-    "args": [
-      "search",
-      "table",
-      "of",
-      "contents"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_troubleshoot-integration",
-    "args": [
-      "search",
-      "troubleshoot",
-      "integration"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_file-browser",
-    "args": [
-      "search",
-      "file",
-      "browser"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_pricing-page",
-    "args": [
-      "search",
-      "pricing",
-      "page"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_best-practices-for-spacing",
-    "args": [
-      "search",
-      "best",
-      "practices",
-      "for",
-      "spacing"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_explain-why-a-field-is-required",
-    "args": [
-      "search",
-      "explain",
-      "why",
-      "a",
-      "field",
-      "is",
-      "required"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_nested-menu",
-    "args": [
-      "search",
-      "nested",
-      "menu"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_light-dark-mode-button",
-    "args": [
-      "search",
-      "light",
-      "dark",
-      "mode",
-      "button"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_resizable-side-panels",
-    "args": [
-      "search",
-      "resizable",
-      "side",
-      "panels"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_font-setup",
-    "args": [
-      "search",
-      "font",
-      "setup"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_code-review",
-    "args": [
-      "search",
-      "code",
-      "review"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_switch-to-a-dark-theme",
-    "args": [
-      "search",
-      "switch",
-      "to",
-      "a",
-      "dark",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_ChatComposer-ChatLayout",
-    "args": [
-      "search",
-      "ChatComposer",
-      "ChatLayout"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_useTablePaginationState",
-    "args": [
-      "search",
-      "useTablePaginationState"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_SidebarToggle",
-    "args": [
-      "search",
-      "SidebarToggle"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_vertical-stack",
-    "args": [
-      "search",
-      "vertical",
-      "stack"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_stack",
-    "args": [
-      "search",
-      "stack"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_command-palette",
-    "args": [
-      "search",
-      "command",
-      "palette"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_CommandPalette",
-    "args": [
-      "search",
-      "CommandPalette"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_a-page-where-you-can-see-business-stats",
-    "args": [
-      "search",
-      "a",
-      "page",
-      "where",
-      "you",
-      "can",
-      "see",
-      "business",
-      "stats"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_zzzzqqq",
-    "args": [
-      "search",
-      "zzzzqqq"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_the",
-    "args": [
-      "search",
-      "the"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_a",
-    "args": [
-      "search",
-      "a"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_x",
-    "args": [
-      "search",
-      "x"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_404-page",
-    "args": [
-      "search",
-      "404",
-      "page"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_settings-page-with-tabs",
-    "args": [
-      "search",
-      "settings",
-      "page",
-      "with",
-      "tabs"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_user-management",
-    "args": [
-      "search",
-      "user",
-      "management"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_analytics-dashboard",
-    "args": [
-      "search",
-      "analytics",
-      "dashboard"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_kanban",
-    "args": [
-      "search",
-      "kanban"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_drag-and-drop",
-    "args": [
-      "search",
-      "drag",
-      "and",
-      "drop"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_file-upload",
-    "args": [
-      "search",
-      "file",
-      "upload"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_empty-state",
-    "args": [
-      "search",
-      "empty",
-      "state"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_toast-notification",
-    "args": [
-      "search",
-      "toast",
-      "notification"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_date-range",
-    "args": [
-      "search",
-      "date",
-      "range"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_time-picker",
-    "args": [
-      "search",
-      "time",
-      "picker"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_chart",
-    "args": [
-      "search",
-      "chart"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_avatar",
-    "args": [
-      "search",
-      "avatar"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_typography",
-    "args": [
-      "search",
-      "typography"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_icons",
-    "args": [
-      "search",
-      "icons"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_accessibility",
-    "args": [
-      "search",
-      "accessibility"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_a11y",
-    "args": [
-      "search",
-      "a11y"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_keyboard",
-    "args": [
-      "search",
-      "keyboard"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_focus",
-    "args": [
-      "search",
-      "focus"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_shadow",
-    "args": [
-      "search",
-      "shadow"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_radius",
-    "args": [
-      "search",
-      "radius"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_motion",
-    "args": [
-      "search",
-      "motion"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_responsive-layout",
-    "args": [
-      "search",
-      "responsive",
-      "layout"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_use-a-theme",
-    "args": [
-      "search",
-      "use",
-      "a",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_author-a-theme",
-    "args": [
-      "search",
-      "author",
-      "a",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_tokens",
-    "args": [
-      "search",
-      "tokens"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_color-tokens",
-    "args": [
-      "search",
-      "color",
-      "tokens"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_spacing-scale",
-    "args": [
-      "search",
-      "spacing",
-      "scale"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_buttons",
-    "args": [
-      "search",
-      "buttons"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_tables",
-    "args": [
-      "search",
-      "tables"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_integrations",
-    "args": [
-      "search",
-      "integrations"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_codemods",
-    "args": [
-      "search",
-      "codemods"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_upgrade",
-    "args": [
-      "search",
-      "upgrade"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_install",
-    "args": [
-      "search",
-      "install"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_login",
-    "args": [
-      "search",
-      "login"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_signup-form",
-    "args": [
-      "search",
-      "signup",
-      "form"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_checkout",
-    "args": [
-      "search",
-      "checkout"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_chat",
-    "args": [
-      "search",
-      "chat"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_calendar",
-    "args": [
-      "search",
-      "calendar"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_gallery",
-    "args": [
-      "search",
-      "gallery"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_hero",
-    "args": [
-      "search",
-      "hero"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_profile",
-    "args": [
-      "search",
-      "profile"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_docs",
-    "args": [
-      "search",
-      "docs"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_api",
-    "args": [
-      "search",
-      "api"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_c",
-    "args": [
-      "search",
-      "c++"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_data-table",
-    "args": [
-      "search",
-      "data-table"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_foo-bar",
-    "args": [
-      "search",
-      "foo_bar"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_caf",
-    "args": [
-      "search",
-      "caf\u00e9"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode",
-    "args": [
-      "search",
-      "dark\u2014mode"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_how-do-I-make-a-sidebar-collapse",
-    "args": [
-      "search",
-      "how",
-      "do",
-      "I",
-      "make",
-      "a",
-      "sidebar",
-      "collapse?"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_useState",
-    "args": [
-      "search",
-      "useState"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_XDSButton",
-    "args": [
-      "search",
-      "XDSButton"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_Button",
-    "args": [
-      "search",
-      "Button"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_BUTTON",
-    "args": [
-      "search",
-      "BUTTON"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode_2",
-    "args": [
-      "search",
-      "dark mode"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_quoted-phrase",
-    "args": [
-      "search",
-      "\"quoted phrase\""
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_spaced-query",
-    "args": [
-      "search",
-      "  spaced   query  "
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-component",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "component"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-type-component",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--type",
-      "component"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-type-component",
-    "args": [
-      "search",
-      "table",
-      "--type",
-      "component"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_warm-type-component",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "component"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-hook",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-type-hook",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-type-hook",
-    "args": [
-      "search",
-      "table",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_warm-type-hook",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-doc",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "doc"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-type-doc",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--type",
-      "doc"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-type-doc",
-    "args": [
-      "search",
-      "table",
-      "--type",
-      "doc"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_warm-type-doc",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "doc"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-template",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "template"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-type-template",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--type",
-      "template"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-type-template",
-    "args": [
-      "search",
-      "table",
-      "--type",
-      "template"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_warm-type-template",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "template"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-theme",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-type-theme",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--type",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-type-theme",
-    "args": [
-      "search",
-      "table",
-      "--type",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_warm-type-theme",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "theme"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-1",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "1"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-2",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "2"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-50",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "50"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-1000",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "1000"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-0",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "0"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-1_2",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "-1"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-1-5",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "1.5"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-abc",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "abc"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-0x10",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "0x10"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-1e1",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "1e1"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-3",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      " 3 "
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      ""
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-verbose",
-    "args": [
-      "search",
-      "button",
-      "--verbose"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_dark-mode-verbose-limit-3",
-    "args": [
-      "search",
-      "dark",
-      "mode",
-      "--verbose",
-      "--limit",
-      "3"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_table-json-limit-2",
-    "args": [
-      "search",
-      "table",
-      "--json",
-      "--limit",
-      "2"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_json-table-type-template-limit-3",
-    "args": [
-      "search",
-      "--json",
-      "table",
-      "--type",
-      "template",
-      "--limit",
-      "3"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-bogus",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "bogus"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type",
-    "args": [
-      "search",
-      "button",
-      "--type"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit_2",
-    "args": [
-      "search",
-      "button",
-      "--limit"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-bogus",
-    "args": [
-      "search",
-      "button",
-      "--bogus"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-type-doc-type-hook",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "doc",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button-limit-2-limit-3",
-    "args": [
-      "search",
-      "button",
-      "--limit",
-      "2",
-      "--limit",
-      "3"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_zzzzqqq-type-hook",
-    "args": [
-      "search",
-      "zzzzqqq",
-      "--type",
-      "hook"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_zzzzqqq-json",
-    "args": [
-      "search",
-      "zzzzqqq",
-      "--json"
-    ],
-    "fixture": "app"
-  },
-  {
-    "id": "w_button_@integration",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_dark-mode_@integration",
-    "args": [
-      "search",
-      "dark",
-      "mode"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_acme_@integration",
-    "args": [
-      "search",
-      "acme"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_ocean_@integration",
-    "args": [
-      "search",
-      "ocean"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_hero_@integration",
-    "args": [
-      "search",
-      "hero"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_zorblax-card_@integration",
-    "args": [
-      "search",
-      "zorblax",
-      "card"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_guide_@integration",
-    "args": [
-      "search",
-      "guide"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_colors_@integration",
-    "args": [
-      "search",
-      "colors"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_AcmeBadge_@integration",
-    "args": [
-      "search",
-      "AcmeBadge"
-    ],
-    "fixture": "integration"
-  },
-  {
-    "id": "w_chart_@large",
-    "args": [
-      "search",
-      "chart"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_comment_@large",
-    "args": [
-      "search",
-      "comment"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_emoji_@large",
-    "args": [
-      "search",
-      "emoji"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_tour_@large",
-    "args": [
-      "search",
-      "tour"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_tab-bar_@large",
-    "args": [
-      "search",
-      "tab",
-      "bar"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_navigation-screen_@large",
-    "args": [
-      "search",
-      "navigation",
-      "screen"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_list-input_@large",
-    "args": [
-      "search",
-      "list",
-      "input"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_diff-viewer_@large",
-    "args": [
-      "search",
-      "diff",
-      "viewer"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_butter_@large",
-    "args": [
-      "search",
-      "butter"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_theme_@large",
-    "args": [
-      "search",
-      "theme"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_chart-type-template-json_@large",
-    "args": [
-      "search",
-      "chart",
-      "--type",
-      "template",
-      "--json"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_comment-verbose_@large",
-    "args": [
-      "search",
-      "comment",
-      "--verbose"
-    ],
-    "fixture": "large"
-  },
-  {
-    "id": "w_button_@empty",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_theme_@empty",
-    "args": [
-      "search",
-      "theme"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_warm_@empty",
-    "args": [
-      "search",
-      "warm"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_dark-mode_@empty",
-    "args": [
-      "search",
-      "dark",
-      "mode"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_install_@empty",
-    "args": [
-      "search",
-      "install"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_button-type-component_@empty",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "component"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_warm-type-theme-json_@empty",
-    "args": [
-      "search",
-      "warm",
-      "--type",
-      "theme",
-      "--json"
-    ],
-    "fixture": "empty"
-  },
-  {
-    "id": "w_button_@nocore",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "nocore"
-  },
-  {
-    "id": "w_button_@plain",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "plain"
-  },
-  {
-    "id": "w_dark-mode_@nocore",
-    "args": [
-      "search",
-      "dark",
-      "mode"
-    ],
-    "fixture": "nocore"
-  },
-  {
-    "id": "w_dark-mode_@plain",
-    "args": [
-      "search",
-      "dark",
-      "mode"
-    ],
-    "fixture": "plain"
-  },
-  {
-    "id": "w_button-type-hook_@nocore",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "hook"
-    ],
-    "fixture": "nocore"
-  },
-  {
-    "id": "w_button-json_@nocore",
-    "args": [
-      "search",
-      "button",
-      "--json"
-    ],
-    "fixture": "nocore"
-  },
-  {
-    "id": "w_button_@brokencore",
-    "args": [
-      "search",
-      "button"
-    ],
-    "fixture": "brokencore"
-  },
-  {
-    "id": "w_button-json_@brokencore",
-    "args": [
-      "search",
-      "button",
-      "--json"
-    ],
-    "fixture": "brokencore"
-  },
-  {
-    "id": "w_button-type-doc_@brokencore",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "doc"
-    ],
-    "fixture": "brokencore"
-  },
-  {
-    "id": "w_button-type-hook_@brokencore",
-    "args": [
-      "search",
-      "button",
-      "--type",
-      "hook"
-    ],
-    "fixture": "brokencore"
-  },
-  {
     "id": "cols40_search_button",
     "args": [
       "search",
@@ -9619,6 +8547,16 @@
     }
   },
   {
+    "id": "search_button_tty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
     "id": "cols60_search_button_tty",
     "args": [
       "search",
@@ -9640,5 +8578,692 @@
     "fixture": "app",
     "gen": true,
     "stdin": "y\nn\n\n"
+  },
+  {
+    "id": "search_button_@pm-npm",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@pm-npm",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "search_button_@pm-pnpm",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@pm-pnpm",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "search_button_@pm-yarn",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@pm-yarn",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "search_button_@pm-yarnberry",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@pm-yarnberry",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "search_button_@pm-bun",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@pm-bun",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "search_button_@monorepo",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@monorepo",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_search_button_@monorepo",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web_search_table_--json_@monorepo",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_search_button_@monorepo",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_search_table_--json_@monorepo",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_search_button_@monorepo",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "in-monorepo.packages.api_search_table_--json_@monorepo",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "search_button_@monorepo-local",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@monorepo-local",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_search_button_@monorepo-local",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "in-monorepo-local.apps.site_search_table_--json_@monorepo-local",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "search_button_@configured",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@configured",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "search_button_@configts",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@configts",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "search_button_@badconfig",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@badconfig",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "search_button_@syntaxconfig",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@syntaxconfig",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "search_button_@unknownint",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "search_table_--json_@unknownint",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.src_search_table_--json",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_search_table_--json",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_search_button_@large",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-large.src_search_table_--json_@large",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_search_button_@integration",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_search_table_--json_@integration",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "in-._search_table_--json_@empty",
+    "args": [
+      "search",
+      "table",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "env-ua-pnpm_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_search_button_@empty",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ci-1_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-true_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-false_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-0_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-github_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-xdg_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg-relative_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-node-env-prod_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-agent_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-pnpm-home_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-lang-zh_search_button",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  },
+  {
+    "id": "search_sparkle_@icons",
+    "args": [
+      "search",
+      "sparkle"
+    ],
+    "fixture": "icons",
+    "gen": true
   }
 ]

@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_add_--_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"--json\".\n",
+ "exit": 1,
+ "files": []
+}

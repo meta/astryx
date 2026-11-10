@@ -20,7 +20,10 @@ node packages/cli-rs/conformance/run.mjs --bin <worktree>/target/release/astryx 
 
 ## Case format
 
-`cases/<command>.json` is a JSON array of cases:
+`cases/<command>.json` (generated, rewritten by `gen-cases.mjs`: never edit it) and
+`cases/<command>.<name>.json` (hand-written; use one file per lane, e.g.
+`cases/docs.docs-lane.json`) are JSON arrays of cases. Ids are unique per command
+across its files.
 
 ```json
 {"id": "component_Button_--json", "args": ["component", "Button", "--json"], "fixture": "app"}
@@ -35,14 +38,14 @@ node packages/cli-rs/conformance/run.mjs --bin <worktree>/target/release/astryx 
 | `stdin`    | no       | text written to stdin (default: empty, closed; stdin is never a TTY)           |
 | `tty`      | no       | `true`: run under a pseudo-terminal (`script`); stdout and stderr arrive merged in `stdout`, with CRLF |
 | `pre`      | no       | list of argv arrays run first with the same binary in the same work tree (output and exit ignored), e.g. `[["theme","add","neutral"]]` before `theme remove neutral` |
-| `env`      | no       | extra environment variables, added to the pinned set                          |
-| `timeoutMs`| no       | default 60000 in run.mjs (`--timeout`), 120000 in record.mjs; record.mjs retries a timeout and never keeps one as a golden |
-| `gen`      | no       | `true` on cases `gen-cases.mjs` made; it rewrites those and keeps the rest     |
+| `env`      | no       | extra environment variables, added to the pinned set; `null` unsets one       |
+| `timeoutMs`| no       | default 20000 in run.mjs (`--timeout`), 120000 in record.mjs; record.mjs retries a timeout and never keeps one as a golden |
+| `gen`      | no       | `true` on generated cases                                                      |
 
 stdout and stderr are regular files (not pipes, not TTYs) unless `tty` is set: Node can exit with pipe
 writes pending, which cut long outputs short at random.
 
-To add cases: append objects without `gen` to the command's file, then record
+To add cases: put them in your own `cases/<command>.<name>.json`, then record
 their goldens from the JS CLI: `node record.mjs --command <command> --missing`.
 Commit the cases and goldens together.
 

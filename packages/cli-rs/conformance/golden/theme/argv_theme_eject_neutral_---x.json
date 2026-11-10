@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_eject_neutral_---x",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_add_-hV",
+ "args": [
+  "integration",
+  "add",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

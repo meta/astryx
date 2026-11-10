@@ -275,10 +275,12 @@ fn show(out: &mut Out, json: bool, m: &Template) -> CmdResult {
         Ok(x) => x,
         Err(e) => return fail(out, e),
     };
-    let (source_text, content, media) = match source::replace_template_demos(&src) {
+    let (with_media, content, media) = match source::replace_template_demos(&src) {
         Ok(x) => x,
         Err(e) => return fail(out, e),
     };
+    let sets = super::icons::load(&fsutil::path_str(&out.cwd));
+    let (source_text, icons) = super::icons::map_template_icons(&with_media, &sets, m.icons.as_ref());
     let comps = source::components_in_source(&source_text);
     if json {
         let mut d = Map::new();
@@ -289,6 +291,9 @@ fn show(out: &mut Out, json: bool, m: &Template) -> CmdResult {
         d.insert("source".into(), s(&source_text));
         d.insert("demoMediaReplaced".into(), Value::from(media));
         d.insert("demoContentReplaced".into(), Value::from(content));
+        if let Some(i) = &icons {
+            d.insert("icons".into(), i.clone());
+        }
         out.json_out("template.show", Some(s(m.pkg())), Value::Object(d), None);
         return Ok(());
     }
@@ -302,6 +307,9 @@ fn show(out: &mut Out, json: bool, m: &Template) -> CmdResult {
     }
     if content > 0 {
         out.eprintln(&demo_content_note(content, None));
+    }
+    for line in super::icons::icon_lines(icons.as_ref()) {
+        out.eprintln(&line);
     }
     Ok(())
 }
@@ -336,12 +344,16 @@ fn copy(inv: &Invocation, out: &mut Out, json: bool, m: &Template, target: &str,
         Ok(x) => x,
         Err(e) => return fail(out, e),
     };
-    let (output_source, content, media) = match source::replace_template_demos(&src) {
+    let (with_media, content, media) = match source::replace_template_demos(&src) {
         Ok(x) => x,
         Err(e) => return fail(out, e),
     };
-    let write = std::fs::create_dir_all(&output_dir).and_then(|_| std::fs::write(&output_file, &output_source));
-    if let Err(e) = write {
+    let sets = super::icons::load(&cwd);
+    let (output_source, icons) = super::icons::map_template_icons(&with_media, &sets, m.icons.as_ref());
+    if let Err((code, _)) = super::mkdir_p(&output_dir) {
+        return fail(out, super::needs::write_failed_code(&output_file, &cwd, &code));
+    }
+    if let Err(e) = std::fs::write(&output_file, &output_source) {
         return fail(out, super::needs::write_failed(&output_file, &cwd, &e));
     }
     let needs = super::needs::analyze(inv, &output_source, &cwd);
@@ -360,6 +372,9 @@ fn copy(inv: &Invocation, out: &mut Out, json: bool, m: &Template, target: &str,
         d.insert("notes".into(), Value::Array(needs.notes.iter().map(|n| s(n)).collect()));
         d.insert("missingPackages".into(), Value::Array(needs.missing.iter().map(|n| s(n)).collect()));
         d.insert("installCommand".into(), needs.install_command.as_deref().map(s).unwrap_or(Value::Null));
+        if let Some(i) = &icons {
+            d.insert("icons".into(), i.clone());
+        }
         out.json_out("template.copy", Some(s(m.pkg())), Value::Object(d), None);
         return Ok(());
     }
@@ -376,6 +391,10 @@ fn copy(inv: &Invocation, out: &mut Out, json: bool, m: &Template, target: &str,
     }
     for n in &needs.notes {
         blocks.push(text(n));
+    }
+    let icon_text = super::icons::icon_lines(icons.as_ref());
+    if !icon_text.is_empty() {
+        blocks.push(text(&icon_text.join("\n")));
     }
     out.emit(&blocks);
     Ok(())

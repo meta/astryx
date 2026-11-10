@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-definition_useClipboard_-",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "useClipboard",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'new-definition'. Expected 1 argument but got 2.\n",
+ "exit": 1,
+ "files": []
+}

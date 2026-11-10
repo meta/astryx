@@ -1,0 +1,15 @@
+{
+ "id": "argv-before_theme_build_--icons-specifier_-acme-icons_theme.ts",
+ "args": [
+  "theme",
+  "build",
+  "--icons-specifier",
+  "@acme/icons",
+  "theme.ts"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

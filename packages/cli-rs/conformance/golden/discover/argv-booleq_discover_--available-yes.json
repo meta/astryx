@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_discover_--available-yes",
+ "args": [
+  "discover",
+  "--available=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--available=yes'\n",
+ "exit": 1,
+ "files": []
+}

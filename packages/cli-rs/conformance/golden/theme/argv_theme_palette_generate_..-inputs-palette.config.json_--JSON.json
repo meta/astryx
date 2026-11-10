@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_palette_generate_..-inputs-palette.config.json_--JSON",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

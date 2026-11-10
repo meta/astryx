@@ -1,0 +1,17 @@
+{
+ "id": "argv-repeat_theme_build_theme.ts_--out_out_--out_out",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--out",
+  "out",
+  "--out",
+  "out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

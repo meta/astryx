@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_new-set_x",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid icon set name \"\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

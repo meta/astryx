@@ -1,0 +1,13 @@
+{
+ "id": "w2_doctor_author2_docs",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "doctor-author2",
+ "stdout": "Checking integration docs: @acme/kit2@2.0.0\n\nIntegration issues\n\nseverity: [warn]\ncode:     source_without_component_doc\nmessage:  Component source \"Orphan.tsx\" has no same-stem metadata file Orphan.doc.mjs, so Astryx ignores it. Fix: add Orphan.doc.mjs beside it with type: 'component'; `astryx docs authoring component-doc` lists its fields.\n\nseverity: [warn]\ncode:     duplicate_prop\nmessage:  Gauge's prop \"value\" is documented twice: props[0] and props[1].\nfix:      In src/Gauge/Gauge.doc.mjs, delete props[1] (the second \"value\" entry), keeping what it adds in props[0].\nfile:     src/Gauge/Gauge.doc.mjs\nline:     1\n\nseverity: [warn]\ncode:     unknown_translated_prop\nmessage:  docsZh.propDescriptions names \"ghost\", but no prop entry of Gauge is named \"ghost\" (an overlay matches an entry's whole name), so that text is never shown.\nfix:      In src/Gauge/Gauge.doc.mjs, remove \"ghost\" from docsZh.propDescriptions, or document the prop \"ghost\" first.\nfile:     src/Gauge/Gauge.doc.mjs\nline:     2\n\nseverity: [warn]\ncode:     unreachable_contribution\nmessage:  Found contribution metadata \"lost/Widget.doc.mjs\" outside every declared integration root, so it contributes nothing. Fix: move it under src/ (the components root). Also add Widget.tsx beside it.\n\nseverity: [fail]\ncode:     invalid_doc_graph\nmessage:  @acme/kit2:tokens: The topic \"tokens\" from @acme/kit2 and Astryx's own namespace \"tokens\" both have the route \"tokens\", so `astryx docs tokens` cannot open both. Fix: rename \"tokens\" (its `name` and its file), such as `name: 'kit2-tokens'`.\n\n[warn] 1 fluff finding(s) (doc_fluff): words that add length, not meaning. Cut each one.\n\ntopic:   tokens\nkind:    phrase\nphrase:  basically\nsection: Use\nfile:    docs/tokens.doc.mjs\nline:    1\nmessage: \"tokens\" (section \"Use\") pads its prose with \"basically\" (line 1). Cut it; the sentence says the same without it.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_gap-report_--package_-astryxdesign-core_Button",
+ "args": [
+  "gap-report",
+  "--package",
+  "@astryxdesign/core",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

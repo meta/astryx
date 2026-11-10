@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_experimental_render_--overwrite-yes",
+ "args": [
+  "experimental",
+  "render",
+  "--overwrite=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--overwrite=yes'\n",
+ "exit": 1,
+ "files": []
+}

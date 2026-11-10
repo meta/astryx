@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_component_--no-blocks",
+ "args": [
+  "component",
+  "--no-blocks"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-blocks'\n(Did you mean --blocks?)\n",
+ "exit": 1,
+ "files": []
+}

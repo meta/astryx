@@ -1,0 +1,13 @@
+{
+ "id": "argv_template_--help_--json",
+ "args": [
+  "template",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx template\",\n    \"description\": \"List, show, or scaffold page and block templates\",\n    \"usage\": \"astryx template [options] [name] [path]\",\n    \"options\": [\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are refused\"\n      },\n      {\n        \"flags\": \"--type <type>\",\n        \"description\": \"Filter by template type: page or block\"\n      },\n      {\n        \"flags\": \"--package <pkg>\",\n        \"description\": \"Narrow to templates from a specific package. Use @astryxdesign/core to select an original hidden by an integration replacement.\"\n      },\n      {\n        \"flags\": \"--skeleton\",\n        \"description\": \"Show layout skeleton with spatial annotations (padding, gap, nesting) instead of the source. Needs <name>. It writes nothing, so <path> and --overwrite are refused with ERR_INVALID_ARGUMENT\"\n      },\n      {\n        \"flags\": \"--cdn [path]\",\n        \"description\": \"Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are refused. The page goes to the --cdn value, else to <path>, else cdn.template.html, and that path is always the file itself. A value right after --cdn (anything not starting with -) is taken as that path\"\n      },\n      {\n        \"flags\": \"-f, --overwrite\",\n        \"description\": \"Replace an existing target file. Without it an existing file is refused (ERR_FILE_EXISTS) and an existing CDN page is left as is\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

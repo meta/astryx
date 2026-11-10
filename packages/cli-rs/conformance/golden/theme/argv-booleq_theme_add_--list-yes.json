@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_theme_add_--list-yes",
+ "args": [
+  "theme",
+  "add",
+  "--list=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--list=yes'\n",
+ "exit": 1,
+ "files": []
+}

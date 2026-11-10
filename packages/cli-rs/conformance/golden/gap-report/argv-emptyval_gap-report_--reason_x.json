@@ -1,0 +1,13 @@
+{
+ "id": "argv-emptyval_gap-report_--reason_x",
+ "args": [
+  "gap-report",
+  "--reason",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

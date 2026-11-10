@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_build_x",
+ "args": [
+  "theme",
+  "build",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: EISDIR: illegal operation on a directory, read\n",
+ "exit": 1,
+ "files": []
+}

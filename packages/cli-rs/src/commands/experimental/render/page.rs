@@ -362,6 +362,150 @@ fn inline_assets(text: &str, html: bool, ctx: &mut Ctx) -> Result<String, Render
     })
 }
 
+struct Imports {
+    carried: Vec<String>,
+    included: Vec<String>,
+    package_sheets: Vec<String>,
+}
+
+struct ImportParams {
+    url: String,
+    layer: Option<String>,
+    supports: Option<String>,
+    media: String,
+}
+
+fn import_params(params: &str) -> Option<ImportParams> {
+    let re = regress::Regex::new(r#"^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)\s*([\s\S]*)$"#).unwrap();
+    let m = re.find(params)?;
+    let g = |i: usize| m.group(i).map(|r| params[r].to_string());
+    let mut rest = g(5).unwrap_or_default();
+    let mut layer = None;
+    let lay = regress::Regex::with_flags(r"^layer(?:\(\s*([^)]*?)\s*\))?(?=\s|$)\s*", "i").unwrap();
+    if let Some(l) = lay.find(&rest) {
+        layer = Some(l.group(1).map(|r| rest[r].to_string()).unwrap_or_default());
+        rest = rest[l.end()..].to_string();
+    }
+    let mut supports = None;
+    let sup = regress::Regex::with_flags(r"^supports\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)\s*", "i").unwrap();
+    if let Some(sm) = sup.find(&rest) {
+        supports = Some(rest[sm.group(1).unwrap()].to_string());
+        rest = rest[sm.end()..].to_string();
+    }
+    Some(ImportParams {
+        url: g(2).or(g(4)).unwrap_or_default(),
+        layer,
+        supports,
+        media: crate::commands::gap_report::api::js_trim(&rest).to_string(),
+    })
+}
+
+/// `expandImports(file, css, ctx)`.
+fn expand_imports(file: &str, text: &str, imp: &mut Imports, warnings: &mut Vec<Warning>, served: Option<&Served>, seen: &mut Vec<String>) -> Result<String, RenderError> {
+    if !text.to_lowercase().contains("@import") {
+        return Ok(text.to_string());
+    }
+    let Ok(mut tree) = css::parse(text) else { return Ok(text.to_string()) };
+    let base = np::basename(file);
+    // PostCSS's walk never visits the nodes a replacement inserts.
+    for id in tree.walk() {
+        if tree.nodes[id].removed {
+            continue;
+        }
+        let params = match &tree.nodes[id].kind {
+            css::Kind::AtRule { name, params, .. } if name.to_lowercase() == "import" => params.clone(),
+            _ => continue,
+        };
+        let Some(parsed) = import_params(&params) else { continue };
+        if parsed.url.is_empty() {
+            continue;
+        }
+        let url = parsed.url.clone();
+        let removed = |tree: &mut css::Tree, _i: &mut usize, id: usize| {
+            tree.remove(id);
+        };
+        let mut i = 0usize;
+        if regress::Regex::with_flags(r"^([a-z]+:)?\/\/", "i").unwrap().find(&url).is_some() {
+            warnings.push(Warning {
+                code: "remote-asset",
+                message: format!("{base} imports {url}, which a sandboxed page cannot load, so it is left out; save it beside the stylesheet and import it instead."),
+            });
+            removed(&mut tree, &mut i, id);
+            continue;
+        }
+        let lu = url.to_lowercase();
+        if lu.ends_with(".scss") || lu.ends_with(".sass") || lu.ends_with(".less") {
+            warnings.push(Warning {
+                code: "missing-asset",
+                message: format!("{base} imports {url}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing."),
+            });
+            removed(&mut tree, &mut i, id);
+            continue;
+        }
+        let relative = np::resolve(&[&np::dirname(file), &url]);
+        let mut from_package = false;
+        let target = if url.starts_with("./") || url.starts_with("../") || np::exists(&relative) {
+            if np::exists(&relative) { Some(relative) } else { None }
+        } else {
+            let t = resolve_served(url.trim_start_matches('~'), file, served);
+            from_package = t.is_some();
+            t
+        };
+        let Some(target) = target else {
+            warnings.push(Warning {
+                code: "missing-asset",
+                message: format!("{base} imports {url}, which was not found, so its styles are missing."),
+            });
+            removed(&mut tree, &mut i, id);
+            continue;
+        };
+        if seen.contains(&target) || imp.included.contains(&target) {
+            removed(&mut tree, &mut i, id);
+            continue;
+        }
+        seen.push(target.clone());
+        imp.included.push(target.clone());
+        if from_package {
+            imp.package_sheets.push(url.trim_start_matches('~').to_string());
+        } else if !imp.carried.contains(&target) {
+            imp.carried.push(target.clone());
+        }
+        let inner_text = std::fs::read_to_string(&target).unwrap_or_default();
+        let mut inner = expand_imports(&target, &inner_text, imp, warnings, served, seen)?;
+        let fdir = np::dirname(file);
+        let tdir = np::dirname(&target);
+        inner = regex_replace(r#"url\(\s*(['"]?)([^'")]+)\1\s*\)"#, "g", &inner, |m, t| {
+            let whole = &t[m.range()];
+            let q = group(m, t, 1).unwrap_or("");
+            let r = group(m, t, 2).unwrap_or("");
+            if regress::Regex::with_flags(r"^(data:|blob:|#|\/|[a-z]+:)", "i").unwrap().find(r).is_some() {
+                return Ok(whole.to_string());
+            }
+            let rebased = np::relative(&fdir, &np::resolve(&[&tdir, r]));
+            Ok(format!("url({q}{}{q})", if rebased.starts_with('.') { rebased } else { format!("./{rebased}") }))
+        })?;
+        if let Some(sup) = &parsed.supports {
+            let inner_sup = regress::Regex::with_flags(r"^\((.*)\)$", "s").unwrap().find(sup).map(|m| sup[m.group(1).unwrap()].to_string()).unwrap_or_else(|| sup.clone());
+            inner = format!("@supports ({inner_sup}){{{inner}}}");
+        }
+        if !parsed.media.is_empty() {
+            inner = format!("@media {}{{{inner}}}", parsed.media);
+        }
+        if let Some(l) = &parsed.layer {
+            inner = format!("@layer{}{{{inner}}}", if l.is_empty() { String::new() } else { format!(" {l}") });
+        }
+        match css::parse(&inner) {
+            Ok(t) => {
+                tree.replace_with_tree(id, t);
+            }
+            Err(reason) => {
+                return Err(rerr("ERR_RENDER_COMPILE", format!("{}, imported by {base}, is not valid CSS: {reason}", np::basename(&target))));
+            }
+        }
+    }
+    Ok(tree.to_string())
+}
+
 fn project_root_of(dir: &str) -> String {
     let mut d = dir.to_string();
     loop {
@@ -473,13 +617,12 @@ pub fn render_page(entry: &str, title: Option<&str>, version: &str, served: Opti
     let used: HashSet<String> = css::classes_in(&markup).into_iter().collect();
     let layer_order = sheet_text.iter().map(|t| css::layer_order_of(t)).find(|s| !s.is_empty()).unwrap_or_default();
     let mut css_out = layer_order;
-    for (i, text) in sheet_text.iter().enumerate() {
-        let file = &sheet_files[i];
-        if text.to_lowercase().contains("@import") {
-            // TEMP: stylesheet @import inlining is not cloned yet.
-            return Err(rerr("ERR_RENDER_FAILED", "stylesheet @import is not cloned yet"));
-        }
-        let cut = css::cut_css(text, &used).map_err(|reason| {
+    let mut imp = Imports { carried: vec![], included: sheet_files.clone(), package_sheets: vec![] };
+    let mut all_sheets: Vec<(String, String)> = sheet_files.iter().cloned().zip(sheet_text.iter().cloned()).collect();
+    all_sheets.extend(message.imported_css.iter().cloned());
+    for (file, text) in &all_sheets {
+        let own = expand_imports(file, text, &mut imp, &mut ctx.warnings, served, &mut vec![file.clone()])?;
+        let cut = css::cut_css(&own, &used).map_err(|reason| {
             rerr("ERR_RENDER_COMPILE", format!("{} is not valid CSS: {reason}", np::relative(&dir, file)))
         })?;
         let saved_dir = std::mem::replace(&mut ctx.dir, np::dirname(file));
@@ -487,14 +630,10 @@ pub fn render_page(entry: &str, title: Option<&str>, version: &str, served: Opti
         ctx.dir = saved_dir;
         css_out.push_str(&inlined?);
     }
-    for (file, text) in &message.imported_css {
-        let cut = css::cut_css(text, &used).map_err(|reason| {
-            rerr("ERR_RENDER_COMPILE", format!("{} is not valid CSS: {reason}", np::relative(&dir, file)))
-        })?;
-        let saved_dir = std::mem::replace(&mut ctx.dir, np::dirname(file));
-        let inlined = inline_assets(&cut, false, &mut ctx);
-        ctx.dir = saved_dir;
-        css_out.push_str(&inlined?);
+    for spec in &imp.package_sheets {
+        if !sheets.contains(spec) {
+            sheets.push(spec.clone());
+        }
     }
     if !message.css.is_empty() {
         css_out.push_str(&inline_assets(&message.css, false, &mut ctx)?);
@@ -571,6 +710,14 @@ pub fn render_page(entry: &str, title: Option<&str>, version: &str, served: Opti
     let mut files: Vec<String> = if message.files.is_empty() { vec![entry.to_string()] } else { message.files.clone() };
     if !files.iter().any(|f| f == entry) {
         files.insert(0, entry.to_string());
+    }
+    for sheet in &imp.carried {
+        if !rel_inside(&root, sheet) {
+            continue;
+        }
+        if !files.contains(sheet) {
+            files.push(sheet.clone());
+        }
     }
     let local_assets = ctx.local_assets.clone();
     for asset in local_assets {

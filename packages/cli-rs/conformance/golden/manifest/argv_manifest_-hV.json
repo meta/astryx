@@ -1,0 +1,12 @@
+{
+ "id": "argv_manifest_-hV",
+ "args": [
+  "manifest",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

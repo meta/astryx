@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat_integration_add_component_useClipboard_--parent_acme_--parent_acme",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--parent",
+  "acme",
+  "--parent",
+  "acme"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"parent\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

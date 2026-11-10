@@ -1,0 +1,104 @@
+[
+  {
+    "id": "oldcore_init_@core-0.7.11",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.7.11",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_@core-0.7.5",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.7.5",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_@core-0.6.8",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.6.8",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_@core-0.5.4",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.5.4",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_@core-0.4.7",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.4.7",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_@core-0.3.0",
+    "args": [
+      "init"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_init_--all_@core-0.3.0",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

@@ -1,0 +1,13 @@
+{
+ "id": "w_r_tint",
+ "args": [
+  "search",
+  "tint",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"tint\",\n    \"matchCount\": 2,\n    \"results\": [\n      {\n        \"domain\": \"doc\",\n        \"name\": \"tokens/tokens-color\",\n        \"package\": \"@astryxdesign/cli\",\n        \"score\": 50,\n        \"reason\": \"docs mention \\\"tint\\\"\",\n        \"description\": \"Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.\",\n        \"title\": \"All Tokens › Color Tokens\",\n        \"command\": \"astryx docs tokens/tokens-color\",\n        \"parent\": \"astryx docs tokens\"\n      },\n      {\n        \"domain\": \"template\",\n        \"name\": \"StepIndicator\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 50,\n        \"reason\": \"description mentions \\\"tint\\\"\",\n        \"description\": \"Everything the indicator prop accepts: the auto default, an always-number badge, a custom ReactNode, and none, each on its own completed Step so the prop is the only difference between them. Every variant occupies the same 16px box, so a step swapping its number for a check as it completes never shifts the label beside it. The last cell shows that a custom node can be live rather than static: a Spinner on a step that is in progress, shaded `inherit` so it picks up the step's own tint like any other glyph.\",\n        \"displayName\": \"Step — Indicator\",\n        \"kind\": \"block\",\n        \"command\": \"astryx template StepIndicator --type block\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

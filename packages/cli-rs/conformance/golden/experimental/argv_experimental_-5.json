@@ -1,0 +1,12 @@
+{
+ "id": "argv_experimental_-5",
+ "args": [
+  "experimental",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

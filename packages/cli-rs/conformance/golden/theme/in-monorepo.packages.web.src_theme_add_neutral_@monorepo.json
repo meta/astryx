@@ -1,0 +1,13 @@
+{
+ "id": "in-monorepo.packages.web.src_theme_add_neutral_@monorepo",
+ "args": [
+  "theme",
+  "add",
+  "neutral"
+ ],
+ "fixture": "monorepo",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-neutral\" is not installed. Run `npm install @astryxdesign/theme-neutral` (or yarn/pnpm/bun), then run `pnpm dlx @astryxdesign/cli@0.7.12 theme add neutral`.\n",
+ "exit": 1,
+ "files": []
+}

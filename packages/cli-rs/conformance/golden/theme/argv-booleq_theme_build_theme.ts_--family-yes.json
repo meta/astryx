@@ -1,0 +1,14 @@
+{
+ "id": "argv-booleq_theme_build_theme.ts_--family-yes",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--family=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--family=yes'\n(Did you mean --family-key?)\n",
+ "exit": 1,
+ "files": []
+}

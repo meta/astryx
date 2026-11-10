@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_theme_add_--import-yes",
+ "args": [
+  "theme",
+  "add",
+  "--import=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--import=yes'\n",
+ "exit": 1,
+ "files": []
+}

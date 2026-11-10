@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_docs_--full-yes",
+ "args": [
+  "docs",
+  "--full=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--full=yes'\n",
+ "exit": 1,
+ "files": []
+}

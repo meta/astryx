@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_use_neutral_--version",
+ "args": [
+  "theme",
+  "use",
+  "neutral",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

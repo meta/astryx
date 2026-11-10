@@ -1,0 +1,15 @@
+{
+ "id": "argv_integration_add_component_useClipboard_--JSON",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

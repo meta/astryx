@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_experimental_icon_--definitions-yes",
+ "args": [
+  "experimental",
+  "icon",
+  "--definitions=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--definitions=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_sparkle_@icons",
+ "args": [
+  "docs",
+  "sparkle"
+ ],
+ "fixture": "icons",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"sparkle\"\n\n  cli/experimental/icon-definitions/sparkle  (The sparkle icon. (from @acme/glyphs, icon set \"glyphs\"))\n",
+ "exit": 1,
+ "files": []
+}

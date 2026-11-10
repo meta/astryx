@@ -1,0 +1,18 @@
+{
+ "id": "fuzz_build_TOKEN-WITH-H@doctor-integrations_1875d6",
+ "args": [
+  "build",
+  "TOKEN-WITH-H"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Build kit for \"TOKEN-WITH-H\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     acme astryx template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `acme astryx docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: acme astryx template --list --type page\n\nname:        theme-showcase\npackage:     @astryxdesign/core\ndescription: Multi-surface comparison shell: preview palettes, typography, icons and control states across a storefront, checkout, chat and inventory on one responsive canvas.\ncommand:     acme astryx template theme-showcase --type page <path>\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: acme astryx component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n\nFEW MATCHES\nFew matches. This is keyword search, not semantic - try other wordings.\nBrowse instead:\nacme astryx component --list\nacme astryx template --list\n",
+ "stderr": "\nNext step: run `acme astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/doctor-integrations/oneclicommand\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

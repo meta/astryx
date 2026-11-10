@@ -1,0 +1,12 @@
+{
+ "id": "argv_doctor_-hV",
+ "args": [
+  "doctor",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

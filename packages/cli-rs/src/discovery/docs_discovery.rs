@@ -895,14 +895,47 @@ pub fn project_docs(project: &Project) -> DocsCatalog {
         };
         catalog.add_tree_inputs(TreeInputs { namespaces: with_rank(found.namespaces), guides: with_rank(found.guides) });
     }
-    if let Some(hook) = ICON_SET_TREE_INPUTS.get() {
-        for inputs in hook(project) {
-            catalog.add_tree_inputs(inputs);
+    // With the opt-in, each installed icon set's own definitions join the
+    // `icon-definitions` group, marked with their package.
+    let opted_in = super::paths::js_truthy(project.config.get("experimental").and_then(|e| e.get("iconSet")));
+    if opted_in {
+        let (sets, withdrawn, _) = super::icon_set_discovery::project_icon_sets(project);
+        for w in withdrawn.iter().filter(|w| w.kind == "invalid") {
+            let r = project.loaded_integrations.iter().find(|r| integ::s(r, "name") == Some(w.package.as_str()));
+            let pkg = r.map(super::project::Project::package_label).unwrap_or_else(|| w.package.clone());
+            project.push_issue(&pkg, "invalid_icon_set", "error", &w.reason);
+        }
+        for set in &sets {
+            if set.definitions.is_empty() {
+                continue;
+            }
+            let at = project.loaded_integrations.iter().position(|r| integ::s(r, "name") == Some(set.package.as_str()));
+            let provider_id = at
+                .and_then(|i| integ::s(&project.loaded_integrations[i], "providerId").map(String::from))
+                .unwrap_or_else(|| set.package.clone());
+            let rank = at.map(|i| i as i64 + 1).unwrap_or(0);
+            let guides = set.definitions.iter().map(|d| icon_definition_tree_input(&d.doc, &d.file, &set.package, &provider_id, &set.name, rank)).collect();
+            catalog.add_tree_inputs(TreeInputs { namespaces: vec![], guides });
         }
     }
     catalog
 }
 
-/// The icon-set lane's contribution to `Project.docs()`: the tree inputs of
-/// each installed icon set's definitions (empty without the opt-in).
-pub static ICON_SET_TREE_INPUTS: std::sync::OnceLock<fn(&Project) -> Vec<TreeInputs>> = std::sync::OnceLock::new();
+/// `iconDefinitionTreeInput(doc, file, provider, providerId)` with the
+/// project's `summary` and `rank`.
+pub fn icon_definition_tree_input(doc: &Value, file: &str, provider: &str, provider_id: &str, set_name: &str, rank: i64) -> TreeInput {
+    let mut m = TreeInput::new();
+    m.insert("provider".into(), Value::String(provider.into()));
+    m.insert("providerId".into(), Value::String(provider_id.into()));
+    m.insert("source".into(), Value::String(super::doc_read::package_source(file)));
+    m.insert("kind".into(), Value::String("icon-definition".into()));
+    let name = doc.get("name").cloned().unwrap_or(Value::Null);
+    m.insert("name".into(), name.clone());
+    m.insert("title".into(), name);
+    let description = super::paths::js_string(doc.get("description"));
+    m.insert("summary".into(), Value::String(format!("{description} (from {provider}, icon set \"{set_name}\")")));
+    m.insert("group".into(), Value::String("icon-definitions".into()));
+    m.insert("ref".into(), serde_json::json!({ "selfDoc": doc }));
+    m.insert("rank".into(), Value::from(rank));
+    m
+}

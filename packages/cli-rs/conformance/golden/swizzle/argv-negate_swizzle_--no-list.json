@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_swizzle_--no-list",
+ "args": [
+  "swizzle",
+  "--no-list"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-list'\n(Did you mean --list?)\n",
+ "exit": 1,
+ "files": []
+}

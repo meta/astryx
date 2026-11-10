@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_add_--all_--from_-acme-glyphs_@icons-unselected",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--all",
+  "--from",
+  "@acme/glyphs"
+ ],
+ "fixture": "icons-unselected",
+ "stdout": "",
+ "stderr": "Error: --all adds one variant for every icon: pass --variant with the variant, such as solid.\n",
+ "exit": 1,
+ "files": []
+}

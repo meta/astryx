@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_discover_--no-available",
+ "args": [
+  "discover",
+  "--no-available"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-available'\n(Did you mean --available?)\n",
+ "exit": 1,
+ "files": []
+}

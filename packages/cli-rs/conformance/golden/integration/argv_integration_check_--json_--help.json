@@ -1,0 +1,14 @@
+{
+ "id": "argv_integration_check_--json_--help",
+ "args": [
+  "integration",
+  "check",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx integration check\",\n    \"description\": \"The CI check for an integration package's own build: every source check, run in continuous integration or a typecheck script, against the package in the current folder\",\n    \"usage\": \"astryx integration check [options]\",\n    \"options\": [\n      {\n        \"flags\": \"--strict\",\n        \"description\": \"Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` is reported as a note (`invalid_cli_command`) that fails nothing.\"\n      },\n      {\n        \"flags\": \"--next\",\n        \"description\": \"Also count the findings the next minor release turns into warnings (the notes marked `next`) as warnings now, so `--strict --next` fails on them. Run it to fix them ahead of the release; every run says how many there are.\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

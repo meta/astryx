@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_use_-V",
+ "args": [
+  "theme",
+  "use",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

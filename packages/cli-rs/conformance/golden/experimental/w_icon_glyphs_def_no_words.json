@@ -1,0 +1,16 @@
+{
+ "id": "w_icon_glyphs_def_no_words",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "rocket",
+  "--description",
+  "x"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Astryx already has the icon definition \"rocket\"; map to it instead of adding your own.\n\n  --definition rocket  (use Astryx's definition)\n",
+ "exit": 1,
+ "files": []
+}

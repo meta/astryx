@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_generate_x",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid palette config path: must be a non-empty string\n",
+ "exit": 1,
+ "files": []
+}

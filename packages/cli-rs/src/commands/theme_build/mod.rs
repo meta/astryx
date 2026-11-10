@@ -7,8 +7,11 @@ pub mod nodepath;
 pub mod build_impl;
 pub mod coredocs;
 pub mod fmt;
+pub mod family;
+pub mod familybuild;
 pub mod fonts;
 pub mod icon_imports;
+pub mod interception;
 pub mod module;
 pub mod validate;
 pub mod watch;
@@ -21,7 +24,7 @@ use crate::cli::format::{code, section, text};
 pub fn palette_generate(inv: &Invocation, out: &mut Out) -> CmdResult {
     let config = inv.arg(0).unwrap_or_default().to_string();
     let opts = palette::generate::GenerateOptions {
-        out: inv.opt_str("out"),
+        out: inv.opt_str("out").filter(|s| !s.is_empty()),
         preview: inv.opt_str("preview"),
         overwrite: inv.flag("overwrite"),
     };
@@ -77,8 +80,8 @@ pub fn build(inv: &Invocation, out: &mut Out) -> CmdResult {
         return out.cli_error(&format!("File not found: {file_path}"), opts);
     }
     let family = inv.flag("family");
-    let family_key = inv.opt_str("familyKey");
-    let out_path = inv.opt_str("out");
+    let family_key = inv.opt_str("familyKey").filter(|s| !s.is_empty());
+    let out_path = inv.opt_str("out").filter(|s| !s.is_empty());
     let watch = inv.flag("watch");
     let check = inv.flag("check");
     let invalid = |out: &mut Out, m: &str| out.cli_error(m, ErrorOpts::code("ERR_THEME_INVALID"));
@@ -114,6 +117,35 @@ pub fn build(inv: &Invocation, out: &mut Out) -> CmdResult {
         };
         watch::run(&cwd, &files, &opts);
         return Ok(());
+    }
+    if family {
+        let mut pve = false;
+        let json_mode = json;
+        let result = {
+            let mut log = build_impl::Logger { out: &mut *out, silent: json_mode };
+            familybuild::theme_build_family(
+                &files,
+                family_key.unwrap_or_default(),
+                check,
+                inv.opt_str("iconsSpecifier"),
+                &cwd,
+                &inv.cli_root.to_string_lossy(),
+                &mut log,
+                &mut pve,
+            )
+        };
+        return match result {
+            Ok(r) => {
+                if json_mode {
+                    out.json_out_response(&r);
+                }
+                if pve || (r["type"] == "theme.build.check" && r["data"]["upToDate"] == false) {
+                    out.exit_code = 1;
+                }
+                Ok(())
+            }
+            Err(e) => out.cli_error(&e.message, ErrorOpts::code(e.code)),
+        };
     }
     build_impl::run(inv, out, &files)
 }

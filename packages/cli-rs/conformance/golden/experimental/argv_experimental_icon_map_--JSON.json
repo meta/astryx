@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_map_--JSON",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

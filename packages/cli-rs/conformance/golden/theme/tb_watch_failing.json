@@ -1,0 +1,14 @@
+{
+ "id": "tb_watch_failing",
+ "args": [
+  "theme",
+  "build",
+  "themes/nameless.mjs",
+  "--watch"
+ ],
+ "fixture": "themes",
+ "stdout": "\nWatching themes/nameless.mjs for changes - press Ctrl-C to stop.\n",
+ "stderr": "Error: Theme must have a name property.\n",
+ "exit": "timeout",
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat2_discover_--limit_3_--limit_0",
+ "args": [
+  "discover",
+  "--limit",
+  "3",
+  "--limit",
+  "0"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --limit must be a positive integer, not \"0\"\n",
+ "exit": 1,
+ "files": []
+}

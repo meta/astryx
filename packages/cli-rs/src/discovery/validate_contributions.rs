@@ -259,12 +259,17 @@ fn read_dir_sorted(dir: &str) -> Option<Vec<np::Dirent>> {
 }
 
 fn check_codemods(r: &Record, out: &mut Vec<Finding>) {
+    use super::contribution_fixes as cf;
     let Some(root) = usable_root(r, "codemods") else { return };
     let file_re = crate::doctor_re!(r"\.(?:ts|mjs|js)$");
     let test_re = crate::doctor_re!(r"\.(?:test|spec|fixture)\.(?:ts|mjs|js)$", "u");
+    let doc_re = crate::doctor_re!(r"\.doc\.(?:ts|mjs|js)$");
+    let tpl_re = crate::doctor_re!(r"\.template\.(?:ts|mjs|js)$");
     let skip: &[&str] = &["node_modules", ".git", "__tests__", "__fixtures__"];
-    let Some(entries) = read_dir_sorted(root) else { return };
     let package_dir = s(r, "__packageDir");
+    let context = package_dir.map(|p| cf::create_fix_context(p, r));
+    let shared = context.as_ref().and_then(|c| cf::shared_codemods_root_fix(c, None));
+    let Some(entries) = read_dir_sorted(root) else { return };
     for e in entries {
         if e.is_file
             && file_re.find(&e.name).is_some()
@@ -272,21 +277,43 @@ fn check_codemods(r: &Record, out: &mut Vec<Finding>) {
             && !(package_dir == Some(root) && MANIFEST_BASENAMES.contains(&e.name.as_str()))
         {
             let base = package_dir.map(String::from).unwrap_or_else(|| np::dirname(root));
-            let shown = np::relative(&base, &np::join2(root, &e.name));
+            let full = np::join2(root, &e.name);
+            let shown = np::relative(&base, &full);
             let dir = np::dirname(&shown);
-            out.push(warn(
-                "codemod_outside_version",
-                format!(
-                    "Codemod file \"{shown}\" is outside a version folder, so upgrade will never load it. Fix: move it into the folder named for the version it migrates to, for example {dir}/1.2.0/{}.",
-                    e.name
-                ),
-            ));
+            let stamp = match &context {
+                Some(c) if doc_re.find(&e.name).is_some() || tpl_re.find(&e.name).is_some() => cf::stamp_of(c, &full),
+                _ => None,
+            };
+            let theme_doc = [".doc.mjs", ".doc.ts", ".doc.js"].iter().map(|sfx| {
+                let m = file_re.find(&full).unwrap();
+                format!("{}{sfx}", &full[..m.start()])
+            }).find(|c| *c != full && np::exists(c));
+            let theme_stamp = match (&context, &stamp, &theme_doc) {
+                (Some(c), None, Some(td)) => cf::stamp_of(c, td),
+                _ => None,
+            };
+            let mut fix = format!("Fix: move it into the folder named for the version it migrates to, for example {dir}/1.2.0/{}.", e.name);
+            if shared.is_some() {
+                if let Some(f) = cf::shared_codemods_root_fix(context.as_ref().unwrap(), Some(&e.name)) {
+                    fix = f;
+                }
+            } else if let (Some(c), Some(st)) = (&context, &stamp) {
+                fix = cf::not_a_codemod_fix(c, &full, st, None, None);
+            } else if let (Some(c), Some(td), Some(ts)) = (&context, &theme_doc, theme_stamp.as_ref().filter(|t| t.kind == "theme")) {
+                fix = cf::not_a_codemod_fix(c, td, ts, Some(&e.name), None);
+            } else if let Some(c) = &context {
+                if let Some((doc, st, source)) = cf::theme_importing(c, &full) {
+                    fix = cf::not_a_codemod_fix(c, &doc, &st, Some(&source), Some(&e.name));
+                }
+            }
+            out.push(warn("codemod_outside_version", format!("Codemod file \"{shown}\" is outside a version folder, so upgrade will never load it. {fix}")));
         }
         if e.is_dir && !skip.contains(&e.name.as_str()) && !super::semver::is_valid_semver(&e.name) {
-            out.push(err(
-                "invalid_codemod_version",
-                format!("Codemod folder \"{}\" is not an exact semver version such as 1.2.0. Fix: rename it to the exact version its codemods migrate to.", e.name),
-            ));
+            let fix = shared
+                .clone()
+                .or_else(|| context.as_ref().and_then(|c| cf::held_root_fix(c, &np::join2(root, &e.name))))
+                .unwrap_or_else(|| "Fix: rename it to the exact version its codemods migrate to.".into());
+            out.push(err("invalid_codemod_version", format!("Codemod folder \"{}\" is not an exact semver version such as 1.2.0. {fix}", e.name)));
         }
     }
     if let Err(e) = crate::commands::upgrade::integration_discovery::discover_integration_codemods(std::slice::from_ref(r)) {
@@ -373,38 +400,155 @@ pub fn loaded_integration(r: &Record) -> cd::LoadedIntegration {
     }
 }
 
+const COMPONENT_DOC_SUFFIXES: &[&str] = &[".doc.ts", ".doc.mjs", ".doc.js"];
+
+fn doc_stem_of(file: &str) -> &str {
+    COMPONENT_DOC_SUFFIXES.iter().find(|x| file.ends_with(*x)).map(|x| &file[..file.len() - x.len()]).unwrap_or(file)
+}
+
+/// `componentDocFiles(root)`: (case mismatches doc -> source name, duplicates).
+fn component_doc_files(root: &str) -> (Vec<(String, String)>, Vec<(String, Vec<String>)>) {
+    let mut case: Vec<(String, String)> = Vec::new();
+    let mut dups: Vec<(String, Vec<String>)> = Vec::new();
+    fn walk(dir: &str, case: &mut Vec<(String, String)>, dups: &mut Vec<(String, Vec<String>)>) {
+        let Some(entries) = read_dir_sorted(dir) else { return };
+        let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
+        let mut by_stem: Vec<(String, Vec<String>)> = Vec::new();
+        for e in &entries {
+            let full = np::join2(dir, &e.name);
+            if e.is_dir {
+                if e.name != "node_modules" && e.name != "__tests__" {
+                    walk(&full, case, dups);
+                }
+                continue;
+            }
+            let stem = doc_stem_of(&e.name).to_string();
+            if stem == e.name {
+                continue;
+            }
+            match by_stem.iter_mut().find(|(k, _)| *k == stem) {
+                Some(x) => x.1.push(e.name.clone()),
+                None => by_stem.push((stem.clone(), vec![e.name.clone()])),
+            }
+            let source = format!("{stem}.tsx");
+            if names.contains(&source) {
+                continue;
+            }
+            if let Some(other) = names.iter().find(|n| **n != source && n.to_lowercase() == source.to_lowercase()) {
+                let ostem = &other[..other.len() - 4];
+                if !COMPONENT_DOC_SUFFIXES.iter().any(|x| names.contains(&format!("{ostem}{x}"))) {
+                    case.push((full, other.clone()));
+                }
+            }
+        }
+        for (_, docs) in by_stem {
+            if docs.len() < 2 {
+                continue;
+            }
+            let ordered: Vec<&String> = COMPONENT_DOC_SUFFIXES.iter().filter_map(|x| docs.iter().find(|d| d.ends_with(x))).collect();
+            dups.push((np::join2(dir, ordered[0]), ordered[1..].iter().map(|d| np::join2(dir, d)).collect()));
+        }
+    }
+    walk(root, &mut case, &mut dups);
+    (case, dups)
+}
+
 fn check_components(r: &Record, out: &mut Vec<Finding>) {
+    use super::contribution_fixes as cf;
     let Some(root) = usable_root(r, "components") else { return };
+    let (case, dups) = component_doc_files(root);
     let li = loaded_integration(r);
     let valid = cd::discover_valid_integration_components(&li, false);
+    let package_dir = s(r, "__packageDir");
+    let mut context: Option<cf::FixContext> = None;
     for (name, message) in &valid.errors {
         let record = valid.discovered.iter().find(|d| &d.name == name);
         match record {
             Some(rec) if rec.source_path.is_none() => {
-                let doc_name = np::basename(&rec.doc_path.to_string_lossy());
-                let doc_dir = np::dirname(&rec.doc_path.to_string_lossy());
-                let stem = cd::doc_stem(&rec.doc_path);
-                let other = [".jsx", ".js", ".ts", ".mjs"].iter().map(|x| format!("{stem}{x}")).find(|f| np::exists(&np::join2(&doc_dir, f)));
-                let (msg, fix) = match other {
-                    Some(o) => (
-                        format!("{}: found {o}, but a component source must be a .tsx file.", message.trim_end_matches('.')),
-                        format!("Fix: rename {o} to {}.tsx (and point its package export at the new file).", rec.name),
-                    ),
-                    None => (message.clone(), format!("Fix: add {}.tsx beside {doc_name}.", rec.name)),
-                };
+                let doc_s = rec.doc_path.to_string_lossy().into_owned();
+                if case.iter().any(|(d, _)| *d == doc_s) {
+                    continue;
+                }
+                let doc_name = np::basename(&doc_s);
+                let mut msg = message.clone();
+                let mut fix = format!("Fix: add {}.tsx beside {doc_name}.", rec.name);
+                let stamp = cf::read_contribution_stamp(&doc_s, false);
+                match (stamp, package_dir) {
+                    (Some(st), Some(pd)) if st.kind != "component" => {
+                        let c = context.get_or_insert_with(|| cf::create_fix_context(pd, r));
+                        fix = cf::not_a_component_fix(c, &doc_s, &st);
+                    }
+                    _ => {
+                        let doc_dir = np::dirname(&doc_s);
+                        let stem = cd::doc_stem(&rec.doc_path);
+                        if let Some(o) = [".jsx", ".js", ".ts", ".mjs"].iter().map(|x| format!("{stem}{x}")).find(|f| np::exists(&np::join2(&doc_dir, f))) {
+                            msg = format!("{}: found {o}, but a component source must be a .tsx file.", message.trim_end_matches('.'));
+                            fix = format!("Fix: rename {o} to {}.tsx (and point its package export at the new file).", rec.name);
+                        }
+                    }
+                }
                 out.push(err("invalid_component", format!("{msg} {fix}")));
             }
             _ => out.push(err("invalid_component", message.clone())),
         }
     }
+    let mut reported: Vec<String> = Vec::new();
+    for (doc_path, source) in &case {
+        let doc = np::basename(doc_path);
+        let renamed = format!("{}{}", &source[..source.len() - 4], &doc[doc_stem_of(&doc).len()..]);
+        let shown = np::relative(root, doc_path);
+        let linux = "They pair on a case-insensitive disk (macOS, Windows) but not on Linux, where CI and most installs run";
+        let fix = format!("Fix: rename {doc} to {renamed}.");
+        let pairs = cd::integration_source_for_doc(std::path::Path::new(doc_path)).is_some();
+        let hidden = cd::is_hidden_component_doc(std::path::Path::new(doc_path));
+        if hidden && !pairs {
+            continue;
+        }
+        reported.push(np::join2(&np::dirname(doc_path), source));
+        if hidden {
+            out.push(listed("source_without_component_doc", format!("Hidden component doc \"{shown}\" and its source \"{source}\" differ only in letter case. {linux}. {fix}")));
+        } else if pairs {
+            out.push(listed("source_without_component_doc", format!("Component doc \"{shown}\" and its source \"{source}\" differ only in letter case. {linux}, so there the component is missing. {fix}")));
+        } else {
+            out.push(err("invalid_component", format!("Component doc \"{shown}\" and its source \"{source}\" differ only in letter case. {linux}, so here the component is missing. {fix}")));
+        }
+    }
+    for (read, ignored) in &dups {
+        let read_name = np::basename(read);
+        let ignored_names: Vec<String> = ignored.iter().map(|f| np::basename(f)).collect();
+        let mut all = vec![read_name.clone()];
+        all.extend(ignored_names.iter().cloned());
+        out.push(listed(
+            "duplicate_component_doc",
+            format!(
+                "Component \"{}\" has {} docs: {}. Astryx reads {read_name} and ignores {}. Fix: delete {}, moving anything only {} into {read_name}.",
+                doc_stem_of(&read_name),
+                ignored.len() + 1,
+                all.join(", "),
+                ignored_names.join(" and "),
+                ignored_names.join(" and "),
+                if ignored.len() == 1 { "it says" } else { "they say" }
+            ),
+        ));
+    }
+    let overlap = match package_dir {
+        Some(pd) => {
+            let c = context.get_or_insert_with(|| cf::create_fix_context(pd, r));
+            cf::new_component_doc_note(c)
+        }
+        None => String::new(),
+    };
     let names: Vec<String> = valid.discovered.iter().map(|d| d.name.clone()).collect();
     for name in source_only_candidates(root, &names) {
-        if [".doc.ts", ".doc.mjs", ".doc.js"].iter().any(|sfx| np::exists(&np::join2(root, &format!("{name}{sfx}")))) {
+        if COMPONENT_DOC_SUFFIXES.iter().any(|sfx| np::exists(&np::join2(root, &format!("{name}{sfx}")))) {
+            continue;
+        }
+        if reported.contains(&np::join2(root, &format!("{name}.tsx"))) {
             continue;
         }
         out.push(warn(
             "source_without_component_doc",
-            format!("Component source \"{name}.tsx\" has no same-stem metadata file {name}.doc.mjs, so Astryx ignores it. Fix: add {name}.doc.mjs beside it with type: 'component'; `astryx docs authoring component-doc` lists its fields."),
+            format!("Component source \"{name}.tsx\" has no same-stem metadata file {name}.doc.mjs, so Astryx ignores it. Fix: add {name}.doc.mjs beside it with type: 'component'; `astryx docs authoring component-doc` lists its fields.{overlap}"),
         ));
     }
 }

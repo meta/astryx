@@ -1,0 +1,15 @@
+{
+ "id": "argv-negval_theme_build_theme.ts_--out_-1",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--out",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

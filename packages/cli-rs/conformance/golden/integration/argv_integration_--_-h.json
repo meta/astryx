@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_--_-h",
+ "args": [
+  "integration",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-h'\n",
+ "exit": 1,
+ "files": []
+}

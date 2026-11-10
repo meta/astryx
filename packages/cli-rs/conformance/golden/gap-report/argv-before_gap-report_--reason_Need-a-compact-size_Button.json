@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_gap-report_--reason_Need-a-compact-size_Button",
+ "args": [
+  "gap-report",
+  "--reason",
+  "Need a compact size",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

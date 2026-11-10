@@ -1,0 +1,14 @@
+{
+ "id": "w_th_eject_target_under_file",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "package.json/x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Failed to write theme files: ENOTDIR: not a directory, mkdir '/tmp/astryx-conformance/work/app/package.json/x'\n",
+ "exit": 1,
+ "files": []
+}

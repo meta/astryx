@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_build_--JSON",
+ "args": [
+  "theme",
+  "build",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

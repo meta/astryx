@@ -1,0 +1,16 @@
+{
+ "id": "argv-negval_integration_add_component_useClipboard_--parent_-1",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--parent",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"parent\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

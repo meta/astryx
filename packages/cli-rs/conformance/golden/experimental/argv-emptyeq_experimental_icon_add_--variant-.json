@@ -1,0 +1,14 @@
+{
+ "id": "argv-emptyeq_experimental_icon_add_--variant-",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--variant="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

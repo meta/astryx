@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_new-definition_--jso",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "--jso"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--jso'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

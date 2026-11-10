@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_components_--jso",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--jso"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--jso'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

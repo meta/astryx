@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_use_nope_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "nope"
+ ],
+ "fixture": "icons",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"nope\"\n\n  glyphs  (installed icon set)\n  @acme/glyphs/glyphs  (installed icon set)\n",
+ "exit": 1,
+ "files": []
+}

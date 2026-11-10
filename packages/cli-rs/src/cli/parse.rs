@@ -502,6 +502,9 @@ impl Run {
                 return Err(Stop::Exit(1));
             }
         }
+        // preAction: load the project's integrations, so every printed
+        // command uses the `cliCommand` they declare.
+        load_project_unless_recorded(&self.cwd);
         // preAction: decide the setup reminder.
         let reminder = crate::cli::nudge::decide(&self.cwd, &node.name, json);
         let inv = Invocation {
@@ -563,6 +566,28 @@ impl Run {
             e.exit_code
         }
     }
+}
+
+/// `Project.load(cwd)` when this process has not loaded the project yet;
+/// a project that cannot load is the command's to report.
+fn load_project_unless_recorded(cwd: &std::path::Path) {
+    let c = cwd.to_string_lossy();
+    if crate::discovery::package_manager::has_recorded_project(Some(&c)) {
+        return;
+    }
+    let _ = crate::discovery::project::Project::load(&c);
+}
+
+/// `loadProjectDebugHandler()`: load the project before parsing when its
+/// config mentions `debug` or `integrations`.
+fn load_project_debug_handler(cwd: &std::path::Path) {
+    let c = cwd.to_string_lossy();
+    let Ok(Some(config)) = crate::discovery::project::find_config_path(&c) else { return };
+    let Ok(text) = std::fs::read_to_string(&config) else { return };
+    if !text.contains("debug") && !text.contains("integrations") {
+        return;
+    }
+    let _ = crate::discovery::project::Project::load(&c);
 }
 
 fn ancestors(full_name: &str) -> Vec<String> {
@@ -725,6 +750,11 @@ pub fn run_live(argv: Vec<String>, cwd: PathBuf, live: bool) -> (Out, i32) {
     run.out.live = live;
     if let Some(line) = crate::cli::release::start_notice(&run.cwd, &argv) {
         run.out.eprintln(&line);
+    }
+    load_project_debug_handler(&run.cwd);
+    let help = argv.iter().any(|a| a == "--help" || a == "-h") || argv.first().map(|a| a == "help").unwrap_or(false);
+    if help {
+        load_project_unless_recorded(&run.cwd);
     }
     // `--version --json` answers before Commander parses.
     if (argv.iter().any(|a| a == "--version" || a == "-V")) && argv.iter().any(|a| a == "--json") {

@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_theme_build_theme.ts_--no-watch",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--no-watch"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-watch'\n(Did you mean --watch?)\n",
+ "exit": 1,
+ "files": []
+}

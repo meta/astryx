@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_use_x",
+ "args": [
+  "theme",
+  "use",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme \"\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add` first.\n",
+ "exit": 1,
+ "files": []
+}

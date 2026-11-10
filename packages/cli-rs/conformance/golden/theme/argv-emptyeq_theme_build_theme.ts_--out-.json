@@ -1,0 +1,14 @@
+{
+ "id": "argv-emptyeq_theme_build_theme.ts_--out-",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--out="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

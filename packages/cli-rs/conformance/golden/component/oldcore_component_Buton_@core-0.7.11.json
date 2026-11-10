@@ -1,0 +1,12 @@
+{
+ "id": "oldcore_component_Buton_@core-0.7.11",
+ "args": [
+  "component",
+  "Buton"
+ ],
+ "fixture": "core-0.7.11",
+ "stdout": "",
+ "stderr": "Error: No component named \"Buton\"\n\n  Button  (similar name (distance 1))\n  IconButton  (keyword \"button\" (distance 1))\n",
+ "exit": 1,
+ "files": []
+}

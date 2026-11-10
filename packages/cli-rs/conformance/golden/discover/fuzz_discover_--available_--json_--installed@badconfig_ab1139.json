@@ -1,0 +1,14 @@
+{
+ "id": "fuzz_discover_--available_--json_--installed@badconfig_ab1139",
+ "args": [
+  "discover",
+  "--available",
+  "--json",
+  "--installed"
+ ],
+ "fixture": "badconfig",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"--installed and --available cannot be used together\",\n  \"code\": \"ERR_INVALID_OPTION\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

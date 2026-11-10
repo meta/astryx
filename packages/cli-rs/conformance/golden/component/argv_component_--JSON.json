@@ -1,0 +1,12 @@
+{
+ "id": "argv_component_--JSON",
+ "args": [
+  "component",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

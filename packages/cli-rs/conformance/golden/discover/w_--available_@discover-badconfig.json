@@ -1,0 +1,12 @@
+{
+ "id": "w_--available_@discover-badconfig",
+ "args": [
+  "discover",
+  "--available"
+ ],
+ "fixture": "discover-badconfig",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

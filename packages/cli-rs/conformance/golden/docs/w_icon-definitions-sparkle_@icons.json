@@ -1,0 +1,12 @@
+{
+ "id": "w_icon-definitions-sparkle_@icons",
+ "args": [
+  "docs",
+  "icon-definitions/sparkle"
+ ],
+ "fixture": "icons",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"icon-definitions/sparkle\"\n\n  icons  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

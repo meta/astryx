@@ -1,0 +1,13 @@
+{
+ "id": "w_handbook-json_@docsint",
+ "args": [
+  "search",
+  "handbook",
+  "--json"
+ ],
+ "fixture": "docsint",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"handbook\",\n    \"matchCount\": 3,\n    \"results\": [\n      {\n        \"domain\": \"doc\",\n        \"name\": \"acme-handbook\",\n        \"package\": \"@acme/docs\",\n        \"score\": 70,\n        \"reason\": \"keyword \\\"acme-handbook\\\"\",\n        \"description\": \"Everything about Acme. See {@link generic:theme}.\",\n        \"title\": \"Acme handbook\",\n        \"command\": \"astryx docs acme-handbook\",\n        \"parent\": \"astryx docs\"\n      },\n      {\n        \"domain\": \"doc\",\n        \"name\": \"acme-handbook/deploying\",\n        \"package\": \"@acme/docs\",\n        \"score\": 50,\n        \"reason\": \"description mentions \\\"handbook\\\"\",\n        \"description\": \"See `astryx docs theme`, `astryx docs cli/commands/docs`, `astryx docs authoring component-doc`, `astryx docs acme-handbook`, `astryx component Button`, `astryx template dashboard --type page` and `{@link generic:theme}`.\",\n        \"section\": \"cross-links\",\n        \"title\": \"Acme handbook › Deploying › Cross links\",\n        \"command\": \"astryx docs acme-handbook/deploying cross-links\",\n        \"parent\": \"astryx docs acme-handbook/deploying --index\"\n      },\n      {\n        \"domain\": \"template\",\n        \"name\": \"documentation\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 50,\n        \"reason\": \"docs mention \\\"handbook\\\"\",\n        \"description\": \"Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.\",\n        \"displayName\": \"Documentation Catalog\",\n        \"kind\": \"page\",\n        \"command\": \"astryx template documentation --type page\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

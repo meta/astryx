@@ -1,0 +1,31 @@
+{
+ "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.7.5",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "core-0.7.5",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.5\",\n    \"codemods\": 73,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.5\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 3,\n    \"transformsApplied\": 19,\n    \"modifiedFiles\": [\n      \"src/LegacyXds.tsx\",\n      \"src/theme.css\",\n      \"src/Legacy.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.5\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "core-0.7.5/src/Legacy.tsx",
+   "status": "changed",
+   "text": "import {Avatar, Banner, CodeBlock, Dialog, Grid, List, Selector, Switch, TabList, Text} from '@astryxdesign/core';\n\nexport function Legacy({open}: {open: boolean}) {\n  return (\n    <>\n      <Text color='accent'>Hi</Text>\n      <Switch label=\"On\" labelSpacing='hug' />\n      <Avatar name=\"Ada\" size='md' />\n      <TabList />\n      <Dialog isOpen={open} position=\"left\" title=\"Side\" />\n      <Grid columns={{\n        minWidth: 200,\n        repeat: 'fit'\n      }} />\n      <Banner status=\"info\" title=\"More\" collapsible={{\n        defaultIsOpen: true\n      }} />\n      <Selector label=\"Pick\" options={[]} emptySearchResultsText=\"None\" />\n      <List /* TODO(astryx upgrade): edgeCompensation is deprecated. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand; this value is computed. */\n      edgeCompensation />\n      <CodeBlock code=\"x\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\n      tokenizer={(s: string) => [s]} />\n    </>\n  );\n}\n"
+  },
+  {
+   "path": "core-0.7.5/src/LegacyXds.tsx",
+   "status": "changed",
+   "text": "import {Badge, Banner, Button, Dialog, Selector, TopNav} from \"@astryxdesign/core\";\n\nexport function LegacyXds({open}: {open: boolean}) {\n  return (\n    <>\n      <TopNav heading=\"Home\" />\n      <Banner status=\"info\" title=\"Heads up\" endContent={<Button label=\"Ok\" />} />\n      <Selector label=\"Fruit\" options={[{value: 'a', label: 'Apple'}]} />\n      <Dialog isOpen={open} onOpenChange={() => {}} title=\"Hello\" />\n      <Button label=\"Next\" endContent={<Badge dot />} />\n    </>\n  );\n}\n"
+  },
+  {
+   "path": "core-0.7.5/src/theme.css",
+   "status": "changed",
+   "text": ".astryx-button:is([data-variant=\"primary\"]) { color: red; }\n.astryx-button:is([data-variant=\"primary\"]) { color: blue; }\n"
+  }
+ ]
+}

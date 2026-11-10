@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_palette_generate_--_-h",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: -h\n",
+ "exit": 1,
+ "files": []
+}

@@ -216,6 +216,15 @@ pub fn write_failed(path: &str, cwd: &str, e: &std::io::Error) -> ApiError {
     };
     let msg = super::node_err(e, "open", path);
     let errno = msg.split(':').next().unwrap_or("").to_string();
+    write_failed_code(path, cwd, &errno)
+}
+
+/// `writeFailed` for an error whose code is known.
+pub fn write_failed_code(path: &str, cwd: &str, errno: &str) -> ApiError {
+    let rel = {
+        let r = fsutil::relative(cwd, path);
+        if r.is_empty() { path.to_string() } else { r }
+    };
     let why = if errno == "EACCES" || errno == "EPERM" { " (no permission)" } else { "" };
     ApiError::new(&format!("Could not write {rel}: {errno}{why}. Nothing was written."), "ERR_WRITE_FAILED")
 }

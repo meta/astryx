@@ -1,0 +1,10 @@
+[
+  {
+    "id": "fuzz_docs_elevation@docsint_7356ec",
+    "args": [
+      "docs",
+      "elevation"
+    ],
+    "fixture": "docsint"
+  }
+]

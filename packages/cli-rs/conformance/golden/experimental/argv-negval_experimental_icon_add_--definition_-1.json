@@ -1,0 +1,15 @@
+{
+ "id": "argv-negval_experimental_icon_add_--definition_-1",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--definition",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

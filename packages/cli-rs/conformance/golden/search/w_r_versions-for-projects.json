@@ -1,0 +1,18 @@
+{
+ "id": "w_r_versions-for-projects",
+ "args": [
+  "search",
+  "versions-for-projects"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"versions-for-projects\" (1)\n\nname:        global/install-once\nsection:     versions-for-projects\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Global mode › Install Astryx globally › Versions for your projects\ndescription: When a project's own CLI is installed but cannot start, Astryx runs the CLI version equal to the project's Core instead, installing it once into a cache in your home folder and reusing it. It uses npm for that, so your npm registry,...\ncommand:     npx @astryxdesign/cli@0.7.12 docs global/install-once versions-for-projects\nparent:      npx @astryxdesign/cli@0.7.12 docs global/install-once --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover versions-for-projects\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

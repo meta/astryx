@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_--_-h",
+ "args": [
+  "theme",
+  "palette",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette -h'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

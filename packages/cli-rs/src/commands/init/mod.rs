@@ -7,7 +7,6 @@ pub mod user;
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, OptValue, Out};
 use crate::commands::swizzle::jspath as p;
 use crate::commands::swizzle::path_safety::assert_within;
-use crate::commands::swizzle::temp_args::{self, Kind, OptSpec};
 use crate::json::{Map, Value};
 use agent_docs::DocsError;
 
@@ -65,18 +64,6 @@ fn truthy(s: &Option<String>) -> bool {
 }
 
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
-    let inv = &temp_args::normalize(
-        inv,
-        &[
-            OptSpec { long: "--features", short: None, key: "features", kind: Kind::Value },
-            OptSpec { long: "--all", short: None, key: "all", kind: Kind::Bool },
-            OptSpec { long: "--remove-agents", short: None, key: "removeAgents", kind: Kind::Bool },
-            OptSpec { long: "--user", short: None, key: "user", kind: Kind::Bool },
-            OptSpec { long: "--agent", short: None, key: "agent", kind: Kind::Value },
-            OptSpec { long: "--agent-docs-path", short: None, key: "agentDocsPath", kind: Kind::Variadic },
-        ],
-        0,
-    );
     let opts = Opts {
         features: inv.opt_str("features").map(String::from),
         all: inv.flag("all"),
@@ -183,7 +170,7 @@ fn remove(cwd: &str, lg: &mut Logger) -> Result<Value, ApiErr> {
     lg.flush(log);
     let removed = match res {
         Ok(r) => r,
-        Err(DocsError::PathSafety(e)) => return Err(api_err(e.message, code_static(&e.code))),
+        Err(DocsError::PathSafety(e)) => return Err(api_err(e.message, code_static(e.code))),
         Err(DocsError::Home(m)) | Err(DocsError::Other(m)) => return Err(api_err(m, "ERR_UNKNOWN")),
     };
     if !skipped.is_empty() {

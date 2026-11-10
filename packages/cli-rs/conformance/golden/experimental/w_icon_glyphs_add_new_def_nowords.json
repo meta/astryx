@@ -1,0 +1,20 @@
+{
+ "id": "w_icon_glyphs_add_new_def_nowords",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "HomeIcon",
+  "--from",
+  "./icons/home.js",
+  "--new-definition",
+  "dwelling",
+  "--description",
+  "x"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: A new icon definition needs --description and --words: one sentence on what the icon is for, and the words people search for.\n",
+ "exit": 1,
+ "files": []
+}

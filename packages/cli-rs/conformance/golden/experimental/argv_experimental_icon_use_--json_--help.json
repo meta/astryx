@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_--json_--help",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx experimental icon use\",\n    \"description\": \"[experimental] Choose the project's icon set\",\n    \"usage\": \"astryx experimental icon use [options] <set>\",\n    \"options\": [],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_docs_-hV",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

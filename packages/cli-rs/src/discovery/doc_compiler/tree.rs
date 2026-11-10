@@ -747,6 +747,7 @@ pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics:
     let by_route: HashMap<String, usize> = nodes.iter().enumerate().map(|(i, n)| (n.route.clone(), i)).collect();
     let by_folded: HashMap<String, usize> = folded_routes.into_iter().map(|(k, r)| (k, by_route[&r])).collect();
     drop(report);
+    sort_diagnostics(&mut diagnostics);
     DocsTree { nodes, by_route, by_folded, diagnostics }
 }
 
@@ -794,6 +795,22 @@ impl TreeNode {
         );
         m.insert("related".into(), Value::Array(related.into_iter().map(Value::from).collect()));
         m.insert("content".into(), content.unwrap_or(Value::Null));
+        if let Some(r) = self.guide_overlay.as_ref().and_then(|o| o.replacement.as_ref()) {
+            m.insert("replacementPackage".into(), r.get("package").cloned().unwrap_or(Value::Null));
+            m.insert("replacedPackage".into(), Value::from(self.guide_overlay.as_ref().unwrap().replaced_package.clone().unwrap_or_else(|| self.provider.clone())));
+        }
         Value::Object(m)
     }
+}
+
+/// `sortDiagnostics(list)` for the tree's diagnostics (all of the link
+/// phase): by source, code, field, message, a missing value last.
+pub fn sort_diagnostics(list: &mut [Diagnostic]) {
+    let ord = |v: &str| if v.is_empty() { "\u{ffff}".to_string() } else { v.to_string() };
+    list.sort_by(|a, b| {
+        js_cmp(&ord(&a.source), &ord(&b.source))
+            .then_with(|| a.code.cmp(&b.code))
+            .then_with(|| js_cmp(&ord(a.field.as_deref().unwrap_or("")), &ord(b.field.as_deref().unwrap_or(""))))
+            .then_with(|| js_cmp(&a.message, &b.message))
+    });
 }

@@ -51,6 +51,71 @@ pub struct BuildOptions {
 }
 
 #[derive(Clone, Debug)]
+/// A family member's build plan (`__prepareFamily`).
+pub struct Prepared {
+    pub file_path: String,
+    pub source_relative: String,
+    pub theme: Value,
+    pub source_theme: JsValue,
+    pub source_parent: JsValue,
+    pub icon_info: Option<(String, String)>,
+    pub indicator_info: Option<(String, String)>,
+    pub component_icon_info: Option<(String, String)>,
+    pub variant_decl: Option<String>,
+    pub css: super::family::CssPlan,
+    pub cli_version: String,
+    pub core_version: String,
+    pub token_count: usize,
+    pub component_count: usize,
+    pub warnings: Vec<String>,
+    pub unloaded_fonts: Vec<String>,
+}
+
+/// The shared loader state of one family build: the wrapped Core module and
+/// the `[input, result]` log of every `defineTheme` call.
+pub struct FamilyLoad {
+    pub virtual_id: u64,
+    pub log: JsObject,
+    pub prepared: Option<Prepared>,
+}
+
+impl FamilyLoad {
+    /// `(observed, parentOf(theme), Object.hasOwn(theme, 'extends'))`.
+    pub fn observe(&self, s: &mut LiveSession, theme: &JsValue) -> (bool, JsValue, bool) {
+        let mut input: Option<JsValue> = None;
+        let len = {
+            let l = s.get(&self.log, "length");
+            s.string(&l).parse::<usize>().unwrap_or(0)
+        };
+        for i in 0..len {
+            let pair = s.get(&self.log, &i.to_string());
+            let Some(p) = pair.as_object() else { continue };
+            let result = s.get(&p, "1");
+            if result.strict_equals(theme) {
+                input = Some(s.get(&p, "0"));
+            }
+        }
+        let theme_obj = theme.as_object();
+        if input.is_none() {
+            if let Some(o) = &theme_obj {
+                let pair = s.get_symbol_for(o, "astryx.theme.lineage");
+                if let Some(p) = pair.as_object() {
+                    input = Some(s.get(&p, "0"));
+                }
+            }
+        }
+        let own_extends = theme_obj.as_ref().map(|o| s.has_own(o, "extends")).unwrap_or(false);
+        let parent = match input.as_ref().and_then(|i| i.as_object()) {
+            Some(io) if io.has_property(boa_engine::js_string!("extends"), s.ctx()).unwrap_or(false) => s.get(&io, "extends"),
+            _ => match &theme_obj {
+                Some(o) => s.get(o, "extends"),
+                None => JsValue::undefined(),
+            },
+        };
+        (input.is_some(), parent, own_extends)
+    }
+}
+
 pub struct Trailer {
     pub theme_name: String,
     pub export_name: String,
@@ -345,14 +410,14 @@ struct Loaded {
 }
 
 fn is_theme_object(s: &mut LiveSession, v: &JsValue) -> bool {
-    let Some(o) = v.as_object() else { return false };
+    let Some(o) = v.as_object().filter(|o| !o.is_callable()) else { return false };
     let name = s.get(&o, "name");
     let tokens = s.get(&o, "tokens");
-    name.is_string() && tokens.as_object().is_some()
+    name.is_string() && tokens.as_object().map(|t| !t.is_callable()).unwrap_or(false)
 }
 
 fn is_plain_object(s: &mut LiveSession, v: &JsValue) -> bool {
-    let Some(o) = v.as_object() else { return false };
+    let Some(o) = v.as_object().filter(|o| !o.is_callable()) else { return false };
     if o.is_array() {
         return false;
     }
@@ -373,15 +438,16 @@ fn own_keys(s: &mut LiveSession, o: &JsObject) -> Vec<String> {
     }
 }
 
-fn load_theme(s: &mut LiveSession, file: &str, aliases: Vec<(String, std::path::PathBuf)>) -> Result<Loaded, String> {
+fn load_theme(s: &mut LiveSession, file: &str, aliases: Vec<(String, std::path::PathBuf)>, virtual_id: Option<u64>) -> Result<Loaded, String> {
     let jiti = crate::js::JitiOptions {
         force: true,
         aliases,
+        virtual_modules: virtual_id.map(|id| vec![("@astryxdesign/core/theme".to_string(), id)]).unwrap_or_default(),
         extensions: Some(THEME_MODULE_EXTENSIONS.iter().map(|e| e.to_string()).collect()),
         ..Default::default()
     };
     let ns = s
-        .import_jiti(Path::new(file), &crate::js::ImportOptions { jsx: true, fresh: true }, &jiti)
+        .import_jiti(Path::new(file), &crate::js::ImportOptions { jsx: true, fresh: virtual_id.is_none() }, &jiti)
         .map_err(|e| e.message.clone())?;
     let keys = own_keys(s, &ns);
     let has_default = keys.iter().any(|k| k == "default");
@@ -411,6 +477,40 @@ fn load_theme(s: &mut LiveSession, file: &str, aliases: Vec<(String, std::path::
 const THEME_MODULE_EXTENSIONS: [&str; 10] = [".ts", ".tsx", ".mts", ".cts", ".mtsx", ".ctsx", ".mjs", ".cjs", ".js", ".json"];
 
 const INPUT_ONLY_FIELDS: [&str; 9] = ["extends", "typography", "motion", "radius", "color", "syntax", "onDark", "onLight", "adaptations"];
+
+pub fn generated_header_pub(source: &str, lang: &str, command: &str, cli: &str, core: &str) -> String {
+    generated_header(source, lang, command, cli, core)
+}
+
+pub fn normalize_for_compare_pub(content: &str) -> String {
+    normalize_for_compare(content)
+}
+
+pub fn confine_output_pub(dest: &str, root: &str, remedy: &str, shown: &str) -> Result<(), ApiError> {
+    confine_output(dest, root, remedy, shown)
+}
+
+pub fn with_live_logger<R>(f: impl FnOnce(&mut LiveSession) -> R) -> R {
+    with_live(f)
+}
+
+/// Select Core and set up the family loader: Core's theme namespace with
+/// `defineTheme` wrapped in a recorder, as a virtual module.
+pub fn family_load(cwd: &str, cli_root: &str) -> Result<FamilyLoad, ApiError> {
+    with_live(|s| {
+        let core = select_core(s, cwd, cli_root)?;
+        let log: JsObject = match s.new_array().as_object() {
+            Some(o) => o.clone(),
+            None => return Err(err("Could not set up the family loader.", "ERR_THEME_INVALID")),
+        };
+        let real = s.get(&core.ns, "defineTheme").as_object().map(|o| o.clone());
+        let Some(real) = real else { return Err(err("Could not set up the family loader.", "ERR_THEME_INVALID")) };
+        let recorder = s.recorder(real, log.clone());
+        let wrapper = s.spread_with(&core.ns, "defineTheme", recorder.into());
+        let id = s.register_virtual(wrapper).map_err(|m| err(m, "ERR_THEME_INVALID"))?;
+        Ok(FamilyLoad { virtual_id: id, log, prepared: None })
+    })
+}
 
 fn generated_header(source: &str, lang: &str, command: &str, cli: &str, core: &str) -> String {
     let body = [
@@ -574,6 +674,7 @@ pub fn theme_build_internal(
     compact: bool,
     trailers: Option<&mut Vec<Trailer>>,
     private_var_error: &mut bool,
+    mut family: Option<&mut FamilyLoad>,
 ) -> Result<Option<Value>, ApiError> {
     let file_path = nodepath::resolve(cwd, &[file]);
     if !Path::new(&file_path).exists() {
@@ -585,11 +686,21 @@ pub fn theme_build_internal(
     }
     let source = if compact { format!("{rel_source}: ") } else { String::new() };
 
-    let (core, theme_js, theme, export_name, before) = with_live(|s| -> Result<(Core, JsValue, Value, String, String), ApiError> {
+    let (core, theme_js, theme, export_name, before, has_adapt, local) = with_live(|s| -> Result<(Core, JsValue, Value, String, String, bool, Option<FamilyLoad>), ApiError> {
         let core = select_core(s, cwd, cli_root)?;
 
         // Load the theme.
-        let before = std::fs::read_to_string(&file_path).unwrap_or_default();
+        let before = match std::fs::read(&file_path) {
+            Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+            Err(e) => {
+                let message = if Path::new(&file_path).is_dir() {
+                    "EISDIR: illegal operation on a directory, read".to_string()
+                } else {
+                    crate::commands::theme_build::palette::generate::node_error_message(&e, "open", &file_path)
+                };
+                return Err(err(message, "ERR_THEME_LOAD"));
+            }
+        };
         // A theme whose own folder cannot resolve Core is handed the Core this
     // build selected (jiti virtualModules in the JS CLI).
     let resolves_core = crate::discovery::paths::find_installed_package(&nodepath::dirname(&file_path), "@astryxdesign/core", usize::MAX).is_some();
@@ -604,7 +715,24 @@ pub fn theme_build_internal(
             }
         }
     }
-    let loaded = load_theme(s, &file_path, aliases).map_err(|m| {
+    let has_adapt = s.get(&core.ns, "generateAdaptationCSS").as_object().map(|o| o.is_callable()).unwrap_or(false);
+    // An old Core erases adaptations while resolving, and a theme folder that
+    // cannot resolve Core is handed the selected one: both load through a
+    // recorded `defineTheme`.
+    let mut local: Option<FamilyLoad> = None;
+    if family.is_none() && (!has_adapt || !resolves_core) {
+        let log_arr = s.new_array();
+        if let (Some(log_obj), Some(real)) = (log_arr.as_object().map(|o| o.clone()), s.get(&core.ns, "defineTheme").as_object().map(|o| o.clone())) {
+            let recorder = s.recorder(real, log_obj.clone());
+            let wrapper = s.spread_with(&core.ns, "defineTheme", recorder.into());
+            if let Ok(id) = s.register_virtual(wrapper) {
+                aliases.retain(|(k, _)| k != "@astryxdesign/core/theme");
+                local = Some(FamilyLoad { virtual_id: id, log: log_obj, prepared: None });
+            }
+        }
+    }
+    let virtual_id = family.as_ref().map(|f| f.virtual_id).or(local.as_ref().map(|l| l.virtual_id));
+    let loaded = load_theme(s, &file_path, aliases, virtual_id).map_err(|m| {
             err(
                 format!("Failed to load theme from {file_path}: {m}\nMake sure all imports in the theme file are resolvable."),
                 "ERR_THEME_LOAD",
@@ -616,8 +744,54 @@ pub fn theme_build_internal(
         }
         let theme_js: JsValue = loaded.theme.clone().into();
         let theme = s.to_value(&theme_js).map_err(|m| err(m, "ERR_THEME_LOAD"))?;
-        Ok((core, theme_js, theme, loaded.export_name, before))
+        Ok((core, theme_js, theme, loaded.export_name, before, has_adapt, local))
     })?;
+    let mut source_parent: Option<JsValue> = None;
+    if let Some(f) = family.as_deref_mut() {
+        let (observed, parent, own_extends) = with_live(|s| f.observe(s, &theme_js));
+        if !observed && !own_extends {
+            let shown = match theme.get("name") {
+                Some(v) if !is_undef(Some(v)) && !v.is_null() => crate::cli::format::js_string(v),
+                _ => nodepath::basename(&file_path),
+            };
+            return Err(err(format!("Theme \"{shown}\" exact family ancestry could not be observed during CLI loading."), "ERR_THEME_INVALID"));
+        }
+        source_parent = Some(parent);
+    }
+    use super::interception as ic;
+    let rec: Option<&FamilyLoad> = family.as_deref().or(local.as_ref());
+    let degradation = ic::Degradation {
+        top_level_await: rec.is_some() && ic::has_top_level_await(&file_path),
+        common_js: rec.is_some() && !ic::common_js_covered(&file_path),
+    };
+    let (lineage_values, unobserved_names, captured_axes) = match rec {
+        Some(r) => with_live(|s| {
+            let lineage = ic::lineage_of(s, r, &theme_js);
+            let values: Vec<Value> = lineage.iter().map(|o| s.to_value(&o.clone().into()).unwrap_or(Value::Null)).collect();
+            let unobserved: Vec<Option<String>> = if degradation.top_level_await || degradation.common_js {
+                ic::unobserved_in(s, r, &theme_js)
+                    .iter()
+                    .map(|o| {
+                        let n = s.get(o, "name");
+                        n.is_string().then(|| s.string(&n))
+                    })
+                    .collect()
+            } else {
+                vec![]
+            };
+            let axes = ic::captured_axes_of(s, r, &theme_js);
+            (values, unobserved, axes)
+        }),
+        None => (vec![], vec![], None),
+    };
+    let core_version_cap = read_pkg_version(crate::discovery::paths::find_core_dir(cwd).as_deref());
+    let assert_cap = |t: &Value| -> Result<(), ApiError> {
+        if has_adapt {
+            return Ok(());
+        }
+        let candidates: Vec<Value> = if lineage_values.is_empty() { vec![t.clone()] } else { lineage_values.clone() };
+        ic::assert_capability(&core_version_cap, &candidates, &unobserved_names, &degradation)
+    };
     let name_v = theme.get("name");
     if !truthy(name_v) {
         return Err(err("Theme must have a name property.", "ERR_THEME_INVALID"));
@@ -652,11 +826,15 @@ pub fn theme_build_internal(
         raw_input,
         entry_source: before.clone(),
     };
-    let mut icon_info = super::icon_imports::resolve_icon_imports(
-        &file_path,
-        Some(&export_name),
-        &icon_opts(has_icons, function_entries, "icons", "mergeComponentIcons".into(), [reserved(function_entries), component_icon_names.clone()].concat()),
-    )?;
+    let mut icon_info = if family.is_none() {
+        super::icon_imports::resolve_icon_imports(
+            &file_path,
+            Some(&export_name),
+            &icon_opts(has_icons, function_entries, "icons", "mergeComponentIcons".into(), [reserved(function_entries), component_icon_names.clone()].concat()),
+        )?
+    } else {
+        None
+    };
     let mut warnings: Vec<String> = Vec::new();
     for w in super::validate::component_override_warnings(&theme, cli_root) {
         log.warn(&format!("  [warn] {source}{w}"));
@@ -677,8 +855,9 @@ pub fn theme_build_internal(
         return Err(err(heading_errors.join("\n"), "ERR_THEME_INVALID"));
     }
 
+    assert_cap(&theme)?;
     // Resolve through Core's defineTheme when the export is raw input.
-    let (resolved_js, resolved) = with_live(|s| -> Result<(JsValue, Value), ApiError> {
+    let (resolved_js, mut resolved) = with_live(|s| -> Result<(JsValue, Value), ApiError> {
         let needs_resolution = INPUT_ONLY_FIELDS.iter().any(|f| !is_undef(theme.get(*f)))
             || (theme.as_object().map(|m| m.contains_key("localTokens")).unwrap_or(false) && is_undef(theme.get("__localTokenLineage")));
         let resolved_js: JsValue = if needs_resolution {
@@ -694,7 +873,7 @@ pub fn theme_build_internal(
         let resolved = s.to_value(&resolved_js).map_err(|m| err(m, "ERR_THEME_INVALID"))?;
         Ok((resolved_js, resolved))
     })?;
-    if icon_info.is_none() && key_count(resolved.get("icons")) > 0 {
+    if family.is_none() && icon_info.is_none() && key_count(resolved.get("icons")) > 0 {
         let rfe = has_function_entries(icon_entries(Some(&resolved)));
         icon_info = super::icon_imports::resolve_icon_imports(
             &file_path,
@@ -712,7 +891,7 @@ pub fn theme_build_internal(
         ));
     }
     let mut component_icon_info = None;
-    if has_function_entries(slot_values(Some(&resolved))) {
+    if family.is_none() && has_function_entries(slot_values(Some(&resolved))) {
         let mut names = [reserved(true), component_icon_names.clone()].concat();
         if let Some(i) = &icon_info {
             names.extend(i.imports.iter().map(|b| b.2.clone()));
@@ -724,11 +903,19 @@ pub fn theme_build_internal(
             &icon_opts(true, true, "componentIcons", format!("{id}ThemeMergeComponentIcons"), names),
         )?;
     }
+    if is_undef(resolved.get("__axes")) {
+        if let Some(axes) = captured_axes.as_ref().filter(|a| as_obj(Some(a)).map(|m| !m.is_empty()).unwrap_or(false)) {
+            if let Value::Object(m) = &mut resolved {
+                m.insert("__axes".into(), axes.clone());
+            }
+        }
+    }
+    assert_cap(&resolved)?;
     let enrollment = super::validate::adaptation_enrollment_errors(&resolved, cli_root);
     if !enrollment.is_empty() {
         return Err(err(enrollment.join("\n"), "ERR_THEME_INVALID"));
     }
-    let (css_parts, component, on_media, dropped_list) = with_live(|s| -> Result<(Vec<String>, Vec<String>, String, Vec<String>), ApiError> {
+    let (css_parts, component, on_media, dropped_list, plan) = with_live(|s| -> Result<(Vec<String>, Vec<String>, String, Vec<String>, super::family::CssPlan), ApiError> {
 
         let scope = format!("[data-astryx-theme=\"{name}\"]");
         let scope_to = "[data-astryx-theme]";
@@ -813,7 +1000,16 @@ pub fn theme_build_internal(
             }
         }
         let dropped_list = s.string_items(&dropped);
-        Ok((css_parts, component, on_media, dropped_list))
+        let plan = super::family::CssPlan {
+            base: String::new(),
+            prose: prose.clone(),
+            component: component.clone(),
+            adaptation: adapt_component.clone(),
+            adaptation_prose: adapt_prose.clone(),
+            on_media: on_media.clone(),
+            color_scheme: color_scheme.trim_end().to_string(),
+        };
+        Ok((css_parts, component, on_media, dropped_list, plan))
     })?;
     let mut css_parts = css_parts;
     for m in dropped_list {
@@ -870,7 +1066,7 @@ pub fn theme_build_internal(
     let header = |lang: &str| generated_header(&rel_source, lang, &build_command, &cli_version, &core_version);
     let css_content = header("css") + &css;
     let css_dts_content = header("ts") + "export {};\n";
-    let js_content = header("js") + &super::module::built_module(&resolved, &format_cli_command(cwd, ""), icon_info.as_ref(), opts.icons_specifier.as_deref(), component_icon_info.as_ref())?;
+    let js_content = if family.is_some() { String::new() } else { header("js") + &super::module::built_module(&resolved, &format_cli_command(cwd, ""), icon_info.as_ref(), opts.icons_specifier.as_deref(), component_icon_info.as_ref())? };
     let dts_content = header("ts") + &super::module::built_types(&resolved, icon_info.as_ref(), variants_file.as_deref());
 
     let mut unloaded = super::fonts::collect_unloaded_fonts(&resolved);
@@ -882,6 +1078,27 @@ pub fn theme_build_internal(
         }
     }
 
+    if let Some(f) = family {
+        f.prepared = Some(Prepared {
+            file_path: file_path.clone(),
+            source_relative: rel_source.clone(),
+            theme: resolved.clone(),
+            source_theme: theme_js.clone(),
+            source_parent: source_parent.unwrap_or_default(),
+            icon_info: super::familybuild::extract_registry_info(&file_path, "icons"),
+            indicator_info: super::familybuild::extract_registry_info(&file_path, "indicators"),
+            component_icon_info: super::familybuild::extract_registry_info(&file_path, "componentIcons"),
+            variant_decl: variant_decl.clone(),
+            css: plan,
+            cli_version: cli_version.clone(),
+            core_version: core_version.clone(),
+            token_count,
+            component_count,
+            warnings: warnings.clone(),
+            unloaded_fonts: unloaded.clone(),
+        });
+        return Ok(None);
+    }
     let mut writes = vec![
         Write { dest: out_path.clone(), content: css_content, allow_missing_in_check: false },
         Write { dest: css_dts_path.clone(), content: css_dts_content, allow_missing_in_check: true },
@@ -1078,15 +1295,7 @@ pub fn print_compact_trailer(log: &mut Logger, trailers: &[Trailer], hint: bool,
 
 /// Whether `--detail` was given on the command line.
 pub fn detail_chosen(inv: &Invocation) -> bool {
-    for a in &inv.argv {
-        if a == "--" {
-            break;
-        }
-        if a == "--detail" || a.starts_with("--detail=") {
-            return true;
-        }
-    }
-    false
+    inv.global_opt_source("detail") != Some("default")
 }
 
 /// The action's non-watch, non-family path: build each theme in order.
@@ -1098,7 +1307,7 @@ pub fn run(inv: &Invocation, out: &mut Out, files: &[String]) -> CmdResult {
     let compact = !chosen || inv.globals.detail != "full";
     let check = inv.flag("check");
     let opts = BuildOptions {
-        out: inv.opt_str("out").map(String::from),
+        out: inv.opt_str("out").filter(|s| !s.is_empty()).map(String::from),
         check,
         icons_specifier: inv.opt_str("iconsSpecifier").map(String::from),
     };
@@ -1120,6 +1329,7 @@ pub fn run(inv: &Invocation, out: &mut Out, files: &[String]) -> CmdResult {
                 report && compact,
                 if report { Some(&mut trailers) } else { None },
                 &mut private_var_error,
+                None,
             );
             match r {
                 Ok(receipt) => {

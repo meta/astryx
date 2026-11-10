@@ -1,0 +1,12 @@
+{
+ "id": "w_icon-definitions-random_@icons",
+ "args": [
+  "docs",
+  "icon-definitions/random"
+ ],
+ "fixture": "icons",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"icon-definitions/random\"\n\n  icons  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-negate_theme_palette_generate_..-inputs-palette.config.json_--no-overwrite",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--no-overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-overwrite'\n(Did you mean --overwrite?)\n",
+ "exit": 1,
+ "files": []
+}

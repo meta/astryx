@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_lucide_---x",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "lucide",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

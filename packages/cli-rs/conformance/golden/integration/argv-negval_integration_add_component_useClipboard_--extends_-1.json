@@ -1,0 +1,16 @@
+{
+ "id": "argv-negval_integration_add_component_useClipboard_--extends_-1",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--extends",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"extends\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

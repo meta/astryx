@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_validate_---x",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_use_neutral_--JSON",
+ "args": [
+  "theme",
+  "use",
+  "neutral",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

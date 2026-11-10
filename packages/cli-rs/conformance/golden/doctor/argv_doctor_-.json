@@ -1,0 +1,12 @@
+{
+ "id": "argv_doctor_-",
+ "args": [
+  "doctor",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor ü中文'\n\n  integration  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "w_icon_glyphs_def_new_json",
+ "args": [
+  "--json",
+  "experimental",
+  "icon",
+  "new-definition",
+  "rocket",
+  "--description",
+  "Launch something.",
+  "--words",
+  "fly,launch"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Astryx already has the icon definition \\\"rocket\\\"; map to it instead of adding your own.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\",\n  \"suggestions\": [\n    {\n      \"name\": \"--definition rocket\",\n      \"reason\": \"use Astryx's definition\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

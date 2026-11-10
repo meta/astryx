@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_-h_--bogus",
+ "args": [
+  "experimental",
+  "icon",
+  "-h",
+  "--bogus"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx experimental icon [options] [command] [query...]\n\n[experimental] Find an icon by meaning, or build an icon set from a library (guide: astryx docs cli/experimental/icon-sets)\n\nOptions:\n  --list                             List the installed icon sets and do nothing else; a query is refused\n  --set <name>                       Search one set, by name or <package>/<set>\n  --limit <n>                        Max number of matches, a positive integer (default 10)\n  --definitions                      Every Astryx icon definition, one line each: name, built in or not, description, words\n  --all-icons                        With --set and no words: every icon of that set, one line each (id, words, definitions)\n  -h, --help                         display help for command\n\nCommands:\n  use <set>                          [experimental] Choose the project's icon set\n  map [options] [definition] [icon]  [experimental] Register which icon of your set draws an icon definition\n  add [options] [export]             [experimental] Register one icon you chose from a library in your icon set\n  new-set [options] <name>           [experimental] Start an icon set in your integration package\n  new-definition [options] <name>    [experimental] Add your icon set's own icon definition\n\nExit codes:\n  0  success (including zero matches)\n  1  no query and no --list, a query with --list, a --limit that is not a positive integer, or a set or icon that is not installed\n\nExamples:\n  # Find by meaning\n  npx @astryxdesign/cli@0.7.12 experimental icon delete\n  # One icon and its variants\n  npx @astryxdesign/cli@0.7.12 experimental icon outline/trash\n  # Installed sets\n  npx @astryxdesign/cli@0.7.12 experimental icon --list --json\n  # Every icon of one set\n  npx @astryxdesign/cli@0.7.12 experimental icon --set outline --all-icons\n  # One set, top 3\n  npx @astryxdesign/cli@0.7.12 experimental icon arrow --set outline --limit 3\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

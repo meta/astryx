@@ -1,0 +1,1301 @@
+[
+  {
+    "id": "w_component_@astryxdesign-core-Button",
+    "args": [
+      "component",
+      "@astryxdesign/core/Button"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_@astryxdesign-core@0.7.12-Button",
+    "args": [
+      "component",
+      "@astryxdesign/core@0.7.12/Button"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_@astryxdesign-core@9.9.9-Button",
+    "args": [
+      "component",
+      "@astryxdesign/core@9.9.9/Button"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_@astryxdesign-core",
+    "args": [
+      "component",
+      "@astryxdesign/core"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_core-Button",
+    "args": [
+      "component",
+      "core/Button"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_@astryxdesign-core-Button_--package_@astryxdesign-lab",
+    "args": [
+      "component",
+      "@astryxdesign/core/Button",
+      "--package",
+      "@astryxdesign/lab"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--package_@nope-pkg",
+    "args": [
+      "component",
+      "Button",
+      "--package",
+      "@nope/pkg"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--package_@astryxdesign-core_--props",
+    "args": [
+      "component",
+      "Button",
+      "--package",
+      "@astryxdesign/core",
+      "--props"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_XDSButton",
+    "args": [
+      "component",
+      "XDSButton"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_XDSButton_--props",
+    "args": [
+      "component",
+      "XDSButton",
+      "--props"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_button",
+    "args": [
+      "component",
+      "button"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Buton",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Btn",
+    "args": [
+      "component",
+      "Btn"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_datatable",
+    "args": [
+      "component",
+      "datatable"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Tabel",
+    "args": [
+      "component",
+      "Tabel"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_HStak",
+    "args": [
+      "component",
+      "HStak"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_dialog-header",
+    "args": [
+      "component",
+      "dialog-header"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Xyzzy",
+    "args": [
+      "component",
+      "Xyzzy"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_A",
+    "args": [
+      "component",
+      "A"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_DataTableRow",
+    "args": [
+      "component",
+      "DataTableRow"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_MenuItemHeader",
+    "args": [
+      "component",
+      "MenuItemHeader"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_ButtonGroupItem",
+    "args": [
+      "component",
+      "ButtonGroupItem"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_Text",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "Text"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Nope_Badge",
+    "args": [
+      "component",
+      "Button",
+      "Nope",
+      "Badge"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Buton_--json",
+    "args": [
+      "component",
+      "Button",
+      "Buton",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_--props",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "--props"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_--source",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "--source"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Card_--showcase",
+    "args": [
+      "component",
+      "Button",
+      "Card",
+      "--showcase"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_--blocks",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "--blocks"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_--detail_brief",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_Badge_--detail_compact",
+    "args": [
+      "component",
+      "Button",
+      "Badge",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_@astryxdesign-core",
+    "args": [
+      "component",
+      "Button",
+      "@astryxdesign/core"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_@astryxdesign-core@1.0.0-Badge_--json",
+    "args": [
+      "component",
+      "Button",
+      "@astryxdesign/core@1.0.0/Badge",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--category_layout",
+    "args": [
+      "component",
+      "--category",
+      "layout"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--category_nope_--json",
+    "args": [
+      "component",
+      "--category",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--category_Button_--detail_compact",
+    "args": [
+      "component",
+      "--category",
+      "Button",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--category_Button_--detail_full",
+    "args": [
+      "component",
+      "--category",
+      "Button",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--list_--detail_compact",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--list_--detail_full",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--list_--dense",
+    "args": [
+      "component",
+      "--list",
+      "--dense"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--list_--zh_--detail_compact",
+    "args": [
+      "component",
+      "--list",
+      "--zh",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_--detail_bogus",
+    "args": [
+      "component",
+      "--detail",
+      "bogus"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--detail_bogus",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "bogus"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--lang_zh",
+    "args": [
+      "component",
+      "Button",
+      "--lang",
+      "zh"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--lang_fr",
+    "args": [
+      "component",
+      "Button",
+      "--lang",
+      "fr"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--lang_dense_--detail_compact",
+    "args": [
+      "component",
+      "Button",
+      "--lang",
+      "dense",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_HStack_--props",
+    "args": [
+      "component",
+      "HStack",
+      "--props"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_StackItem",
+    "args": [
+      "component",
+      "StackItem"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_StackItem_--source",
+    "args": [
+      "component",
+      "StackItem",
+      "--source"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_StackItem_--props_--json",
+    "args": [
+      "component",
+      "StackItem",
+      "--props",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_HStack_--showcase",
+    "args": [
+      "component",
+      "HStack",
+      "--showcase"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_HStack_--blocks",
+    "args": [
+      "component",
+      "HStack",
+      "--blocks"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Heading_--source",
+    "args": [
+      "component",
+      "Heading",
+      "--source"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Nope_--source",
+    "args": [
+      "component",
+      "Nope",
+      "--source"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Nope_--showcase",
+    "args": [
+      "component",
+      "Nope",
+      "--showcase"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Nope_--blocks",
+    "args": [
+      "component",
+      "Nope",
+      "--blocks"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_--props_--source",
+    "args": [
+      "component",
+      "Button",
+      "--props",
+      "--source"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_Button_@compkit",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_--json_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_--package_@comp-kit_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "--package",
+      "@comp/kit"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_--package_@astryxdesign-core_--detail_brief_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "--package",
+      "@astryxdesign/core",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_@comp-kit-Button_--props_@compkit",
+    "args": [
+      "component",
+      "@comp/kit/Button",
+      "--props"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_@comp-kit@2.0.0-Button_--json_@compkit",
+    "args": [
+      "component",
+      "@comp/kit@2.0.0/Button",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_@comp-kit@1.0.0-Button_@compkit",
+    "args": [
+      "component",
+      "@comp/kit@1.0.0/Button"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_kit-Button_@compkit",
+    "args": [
+      "component",
+      "kit/Button"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitPanel_@compkit",
+    "args": [
+      "component",
+      "KitPanel"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitPanelHeader_@compkit",
+    "args": [
+      "component",
+      "KitPanelHeader"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitPanelHeader_--json_@compkit",
+    "args": [
+      "component",
+      "KitPanelHeader",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitPanelHeader_--props_@compkit",
+    "args": [
+      "component",
+      "KitPanelHeader",
+      "--props"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitPanel_--source_@compkit",
+    "args": [
+      "component",
+      "KitPanel",
+      "--source"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitGauge_@compkit",
+    "args": [
+      "component",
+      "KitGauge"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_KitGauge_--json_@compkit",
+    "args": [
+      "component",
+      "KitGauge",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Gauge_@compkit",
+    "args": [
+      "component",
+      "Gauge"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Broken_@compkit",
+    "args": [
+      "component",
+      "Broken"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Broken_--json_@compkit",
+    "args": [
+      "component",
+      "Broken",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Broken_--source_@compkit",
+    "args": [
+      "component",
+      "Broken",
+      "--source"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Dial_--zh_@compkit",
+    "args": [
+      "component",
+      "Dial",
+      "--zh"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Dial_--zh_--json_@compkit",
+    "args": [
+      "component",
+      "Dial",
+      "--zh",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Dial_--detail_brief_@compkit",
+    "args": [
+      "component",
+      "Dial",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_SideNav_@compkit",
+    "args": [
+      "component",
+      "SideNav"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_SideNav_--json_@compkit",
+    "args": [
+      "component",
+      "SideNav",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_SideNav_--package_@astryxdesign-core_--detail_brief_@compkit",
+    "args": [
+      "component",
+      "SideNav",
+      "--package",
+      "@astryxdesign/core",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_SwapNav_--props_@compkit",
+    "args": [
+      "component",
+      "SwapNav",
+      "--props"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_SideNav_--package_@comp-swap_--json_@compkit",
+    "args": [
+      "component",
+      "SideNav",
+      "--package",
+      "@comp/swap",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_@comp-swap-SideNav_@compkit",
+    "args": [
+      "component",
+      "@comp/swap/SideNav"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_LegacyThing_@compkit",
+    "args": [
+      "component",
+      "LegacyThing"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_LegacyThing_--package_@comp-legacy_@compkit",
+    "args": [
+      "component",
+      "LegacyThing",
+      "--package",
+      "@comp/legacy"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_LegacyThing_--package_@comp-legacy_--json_@compkit",
+    "args": [
+      "component",
+      "LegacyThing",
+      "--package",
+      "@comp/legacy",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_LegacyThing_--source_@compkit",
+    "args": [
+      "component",
+      "LegacyThing",
+      "--source"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Nope_--package_@comp-legacy_@compkit",
+    "args": [
+      "component",
+      "Nope",
+      "--package",
+      "@comp/legacy"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_@compkit",
+    "args": [
+      "component"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--json_@compkit",
+    "args": [
+      "component",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--list_--detail_compact_@compkit",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--list_--detail_full_@compkit",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--category_Kit-Layout-@comp-kit-_@compkit",
+    "args": [
+      "component",
+      "--category",
+      "Kit Layout (@comp/kit)"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_KitPanelHeader_SideNav_--json_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "KitPanelHeader",
+      "SideNav",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_KitPanelHeader_SideNav_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "KitPanelHeader",
+      "SideNav"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_Broken_Nope_--detail_brief_@compkit",
+    "args": [
+      "component",
+      "Button",
+      "Broken",
+      "Nope",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--category_Navigation_--detail_compact_@compkit",
+    "args": [
+      "component",
+      "--category",
+      "Navigation",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Button_@comptheme_sunset",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/sunset"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_sunset",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/sunset"
+  },
+  {
+    "id": "w_component_Card_@comptheme_sunset",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/sunset"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_sunset",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/sunset"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_sunset",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/sunset"
+  },
+  {
+    "id": "w_component_Button_@comptheme_plain",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/plain"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_plain",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/plain"
+  },
+  {
+    "id": "w_component_Card_@comptheme_plain",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/plain"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_plain",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/plain"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_plain",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/plain"
+  },
+  {
+    "id": "w_component_Button_@comptheme_notheme",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/notheme"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_notheme",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/notheme"
+  },
+  {
+    "id": "w_component_Card_@comptheme_notheme",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/notheme"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_notheme",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/notheme"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_notheme",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/notheme"
+  },
+  {
+    "id": "w_component_Button_@comptheme_missing",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/missing"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_missing",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/missing"
+  },
+  {
+    "id": "w_component_Card_@comptheme_missing",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/missing"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_missing",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/missing"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_missing",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/missing"
+  },
+  {
+    "id": "w_component_Button_@comptheme_scoped",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/scoped"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_scoped",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/scoped"
+  },
+  {
+    "id": "w_component_Card_@comptheme_scoped",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/scoped"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_scoped",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/scoped"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_scoped",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/scoped"
+  },
+  {
+    "id": "w_component_Button_@comptheme_bare",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_Button_--detail_brief_@comptheme_bare",
+    "args": [
+      "component",
+      "Button",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_Card_@comptheme_bare",
+    "args": [
+      "component",
+      "Card"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_Badge_--detail_brief_@comptheme_bare",
+    "args": [
+      "component",
+      "Badge",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_--list_--detail_full_--category_Button_@comptheme_bare",
+    "args": [
+      "component",
+      "--list",
+      "--detail",
+      "full",
+      "--category",
+      "Button"
+    ],
+    "fixture": "comptheme",
+    "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_Linked_@compkit",
+    "args": [
+      "component",
+      "Linked"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--props_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--props"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--props_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--props",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--detail_compact_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_Button_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "Button",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--list_--json_@compkit",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "compkit"
+  }
+]

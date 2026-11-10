@@ -1,0 +1,12 @@
+{
+ "id": "argv_doctor_x",
+ "args": [
+  "doctor",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor '\n\n  integration  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

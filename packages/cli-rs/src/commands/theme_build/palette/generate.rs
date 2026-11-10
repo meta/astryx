@@ -375,7 +375,14 @@ pub fn theme_palette_generate(config: &str, opts: &GenerateOptions, cwd: &str) -
         }
         Err(e) => {
             return Err(err(
-                format!("Could not parse palette config: {}", node_error_message(&e, "read", &resolved_config)),
+                format!(
+                    "Could not parse palette config: {}",
+                    if std::path::Path::new(&resolved_config).is_dir() {
+                        "EISDIR: illegal operation on a directory, read".to_string()
+                    } else {
+                        node_error_message(&e, "open", &resolved_config)
+                    }
+                ),
                 "ERR_PALETTE_GENERATION",
             ))
         }

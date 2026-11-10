@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_discover_--type_-1",
+ "args": [
+  "discover",
+  "--type",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown --type \"-1\"\n\n  component  (item kind)\n  template  (item kind)\n  doc  (item kind)\n  theme  (item kind)\n  codemod  (item kind)\n  agent-doc  (item kind)\n",
+ "exit": 1,
+ "files": []
+}

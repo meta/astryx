@@ -1,0 +1,13 @@
+{
+ "id": "argv_search_table_--version",
+ "args": [
+  "search",
+  "table",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_experimental_render_--overwrite_page.tsx",
+ "args": [
+  "experimental",
+  "render",
+  "--overwrite",
+  "page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --overwrite applies only to --reverse; rendering replaces an existing HTML file only when a render wrote it\n",
+ "exit": 1,
+ "files": []
+}

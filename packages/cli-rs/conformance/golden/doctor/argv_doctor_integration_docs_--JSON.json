@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_docs_--JSON",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

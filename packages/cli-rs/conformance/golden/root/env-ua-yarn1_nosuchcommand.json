@@ -1,0 +1,11 @@
+{
+ "id": "env-ua-yarn1_nosuchcommand",
+ "args": [
+  "nosuchcommand"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown command 'nosuchcommand'\n\n  init  (available command)\n  component  (available command)\n  docs  (available command)\n  blog  (available command)\n  swizzle  (available command)\n  gap-report  (available command)\n  template  (available command)\n  upgrade  (available command)\n  theme  (available command)\n  integration  (available command)\n  hook  (available command)\n  discover  (available command)\n  search  (available command)\n  build  (available command)\n  doctor  (available command)\n  experimental  (available command)\n  manifest  (available command)\n",
+ "exit": 1,
+ "files": []
+}

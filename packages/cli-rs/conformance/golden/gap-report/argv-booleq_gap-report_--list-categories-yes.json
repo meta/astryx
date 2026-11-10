@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_gap-report_--list-categories-yes",
+ "args": [
+  "gap-report",
+  "--list-categories=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--list-categories=yes'\n",
+ "exit": 1,
+ "files": []
+}

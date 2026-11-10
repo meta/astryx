@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_build_--jso",
+ "args": [
+  "theme",
+  "build",
+  "--jso"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--jso'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

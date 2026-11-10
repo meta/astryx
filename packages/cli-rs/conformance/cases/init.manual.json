@@ -1,0 +1,610 @@
+[
+  {
+    "id": "w_features_agents_theme",
+    "args": [
+      "init",
+      "--features",
+      "agents,theme"
+    ]
+  },
+  {
+    "id": "w_features_spaced_case",
+    "args": [
+      "init",
+      "--features",
+      " Agents , THEME "
+    ]
+  },
+  {
+    "id": "w_features_template_json",
+    "args": [
+      "--json",
+      "init",
+      "--features",
+      "template"
+    ]
+  },
+  {
+    "id": "w_features_theme_empty",
+    "args": [
+      "init",
+      "--features",
+      "theme"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_features_bad_mixed",
+    "args": [
+      "init",
+      "--features",
+      "agents,nope,x"
+    ]
+  },
+  {
+    "id": "w_features_empty_string",
+    "args": [
+      "init",
+      "--features",
+      ""
+    ]
+  },
+  {
+    "id": "w_all_features",
+    "args": [
+      "init",
+      "--all",
+      "--features",
+      "agents"
+    ]
+  },
+  {
+    "id": "w_all_features_json",
+    "args": [
+      "init",
+      "--all",
+      "--features",
+      "agents",
+      "--json"
+    ]
+  },
+  {
+    "id": "w_remove_with_all",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--all"
+    ]
+  },
+  {
+    "id": "w_remove_with_agent_path",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--agent",
+      "claude",
+      "--agent-docs-path",
+      "x.md"
+    ]
+  },
+  {
+    "id": "w_user_with_features",
+    "args": [
+      "init",
+      "--user",
+      "--features",
+      "agents",
+      "--agent",
+      "claude"
+    ]
+  },
+  {
+    "id": "w_user_with_all_json",
+    "args": [
+      "--json",
+      "init",
+      "--user",
+      "--all"
+    ]
+  },
+  {
+    "id": "w_agent_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ]
+  },
+  {
+    "id": "w_agent_codex",
+    "args": [
+      "init",
+      "--agent",
+      "codex"
+    ]
+  },
+  {
+    "id": "w_agent_hermes_json",
+    "args": [
+      "init",
+      "--agent",
+      "hermes",
+      "--json"
+    ]
+  },
+  {
+    "id": "w_agent_muse_empty",
+    "args": [
+      "init",
+      "--agent",
+      "muse"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_agent_claude_features_agents",
+    "args": [
+      "init",
+      "--features",
+      "agents",
+      "--agent",
+      "claude"
+    ]
+  },
+  {
+    "id": "w_agent_bogus_features_theme",
+    "args": [
+      "init",
+      "--features",
+      "theme",
+      "--agent",
+      "bogus"
+    ]
+  },
+  {
+    "id": "w_docs_path_multi",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "a/AI.md",
+      "b/notes.txt"
+    ]
+  },
+  {
+    "id": "w_docs_path_escape",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "../outside.md"
+    ]
+  },
+  {
+    "id": "w_docs_path_escape_json",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "../outside.md",
+      "--json"
+    ]
+  },
+  {
+    "id": "w_docs_path_abs",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "/tmp/abs.md"
+    ]
+  },
+  {
+    "id": "w_docs_path_home",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "../home/AGENTS.md"
+    ]
+  },
+  {
+    "id": "w_subfolder",
+    "args": [
+      "init"
+    ],
+    "cwd": "app/src"
+  },
+  {
+    "id": "w_subfolder_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "cwd": "app/src"
+  },
+  {
+    "id": "w_subfolder_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "cwd": "app/src"
+  },
+  {
+    "id": "w_author",
+    "args": [
+      "init"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_author_all",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_home",
+    "args": [
+      "init"
+    ],
+    "cwd": "home"
+  },
+  {
+    "id": "w_home_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "cwd": "home"
+  },
+  {
+    "id": "w_remove_empty",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_large_agent_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_integration_features_agents",
+    "args": [
+      "init",
+      "--features",
+      "agents",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_user_remove_json_empty",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "d_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_init_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_init_twice",
+    "args": [
+      "init"
+    ],
+    "fixture": "initdone",
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "d_init_all",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_init_all_json",
+    "args": [
+      "init",
+      "--all",
+      "--json"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_remove_json",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_remove_after_init",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "initdone",
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "d_agent_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_agent_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_agent_cursor",
+    "args": [
+      "init",
+      "--agent",
+      "cursor"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_agent_hermes",
+    "args": [
+      "init",
+      "--agent",
+      "hermes"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_agent_codex",
+    "args": [
+      "init",
+      "--agent",
+      "codex"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_web",
+    "args": [
+      "init"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/packages/web"
+  },
+  {
+    "id": "d_web_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/packages/web"
+  },
+  {
+    "id": "d_web_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/packages/web",
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "d_web_agent_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/packages/web"
+  },
+  {
+    "id": "d_broken",
+    "args": [
+      "init"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/broken"
+  },
+  {
+    "id": "d_broken_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/broken"
+  },
+  {
+    "id": "d_broken_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/broken"
+  },
+  {
+    "id": "d_dup",
+    "args": [
+      "init"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/dup"
+  },
+  {
+    "id": "d_dup_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "initdone",
+    "cwd": "initdone/dup"
+  },
+  {
+    "id": "d_docs_path_existing",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "CLAUDE.md",
+      "GEMINI.md"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "d_user_twice",
+    "args": [
+      "init",
+      "--user"
+    ],
+    "fixture": "initdone",
+    "pre": [
+      [
+        "init",
+        "--user"
+      ]
+    ]
+  },
+  {
+    "id": "d_user_then_remove",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents"
+    ],
+    "fixture": "initdone",
+    "pre": [
+      [
+        "init",
+        "--user"
+      ]
+    ]
+  },
+  {
+    "id": "d_user_then_remove_json",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "initdone",
+    "pre": [
+      [
+        "init",
+        "--user"
+      ]
+    ]
+  },
+  {
+    "id": "d_app_init_twice_json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "d_app_init_then_remove",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "d_app_claude_then_default",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "init",
+        "--agent",
+        "claude"
+      ]
+    ]
+  },
+  {
+    "id": "d_app_all_then_remove_json",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "init",
+        "--agent",
+        "all"
+      ]
+    ]
+  }
+]

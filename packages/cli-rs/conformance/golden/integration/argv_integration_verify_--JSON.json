@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_verify_--JSON",
+ "args": [
+  "integration",
+  "verify",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

@@ -68,17 +68,12 @@ fn definition_of(d: &crate::discovery::icon_definition_discovery::DiscoveredIcon
 
 /// `loadIconSets(cwd)`: `Project.load(cwd).iconSets({experimental: true})`.
 /// A project that fails to load has no sets here.
-pub fn load_icon_sets(cwd: &str) -> IconSets {
+pub fn load_icon_sets(cwd: &str) -> Result<IconSets, IconError> {
     use crate::discovery::icon_set_discovery as isd;
-    let Ok(project) = crate::discovery::project::Project::load(&np::resolve1(cwd)) else {
-        return IconSets {
-            sets: vec![],
-            withdrawn: vec![],
-            choice: Choice { status: "none".into(), set: None, reason: "No icon set is installed.".into() },
-        };
-    };
+    // A config that fails to load fails the command, as Project.load throws.
+    let project = crate::discovery::project::Project::load(&np::resolve1(cwd)).map_err(|m| ierr(m, vec![], "ERR_UNKNOWN"))?;
     let (sets, withdrawn, choice) = isd::project_icon_sets(&project);
-    IconSets {
+    Ok(IconSets {
         sets: sets
             .into_iter()
             .map(|s| IconSet {
@@ -93,7 +88,7 @@ pub fn load_icon_sets(cwd: &str) -> IconSets {
             .collect(),
         withdrawn: withdrawn.into_iter().map(|w| Withdrawn { name: w.name, package: w.package, reason: w.reason }).collect(),
         choice: Choice { status: choice.status.into(), set: choice.set, reason: choice.reason },
-    }
+    })
 }
 
 pub fn icon_set_key(s: &IconSet) -> String {
@@ -201,6 +196,10 @@ pub fn unusable_set(sets: &[IconSet], withdrawn: &[Withdrawn], selector: &str) -
 pub fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<u16> = a.encode_utf16().collect();
     let b: Vec<u16> = b.encode_utf16().collect();
+    // levenshtein.mjs: a length gap over 5 is never a match.
+    if a.len().abs_diff(b.len()) > 5 {
+        return 999;
+    }
     let mut prev: Vec<usize> = (0..=b.len()).collect();
     for i in 1..=a.len() {
         let mut cur = vec![i; b.len() + 1];
@@ -357,7 +356,7 @@ pub fn icon(query: Option<&str>, o: &IconOptions, cwd: &str, defs: &dyn Fn() -> 
     let limit = o.limit.unwrap_or(DEFAULT_ICON_LIMIT);
     let term = given;
     if o.list {
-        return Ok(IconResult::List(icon_list(cwd, &defs())));
+        return Ok(IconResult::List(icon_list(cwd, &defs())?));
     }
     if o.definitions {
         let list: Vec<Value> = defs()
@@ -408,8 +407,8 @@ pub fn icon(query: Option<&str>, o: &IconOptions, cwd: &str, defs: &dyn Fn() -> 
     icon_search(term, cwd, o.set.as_deref(), limit, &defs()).map(IconResult::Search)
 }
 
-fn icon_list(cwd: &str, defs: &[Definition]) -> Value {
-    let IconSets { sets, withdrawn, choice } = load_icon_sets(cwd);
+fn icon_list(cwd: &str, defs: &[Definition]) -> Result<Value, IconError> {
+    let IconSets { sets, withdrawn, choice } = load_icon_sets(cwd)?;
     let built_in: Vec<&str> = defs.iter().filter(|d| d.built_in).map(|d| d.name.as_str()).collect();
     let mut data = Map::new();
     data.insert("status".into(), Value::String(choice.status.clone()));
@@ -472,11 +471,11 @@ fn icon_list(cwd: &str, defs: &[Definition]) -> Value {
                 .collect(),
         ),
     );
-    Value::Object(data)
+    Ok(Value::Object(data))
 }
 
 fn icon_set_icons(cwd: &str, set: &str) -> Result<Value, IconError> {
-    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd);
+    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd)?;
     let named = sets_named(&sets, set);
     if named.is_empty() {
         return Err(unusable_set(&sets, &withdrawn, set));
@@ -522,7 +521,7 @@ fn own_words(set: &IconSet, name: &str) -> Option<Vec<String>> {
 }
 
 fn icon_search(term: &str, cwd: &str, set: Option<&str>, limit: f64, defs: &[Definition]) -> Result<Value, IconError> {
-    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd);
+    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd)?;
     let searched: Vec<&IconSet> = match set {
         Some(sel) => {
             let named = sets_named(&sets, sel);
@@ -549,7 +548,7 @@ fn icon_detail(reference: &str, cwd: &str, defs: &[Definition]) -> Result<IconRe
     let slash = reference.rfind('/').unwrap_or(0);
     let selector = &reference[..slash];
     let id = &reference[slash + 1..];
-    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd);
+    let IconSets { sets, withdrawn, .. } = load_icon_sets(cwd)?;
     let named = sets_named(&sets, selector);
     if named.is_empty() {
         return Err(unusable_set(&sets, &withdrawn, selector));

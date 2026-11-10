@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_check_--version",
+ "args": [
+  "integration",
+  "check",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

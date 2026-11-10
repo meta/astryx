@@ -400,7 +400,8 @@ fn startup_time() {
 fn call_probe() {
     let p = std::env::var("JS_CALL").unwrap();
     let t = std::time::Instant::now();
-    let r = call_export(Path::new(&p), &["go"], &[], &CallOptions::default());
+    let ex = std::env::var("JS_EXPORT").unwrap_or_else(|_| "go".into());
+    let r = call_export(Path::new(&p), &[ex.as_str()], &[], &CallOptions::default());
     eprintln!("call {:?}: {}", t.elapsed(), match r { Ok(r) => crate::json::stringify(&r.value, 0).chars().take(300).collect::<String>(), Err(e) => format!("{e:?}") });
 }
 
@@ -478,4 +479,273 @@ fn jiti_missing_named_import_is_undefined() {
     let jiti = JitiOptions { force: true, extensions: Some(vec![".ts".into()]), ..Default::default() };
     let ns = import_module_jiti(&d.join("slots.ts"), &ImportOptions::default(), &jiti).unwrap();
     assert_eq!(crate::json::stringify(&ns["default"], 0), r#"["undefined","x"]"#);
+}
+
+#[test]
+fn fresh_jiti_rereads_the_graph() {
+    let d = tmp("freshgraph");
+    fs::write(d.join("dep.ts"), "export const v = 1;\n").unwrap();
+    fs::write(d.join("root.ts"), "import {v} from './dep';\nexport const got = v;\n").unwrap();
+    let fresh = ImportOptions { fresh: true, ..Default::default() };
+    assert_eq!(import_module(&d.join("root.ts"), &fresh).unwrap()["got"], serde_json::json!(1));
+    fs::write(d.join("dep.ts"), "export const v = 2;\n").unwrap();
+    assert_eq!(import_module(&d.join("root.ts"), &fresh).unwrap()["got"], serde_json::json!(2));
+    // A native ES fresh read rereads the root only, as Node does.
+    fs::write(d.join("dep.mjs"), "export const v = 1;\n").unwrap();
+    fs::write(d.join("root.mjs"), "import {v} from './dep.mjs';\nexport const got = v;\n").unwrap();
+    assert_eq!(import_module(&d.join("root.mjs"), &fresh).unwrap()["got"], serde_json::json!(1));
+    fs::write(d.join("dep.mjs"), "export const v = 2;\n").unwrap();
+    assert_eq!(import_module(&d.join("root.mjs"), &fresh).unwrap()["got"], serde_json::json!(1));
+}
+
+#[test]
+#[ignore]
+fn oxc_probe() {
+    use oxc::allocator::Allocator;
+    use oxc::parser::Parser;
+    use oxc::span::SourceType;
+    let shapes: Vec<(String, String)> = serde_json::from_str(&fs::read_to_string("/tmp/jse_se/shapes.json").unwrap()).unwrap();
+    for (name, src) in shapes {
+        if std::env::var("JSX_ONLY").is_ok() && !name.contains("jsx") && name != "html_comment" { continue; }
+        for (kind, st) in [("mjs", SourceType::mjs()), ("ts", SourceType::ts()), ("tsx", SourceType::tsx())] {
+            let a = Allocator::default();
+            let ret = Parser::new(&a, &src, st).parse();
+            let d = ret.diagnostics.iter().next();
+            let s = d.map(|d| {
+                let l = d.labels.iter().map(|l| format!("{}+{}", l.offset(), l.len())).collect::<Vec<_>>().join(",");
+                format!("{} @{} [{}]", d.message, l, src.get(d.labels.first().map(|l| l.offset() as usize).unwrap_or(0)..).unwrap_or("").chars().take(6).collect::<String>().escape_debug())
+            });
+            eprintln!("{name:22} {kind:4} {}", s.unwrap_or_else(|| "ok".into()));
+        }
+    }
+    for src in ["export const class = 1;\n", "export const f = <T>(x: T) => x;\n", "let x = {if: 1}; var function = 2;\n", "import {a as class} from 'x';\n"] {
+        for (kind, st) in [("ts", SourceType::ts()), ("tsx", SourceType::tsx())] {
+            let a = Allocator::default();
+            let ret = Parser::new(&a, src, st).parse();
+            eprintln!("{src:?} {kind} {:?}", ret.diagnostics.iter().map(|d| (d.message.to_string(), d.labels.iter().map(|l| l.offset()).collect::<Vec<_>>())).collect::<Vec<_>>());
+        }
+    }
+}
+
+/// Syntax-error shapes and the messages Node (native import) and jiti give
+/// for them (recorded by testdata/syntax-oracle.mjs).
+#[test]
+fn syntax_errors_match_node_and_jiti() {
+    use super::syntax::{syntax_error, Dialect};
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cases: Vec<Value> = serde_json::from_str(&fs::read_to_string(crate_dir.join("src/js/testdata/syntax.json")).unwrap()).unwrap();
+    let mut bad = Vec::new();
+    for c in &cases {
+        let src = c["source"].as_str().unwrap();
+        let name = c["name"].as_str().unwrap();
+        for (key, dialect, ts, jsx) in [
+            ("esm", Dialect::V8Module, false, false),
+            ("jiti_ts", Dialect::Jiti, true, false),
+            ("jiti_tsx", Dialect::Jiti, true, true),
+        ] {
+            if c[key].get("name").and_then(|n| n.as_str()).map(|n| n != "SyntaxError" && n != "Error").unwrap_or(false) {
+                continue; // a runtime error, not a parse error
+            }
+            // JSX in a `.ts` file that jiti reads without JSX: no real load does this.
+            if key == "jiti_ts" && (name == "jsx_adjacent" || name == "jsx_bad_attr") {
+                continue;
+            }
+            let got = syntax_error(src, Path::new("<file>"), dialect, ts, jsx)
+                .map(|(n, m)| serde_json::json!({"name": n, "message": m}))
+                .unwrap_or(Value::Null);
+            if got != c[key] {
+                bad.push(format!("{name} {key}\n  got:  {got}\n  want: {}", c[key]));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}/{} differ:\n{}", bad.len(), cases.len() * 3, bad.join("\n"));
+}
+
+#[test]
+#[ignore]
+fn oxc_sem_probe() {
+    for src in ["export default 017;\n", "with (a) {}\n", "let a; delete a;\nexport default 1;\n"] {
+        let a = oxc::allocator::Allocator::default();
+        let ret = oxc::parser::Parser::new(&a, src, oxc::span::SourceType::mjs()).parse();
+        eprintln!("parse {:?}", ret.diagnostics.iter().map(|d| (d.message.to_string(), d.labels.iter().map(|l| l.offset()).collect::<Vec<_>>())).collect::<Vec<_>>());
+        let sem = oxc::semantic::SemanticBuilder::new().with_check_syntax_error(true).build(&ret.program);
+        eprintln!("sem {:?}", sem.diagnostics.iter().map(|d| (d.message.to_string(), d.labels.iter().map(|l| l.offset()).collect::<Vec<_>>())).collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn syntax_errors_through_the_loader() {
+    let d = tmp("syntaxload");
+    fs::write(d.join("a.doc.mjs"), "export default {a: 1 @@};\n").unwrap();
+    fs::write(d.join("b.doc.ts"), "export default {name: 'abc,\n b: 1};\n").unwrap();
+    fs::write(d.join("c.cjs"), "module.exports = {a: 1,\n").unwrap();
+    let e = import_module(&d.join("a.doc.mjs"), &ImportOptions::default()).unwrap_err();
+    assert_eq!((e.name.as_str(), e.message.as_str(), e.code.as_deref()), ("SyntaxError", "Invalid or unexpected token", None));
+    let e = import_module(&d.join("b.doc.ts"), &ImportOptions::default()).unwrap_err();
+    let real = fs::canonicalize(&d).unwrap();
+    assert_eq!(e.name, "Error");
+    assert_eq!(e.message, format!("ParseError: Unterminated string constant.  \n {}/b.doc.ts:1:22", real.display()));
+    let e = import_module(&d.join("c.cjs"), &ImportOptions::default()).unwrap_err();
+    assert_eq!((e.name.as_str(), e.message.as_str()), ("SyntaxError", "Unexpected end of input"));
+}
+
+#[test]
+fn jsx_text_braces_load_as_babel_reads_them() {
+    let d = tmp("jsxtext");
+    fs::create_dir_all(d.join("node_modules/react")).unwrap();
+    fs::write(d.join("node_modules/react/package.json"), "{\"name\":\"react\",\"type\":\"module\",\"exports\":{\"./jsx-runtime\":\"./jsx.js\"}}").unwrap();
+    fs::write(d.join("node_modules/react/jsx.js"), "export const jsx = (t, p) => p.children; export const jsxs = jsx;\n").unwrap();
+    fs::write(d.join("p.tsx"), "export default <p>a } b > c</p>;\n").unwrap();
+    let jiti = JitiOptions { jsx_automatic: true, ..Default::default() };
+    let ns = import_module_jiti(&d.join("p.tsx"), &ImportOptions::default(), &jiti).unwrap();
+    assert_eq!(ns["default"], serde_json::json!("a } b > c"));
+    assert_eq!(
+        super::syntax::babel_error("export default function Page() {\n  return <p>unclosed;\n}\n", true, true),
+        Some(("Unterminated JSX contents.".to_string(), 2, 12))
+    );
+}
+
+#[test]
+#[ignore]
+fn strip_probe() {
+    let f = std::env::var("JS_STRIP").unwrap_or_default();
+    let src = fs::read_to_string(&f).unwrap();
+    let rew = super::syntax::babel_jsx_text(&src);
+    eprintln!("jsx text rewrite: {}", rew.is_some());
+    if let Some(r) = &rew { fs::write("/tmp/jse_rew.tsx", r).unwrap(); }
+    let out = super::transform::strip(&src, Path::new(&f), true, true);
+    match &out { Ok(o) => { fs::write("/tmp/jse_strip.js", o).unwrap(); eprintln!("strip ok"); } Err(e) => eprintln!("strip err {e}") }
+    if let Ok(o) = out {
+        let p = super::transform::rewrite_pow(&o, true);
+        eprintln!("pow rewrite: {}", p.is_some());
+        let o2 = p.unwrap_or(o);
+        let j = super::transform::jiti_import_reads(&o2);
+        eprintln!("jiti reads: {}", j.is_some());
+        fs::write("/tmp/jse_final.js", j.unwrap_or(o2)).unwrap();
+    }
+}
+
+#[test]
+#[ignore]
+fn minify_probe() {
+    let p = std::env::var("JS_PROBE").unwrap();
+    let text = fs::read_to_string(&p).unwrap();
+    let t = std::time::Instant::now();
+    let a = oxc::allocator::Allocator::default();
+    let ret = oxc::parser::Parser::new(&a, &text, oxc::span::SourceType::cjs()).parse();
+    let out = oxc::codegen::Codegen::new().with_options(oxc::codegen::CodegenOptions::minify()).build(&ret.program).code;
+    eprintln!("oxc minify {:?}: {} -> {} bytes", t.elapsed(), text.len(), out.len());
+    let mut ctx = boa_engine::Context::default();
+    let wrapped = format!("(function (exports, require, module, __filename, __dirname) {{{out}\n}})");
+    let t = std::time::Instant::now();
+    let s = boa_engine::Script::parse(boa_engine::Source::from_bytes(wrapped.as_str()), None, &mut ctx).unwrap();
+    eprintln!("parse {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    let _ = s.codeblock(&mut ctx).unwrap();
+    eprintln!("compile {:?}", t.elapsed());
+}
+
+#[test]
+#[ignore]
+fn parse_input_probe() {
+    let p = std::env::var("JS_PROBE").unwrap();
+    let text = fs::read_to_string(&p).unwrap();
+    let wrapped = format!("(function (exports, require, module, __filename, __dirname) {{{text}\n}})");
+    let mut ctx = boa_engine::Context::default();
+    let t = std::time::Instant::now();
+    let _ = boa_engine::Script::parse(boa_engine::Source::from_bytes(wrapped.as_str()), None, &mut ctx).unwrap();
+    eprintln!("utf8 parse {:?}", t.elapsed());
+    let u16s: Vec<u16> = wrapped.encode_utf16().collect();
+    let mut ctx = boa_engine::Context::default();
+    let t = std::time::Instant::now();
+    let _ = boa_engine::Script::parse(boa_engine::Source::from_utf16(&u16s), None, &mut ctx).unwrap();
+    eprintln!("utf16 parse {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    let a = oxc::allocator::Allocator::default();
+    let _ = oxc::parser::Parser::new(&a, &wrapped, oxc::span::SourceType::cjs()).parse();
+    eprintln!("oxc parse {:?}", t.elapsed());
+}
+
+#[test]
+#[ignore]
+fn boa_runtime_probe() {
+    let snippets: Vec<(String, String)> = serde_json::from_str(&fs::read_to_string("/tmp/jse_rt/snippets.json").unwrap()).unwrap();
+    let d = tmp("rtprobe");
+    for (name, src) in snippets {
+        let f = d.join(format!("{name}.mjs"));
+        fs::write(&f, format!("{src}\nexport default 1;\n")).unwrap();
+        let r = super::engine::with_engine(|e| {
+            let (m, _, _) = match e.load(&f, &ImportOptions::default()) { Ok(x) => x, Err(err) => return format!("LOADERR {} | {}", err.name, err.message) };
+            let _ = m;
+            "ok".to_string()
+        });
+        let detail = super::engine::LAST_STACK.with(|s| s.borrow().clone());
+        eprintln!("{name:24} {r} || {}", detail.replace('\n', "\\n"));
+    }
+}
+
+#[test]
+#[ignore]
+fn boa_parse_probe() {
+    let f = std::env::var("JS_PARSE").unwrap();
+    let src = fs::read_to_string(&f).unwrap();
+    let mut ctx = boa_engine::Context::default();
+    match boa_engine::Module::parse(boa_engine::Source::from_bytes(src.as_str()), None, &mut ctx) {
+        Ok(_) => eprintln!("boa ok"),
+        Err(e) => eprintln!("boa err {e:?}"),
+    }
+}
+
+#[test]
+#[ignore]
+fn jiti_load_probe() {
+    let f = std::env::var("JS_LOAD").unwrap();
+    let jiti = JitiOptions { force: true, jsx_automatic: true, ..Default::default() };
+    record_loads(true);
+    let r = import_module_jiti(Path::new(&f), &ImportOptions::default(), &jiti);
+    let loads = record_loads(false);
+    eprintln!("loads: {}", loads.len());
+    if let Some(l) = loads.last() { eprintln!("last load: {}", l.display()); }
+    eprintln!("result: {:?}", r.map(|n| n.keys().cloned().collect::<Vec<_>>()));
+}
+
+#[test]
+fn jiti_sync_package_exports_use_require_conditions() {
+    let d = tmp("syncreg");
+    let pkg = d.join("node_modules/reg");
+    fs::create_dir_all(&pkg).unwrap();
+    fs::write(pkg.join("package.json"), r#"{"name":"reg","exports":{"import":"./index.mjs","require":"./index.cjs"}}"#).unwrap();
+    fs::write(pkg.join("index.mjs"), "throw new Error('esm registry exploded');\n").unwrap();
+    fs::write(pkg.join("index.cjs"), "exports.icons = {a: 1};\n").unwrap();
+    let only = d.join("node_modules/onlyimp");
+    fs::create_dir_all(&only).unwrap();
+    fs::write(only.join("package.json"), r#"{"name":"onlyimp","exports":{"import":"./i.mjs"}}"#).unwrap();
+    fs::write(only.join("i.mjs"), "export const k = 'imp';\n").unwrap();
+    fs::write(d.join("theme.ts"), "import {icons} from 'reg';\nimport {k} from 'onlyimp';\nexport const t: number = Object.keys(icons).length;\nexport const kk = k;\n").unwrap();
+    let opts = ImportOptions { fresh: true, ..Default::default() };
+    let sync = JitiOptions { force: true, sync: true, ..Default::default() };
+    let ns = import_module_jiti(&d.join("theme.ts"), &opts, &sync).unwrap();
+    assert_eq!(ns["t"], serde_json::json!(1));
+    assert_eq!(ns["kk"], serde_json::json!("imp"));
+    let not_sync = JitiOptions { force: true, ..Default::default() };
+    let e = import_module_jiti(&d.join("theme.ts"), &opts, &not_sync).unwrap_err();
+    assert_eq!(e.message, "esm registry exploded");
+}
+
+#[test]
+fn jiti_sync_unknown_extension_loads_as_js() {
+    let d = tmp("synccss");
+    fs::write(d.join("x.css"), "").unwrap();
+    fs::write(d.join("y.css"), ".a{color:red}\n").unwrap();
+    fs::write(d.join("t3.ts"), "import './x.css';\nexport const a = 1;\n").unwrap();
+    fs::write(d.join("t2.ts"), "import './y.css';\nexport const a = 1;\n").unwrap();
+    let opts = ImportOptions { fresh: true, ..Default::default() };
+    let sync = JitiOptions { force: true, sync: true, ..Default::default() };
+    let ns = import_module_jiti(&d.join("t3.ts"), &opts, &sync).unwrap();
+    assert_eq!(ns["a"], serde_json::json!(1));
+    let e = import_module_jiti(&d.join("t2.ts"), &opts, &sync).unwrap_err();
+    assert_eq!(e.to_js_string(), "SyntaxError: Unexpected token '.'");
+    let not_sync = JitiOptions { force: true, ..Default::default() };
+    let e = import_module_jiti(&d.join("t3.ts"), &opts, &not_sync).unwrap_err();
+    assert!(e.message.starts_with("Unknown file extension \".css\""), "{}", e.message);
 }

@@ -1,0 +1,15 @@
+{
+ "id": "argv-emptyeq_integration_add_component_useClipboard_--extends-",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--extends="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"extends\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

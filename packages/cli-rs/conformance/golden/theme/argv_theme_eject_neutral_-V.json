@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_eject_neutral_-V",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -350,6 +350,193 @@
   "gen": true
  },
  {
+  "id": "argv_integration_--json_--json",
+  "args": [
+   "integration",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--help_--json",
+  "args": [
+   "integration",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--json_--help",
+  "args": [
+   "integration",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-h_--bogus",
+  "args": [
+   "integration",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--bogus_-h",
+  "args": [
+   "integration",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-V",
+  "args": [
+   "integration",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--version",
+  "args": [
+   "integration",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--JSON",
+  "args": [
+   "integration",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--jso",
+  "args": [
+   "integration",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--no-json",
+  "args": [
+   "integration",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--json-1",
+  "args": [
+   "integration",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-x",
+  "args": [
+   "integration",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-hV",
+  "args": [
+   "integration",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--_--json",
+  "args": [
+   "integration",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_--_-h",
+  "args": [
+   "integration",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_x",
+  "args": [
+   "integration",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-",
+  "args": [
+   "integration",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_-5",
+  "args": [
+   "integration",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_---x",
+  "args": [
+   "integration",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_---json",
+  "args": [
+   "integration",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
   "id": "integration_add_--help_@author",
   "args": [
    "integration",
@@ -1981,6 +2168,995 @@
   "gen": true
  },
  {
+  "id": "argv_integration_add_--json_--json",
+  "args": [
+   "integration",
+   "add",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--json_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--help_--json",
+  "args": [
+   "integration",
+   "add",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--help_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--json_--help",
+  "args": [
+   "integration",
+   "add",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--json_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-h_--bogus",
+  "args": [
+   "integration",
+   "add",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-h_--bogus",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--bogus_-h",
+  "args": [
+   "integration",
+   "add",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--bogus_-h",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-V",
+  "args": [
+   "integration",
+   "add",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-V",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--version",
+  "args": [
+   "integration",
+   "add",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--version",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--JSON",
+  "args": [
+   "integration",
+   "add",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--JSON",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--jso",
+  "args": [
+   "integration",
+   "add",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--jso",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--no-json",
+  "args": [
+   "integration",
+   "add",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--no-json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--json-1",
+  "args": [
+   "integration",
+   "add",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--json-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-x",
+  "args": [
+   "integration",
+   "add",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-hV",
+  "args": [
+   "integration",
+   "add",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-hV",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--_--json",
+  "args": [
+   "integration",
+   "add",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_--_-h",
+  "args": [
+   "integration",
+   "add",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_--_-h",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_x",
+  "args": [
+   "integration",
+   "add",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-",
+  "args": [
+   "integration",
+   "add",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_-5",
+  "args": [
+   "integration",
+   "add",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_-5",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_---x",
+  "args": [
+   "integration",
+   "add",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_---x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_---json",
+  "args": [
+   "integration",
+   "add",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_add_component_useClipboard_---json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--dry-run_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--dry-run",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--dry-run_--dry-run",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--dry-run",
+   "--dry-run"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-booleq_integration_add_component_useClipboard_--dry-run-yes",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--dry-run=yes"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negate_integration_add_component_useClipboard_--no-dry-run",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--no-dry-run"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--type_page_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--type",
+   "page",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--type_page_--type_page",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "page",
+   "--type",
+   "page"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--type_page_--type_block",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "page",
+   "--type",
+   "block"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--type_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--type-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--type_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--replaces_principles_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--replaces",
+   "principles",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--replaces_principles_--replaces_principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "principles",
+   "--replaces",
+   "principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--replaces_principles_--replaces_nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "principles",
+   "--replaces",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--replaces_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--replaces-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--replaces_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--extends_principles_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--extends",
+   "principles",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--extends_principles_--extends_principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "principles",
+   "--extends",
+   "principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--extends_principles_--extends_nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "principles",
+   "--extends",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--extends_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--extends-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--extends_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--parent_acme_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--parent",
+   "acme",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--parent_acme_--parent_acme",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "acme",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--parent_acme_--parent_other",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "acme",
+   "--parent",
+   "other"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--parent_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--parent-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--parent_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--from_neutral_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--from",
+   "neutral",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--from_neutral_--from_neutral",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "neutral",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--from_neutral_--from_other",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "neutral",
+   "--from",
+   "other"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--from_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--from-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--from_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_integration_add_--to_0.6.0_component_useClipboard",
+  "args": [
+   "integration",
+   "add",
+   "--to",
+   "0.6.0",
+   "component",
+   "useClipboard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_add_component_useClipboard_--to_0.6.0_--to_0.6.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.6.0",
+   "--to",
+   "0.6.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_integration_add_component_useClipboard_--to_0.6.0_--to_0.1.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.6.0",
+   "--to",
+   "0.1.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_integration_add_component_useClipboard_--to_x",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_integration_add_component_useClipboard_--to-",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_integration_add_component_useClipboard_--to_-1",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
   "id": "integration_add_nosuchsub",
   "args": [
    "integration",
@@ -2258,6 +3434,275 @@
    "check",
    "--next",
    "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--json_--json",
+  "args": [
+   "integration",
+   "check",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--help_--json",
+  "args": [
+   "integration",
+   "check",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--json_--help",
+  "args": [
+   "integration",
+   "check",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-h_--bogus",
+  "args": [
+   "integration",
+   "check",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--bogus_-h",
+  "args": [
+   "integration",
+   "check",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-V",
+  "args": [
+   "integration",
+   "check",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--version",
+  "args": [
+   "integration",
+   "check",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--JSON",
+  "args": [
+   "integration",
+   "check",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--jso",
+  "args": [
+   "integration",
+   "check",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--no-json",
+  "args": [
+   "integration",
+   "check",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--json-1",
+  "args": [
+   "integration",
+   "check",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-x",
+  "args": [
+   "integration",
+   "check",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-hV",
+  "args": [
+   "integration",
+   "check",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--_--json",
+  "args": [
+   "integration",
+   "check",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_--_-h",
+  "args": [
+   "integration",
+   "check",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_x",
+  "args": [
+   "integration",
+   "check",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-",
+  "args": [
+   "integration",
+   "check",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_-5",
+  "args": [
+   "integration",
+   "check",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_---x",
+  "args": [
+   "integration",
+   "check",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_check_---json",
+  "args": [
+   "integration",
+   "check",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_check_--strict_--strict",
+  "args": [
+   "integration",
+   "check",
+   "--strict",
+   "--strict"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-booleq_integration_check_--strict-yes",
+  "args": [
+   "integration",
+   "check",
+   "--strict=yes"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negate_integration_check_--no-strict",
+  "args": [
+   "integration",
+   "check",
+   "--no-strict"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_check_--next_--next",
+  "args": [
+   "integration",
+   "check",
+   "--next",
+   "--next"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-booleq_integration_check_--next-yes",
+  "args": [
+   "integration",
+   "check",
+   "--next=yes"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negate_integration_check_--no-next",
+  "args": [
+   "integration",
+   "check",
+   "--no-next"
   ],
   "fixture": "app",
   "gen": true
@@ -2564,6 +4009,244 @@
   "gen": true
  },
  {
+  "id": "argv_integration_pack_--json_--json",
+  "args": [
+   "integration",
+   "pack",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--help_--json",
+  "args": [
+   "integration",
+   "pack",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--json_--help",
+  "args": [
+   "integration",
+   "pack",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-h_--bogus",
+  "args": [
+   "integration",
+   "pack",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--bogus_-h",
+  "args": [
+   "integration",
+   "pack",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-V",
+  "args": [
+   "integration",
+   "pack",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--version",
+  "args": [
+   "integration",
+   "pack",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--JSON",
+  "args": [
+   "integration",
+   "pack",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--jso",
+  "args": [
+   "integration",
+   "pack",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--no-json",
+  "args": [
+   "integration",
+   "pack",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--json-1",
+  "args": [
+   "integration",
+   "pack",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-x",
+  "args": [
+   "integration",
+   "pack",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-hV",
+  "args": [
+   "integration",
+   "pack",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--_--json",
+  "args": [
+   "integration",
+   "pack",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_--_-h",
+  "args": [
+   "integration",
+   "pack",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_x",
+  "args": [
+   "integration",
+   "pack",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-",
+  "args": [
+   "integration",
+   "pack",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_-5",
+  "args": [
+   "integration",
+   "pack",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_---x",
+  "args": [
+   "integration",
+   "pack",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_pack_---json",
+  "args": [
+   "integration",
+   "pack",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_integration_pack_--check_--check",
+  "args": [
+   "integration",
+   "pack",
+   "--check",
+   "--check"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-booleq_integration_pack_--check-yes",
+  "args": [
+   "integration",
+   "pack",
+   "--check=yes"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negate_integration_pack_--no-check",
+  "args": [
+   "integration",
+   "pack",
+   "--no-check"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
   "id": "integration_pack_nosuchsub",
   "args": [
    "integration",
@@ -2754,6 +4437,213 @@
    "--json"
   ],
   "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--json_--json",
+  "args": [
+   "integration",
+   "verify",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--help_--json",
+  "args": [
+   "integration",
+   "verify",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--json_--help",
+  "args": [
+   "integration",
+   "verify",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-h_--bogus",
+  "args": [
+   "integration",
+   "verify",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--bogus_-h",
+  "args": [
+   "integration",
+   "verify",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-V",
+  "args": [
+   "integration",
+   "verify",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--version",
+  "args": [
+   "integration",
+   "verify",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--JSON",
+  "args": [
+   "integration",
+   "verify",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--jso",
+  "args": [
+   "integration",
+   "verify",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--no-json",
+  "args": [
+   "integration",
+   "verify",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--json-1",
+  "args": [
+   "integration",
+   "verify",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-x",
+  "args": [
+   "integration",
+   "verify",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-hV",
+  "args": [
+   "integration",
+   "verify",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--_--json",
+  "args": [
+   "integration",
+   "verify",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_--_-h",
+  "args": [
+   "integration",
+   "verify",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_x",
+  "args": [
+   "integration",
+   "verify",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-",
+  "args": [
+   "integration",
+   "verify",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_-5",
+  "args": [
+   "integration",
+   "verify",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_---x",
+  "args": [
+   "integration",
+   "verify",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_integration_verify_---json",
+  "args": [
+   "integration",
+   "verify",
+   "---json"
+  ],
+  "fixture": "app",
   "gen": true
  },
  {
@@ -3302,700 +5192,201 @@
   "gen": true
  },
  {
-  "id": "w_agent_doc_author",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Run acme verify before finishing."
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_long_author",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_quotes_author_json",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Use the team's \"acme\" CLI \\ wrapper.",
-   "--json"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_template_block_author",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "account-card",
-   "--type",
-   "block"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_template_page_dry_author",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "acme-dashboard",
-   "--dry-run"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_theme_author_json",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--json"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_theme_dry_author",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--dry-run"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_doc_parent_author_json",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "releasing",
-   "--parent",
-   "acme",
-   "--json"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_codemod_author",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "rename-widget",
-   "--to",
-   "1.2.0-beta.1"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_component_author_dry",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "AcmeWidget",
-   "--dry-run"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_app",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Run acme verify before finishing."
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_agent_doc_long_app",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_agent_doc_quotes_app_json",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "Use the team's \"acme\" CLI \\ wrapper.",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_template_block_app",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "account-card",
-   "--type",
-   "block"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_template_page_dry_app",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "acme-dashboard",
-   "--dry-run"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_app_json",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_dry_app",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--dry-run"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_parent_app_json",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "releasing",
-   "--parent",
-   "acme",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_codemod_app",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "rename-widget",
-   "--to",
-   "1.2.0-beta.1"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_component_app_dry",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "AcmeWidget",
-   "--dry-run"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_component_exists_author",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "WidgetCard"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_component_exists_author_json",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "WidgetCard",
-   "--json"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_doc_exists_author",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "widgets"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_component_from_subdir_author",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "AcmeWidget"
-  ],
-  "fixture": "author",
-  "cwd": "author/src"
- },
- {
-  "id": "w_component_from_subdir_app",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "AcmeWidget"
-  ],
-  "fixture": "app",
-  "cwd": "app/src"
- },
- {
-  "id": "w_agent_doc_twice_marker",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "<!-- ASTRYX:START -->"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_blank",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "   "
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_padded",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   " padded "
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_agent_doc_toolong",
-  "args": [
-   "integration",
-   "add",
-   "agent-doc",
-   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_component_lower",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "acmeWidget"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_component_bad_chars",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "Acme-Widget",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_template_bad_name",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "Acme_Dash"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_template_bad_type_json",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "acme",
-   "--type",
-   "grid",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_bad_name",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "my doc"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_both",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "topic",
-   "--replaces",
-   "a",
-   "--extends",
-   "b"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_parent_and_replaces",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "topic",
-   "--parent",
-   "acme",
-   "--replaces",
-   "a"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_parent_bad",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "topic",
-   "--parent",
-   "Acme"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_doc_replaces_bad",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "topic",
-   "--replaces",
-   "a b"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_codemod_no_to",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "rename-widget"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_codemod_bad_to",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "rename-widget",
-   "--to",
-   "1.2"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_codemod_bad_name",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "Rename",
-   "--to",
-   "1.0.0"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_bad_name",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "Ocean"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_from_self",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--from",
-   "ocean"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_from_unknown",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--from",
-   "nope"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_from_unknown_json",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean",
-   "--from",
-   "nope",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_from_stone_author",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "sea-glass",
-   "--from",
-   "stone"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_theme_from_y2k_json",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "retro",
-   "--from",
-   "y2k",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_theme_y2k_name",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "y2k-neon",
-   "--dry-run",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_kind_unknown",
-  "args": [
-   "integration",
-   "add",
-   "widget",
-   "Foo"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_kind_unknown_json",
-  "args": [
-   "integration",
-   "add",
-   "widget",
-   "Foo",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_opt_wrong_kind_to",
-  "args": [
-   "integration",
-   "add",
-   "doc",
-   "topic",
-   "--to",
-   "1.0.0"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_opt_wrong_kind_from",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "Foo",
-   "--from",
-   "neutral",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_opt_wrong_kind_type",
-  "args": [
-   "integration",
-   "add",
-   "codemod",
-   "x",
-   "--type",
-   "page"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_empty_dir_theme",
-  "args": [
-   "integration",
-   "add",
-   "theme",
-   "ocean"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "w_plain_component",
-  "args": [
-   "integration",
-   "add",
-   "component",
-   "AcmeWidget",
-   "--json"
-  ],
-  "fixture": "plain"
- },
- {
-  "id": "w_integration_template",
-  "args": [
-   "integration",
-   "add",
-   "template",
-   "acme-dash"
-  ],
-  "fixture": "integration"
- },
- {
-  "id": "w_check_strict_next_author",
-  "args": [
-   "integration",
-   "check",
-   "--strict",
-   "--next"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_check_next_author_json",
-  "args": [
-   "integration",
-   "check",
-   "--next",
-   "--json"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_check_strict_json_app",
-  "args": [
-   "integration",
-   "check",
-   "--strict",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "w_check_subdir_author",
+  "id": "integration_check_@pm-npm",
   "args": [
    "integration",
    "check"
   ],
-  "fixture": "author",
-  "cwd": "author/src"
+  "fixture": "pm-npm",
+  "gen": true
  },
  {
-  "id": "w_verify_subdir_author",
+  "id": "integration_check_@pm-pnpm",
   "args": [
    "integration",
-   "verify"
+   "check"
   ],
-  "fixture": "author",
-  "cwd": "author/src"
+  "fixture": "pm-pnpm",
+  "gen": true
  },
  {
-  "id": "w_verify_plain_json",
+  "id": "integration_check_@pm-yarn",
   "args": [
    "integration",
-   "verify",
-   "--json"
+   "check"
   ],
-  "fixture": "plain"
+  "fixture": "pm-yarn",
+  "gen": true
  },
  {
-  "id": "w_pack_check_json_author",
+  "id": "integration_check_@pm-yarnberry",
   "args": [
    "integration",
-   "pack",
-   "--check",
-   "--json"
+   "check"
   ],
-  "fixture": "author"
+  "fixture": "pm-yarnberry",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@pm-bun",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "pm-bun",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@monorepo",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo",
+  "gen": true
+ },
+ {
+  "id": "in-monorepo.packages.web_integration_check_@monorepo",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web"
+ },
+ {
+  "id": "in-monorepo.packages.web.src_integration_check_@monorepo",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web/src"
+ },
+ {
+  "id": "in-monorepo.packages.api_integration_check_@monorepo",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/api"
+ },
+ {
+  "id": "integration_check_@monorepo-local",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo-local",
+  "gen": true
+ },
+ {
+  "id": "in-monorepo-local.apps.site_integration_check_@monorepo-local",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "monorepo-local",
+  "gen": true,
+  "cwd": "monorepo-local/apps/site"
+ },
+ {
+  "id": "integration_check_@configured",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "configured",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@configts",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "configts",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@badconfig",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "badconfig",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@syntaxconfig",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "syntaxconfig",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@unknownint",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "unknownint",
+  "gen": true
+ },
+ {
+  "id": "in-app.src_integration_check",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/src"
+ },
+ {
+  "id": "in-app.node_modules.@astryxdesign.core_integration_check",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/node_modules/@astryxdesign/core"
+ },
+ {
+  "id": "in-large.src_integration_check_@large",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "large",
+  "gen": true,
+  "cwd": "large/src"
+ },
+ {
+  "id": "in-integration.node_modules.@acme.kit_integration_check_@integration",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "integration",
+  "gen": true,
+  "cwd": "integration/node_modules/@acme/kit"
+ },
+ {
+  "id": "in-._integration_check_@empty",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "empty",
+  "gen": true,
+  "cwd": "."
  }
 ]

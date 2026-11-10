@@ -1,0 +1,12 @@
+{
+ "id": "argv_search_-hV",
+ "args": [
+  "search",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

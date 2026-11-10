@@ -9,7 +9,7 @@ use super::ui::Ui;
 use super::{ApiError, Opts};
 use crate::discovery::semver::{semver_gt, semver_gte};
 use crate::json::{Map, Value};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 fn o() -> Map<String, Value> {
@@ -805,9 +805,9 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     let prot_now = Resolver::new(cwd, Default::default()).ok();
     // loadProjectContext
     let project = load_project_context(cwd, &opts.integration);
-    let (integrations, hooks, config_path) = match &project {
-        Ok(c) => (c.integrations.clone(), c.hooks.clone(), c.config_path.clone()),
-        Err(_) => (vec![], vec![], None),
+    let (integrations, hooks, config_path, records, icon_sets) = match &project {
+        Ok(c) => (c.integrations.clone(), c.hooks.clone(), c.config_path.clone(), c.records.clone(), c.icon_sets),
+        Err(_) => (vec![], vec![], None, vec![], false),
     };
     if let Err(config_err) = project {
         let prot = prot_now.as_ref().unwrap();
@@ -879,8 +879,40 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     if !integrations.is_empty() {
         ui.log(&format!("Integrations: {}", integrations.join(", ")));
     }
-    super::integration_warn(ui, cwd);
-    if manifests.is_empty() {
+    {
+        let recs: Vec<crate::discovery::integrations::Record> = records
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                if !icon_sets {
+                    r.shift_remove("iconSets");
+                }
+                r
+            })
+            .collect();
+        let silent = ui.silent;
+        crate::discovery::integration_warnings::warn_on_integrations(&recs, silent, ui.out);
+    }
+    let integration_groups = select_integration_codemods_for(&records, &current, &target);
+    let has_integration = integration_groups.iter().any(|(_, c)| !c.is_empty());
+    for (_, list) in &integration_groups {
+        for c in list {
+            if let Some(want) = &opts.codemod {
+                if &c.id != want {
+                    continue;
+                }
+            }
+            if skip.contains(&c.id) {
+                continue;
+            }
+            if c.is_optional && opts.codemod.is_none() {
+                total_optional += 1;
+            } else {
+                total += 1;
+            }
+        }
+    }
+    if manifests.is_empty() && !has_integration {
         let reg = reconcile(ui)?;
         let ad = agent_docs_for(ui, cwd, origin, &target, apply, cli_root);
         let mut r = status_no_codemods(ui, &current, &target, ad, cbc);
@@ -898,15 +930,35 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     } else {
         ui.log("No automatic codemods to run for this version range.");
     }
+    let integ = if has_integration {
+        let staged: HashMap<PathBuf, String> = core.as_ref().map(|c| c.staged_contents.clone()).unwrap_or_default();
+        let wrote = core.as_ref().map(|c| !c.written_files.is_empty()).unwrap_or(false);
+        let prot = if wrote || !staged.is_empty() {
+            Resolver::new(cwd, staged.iter().map(|(k, v)| (k.clone(), Some(v.clone()))).collect()).unwrap_or_else(|_| Resolver::new(cwd, Default::default()).unwrap())
+        } else {
+            Resolver::new(cwd, Default::default()).unwrap()
+        };
+        ui.log("Applying integration codemods...");
+        let io = runner::IntegrationRunOptions { apply, path: &path_, codemod: opts.codemod.as_deref(), skip: &skip, silent: ui.silent, root: cwd };
+        let mut ignore = Vec::new();
+        Some(runner::run_integration_codemods(ui.out, &integration_groups, &io, prot, staged, &mut ignore))
+    } else {
+        None
+    };
     let reg = reconcile(ui)?;
     let reg_written: Vec<PathBuf> = Vec::new();
-    let changed_core: Vec<PathBuf> = core.as_ref().map(|c| c.changed_files.clone()).unwrap_or_default();
+    let mut changed_core: Vec<PathBuf> = core.as_ref().map(|c| c.changed_files.clone()).unwrap_or_default();
+    changed_core.extend(integ.as_ref().map(|c| c.changed_files.clone()).unwrap_or_default());
     let merged_files_changed = changed_core.iter().collect::<HashSet<_>>().len();
-    let merged_applied = core.as_ref().map(|c| c.total_transforms_applied).unwrap_or(0);
+    let merged_applied = core.as_ref().map(|c| c.total_transforms_applied).unwrap_or(0) + integ.as_ref().map(|c| c.total_transforms_applied).unwrap_or(0);
     let mut merged_changed = changed_core.clone();
     merged_changed.extend(reg_written.iter().cloned());
-    let merged_errors: Vec<ErrorRow> = core.as_ref().map(|c| c.errors.clone()).unwrap_or_default();
-    let initial_protected: Vec<ProtectedRow> = core.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
+    let mut merged_errors: Vec<ErrorRow> = core.as_ref().map(|c| c.errors.clone()).unwrap_or_default();
+    merged_errors.extend(integ.as_ref().map(|c| c.errors.clone()).unwrap_or_default());
+    let mut initial_protected: Vec<ProtectedRow> = core.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
+    initial_protected.extend(integ.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default());
+    let mut initial_declined: Vec<DeclinedRow> = core.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
+    initial_declined.extend(integ.as_ref().map(|c| c.declined.clone()).unwrap_or_default());
     let mut final_errors0 = merged_errors.clone();
     let prot0 = prot_now.unwrap();
     let generated_blocked = initial_protected.iter().any(|p| p.generated);
@@ -944,7 +996,7 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
                 let mut errs = merged_errors.clone();
                 errs.extend(regeneration_errors(&outcomes, &prot0, cwd));
                 errs.push(ErrorRow { file: ".".into(), codemod: "post-codemod-hook".into(), error: msg.clone() });
-                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, merged_changed.clone(), merged_applied, vec![], &outcomes, errs, core.as_ref().map(|c| c.declined.clone()).unwrap_or_default(), "ERR_CODEMOD_FAILED", cbc);
+                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, merged_changed.clone(), merged_applied, vec![], &outcomes, errs, initial_declined.clone(), "ERR_CODEMOD_FAILED", cbc);
                 attach_registry(&mut stopped, reg);
                 return Err(fail_with_receipt(msg, "ERR_CODEMOD_FAILED", stopped));
             }
@@ -963,7 +1015,7 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
         }
     }
     let mut remaining_protected = initial_protected.clone();
-    let mut remaining_declined: Vec<DeclinedRow> = core.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
+    let mut remaining_declined: Vec<DeclinedRow> = initial_declined.clone();
     let mut outcomes = outcomes;
     let mut final_prot = prot0;
     if apply && should_run_hooks && hook_failure.is_none() {
@@ -982,7 +1034,7 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
                 errs.push(ErrorRow { file: ".".into(), codemod: "file-protection".into(), error: e.message.clone() });
                 let mut ch = merged_changed.clone();
                 ch.extend(hook_modified.iter().cloned());
-                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, ch, merged_applied, prows, &outcomes, errs, core.as_ref().map(|c| c.declined.clone()).unwrap_or_default(), "ERR_CODEMOD_PROTECTION_SOURCE", cbc);
+                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, ch, merged_applied, prows, &outcomes, errs, initial_declined.clone(), "ERR_CODEMOD_PROTECTION_SOURCE", cbc);
                 attach_registry(&mut stopped, reg);
                 return Err(fail_with_receipt(e.message, "ERR_CODEMOD_PROTECTION_SOURCE", stopped));
             }
@@ -994,17 +1046,34 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
             RunOutcome::Done(r) => Some(r),
             RunOutcome::SourceMissing => None,
         };
+        let integ_check = if has_integration {
+            let staged: HashMap<PathBuf, String> = checked.as_ref().map(|c| c.staged_contents.clone()).unwrap_or_default();
+            let prot = if !staged.is_empty() {
+                Resolver::new(cwd, staged.iter().map(|(k, v)| (k.clone(), Some(v.clone()))).collect()).unwrap_or_else(|_| Resolver::new(cwd, Default::default()).unwrap())
+            } else {
+                Resolver::new(cwd, Default::default()).unwrap()
+            };
+            let io = runner::IntegrationRunOptions { apply: false, path: &path_, codemod: opts.codemod.as_deref(), skip: &skip, silent: true, root: cwd };
+            let mut ignore = Vec::new();
+            Some(runner::run_integration_codemods(ui.out, &integration_groups, &io, prot, staged, &mut ignore))
+        } else {
+            None
+        };
         let mut rechecked: Vec<ProtectedRow> = checked.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
-        let rechanged: Vec<String> = checked.as_ref().map(|c| c.changed_files.iter().map(|f| relative(cwd, f)).collect()).unwrap_or_default();
+        rechecked.extend(integ_check.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default());
+        let mut rechanged: Vec<String> = checked.as_ref().map(|c| c.changed_files.iter().map(|f| relative(cwd, f)).collect()).unwrap_or_default();
+        rechanged.extend(integ_check.as_ref().map(|c| c.changed_files.iter().map(|f| relative(cwd, f)).collect::<Vec<_>>()).unwrap_or_default());
         for f in rechanged {
             rechecked.extend(initial_protected.iter().filter(|p| p.file == f).cloned());
         }
         remaining_protected = rechecked;
         remaining_declined = checked.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
+        remaining_declined.extend(integ_check.as_ref().map(|c| c.declined.clone()).unwrap_or_default());
         outcomes = re_outcomes;
         final_prot = refreshed;
         final_errors0 = merged_errors.clone();
         final_errors0.extend(checked.as_ref().map(|c| c.errors.clone()).unwrap_or_default());
+        final_errors0.extend(integ_check.as_ref().map(|c| c.errors.clone()).unwrap_or_default());
     }
     merged_changed.extend(hook_modified.iter().cloned());
     let mut prot_rows = remaining_protected.clone();
@@ -1158,6 +1227,8 @@ fn stopped_receipt(
 
 pub struct ProjectContext {
     pub integrations: Vec<String>,
+    pub records: Vec<crate::discovery::integrations::Record>,
+    pub icon_sets: bool,
     pub hooks: Vec<Value>,
     pub config_path: Option<String>,
 }
@@ -1166,10 +1237,11 @@ pub struct ProjectContext {
 /// the receipt) and the postCodemod hooks, or the config load error.
 fn load_project_context(cwd: &Path, extra_specs: &[String]) -> Result<ProjectContext, String> {
     use crate::discovery::integrations as integ;
-    let project = crate::discovery::project::Project::load_with(&s(cwd), true)?;
+    let project = crate::discovery::project::Project::load_opts(&s(cwd), true, true)?;
     let hooks = project.config.get("hooks").and_then(|h| h.get("postCodemod")).and_then(|v| v.as_array()).cloned().unwrap_or_default();
     let configured: HashSet<String> = project.integrations.iter().cloned().collect();
     let mut names: Vec<String> = Vec::new();
+    let mut records: Vec<integ::Record> = Vec::new();
     let name_of = |r: &integ::Record| integ::s(r, "name").filter(|n| !n.is_empty()).or_else(|| integ::s(r, "__spec")).unwrap_or("").to_string();
     for r in &project.loaded_integrations {
         let autolinked = integ::has(r, "__autolinked");
@@ -1177,6 +1249,7 @@ fn load_project_context(cwd: &Path, extra_specs: &[String]) -> Result<ProjectCon
         // upgrade's codemod rule: autolinked and local packages are not listed.
         let keep = !autolinked && configured.contains(&spec);
         if keep && !integ::has(r, "__providerConflict") {
+            records.push(r.clone());
             let n = name_of(r);
             if !names.contains(&n) {
                 names.push(n);
@@ -1188,11 +1261,35 @@ fn load_project_context(cwd: &Path, extra_specs: &[String]) -> Result<ProjectCon
     if !extras.is_empty() {
         let loaded = integ::load_integrations(&extras, &s(cwd), false)?;
         for r in &loaded {
+            records.push(r.clone());
             let n = name_of(r);
             if !names.contains(&n) {
                 names.push(n);
             }
         }
     }
-    Ok(ProjectContext { integrations: names, hooks, config_path: project.config_path.clone() })
+    let icon_sets = project.config.get("experimental").and_then(|e| e.get("iconSet")).map(|v| !(v.is_null() || *v == Value::Bool(false) || v.get("__js").is_some() && v.get("__js").and_then(|x| x.as_str()) == Some("undefined"))).unwrap_or(false);
+    Ok(ProjectContext { integrations: names, records, icon_sets, hooks, config_path: project.config_path.clone() })
+}
+
+
+/// `selectIntegrationCodemodsFor(integrations, from, to)`: an integration
+/// whose codemods fail to load is skipped.
+fn select_integration_codemods_for(records: &[crate::discovery::integrations::Record], from: &str, to: &str) -> Vec<(String, Vec<super::integration_discovery::IntegrationCodemod>)> {
+    use super::integration_discovery as idisc;
+    let mut by: Vec<(String, Vec<idisc::IntegrationCodemod>)> = Vec::new();
+    for r in records {
+        if crate::discovery::integrations::s(r, "codemods").map(|c| c.is_empty()).unwrap_or(true) {
+            continue;
+        }
+        if let Ok(groups) = idisc::discover_integration_codemods(std::slice::from_ref(r)) {
+            for (v, list) in groups {
+                match by.iter_mut().find(|(x, _)| *x == v) {
+                    Some((_, l)) => l.extend(list),
+                    None => by.push((v, list)),
+                }
+            }
+        }
+    }
+    idisc::select_integration_codemods(&by, from, to)
 }

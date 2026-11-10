@@ -1,0 +1,19 @@
+{
+ "id": "w_layout-scaffold_--index_@docsint",
+ "args": [
+  "docs",
+  "layout/scaffold",
+  "--index"
+ ],
+ "fixture": "docsint",
+ "stdout": "Scaffold\nPick the shell, budget each region, and choose navigation, before any content exists.\n\npackage: @astryxdesign/cli\n\nscaffold    Scaffold - Pick the shell, budget each region, and choose navigation, before any content exists. Shell and\n            Navigation cover each step; these rules hold for both.\nshell       Shell - Pick the shell and budget its regions before any content exists. Structural widths are the one place\n            raw px belongs; everything inside them uses the spacing scale.\nnavigation  Navigation - When the frame leaves navigation open, default to SideNav: it absorbs destinations you have not\n            planned yet. App type and destination count are guiding indicators, not determining rules.\nacme-shell  Acme shell (@acme/docs) - Use the Acme shell.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs layout/scaffold <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs layout/scaffold --full\nUp: npx @astryxdesign/cli@0.7.12 docs layout\nNext: npx @astryxdesign/cli@0.7.12 docs layout/structure\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

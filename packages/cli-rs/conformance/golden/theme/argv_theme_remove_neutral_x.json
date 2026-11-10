@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_remove_neutral_x",
+ "args": [
+  "theme",
+  "remove",
+  "neutral",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme \"neutral\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add neutral` first.\n",
+ "exit": 1,
+ "files": []
+}

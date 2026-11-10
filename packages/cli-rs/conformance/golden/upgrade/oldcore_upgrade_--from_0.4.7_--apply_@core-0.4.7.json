@@ -1,0 +1,20 @@
+{
+ "id": "oldcore_upgrade_--from_0.4.7_--apply_@core-0.4.7",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.4.7",
+  "--apply"
+ ],
+ "fixture": "core-0.4.7",
+ "stdout": "\nUpgrade\nFrom version: 0.4.7\nInstalled target: 0.4.7 (@astryxdesign/core)\n[ok] Already up to date - no codemods to run.\nUse --force to run codemods anyway.\nDone\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npm install @astryxdesign/cli@0.4.7`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.4.7\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

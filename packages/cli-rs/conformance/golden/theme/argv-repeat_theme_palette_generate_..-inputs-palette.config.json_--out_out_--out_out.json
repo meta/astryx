@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat_theme_palette_generate_..-inputs-palette.config.json_--out_out_--out_out",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--out",
+  "out",
+  "--out",
+  "out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid palette config path \"../inputs/palette.config.json\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

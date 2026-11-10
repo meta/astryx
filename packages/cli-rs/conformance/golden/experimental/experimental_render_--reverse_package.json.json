@@ -1,0 +1,14 @@
+{
+ "id": "experimental_render_--reverse_package.json",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "package.json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --reverse reads a rendered .html file; package.json is not one\n\n  npx @astryxdesign/cli@0.7.12 experimental render package.json  (render the page instead)\n",
+ "exit": 1,
+ "files": []
+}

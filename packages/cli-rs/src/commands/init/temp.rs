@@ -112,32 +112,12 @@ pub fn find_core_dir(start: &str) -> Option<String> {
     crate::discovery::paths::find_core_dir(start)
 }
 
-/// Whether the folder's ignore files exclude `rel` (outside a repository).
+/// Whether the folder's ignore files exclude `rel` (outside a repository),
+/// read with the working-tree ignore reader; None when one cannot be read.
 pub fn ignored_here(target: &str, rel: &str) -> Option<bool> {
-    let gi = p::join2(target, ".gitignore");
-    let Ok(text) = std::fs::read_to_string(&gi) else { return Some(false) };
-    let mut ignored = false;
-    for line in text.lines() {
-        let l = line.trim_end();
-        if l.is_empty() || l.starts_with('#') {
-            continue;
-        }
-        let (neg, pat) = match l.strip_prefix('!') {
-            Some(x) => (true, x),
-            None => (false, l),
-        };
-        let pat = pat.trim_start_matches('/');
-        let dir_pat = pat.trim_end_matches('/');
-        let hit = pat == rel
-            || (!pat.contains('/') && p::basename(rel) == pat)
-            || (rel.starts_with(&format!("{dir_pat}/")))
-            || pat == "*"
-            || (pat.starts_with("*.") && rel.ends_with(&pat[1..]));
-        if hit {
-            ignored = !neg;
-        }
-    }
-    Some(ignored)
+    let resolver = crate::discovery::file_protection::FileProtectionResolver::new(target, &[]).ok()?;
+    let found = resolver.classify(&p::join2(target, rel)).ok()?;
+    Some(found.iter().any(|f| f.reason == "ignored"))
 }
 
 /// True when `cwd` is outside any project.

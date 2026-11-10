@@ -1,0 +1,13 @@
+{
+ "id": "argv_swizzle_--json_--help",
+ "args": [
+  "swizzle",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx swizzle\",\n    \"description\": \"Copy component source for customization\",\n    \"usage\": \"astryx swizzle [options] [component]\",\n    \"options\": [\n      {\n        \"flags\": \"--output <dir>\",\n        \"description\": \"Output directory\",\n        \"defaultValue\": \"./components/astryx\"\n      },\n      {\n        \"flags\": \"--package <pkg>\",\n        \"description\": \"Scope to a specific owning package. Use @astryxdesign/core to copy an original replaced by an integration component\"\n      },\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List the swizzlable Core components, including any that an integration component replaces\"\n      },\n      {\n        \"flags\": \"-f, --overwrite\",\n        \"description\": \"Replace the component's existing files. Without it, existing files fail the command with ERR_FILE_EXISTS and nothing is written. A helper an earlier swizzle wrote is reused when it is the same and is never replaced by a copy that carries it: a different one stays, and this copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper counts it as one of that component's own files. A changed private attribute owner module, or a style module it imports, fails the command without --overwrite and is replaced with it\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

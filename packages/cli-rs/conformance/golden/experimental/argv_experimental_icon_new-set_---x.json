@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_new-set_---x",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

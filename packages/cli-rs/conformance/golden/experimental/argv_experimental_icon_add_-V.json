@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_add_-V",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

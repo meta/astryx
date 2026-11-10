@@ -120,6 +120,7 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
         fn_texts: vec![],
         side_files: vec![],
     };
+    let paths = super::ts_paths::read_paths_in(root).unwrap_or_default();
     let stubs = stub_dir();
     let empty = stubs.join("empty.mjs");
     let _ = std::fs::write(&empty, "export default {};\n");
@@ -146,16 +147,40 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
         }
         let specs = match imports_of(&source, &file) {
             Ok(s) => s,
-            Err(m) => return Err(rerr("ERR_RENDER_COMPILE", format!("The page does not compile: {m}"))),
+            Err(m) => {
+                let ts = [".ts", ".tsx", ".mts", ".cts"].iter().any(|e| file.ends_with(e));
+                return Err(match crate::js::syntax::babel_error(&source, ts, true) {
+                    Some((msg, line, col)) => rerr("ERR_RENDER_COMPILE", format!("The page does not compile (line {line}): {msg} ({line}:{col})")),
+                    None => rerr("ERR_RENDER_COMPILE", format!("The page does not compile: {m}")),
+                });
+            }
         };
         if file != entry || true {
             super::texts::collect(&source, &file, &mut p.texts, &mut p.fn_texts);
         }
         let dir = np::dirname(&file);
+        let mut children: Vec<String> = vec![];
         for spec in specs {
-            let raw = spec.split('?').next().unwrap_or("").to_string();
+            let written = spec.split('?').next().unwrap_or("").to_string();
+            let aliased = super::ts_paths::resolve_path(&paths, &written);
+            let lower_w = written.to_lowercase();
+            let content_import = [".css", ".scss", ".sass", ".less", ".json"].iter().any(|e| lower_w.ends_with(e)) || is_asset_path(&written);
+            let raw = match &aliased {
+                Some(f) if content_import => f.clone(),
+                _ => written.clone(),
+            };
             let relative = raw.starts_with('.') || raw.starts_with('/');
-            if !relative {
+            if !content_import {
+                if let Some(f) = &aliased {
+                    // A module through a project alias: the file it places.
+                    add_alias(&mut p, &spec, PathBuf::from(f));
+                    if is_local(f, entry, root) {
+                        children.push(f.clone());
+                    }
+                    continue;
+                }
+            }
+            if !relative && aliased.is_none() {
                 let pkg = package_of(&raw);
                 if !p.packages.contains(&pkg) {
                     p.packages.push(pkg.clone());
@@ -173,6 +198,9 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
                 p.skipped_css.push(raw.clone());
                 add_alias(&mut p, &spec, empty.clone());
                 continue;
+            }
+            if lower.ends_with(".css") && raw == written && super::ts_paths::names_alias(&paths, &raw) && resolve(&raw, Path::new(&file), Mode::Cjs).is_err() {
+                return Err(rerr("ERR_FILE_NOT_FOUND", format!("{} imports {spec} through a path alias that does not lead to a file.", np::basename(&file))));
             }
             if lower.ends_with(".css") {
                 if relative {
@@ -211,12 +239,16 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
             if relative {
                 if let Some(f) = resolve_file(&raw, &file) {
                     if is_local(&f, entry, root) {
-                        queue.push(f);
+                        children.push(f);
                     }
                 }
                 continue;
             }
             runtime_specs.push(raw.clone());
+        }
+        // Depth first, in import order: the order the loader runs them.
+        for c in children.into_iter().rev() {
+            queue.push(c);
         }
     }
     // Bare specifiers: React, React DOM and StyleX from the set when there is
@@ -265,7 +297,7 @@ export async function run(entry, reactSpec, serverSpec) {
 }
 "#;
 
-fn classify(message: &str, name: &str) -> RenderError {
+fn classify(message: &str, name: &str, paths: &[super::ts_paths::PathPattern]) -> RenderError {
     let message = regress::Regex::new(r"^\/[^:\n]*: ").unwrap().find(message).map(|m| message[m.end()..].to_string()).unwrap_or_else(|| message.to_string());
     if message.contains("suspended while responding to synchronous input") || message.contains("A component suspended") {
         return rerr("ERR_RENDER_FAILED", "The page waits for data while rendering (a component suspended), and a static render cannot wait. Load the data first, or render a version of the page that has it.");
@@ -275,6 +307,12 @@ fn classify(message: &str, name: &str) -> RenderError {
         .find(&message)
         .map(|m| message[m.group(1).unwrap()].to_string());
     if let Some(spec) = missing {
+        if super::ts_paths::names_alias(paths, &spec) || regress::Regex::new(r"^[@~#]\/|^#").unwrap().find(&spec).is_some() {
+            return rerr(
+                "ERR_FILE_NOT_FOUND",
+                format!("The page imports {spec} through a path alias that does not lead to a file. Check `compilerOptions.paths` in the project's tsconfig.json, or import it by a relative path."),
+            );
+        }
         if !spec.starts_with('.') && !spec.starts_with('/') {
             let pkg = package_of(&spec);
             return RenderError {
@@ -303,6 +341,7 @@ fn classify(message: &str, name: &str) -> RenderError {
 pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: u64) -> Result<WorkerOut, RenderError> {
     let served = served.filter(|_| crate::discovery::paths::find_node_modules_package(&np::dirname(entry), "@astryxdesign/core").is_none());
     let plan = plan(entry, root, served)?;
+    let paths = super::ts_paths::read_paths_in(root).unwrap_or_default();
     let stubs = stub_dir();
     let glue = stubs.join("glue.mjs");
     std::fs::write(&glue, GLUE).map_err(|e| rerr("ERR_RENDER_FAILED", format!("The page could not be rendered: {e}")))?;
@@ -331,6 +370,9 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
     let loads = crate::js::record_loads(false);
     let console = crate::js::capture_console(false);
     let _ = std::fs::remove_dir_all(&stubs);
+    if std::env::var("ASTRYX_RS_RENDER_DEBUG").is_ok() {
+        eprintln!("render debug: {r:?}");
+    }
     let v = match r {
         Ok(r) => r.value,
         Err(crate::js::CallError::Timeout { .. }) => {
@@ -339,8 +381,8 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
                 format!("The page did not finish rendering within {} seconds, so it was stopped. Look for a loop that never ends or a promise the page waits on.", timeout_ms / 1000),
             ))
         }
-        Err(crate::js::CallError::Thrown { error, .. }) => return Err(classify(&error.message, &error.name)),
-        Err(crate::js::CallError::Load(e)) => return Err(classify(&e.message, &e.name)),
+        Err(crate::js::CallError::Thrown { error, .. }) => return Err(classify(&error.message, &error.name, &paths)),
+        Err(crate::js::CallError::Load(e)) => return Err(classify(&e.message, &e.name, &paths)),
         Err(e) => return Err(rerr("ERR_RENDER_FAILED", format!("The page could not be rendered: {e:?}"))),
     };
     let logs: Vec<(String, String)> = console
@@ -378,7 +420,7 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
         ));
     }
     if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
-        return Err(classify(err, v.get("name").and_then(|n| n.as_str()).unwrap_or("")));
+        return Err(classify(err, v.get("name").and_then(|n| n.as_str()).unwrap_or(""), &paths));
     }
     let mut from_set = plan.from_set.clone();
     // The render always runs on React; StyleX only when the page uses it.

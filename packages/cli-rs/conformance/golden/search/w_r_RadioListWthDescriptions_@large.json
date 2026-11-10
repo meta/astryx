@@ -1,0 +1,13 @@
+{
+ "id": "w_r_RadioListWthDescriptions_@large",
+ "args": [
+  "search",
+  "RadioListWthDescriptions",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"RadioListWthDescriptions\",\n    \"matchCount\": 1,\n    \"results\": [\n      {\n        \"domain\": \"template\",\n        \"name\": \"RadioListWithDescriptions\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 80,\n        \"reason\": \"similar name (distance 1)\",\n        \"description\": \"Radio list with descriptions on the group and each item.\",\n        \"displayName\": \"RadioList — With Descriptions\",\n        \"kind\": \"block\",\n        \"command\": \"astryx template RadioListWithDescriptions --type block\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

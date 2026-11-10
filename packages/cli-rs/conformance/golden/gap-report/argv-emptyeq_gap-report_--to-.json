@@ -1,0 +1,12 @@
+{
+ "id": "argv-emptyeq_gap-report_--to-",
+ "args": [
+  "gap-report",
+  "--to="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv_doctor_integration_docs_--bogus_-h",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "--bogus",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx doctor integration docs [options] [package]\n\nCheck an integration's docs: the docs tree they add, every link, and overlaps with Core topics\n\nArguments:\n  package     Installed integration package name; omit to check the package in the current directory.\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  all Core overlaps are explicitly declared or no overlap exists\n  1  an overlap is accidental, a doc is invalid, a namespace or placement fails, or a reference block cannot include what it names. A link that names no doc is a warning, and does not change the exit code\n\nExamples:\n  # Check the local integration\n  npx @astryxdesign/cli@0.7.12 doctor integration docs\n  # Check an installed integration\n  npx @astryxdesign/cli@0.7.12 doctor integration docs @acme/widgets --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor-integration-docs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

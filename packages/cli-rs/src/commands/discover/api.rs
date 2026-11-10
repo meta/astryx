@@ -71,7 +71,7 @@ fn split_target(query: &str) -> Target {
     Target { scoped, name, version, item: rest }
 }
 
-fn check_options(o: &Options, kinds: &[&str]) -> DResult<()> {
+pub fn check_options(o: &Options, kinds: &[&str]) -> DResult<()> {
     if let Some(t) = &o.type_ {
         if !kinds.contains(&t.as_str()) {
             return Err(DiscoverError::new(
@@ -361,12 +361,7 @@ impl<'a> Ctx<'a> {
 
 /// `discover(query, options)`.
 pub fn discover(env: &Env, query: Option<&str>, options: &Options) -> DResult<Value> {
-    let kinds = read_kinds(env);
-    let kinds_for_check: Vec<&str> = match &options.type_ {
-        Some(t) if !STABLE_KINDS.contains(&t.as_str()) => kinds.clone(),
-        _ => STABLE_KINDS.to_vec(),
-    };
-    check_options(options, &kinds_for_check)?;
+    check_options(options, &kinds_for_check(Some(env), options))?;
     let only = if options.installed {
         Some("installed")
     } else if options.available {
@@ -1003,6 +998,15 @@ fn search(
         ));
     }
     Err(DiscoverError::new(format!("\"{query}\" not found in any package"), vec![], "ERR_NOT_FOUND"))
+}
+
+/// The kinds `--type` may name: the stable kinds, or, for an experimental
+/// kind, what the project reads (stable when it cannot be loaded).
+pub fn kinds_for_check(env: Option<&Env>, options: &Options) -> Vec<&'static str> {
+    match (&options.type_, env) {
+        (Some(t), Some(env)) if !STABLE_KINDS.contains(&t.as_str()) => read_kinds(env),
+        _ => STABLE_KINDS.to_vec(),
+    }
 }
 
 /// `answersQueries(project)`.

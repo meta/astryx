@@ -1,0 +1,17 @@
+{
+ "id": "tb_family_badkey",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/ocean-midnight.mjs",
+  "--family-key",
+  "Bad_Key"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Family key must be an exact lower-kebab filename stem (for example, ocean-family).\n",
+ "exit": 1,
+ "files": []
+}

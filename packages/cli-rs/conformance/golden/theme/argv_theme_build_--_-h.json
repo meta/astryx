@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_--_-h",
+ "args": [
+  "theme",
+  "build",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/-h\n",
+ "exit": 1,
+ "files": []
+}

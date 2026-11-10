@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_upgrade_--from_-1",
+ "args": [
+  "upgrade",
+  "--from",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Invalid --from value: \"-1\". Expected a semver string like 0.0.5.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_map_random_--remove_@icons-unselected",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "random",
+  "--remove"
+ ],
+ "fixture": "icons-unselected",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_map_--_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon id to map it to, or pass --remove\n",
+ "exit": 1,
+ "files": []
+}

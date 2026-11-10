@@ -1,0 +1,14 @@
+{
+ "id": "upgrade_--from_0.0.1_--apply_@monorepo",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--apply"
+ ],
+ "fixture": "monorepo",
+ "stdout": "\nUpgrade\nFrom version: 0.0.1\nInstalled target: 0.7.12 (@astryxdesign/core)\n!! Source path not found: /tmp/astryx-conformance/work/monorepo/src\n74 codemods to run\nUpgrade complete, but src does not exist, so no source files were scanned. Pass --path <your source directory> if your code does not live in ./src.\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `pnpm dlx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n",
+ "exit": 0,
+ "files": []
+}

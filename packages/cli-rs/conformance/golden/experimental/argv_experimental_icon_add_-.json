@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_add_-",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"ü中文\".\n",
+ "exit": 1,
+ "files": []
+}

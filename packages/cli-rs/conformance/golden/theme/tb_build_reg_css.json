@@ -1,0 +1,13 @@
+{
+ "id": "tb_build_reg_css",
+ "args": [
+  "theme",
+  "build",
+  "reg/css.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/themes/reg/css.mjs: Unknown file extension \".css\" for /tmp/astryx-conformance/work/themes/reg/x.css\nMake sure all imports in the theme file are resolvable.\n",
+ "exit": 1,
+ "files": []
+}

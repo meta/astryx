@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_experimental_render_--reverse-yes",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--reverse=yes'\n",
+ "exit": 1,
+ "files": []
+}

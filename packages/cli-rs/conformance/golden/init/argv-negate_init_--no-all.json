@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_init_--no-all",
+ "args": [
+  "init",
+  "--no-all"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-all'\n(Did you mean --all?)\n",
+ "exit": 1,
+ "files": []
+}

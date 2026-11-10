@@ -1,0 +1,16 @@
+{
+ "id": "gap-report_Button_--category_missing_variant_--reason_x_@unknownint",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x"
+ ],
+ "fixture": "unknownint",
+ "stdout": "Gap report failed\n\nstatus:          failed\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: integration\nhandler:     @acme/missing\nstatus:      failed\nmessage:     Integration failed to load, so it could not receive this report: Could not find installed integration package \"@acme/missing\" at /tmp/astryx-conformance/work/unknownint/node_modules/@acme/missing/package.json. Install it first.. Fix the package or remove it from integrations in astryx.config, then rerun.\n",
+ "stderr": "gap-report: delivery to @acme/missing failed: Integration failed to load, so it could not receive this report: Could not find installed integration package \"@acme/missing\" at /tmp/astryx-conformance/work/unknownint/node_modules/@acme/missing/package.json. Install it first.. Fix the package or remove it from integrations in astryx.config, then rerun.\n",
+ "exit": 1,
+ "files": []
+}

@@ -201,6 +201,8 @@ pub struct Docs {
     /// `(package, message)` for each package whose docs did not load.
     issues: Vec<(String, String)>,
     not_loaded_suffix: String,
+    /// Built at run time from a catalog the integrations changed.
+    runtime: bool,
 }
 
 enum Owner<'a> {
@@ -213,7 +215,7 @@ impl Docs {
         let variant = Variant::get(pm);
         let tree = Tree::new(variant.nodes());
         let topics = variant.topics().into_iter().map(|v| Topic { v }).collect();
-        Docs { variant, tree, topics, extra_reads: HashMap::new(), issues: vec![], not_loaded_suffix: String::new() }
+        Docs { variant, tree, topics, extra_reads: HashMap::new(), issues: vec![], not_loaded_suffix: String::new(), runtime: false }
     }
 
     /// The project's docs: the CLI's own, plus whatever its integrations
@@ -221,7 +223,7 @@ impl Docs {
     pub fn load_project(pm: &str, cwd: &str) -> Docs {
         let Some(catalog) = super::runtime::discover(cwd) else { return Self::load(pm) };
         let variant = Variant::get(pm);
-        let built = super::runtime::build(&variant, catalog);
+        let built = super::runtime::build(&variant, catalog, cwd);
         Docs {
             tree: Tree::new(built.nodes),
             topics: built.topics.into_iter().map(|v| Topic { v }).collect(),
@@ -229,13 +231,34 @@ impl Docs {
             extra_reads: built.reads,
             issues: built.issues,
             not_loaded_suffix: String::new(),
+            runtime: true,
         }
     }
 
     fn read(&self, key: &str) -> Option<Value> {
         match self.extra_reads.get(key) {
             Some(v) => Some(v.clone()),
-            None => self.variant.read(key),
+            None => {
+                let mut v = self.variant.read(key)?;
+                if self.runtime {
+                    // The CLI's own topic, in a tree the integrations changed:
+                    // its moves come from this tree.
+                    let mut parts = key.splitn(2, ':');
+                    let kind = parts.next().unwrap_or("");
+                    let rest = parts.next().unwrap_or("");
+                    let name = &rest[..rest.rfind(':').unwrap_or(rest.len())];
+                    let placed = self.tree.get(name).filter(|n| if kind == "guide" { n.kind() == "generic" } else { n.flat_topic() == Some(name) });
+                    if let Some(node) = placed {
+                        let links = Value::Object(self.place_links(node));
+                        for k in ["detail", "index"] {
+                            if let Some(m) = v.get_mut(k).and_then(|x| x.as_object_mut()) {
+                                m.insert("links".into(), links.clone());
+                            }
+                        }
+                    }
+                }
+                Some(v)
+            }
         }
     }
 
@@ -270,7 +293,8 @@ impl Docs {
     }
 
     fn guide_entry(n: &Node) -> Entry {
-        Entry { name: n.route().to_string(), package: n.provider().to_string(), tree: true }
+        let package = n.v.get("replacementPackage").and_then(|p| p.as_str()).unwrap_or(n.provider());
+        Entry { name: n.route().to_string(), package: package.to_string(), tree: true }
     }
 
     fn name_owner(&self, name: &str) -> Option<Owner<'_>> {
@@ -559,7 +583,16 @@ impl Docs {
         let route = child.route();
         m.insert("route".into(), Value::from(route));
         m.insert("name".into(), Value::from(&route[route.rfind('/').map(|i| i + 1).unwrap_or(0)..]));
-        m.insert("package".into(), Value::from(child.provider()));
+        match child.v.get("replacementPackage").and_then(|p| p.as_str()) {
+            Some(rp) => {
+                m.insert("package".into(), Value::from(rp));
+                m.insert("replaces".into(), Value::from(route));
+                m.insert("replacedPackage".into(), child.v.get("replacedPackage").cloned().unwrap_or(Value::from(child.provider())));
+            }
+            None => {
+                m.insert("package".into(), Value::from(child.provider()));
+            }
+        }
         m.insert("kind".into(), Value::from(child.kind()));
         m.insert("title".into(), child.v.get("title").cloned().unwrap_or(Value::Null));
         m.insert("summary".into(), child.v.get("summary").cloned().unwrap_or(Value::Null));

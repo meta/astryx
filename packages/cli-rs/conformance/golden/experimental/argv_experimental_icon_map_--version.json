@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_map_--version",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

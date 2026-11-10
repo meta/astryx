@@ -1,0 +1,19 @@
+{
+ "id": "env-ci-1_template_blank_src-p.tsx",
+ "args": [
+  "template",
+  "blank",
+  "src/p.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "Copied template to src/p.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/src/p.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Layout, LayoutContent} from '@astryxdesign/core';\nimport {Text} from '@astryxdesign/core';\n\nexport default function Page() {\n  return (\n    <Layout\n      content={\n        <LayoutContent>\n          <Text type=\"large\">New Page</Text>\n        </LayoutContent>\n      }\n    />\n  );\n}\n"
+  }
+ ]
+}

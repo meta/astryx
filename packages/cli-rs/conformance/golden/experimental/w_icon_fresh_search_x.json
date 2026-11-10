@@ -1,0 +1,14 @@
+{
+ "id": "w_icon_fresh_search_x",
+ "args": [
+  "experimental",
+  "icon",
+  "search",
+  "close"
+ ],
+ "fixture": "iconfresh",
+ "stdout": "No icons match \"search close\".\n\nSee the installed sets: npx @astryxdesign/cli@0.7.12 experimental icon --list\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

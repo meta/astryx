@@ -1,0 +1,15 @@
+{
+ "id": "fuzz_component_ChartAxis_-TopNavHeading_--category_Selector-a_5e8a6f",
+ "args": [
+  "component",
+  "ChartAxis",
+  " TopNavHeading",
+  "--category",
+  "Selector (@a"
+ ],
+ "fixture": "app",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nChartAxis\n\nselector: ChartAxis\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"ChartAxis\"\n\n TopNavHeading\n\nselector:  TopNavHeading\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \" TopNavHeading\"\n\nSuggestions\n\nname:   TopNavHeading\nreason: same name\n\nname:   TopNav\nreason: the family this part belongs to\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

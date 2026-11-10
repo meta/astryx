@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_copy_under_file",
+ "args": [
+  "template",
+  "login",
+  "package.json/x.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Could not write package.json/x.tsx: EEXIST. Nothing was written.\n",
+ "exit": 1,
+ "files": []
+}

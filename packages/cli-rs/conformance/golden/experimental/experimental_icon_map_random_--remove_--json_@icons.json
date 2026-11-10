@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_map_random_--remove_--json_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "random",
+  "--remove",
+  "--json"
+ ],
+ "fixture": "icons",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"This package ships no icon set. Add one first.\",\n  \"code\": \"ERR_NOT_FOUND\",\n  \"suggestions\": [\n    {\n      \"name\": \"astryx experimental icon new-set <name>\",\n      \"reason\": \"add an icon set\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

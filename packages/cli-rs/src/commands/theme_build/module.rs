@@ -104,6 +104,16 @@ pub fn slot_values(theme: Option<&Value>) -> Option<&Value> {
     component_icons(theme?)
 }
 
+/// `generateBuiltModule`'s `moduleOptions` (family members set them).
+#[derive(Default)]
+pub struct ModuleOpts {
+    pub theme_binding: Option<String>,
+    pub icons_expression: Option<String>,
+    pub indicators_expression: Option<String>,
+    pub artifact_base: Option<String>,
+    pub hide_icons_export: bool,
+}
+
 /// `generateBuiltModule` for a standalone build.
 pub fn built_module(
     theme: &Value,
@@ -112,12 +122,24 @@ pub fn built_module(
     icons_specifier: Option<&str>,
     component_icon_info: Option<&IconImports>,
 ) -> Result<String, ApiError> {
+    built_module_with(theme, cli_invocation, icon_info, icons_specifier, component_icon_info, &ModuleOpts::default())
+}
+
+pub fn built_module_with(
+    theme: &Value,
+    cli_invocation: &str,
+    icon_info: Option<&IconImports>,
+    icons_specifier: Option<&str>,
+    component_icon_info: Option<&IconImports>,
+    mo: &ModuleOpts,
+) -> Result<String, ApiError> {
     let name = match theme.get("name") {
         Some(Value::String(s)) => s.clone(),
         Some(v) => crate::cli::format::js_string(v),
         None => String::new(),
     };
-    let binding = format!("{}Theme", to_identifier(&name));
+    let binding = mo.theme_binding.clone().unwrap_or_else(|| format!("{}Theme", to_identifier(&name)));
+    let artifact = mo.artifact_base.clone().unwrap_or_else(|| name.clone());
     let mut icon_import = String::new();
     if let Some(info) = icon_info {
         for (path, imported, local) in &info.imports {
@@ -131,7 +153,7 @@ pub fn built_module(
         Some(i) if i.expression != i.export_name => format!("const {} = {};\n", i.export_name, i.expression),
         _ => String::new(),
     };
-    let icons_expr = icon_info.map(|i| i.export_name.clone());
+    let icons_expr = mo.icons_expression.clone().or_else(|| icon_info.map(|i| i.export_name.clone()));
     let icon_nodes = match &icons_expr {
         Some(_) if has_function_entry(icon_entries(Some(theme))) => Some(format!("{binding}IconNodes")),
         _ => None,
@@ -145,7 +167,8 @@ pub fn built_module(
         (None, Some(e)) => format!("  icons: {e},"),
         _ => String::new(),
     };
-    let re_export = match icon_info {
+    let indicators_field = mo.indicators_expression.as_ref().map(|e| format!("\n  indicators: {e},")).unwrap_or_default();
+    let re_export = match icon_info.filter(|_| !mo.hide_icons_export) {
         Some(i) => match &icon_nodes {
             Some(n) => format!("\nexport {{ {n} as {} }};\n", i.export_name),
             None => format!("\nexport {{ {} }};\n", i.export_name),
@@ -221,7 +244,7 @@ pub fn built_module(
         fields.push_str(&serialize_field("componentIcons", slot_values, true));
     }
     Ok(format!(
-        "{icon_import}{prelude}{icon_decl}{icon_nodes_decl}/**\n * {name} theme \u{2014} built by `{cli_invocation} theme build`\n * Import the CSS file alongside this module:\n *\n *   import {{ {binding} }} from './{name}';\n *   import './{name}.css';\n */\nexport const {binding} = {{\n  name: '{name}',\n  __built: true,\n  tokens: {tokens_str},\n{fields}{icons_field}\n}};\n{re_export}"
+        "{icon_import}{prelude}{icon_decl}{icon_nodes_decl}/**\n * {name} theme \u{2014} built by `{cli_invocation} theme build`\n * Import the CSS file alongside this module:\n *\n *   import {{ {binding} }} from './{artifact}';\n *   import './{artifact}.css';\n */\nexport const {binding} = {{\n  name: '{name}',\n  __built: true,\n  tokens: {tokens_str},\n{fields}{icons_field}{indicators_field}\n}};\n{re_export}"
     ))
 }
 
@@ -247,8 +270,13 @@ fn icon_variant_names(theme: &Value) -> Option<Vec<String>> {
 
 /// `generateBuiltTypes` without an icon registry.
 pub fn built_types(theme: &Value, icon_info: Option<&IconImports>, variants_file: Option<&str>) -> String {
+    built_types_with(theme, icon_info, variants_file, None, true, true)
+}
+
+pub fn built_types_with(theme: &Value, icon_info: Option<&IconImports>, variants_file: Option<&str>, theme_binding: Option<&str>, include_icon_export: bool, include_theme_import: bool) -> String {
     let name = theme.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-    let binding = format!("{}Theme", to_identifier(name));
+    let binding = theme_binding.map(String::from).unwrap_or_else(|| format!("{}Theme", to_identifier(name)));
+    let icon_info = icon_info.filter(|_| include_icon_export);
     let variants = variants_file.map(|f| format!("/// <reference path=\"./{f}\" />\n")).unwrap_or_default();
     let ty = match icon_variant_names(theme) {
         None => "DefinedTheme".to_string(),
@@ -260,7 +288,8 @@ pub fn built_types(theme: &Value, icon_info: Option<&IconImports>, variants_file
     let icon_type = icon_info
         .map(|i| format!("import type {{ IconRegistry }} from '@astryxdesign/core/Icon';\nexport declare const {}: IconRegistry;\n", i.export_name))
         .unwrap_or_default();
-    format!("{variants}import type {{ DefinedTheme }} from '@astryxdesign/core/theme';\n{icon_type}export declare const {binding}: {ty};\n")
+    let theme_import = if include_theme_import { "import type { DefinedTheme } from '@astryxdesign/core/theme';\n" } else { "" };
+    format!("{variants}{theme_import}{icon_type}export declare const {binding}: {ty};\n")
 }
 
 /// `generateVariantDeclarationsAsync`: the `.variants.d.ts` body, or `None`.

@@ -1,0 +1,13 @@
+{
+ "id": "w_--installed---available_@discover-badconfig",
+ "args": [
+  "discover",
+  "--installed",
+  "--available"
+ ],
+ "fixture": "discover-badconfig",
+ "stdout": "",
+ "stderr": "Error: --installed and --available cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

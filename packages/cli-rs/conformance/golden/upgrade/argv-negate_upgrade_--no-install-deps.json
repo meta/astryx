@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_upgrade_--no-install-deps",
+ "args": [
+  "upgrade",
+  "--no-install-deps"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-install-deps'\n(Did you mean --install-deps?)\n",
+ "exit": 1,
+ "files": []
+}

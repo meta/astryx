@@ -1,0 +1,13 @@
+{
+ "id": "argv_experimental_--_-h",
+ "args": [
+  "experimental",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'experimental -h'\n\n  icon  (available subcommand)\n  render  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

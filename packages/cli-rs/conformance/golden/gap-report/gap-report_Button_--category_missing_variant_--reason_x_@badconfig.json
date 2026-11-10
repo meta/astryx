@@ -1,0 +1,16 @@
+{
+ "id": "gap-report_Button_--category_missing_variant_--reason_x_@badconfig",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x"
+ ],
+ "fixture": "badconfig",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

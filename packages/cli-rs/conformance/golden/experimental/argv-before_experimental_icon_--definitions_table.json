@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_experimental_icon_--definitions_table",
+ "args": [
+  "experimental",
+  "icon",
+  "--definitions",
+  "table"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --definitions and a query cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

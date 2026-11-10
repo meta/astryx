@@ -1,0 +1,17 @@
+{
+ "id": "argv-repeat2_experimental_icon_add_--id_dice-5_--id_other",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--id",
+  "dice-5",
+  "--id",
+  "other"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "fuzz_doctor_--_--built-src_294189",
+    "args": [
+      "doctor",
+      "--",
+      "--built=src"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_doctor@doctor-author2_1948d9",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  }
+]

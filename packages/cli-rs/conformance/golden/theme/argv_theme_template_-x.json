@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_template_-x",
+ "args": [
+  "theme",
+  "template",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

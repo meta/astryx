@@ -208,9 +208,8 @@ fn fields(obj: &Value, keys: &[&str]) -> Fields {
 }
 
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
-    // TEMP: until the shell fills `args`, the slug is the first operand.
-    let slug = inv.arg(0).map(String::from).or_else(|| inv.extra_args.iter().find(|a| !a.starts_with("--")).cloned());
-    let json = inv.json() || inv.extra_args.iter().any(|a| a == "--json");
+    let slug = inv.arg(0).map(String::from);
+    let json = inv.json();
     let run = crate::cli::env::cli_invocation(&inv.cwd);
     let result = match blog_api(slug.as_deref()) {
         Ok(r) => r,

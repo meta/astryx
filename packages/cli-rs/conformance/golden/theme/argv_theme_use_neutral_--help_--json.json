@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_use_neutral_--help_--json",
+ "args": [
+  "theme",
+  "use",
+  "neutral",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme use\",\n    \"description\": \"Choose the app default from its added themes\",\n    \"usage\": \"astryx theme use [options] <slug>\",\n    \"options\": [],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

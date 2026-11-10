@@ -1,0 +1,12 @@
+{
+ "id": "argv_init_---x",
+ "args": [
+  "init",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

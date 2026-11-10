@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_discover_--components-yes",
+ "args": [
+  "discover",
+  "--components=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--components=yes'\n",
+ "exit": 1,
+ "files": []
+}

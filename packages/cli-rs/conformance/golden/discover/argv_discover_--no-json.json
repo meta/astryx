@@ -1,0 +1,12 @@
+{
+ "id": "argv_discover_--no-json",
+ "args": [
+  "discover",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

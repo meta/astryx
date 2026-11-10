@@ -1,0 +1,12 @@
+{
+ "id": "argv_discover_-hV",
+ "args": [
+  "discover",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

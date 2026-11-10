@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_remove_neutral_-x",
+ "args": [
+  "theme",
+  "remove",
+  "neutral",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

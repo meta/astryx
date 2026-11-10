@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Generates cases/<command>.json from the JS CLI's own manifest and entity lists.
 //
-// Generated cases carry "gen": true. Hand-written cases (no "gen") in the same
-// file are kept as they are when this script runs again.
+// Generated cases carry "gen": true and live in cases/<command>.json, which
+// this script owns and rewrites. Hand-written cases go in other files,
+// cases/<command>.<name>.json, which it never touches.
 //
 // Usage: node gen-cases.mjs
 
@@ -69,7 +70,7 @@ function slug(s) {
  */
 function add(command, args, opts = {}) {
   const fixture = opts.fixture ?? 'app';
-  const key = JSON.stringify([args, fixture, opts.tty ?? false, opts.stdin ?? null, opts.env ?? null, opts.pre ?? null]);
+  const key = JSON.stringify([args, fixture, opts.tty ?? false, opts.stdin ?? null, opts.env ?? null, opts.pre ?? null, opts.cwd ?? null]);
   const list = byCommand.get(command) ?? [];
   byCommand.set(command, list);
   const seen = seenArgs.get(command) ?? new Set();
@@ -87,6 +88,7 @@ function add(command, args, opts = {}) {
   if (opts.stdin != null) c.stdin = opts.stdin;
   if (opts.env) c.env = opts.env;
   if (opts.pre) c.pre = opts.pre;
+  if (opts.cwd) c.cwd = opts.cwd;
   list.push(c);
 }
 
@@ -174,6 +176,54 @@ function walkCommands(cmd, prefix, top) {
     if (shortFlag) add(topName, [...p, ...pos, shortFlag, ...(valueSpec && values[0] != null ? [values[0]] : [])]);
     if (firstArg && !firstArg.required) add(topName, [...p, sampleArg(firstArg.name), ...(valueSpec ? [longFlag, values[0]] : [longFlag])]);
     add(topName, [...p, ...pos, longFlag, ...(values[0] != null ? [values[0]] : []), '--help']);
+  }
+  // Input accuracy: argv shapes Commander treats specially.
+  const pos0 = req.map(a => sampleArg(a.name));
+  const anyArg = firstArg ? [sampleArg(firstArg.name)] : [];
+  for (const shape of [
+    ['--json', '--json'],
+    ['--help', '--json'],
+    ['--json', '--help'],
+    ['-h', '--bogus'],
+    ['--bogus', '-h'],
+    ['-V'],
+    ['--version'],
+    ['--JSON'],
+    ['--jso'],
+    ['--no-json'],
+    ['--json=1'],
+    ['-x'],
+    ['-hV'],
+    ['--', '--json'],
+    ['--', '-h'],
+    [''],
+    ['ü中文'],
+    ['-5'],
+    ['--=x'],
+    ['---json'],
+  ]) {
+    add(topName, [...p, ...shape], {tag: 'argv'});
+    if (pos0.length) add(topName, [...p, ...pos0, ...shape], {tag: 'argv'});
+  }
+  for (const o of cmd.options ?? []) {
+    const longFlag = o.flag.split(/[ ,]+/).find(s => s.startsWith('--'));
+    const valueSpec = (o.flag.match(/[<[][^>\]]+[>\]]/) ?? [])[0];
+    const v = o.choices ? o.choices[0] : valueSpec ? (SAMPLE[valueSpec] ?? ['sample'])[0] : null;
+    const fa = v == null ? [longFlag] : [longFlag, v];
+    // Option before the positional, repeated, and with a different later value.
+    if (anyArg.length) add(topName, [...p, ...fa, ...anyArg, ...pos0.slice(1)], {tag: 'argv-before'});
+    add(topName, [...p, ...pos0, ...fa, ...fa], {tag: 'argv-repeat'});
+    if (v != null) {
+      const v2 = o.choices ? o.choices[o.choices.length - 1] : (SAMPLE[valueSpec] ?? ['sample', 'other'])[1] ?? 'other';
+      add(topName, [...p, ...pos0, longFlag, v, longFlag, v2], {tag: 'argv-repeat2'});
+      add(topName, [...p, ...pos0, longFlag, ''], {tag: 'argv-emptyval'});
+      add(topName, [...p, ...pos0, `${longFlag}=`], {tag: 'argv-emptyeq'});
+      add(topName, [...p, ...pos0, longFlag, '--json'], {tag: 'argv-flagasval'});
+      add(topName, [...p, ...pos0, longFlag, '-1'], {tag: 'argv-negval'});
+    } else {
+      add(topName, [...p, ...pos0, `${longFlag}=yes`], {tag: 'argv-booleq'});
+      add(topName, [...p, ...pos0, `--no-${longFlag.slice(2)}`], {tag: 'argv-negate'});
+    }
   }
   for (const s of cmd.subcommands ?? []) walkCommands(s, p, topName);
   add(topName, [...p, 'nosuchsub']);
@@ -566,6 +616,106 @@ for (const args of [['search', 'button'], ['component', 'Button'], ['docs', 'tok
   add(args[0], args, {stdin: 'y\nn\n\n', tag: 'stdin'});
 }
 
+
+// ---- realistic projects: lockfiles, workspaces, configs, subfolders ----
+const PROJECTS = [
+  {fixture: 'pm-npm'}, {fixture: 'pm-pnpm'}, {fixture: 'pm-yarn'}, {fixture: 'pm-yarnberry'}, {fixture: 'pm-bun'},
+  {fixture: 'monorepo'}, {fixture: 'monorepo', cwd: 'monorepo/packages/web'}, {fixture: 'monorepo', cwd: 'monorepo/packages/web/src'},
+  {fixture: 'monorepo', cwd: 'monorepo/packages/api'}, {fixture: 'monorepo-local'}, {fixture: 'monorepo-local', cwd: 'monorepo-local/apps/site'},
+  {fixture: 'configured'}, {fixture: 'configts'}, {fixture: 'badconfig'}, {fixture: 'syntaxconfig'}, {fixture: 'unknownint'},
+  {fixture: 'app', cwd: 'app/src'}, {fixture: 'app', cwd: 'app/node_modules/@astryxdesign/core'}, {fixture: 'large', cwd: 'large/src'},
+  {fixture: 'integration', cwd: 'integration/node_modules/@acme/kit'}, {fixture: 'empty', cwd: '.'},
+];
+const PROJECT_ARGS = [
+  ['init'], ['init', '--all'], ['doctor'], ['doctor', '--json'], ['upgrade', '--from', '0.6.0'], ['upgrade', '--from', '0.0.1', '--apply'],
+  ['component', 'Button'], ['component', '--list', '--json'], ['component', 'Card', '--dense'], ['hook', 'useClipboard'], ['docs'], ['docs', 'principles', '--index'],
+  ['search', 'button'], ['search', 'table', '--json'], ['build', 'dashboard'], ['build', 'login page', '--json'], ['discover', 'chart'],
+  ['template', '--list'], ['template', 'blank', 'src/new-page.tsx'], ['swizzle', 'Button'], ['theme', 'list'], ['theme', 'add', 'neutral'],
+  ['theme', 'targets', 'button'], ['gap-report', 'Button', '--category', 'missing_variant', '--reason', 'x'], ['integration', 'check'],
+  ['manifest'], ['--help'], [],
+];
+for (const proj of PROJECTS) {
+  for (const args of PROJECT_ARGS) {
+    const top = args.length === 0 || args[0].startsWith('-') ? 'root' : args[0];
+    const tag = proj.cwd ? `in-${proj.cwd.replace(/\//g, '.')}` : undefined;
+    add(top, args, {fixture: proj.fixture, cwd: proj.cwd, tag});
+  }
+}
+
+
+// ---- environment the CLI reads ----
+const ENVS = {
+  'ua-pnpm': {npm_config_user_agent: 'pnpm/9.12.0 npm/? node/v22.0.0 linux x64'},
+  'ua-yarn1': {npm_config_user_agent: 'yarn/1.22.22 npm/? node/v22.0.0 linux x64'},
+  'ua-yarn4': {npm_config_user_agent: 'yarn/4.5.0 npm/? node/v22.0.0 linux x64'},
+  'ua-bun': {npm_config_user_agent: 'bun/1.1.30 npm/? node/v22.0.0 linux x64'},
+  'ua-npm-exec': {npm_config_user_agent: 'npm/10.9.0 node/v22.0.0 linux x64 workspaces/false', npm_command: 'exec'},
+  'ci-1': {CI: '1'}, 'ci-true': {CI: 'true'}, 'ci-false': {CI: 'false'}, 'ci-0': {CI: '0'}, 'ci-github': {GITHUB_ACTIONS: 'true', CI: 'true'},
+  'xdg': {XDG_CONFIG_HOME: '/tmp/astryx-conformance/work/home/xdg-config', XDG_CACHE_HOME: '/tmp/astryx-conformance/work/home/xdg-cache', XDG_DATA_HOME: '/tmp/astryx-conformance/work/home/xdg-data'},
+  'xdg-relative': {XDG_CONFIG_HOME: 'relative/config', XDG_CACHE_HOME: 'relative/cache'},
+  'node-env-prod': {NODE_ENV: 'production'},
+  'agent': {AGENT: 'some-agent', AGENT_SESSION_ID: 'abc123', TERM_PROGRAM: 'vscode'},
+  'pnpm-home': {PNPM_HOME: '/tmp/astryx-conformance/work/home/.pnpm'},
+  'lang-zh': {LANG: 'zh_CN.UTF-8', LC_ALL: 'zh_CN.UTF-8'},
+};
+const ENV_ARGS = [['init'], ['doctor'], ['component', 'Button'], ['upgrade', '--from', '0.6.0'], ['template', 'blank', 'src/p.tsx'], ['--help'], ['nosuchcommand'], ['swizzle', 'Button'], ['search', 'button'], ['docs'], ['theme', 'list'], ['build', 'dashboard']];
+for (const [name, env] of Object.entries(ENVS)) {
+  for (const args of ENV_ARGS) {
+    const top = args[0].startsWith('-') || args[0] === 'nosuchcommand' ? 'root' : args[0];
+    add(top, args, {env, tag: `env-${name}`});
+    if (name.startsWith('ua-')) add(top, args, {env, tag: `env-${name}`, fixture: 'empty'});
+  }
+}
+
+// ---- the hidden postinstall hook ----
+for (const f of ['app', 'empty', 'large', 'integration', 'nocore']) {
+  add('postinstall', ['postinstall'], {fixture: f});
+  add('postinstall', ['postinstall', '--json'], {fixture: f});
+}
+for (const env of [{CI: '1'}, {npm_config_user_agent: 'pnpm/9.12.0 npm/? node/v22.0.0 linux x64'}, {INIT_CWD: '/tmp/astryx-conformance/work/app'}]) add('postinstall', ['postinstall'], {env, tag: `env-${Object.keys(env)[0]}`});
+for (const args of [['postinstall', '--help'], ['postinstall', 'x'], ['postinstall', '--bogus'], ['help', 'postinstall']]) add('postinstall', args);
+
+
+// ---- icon sets (experimental icon) ----
+for (const f of ['icons', 'icons-unselected']) {
+  for (const args of [[], ['--list'], ['--list', '--json'], ['--json'], ['--definitions'], ['--definitions', '--json'], ['--all-icons'], ['--set', 'glyphs'], ['--set', 'nope'], ['--limit', '1'],
+    ['arrow'], ['arrow', '--json'], ['dice'], ['magic'], ['sparkle'], ['nope'], ['arrow', 'down'], ['--set', 'glyphs', 'arrow']]) {
+    add('experimental', ['experimental', 'icon', ...args], {fixture: f});
+  }
+  for (const args of [['use', 'glyphs'], ['use', 'nope'], ['use', '@acme/glyphs/glyphs'], ['new-definition', 'rocket', '--description', 'Go fast.', '--words', 'launch,space'], ['new-definition', 'rocket', '--dry-run'],
+    ['new-definition', 'sparkle'], ['new-set', 'mine', '--dry-run'], ['new-set', 'mine', '--from', '@acme/glyphs'], ['map', 'random', 'dice-5'], ['map', 'random', '--remove'], ['map', '--pairs', 'random=dice-5'],
+    ['add', 'Dice5', '--from', '@acme/glyphs', '--definition', 'random'], ['add', 'Dice5', '--from', '@acme/glyphs', '--new-definition', 'dice'], ['add', '--all', '--from', '@acme/glyphs'], ['add', 'Nope', '--from', '@acme/glyphs']]) {
+    add('experimental', ['experimental', 'icon', ...args], {fixture: f});
+    add('experimental', ['experimental', 'icon', ...args, '--json'], {fixture: f});
+  }
+}
+add('experimental', ['experimental', 'icon', '--list'], {fixture: 'icons', pre: [['experimental', 'icon', 'new-set', 'mine', '--from', '@acme/glyphs']]});
+add('experimental', ['experimental', 'icon', 'random'], {fixture: 'icons', pre: [['experimental', 'icon', 'map', 'random', 'dice-5']]});
+add('component', ['component', 'Icon'], {fixture: 'icons'});
+add('discover', ['discover', 'icon'], {fixture: 'icons'});
+add('search', ['search', 'sparkle'], {fixture: 'icons'});
+add('doctor', ['doctor'], {fixture: 'icons'});
+add('theme', ['theme', 'list'], {fixture: 'icons'});
+
+
+// ---- experimental render: real pages, round trips ----
+for (const extra of [[], ['--json'], ['--out', 'out/page.html'], ['--title', 'Hello'], ['--out', 'page.txt'], ['--reverse'], ['--overwrite']]) {
+  add('experimental', ['experimental', 'render', 'src/App.tsx', ...extra]);
+}
+add('experimental', ['experimental', 'render', '--reverse', 'src/App.html'], {pre: [['experimental', 'render', 'src/App.tsx']]});
+add('experimental', ['experimental', 'render', '--reverse', 'src/App.html', '--out', 'src/Back.tsx'], {pre: [['experimental', 'render', 'src/App.tsx']]});
+add('experimental', ['experimental', 'render', '--reverse', 'src/App.html', '--out', 'src/App.tsx'], {pre: [['experimental', 'render', 'src/App.tsx']]});
+add('experimental', ['experimental', 'render', '--reverse', 'src/App.html', '--out', 'src/App.tsx', '--overwrite'], {pre: [['experimental', 'render', 'src/App.tsx']]});
+add('experimental', ['experimental', 'render', 'src/App.tsx'], {pre: [['experimental', 'render', 'src/App.tsx']], tag: 'again'});
+add('experimental', ['experimental', 'render', '--reverse', 'package.json']);
+add('experimental', ['experimental', 'render', 'package.json']);
+for (const t of templates.filter(t => t.type === 'page').slice(0, 30)) {
+  add('experimental', ['experimental', 'render', `src/${t.id}.tsx`], {fixture: 'large', pre: [['template', t.id, `src/${t.id}.tsx`]], tag: t.id});
+}
+for (const t of templates.filter(t => t.type === 'block').slice(0, 15)) {
+  add('experimental', ['experimental', 'render', `src/${t.id}.tsx`, '--json'], {fixture: 'large', pre: [['template', t.id, `src/${t.id}.tsx`]], tag: t.id});
+}
+
 // ---- TTY and stdin ----
 for (const args of [['component', 'Button'], ['docs'], ['search', 'button'], ['component', '--list'], ['--help'], ['init'], ['theme', 'add'], ['nosuchcommand']]) {
   add(args[0] === '--help' || args[0] === 'nosuchcommand' ? 'root' : args[0], args, {tty: true});
@@ -573,17 +723,82 @@ for (const args of [['component', 'Button'], ['docs'], ['search', 'button'], ['c
 add('init', ['init'], {stdin: 'y\n'});
 add('theme', ['theme', 'add'], {stdin: '1\n'});
 
+
+// ---- projects on older published Cores: cases/<command>.oldcore.json ----
+const OLD_CORES = ['0.7.11', '0.7.5', '0.6.8', '0.5.4', '0.4.7', '0.3.0'];
+const oldcore = new Map();
+function addOld(command, args, opts) {
+  const list = oldcore.get(command) ?? [];
+  oldcore.set(command, list);
+  const id = `oldcore_${[opts.tag, ...args.map(slug), `@${opts.fixture}`].filter(Boolean).join('_')}`.slice(0, 140);
+  if (list.some(c => c.id === id)) return;
+  const c = {id, args, fixture: opts.fixture, gen: true};
+  if (opts.pre) c.pre = opts.pre;
+  if (opts.cwd) c.cwd = opts.cwd;
+  list.push(c);
+}
+for (const v of OLD_CORES) {
+  const fixture = `core-${v}`;
+  const sweep = [
+    [], ['--help'], ['--version'], ['manifest'],
+    ['component', '--list'], ['component', '--list', '--json'], ['component', 'Button'], ['component', 'Button', '--json'], ['component', 'Button', '--dense'],
+    ['component', 'Button', '--props'], ['component', 'Card', '--zh'], ['component', 'Table', '--detail', 'brief'], ['component', 'Buton'], ['component', 'Dialog', 'Selector'],
+    ['hook', '--list'], ['hook', 'useClipboard'], ['hook', 'useClipboard', '--json'],
+    ['docs'], ['docs', '--json'], ['docs', 'principles'], ['docs', 'principles', '--index'], ['docs', 'tokens', '--dense'], ['docs', 'theme'], ['docs', 'cli'],
+    ['search', 'button'], ['search', 'data table', '--json'], ['search', 'dark mode'], ['search', 'buton'],
+    ['build'], ['build', 'dashboard'], ['build', 'login page', '--json'], ['build', 'settings', '--verbose'],
+    ['discover', 'chart'], ['discover', 'table', '--json'],
+    ['template', '--list'], ['template', '--list', '--json'], ['template', 'blank'], ['template', 'dashboard', '--skeleton'], ['template', 'blank', 'src/new-page.tsx'],
+    ['theme', 'list'], ['theme', 'list', '--json'], ['theme', 'add', '--list'], ['theme', 'targets', 'button'], ['theme', 'template', 'src/my.theme.ts'],
+    ['swizzle', '--list'], ['swizzle', 'Button'],
+    ['doctor'], ['doctor', '--json'], ['init'], ['init', '--all'],
+    ['upgrade'], ['upgrade', '--list'], ['upgrade', '--json'],
+    ['upgrade', '--from', v], ['upgrade', '--from', v, '--apply'], ['upgrade', '--from', v, '--json'],
+    ['upgrade', '--from', '0.0.1'], ['upgrade', '--from', '0.0.1', '--apply'], ['upgrade', '--from', '0.0.1', '--apply', '--json'], ['upgrade', '--from', '0.0.1', '--force'],
+    ['gap-report', 'Button', '--category', 'missing_variant', '--reason', 'x'],
+  ];
+  for (const args of sweep) {
+    const top = args.length === 0 || args[0].startsWith('-') ? 'root' : args[0];
+    addOld(top, args, {fixture});
+  }
+  for (const extra of [[], ['--json'], ['--check'], ['--out', 'dist/theme.css']]) {
+    addOld('theme', ['theme', 'build', 'src/my.theme.ts', ...extra], {fixture, pre: [['theme', 'template', 'src/my.theme.ts']]});
+  }
+  addOld('upgrade', ['upgrade', '--from', '0.0.1', '--apply'], {fixture, pre: [['init']], tag: 'after-init'});
+  addOld('doctor', ['doctor'], {fixture, pre: [['upgrade', '--from', '0.0.1', '--apply']], tag: 'after-upgrade'});
+  addOld('component', ['component', 'Button'], {fixture, cwd: `${fixture}/src`, tag: 'in-src'});
+}
+for (const [command, list] of oldcore) {
+  fs.writeFileSync(path.join(CASES_DIR, `${command}.oldcore.json`), `${JSON.stringify(list, null, 1)}\n`);
+}
+console.log(`oldcore        ${[...oldcore.values()].reduce((n, l) => n + l.length, 0)} (cases/<command>.oldcore.json)`);
+
 // ---- write ----
+// cases/<command>.json holds only generated cases. Hand-written cases live in
+// cases/<command>.<name>.json; any found in the generated file move to
+// cases/<command>.manual.json.
 fs.mkdirSync(CASES_DIR, {recursive: true});
 let total = 0;
 for (const [command, list] of [...byCommand].sort()) {
   const file = path.join(CASES_DIR, `${command}.json`);
-  let manual = [];
-  if (fs.existsSync(file)) manual = JSON.parse(fs.readFileSync(file, 'utf8')).filter(c => !c.gen);
-  const ids = new Set(manual.map(c => c.id));
-  const merged = [...list.filter(c => !ids.has(c.id)), ...manual];
-  fs.writeFileSync(file, `${JSON.stringify(merged, null, 1)}\n`);
-  total += merged.length;
-  console.log(`${command.padEnd(14)} ${merged.length}`);
+  const manualFile = path.join(CASES_DIR, `${command}.manual.json`);
+  if (fs.existsSync(file)) {
+    const stray = JSON.parse(fs.readFileSync(file, 'utf8')).filter(c => !c.gen);
+    if (stray.length) {
+      const prev = fs.existsSync(manualFile) ? JSON.parse(fs.readFileSync(manualFile, 'utf8')) : [];
+      const ids = new Set(prev.map(c => c.id));
+      fs.writeFileSync(manualFile, `${JSON.stringify([...prev, ...stray.filter(c => !ids.has(c.id))], null, 1)}\n`);
+    }
+  }
+  const taken = new Set();
+  for (const f of fs.readdirSync(CASES_DIR)) {
+    if (f.startsWith(`${command}.`) && f !== `${command}.json` && f.endsWith('.json')) {
+      for (const c of JSON.parse(fs.readFileSync(path.join(CASES_DIR, f), 'utf8'))) taken.add(c.id);
+    }
+  }
+  const mine = list.filter(c => !taken.has(c.id));
+  fs.writeFileSync(file, `${JSON.stringify(mine, null, 1)}\n`);
+  total += mine.length + taken.size;
+  console.log(`${command.padEnd(14)} ${mine.length} generated, ${taken.size} hand-written`);
 }
 console.log(`total          ${total}`);

@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_glyphs_map_pairs_unknown_def",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--pairs",
+  "zzz=home"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"zzz\" is not an icon definition. Nothing was written.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_add_x",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_search_table_--verbose-yes",
+ "args": [
+  "search",
+  "table",
+  "--verbose=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--verbose=yes'\n",
+ "exit": 1,
+ "files": []
+}

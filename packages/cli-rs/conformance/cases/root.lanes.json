@@ -1,0 +1,62 @@
+[
+  {
+    "id": "shell_--help_@oneclicommand",
+    "args": [
+      "--help"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_theme_--help_@oneclicommand",
+    "args": [
+      "theme",
+      "--help"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_help_blog_@oneclicommand",
+    "args": [
+      "help",
+      "blog"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_nope_@oneclicommand",
+    "args": [
+      "nope"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_manifest_@oneclicommand",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_blog_--help_--json_@oneclicommand",
+    "args": [
+      "blog",
+      "--help",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_postinstall_@oneclicommand",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  }
+]

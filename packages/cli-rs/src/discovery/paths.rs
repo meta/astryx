@@ -703,6 +703,14 @@ pub fn exists_case_exact(target: &str, root: &str) -> bool {
     if np::is_absolute(&rel) || rel == ".." || rel.starts_with("../") {
         return false;
     }
+    if super::listing_cache::active() {
+        // Inside an operation the folders' listings answer (see
+        // component_discovery::exists_case_exact).
+        return match super::listing_cache::find_entry_path(std::path::Path::new(root), std::path::Path::new(&rel)) {
+            None => false,
+            Some(kind) => !kind.is_some_and(|k| k.is_symlink) || np::exists(target),
+        };
+    }
     if !np::exists(target) {
         return false;
     }

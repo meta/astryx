@@ -1,0 +1,12 @@
+{
+ "id": "w_--installed_@author",
+ "args": [
+  "discover",
+  "--installed"
+ ],
+ "fixture": "author",
+ "stdout": "Installed\n\nname:       @acme/widgets\npackage:    @acme/widgets\ncategory:   @acme/widgets\ncomponents: WidgetCard\nversion:    0.1.0\ndocs:       widgets\n\nUsage:\n  npx @astryxdesign/cli@0.7.12 discover <package>            Browse a package and its versions\n  npx @astryxdesign/cli@0.7.12 discover <package>/<item>     View one item\n  npx @astryxdesign/cli@0.7.12 discover <search>             Search every item and package\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

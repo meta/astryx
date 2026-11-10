@@ -1,0 +1,13 @@
+{
+ "id": "argv-repeat_init_--remove-agents_--remove-agents",
+ "args": [
+  "init",
+  "--remove-agents",
+  "--remove-agents"
+ ],
+ "fixture": "app",
+ "stdout": "[ok] Nothing to remove: no Astryx agent-docs block was found.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

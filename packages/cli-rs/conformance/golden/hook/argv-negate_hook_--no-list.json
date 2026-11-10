@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_hook_--no-list",
+ "args": [
+  "hook",
+  "--no-list"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-list'\n(Did you mean --list?)\n",
+ "exit": 1,
+ "files": []
+}

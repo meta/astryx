@@ -1,0 +1,15 @@
+{
+ "id": "argv-emptyval_experimental_icon_add_--description_x",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--description",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

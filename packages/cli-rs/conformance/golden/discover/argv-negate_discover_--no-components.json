@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_discover_--no-components",
+ "args": [
+  "discover",
+  "--no-components"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-components'\n(Did you mean --components?)\n",
+ "exit": 1,
+ "files": []
+}

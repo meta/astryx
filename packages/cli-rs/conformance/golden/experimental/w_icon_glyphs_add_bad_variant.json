@@ -1,0 +1,18 @@
+{
+ "id": "w_icon_glyphs_add_bad_variant",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "HomeIcon",
+  "--from",
+  "./icons/home.js",
+  "--variant",
+  "duotone"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"glyphs\" declares no variant \"duotone\" (it declares outline, solid). Declare it first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set glyphs --variants outline,solid,duotone --default-variant outline  (declare the variants)\n",
+ "exit": 1,
+ "files": []
+}

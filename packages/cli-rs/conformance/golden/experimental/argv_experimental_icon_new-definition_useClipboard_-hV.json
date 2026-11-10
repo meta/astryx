@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-definition_useClipboard_-hV",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "useClipboard",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

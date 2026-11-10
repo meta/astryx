@@ -679,6 +679,349 @@
   "gen": true
  },
  {
+  "id": "argv_build_--json_--json",
+  "args": [
+   "build",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--help_--json",
+  "args": [
+   "build",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--json_--help",
+  "args": [
+   "build",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-h_--bogus",
+  "args": [
+   "build",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--bogus_-h",
+  "args": [
+   "build",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-V",
+  "args": [
+   "build",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--version",
+  "args": [
+   "build",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--JSON",
+  "args": [
+   "build",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--jso",
+  "args": [
+   "build",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--no-json",
+  "args": [
+   "build",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--json-1",
+  "args": [
+   "build",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-x",
+  "args": [
+   "build",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-hV",
+  "args": [
+   "build",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--_--json",
+  "args": [
+   "build",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_--_-h",
+  "args": [
+   "build",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_x",
+  "args": [
+   "build",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-",
+  "args": [
+   "build",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_-5",
+  "args": [
+   "build",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_---x",
+  "args": [
+   "build",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_build_---json",
+  "args": [
+   "build",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_build_--type_component_table",
+  "args": [
+   "build",
+   "--type",
+   "component",
+   "table"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_build_--type_component_--type_component",
+  "args": [
+   "build",
+   "--type",
+   "component",
+   "--type",
+   "component"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_build_--type_component_--type_hook",
+  "args": [
+   "build",
+   "--type",
+   "component",
+   "--type",
+   "hook"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_build_--type_x",
+  "args": [
+   "build",
+   "--type",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_build_--type-",
+  "args": [
+   "build",
+   "--type="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negval_build_--type_-1",
+  "args": [
+   "build",
+   "--type",
+   "-1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_build_--limit_3_table",
+  "args": [
+   "build",
+   "--limit",
+   "3",
+   "table"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_build_--limit_3_--limit_3",
+  "args": [
+   "build",
+   "--limit",
+   "3",
+   "--limit",
+   "3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat2_build_--limit_3_--limit_0",
+  "args": [
+   "build",
+   "--limit",
+   "3",
+   "--limit",
+   "0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyval_build_--limit_x",
+  "args": [
+   "build",
+   "--limit",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-emptyeq_build_--limit-",
+  "args": [
+   "build",
+   "--limit="
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-before_build_--verbose_table",
+  "args": [
+   "build",
+   "--verbose",
+   "table"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-repeat_build_--verbose_--verbose",
+  "args": [
+   "build",
+   "--verbose",
+   "--verbose"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-booleq_build_--verbose-yes",
+  "args": [
+   "build",
+   "--verbose=yes"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv-negate_build_--no-verbose",
+  "args": [
+   "build",
+   "--no-verbose"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
   "id": "build_nosuchsub",
   "args": [
    "build",
@@ -5160,1889 +5503,681 @@
   }
  },
  {
-  "id": "wide_build_00_analytics-dashboard-with-a-kpi-row",
+  "id": "build_dashboard_@pm-npm",
   "args": [
    "build",
-   "analytics dashboard with a kpi row"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "pm-npm",
+  "gen": true
  },
  {
-  "id": "wide_build_00_analytics-dashboard-with-a-kpi-row_--json",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_00_analytics-dashboard-with-a-kpi-row_--verbose",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_01_ops-dashboard-with-a-KPI-row-a-sortable-table-and-a-trend-ch",
-  "args": [
-   "build",
-   "ops dashboard with a KPI row, a sortable table and a trend chart"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_01_ops-dashboard-with-a-KPI-row-a-sortable-table-and-a-trend-ch_--json",
-  "args": [
-   "build",
-   "ops dashboard with a KPI row, a sortable table and a trend chart",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_02_audit-dashboard-dense-table-with-filters-export-and-paginati",
-  "args": [
-   "build",
-   "audit dashboard: dense table with filters, export, and pagination"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_02_audit-dashboard-dense-table-with-filters-export-and-paginati_--json",
-  "args": [
-   "build",
-   "audit dashboard: dense table with filters, export, and pagination",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_03_saml-login",
-  "args": [
-   "build",
-   "saml login"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_03_saml-login_--json",
-  "args": [
-   "build",
-   "saml login",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_03_saml-login_--verbose",
-  "args": [
-   "build",
-   "saml login",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_04_a-settings-page-with-an-empty-state",
-  "args": [
-   "build",
-   "a settings page with an empty state"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_04_a-settings-page-with-an-empty-state_--json",
-  "args": [
-   "build",
-   "a settings page with an empty state",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_05_draft-history-in-a-modal",
-  "args": [
-   "build",
-   "draft history in a modal"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_05_draft-history-in-a-modal_--json",
-  "args": [
-   "build",
-   "draft history in a modal",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_06_drafts-in-a-modal",
-  "args": [
-   "build",
-   "drafts in a modal"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_06_drafts-in-a-modal_--json",
-  "args": [
-   "build",
-   "drafts in a modal",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_06_drafts-in-a-modal_--verbose",
-  "args": [
-   "build",
-   "drafts in a modal",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_07_side-by-side-product-response",
-  "args": [
-   "build",
-   "side-by-side product response"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_07_side-by-side-product-response_--json",
-  "args": [
-   "build",
-   "side-by-side product response",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_08_a-funnel-for-a-dashboard",
-  "args": [
-   "build",
-   "a funnel for a dashboard"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_08_a-funnel-for-a-dashboard_--json",
-  "args": [
-   "build",
-   "a funnel for a dashboard",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_09_a-small-comparison-note",
-  "args": [
-   "build",
-   "a small comparison note"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_09_a-small-comparison-note_--json",
-  "args": [
-   "build",
-   "a small comparison note",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_09_a-small-comparison-note_--verbose",
-  "args": [
-   "build",
-   "a small comparison note",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_10_horizontal-site-navigation",
-  "args": [
-   "build",
-   "horizontal site navigation"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_10_horizontal-site-navigation_--json",
-  "args": [
-   "build",
-   "horizontal site navigation",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_11_a-frame-with-sidebar-navigation",
-  "args": [
-   "build",
-   "a frame with sidebar navigation"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_11_a-frame-with-sidebar-navigation_--json",
-  "args": [
-   "build",
-   "a frame with sidebar navigation",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_12_add-a-column-to-the-existing-table",
-  "args": [
-   "build",
-   "add a column to the existing table"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_12_add-a-column-to-the-existing-table_--json",
-  "args": [
-   "build",
-   "add a column to the existing table",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_12_add-a-column-to-the-existing-table_--verbose",
-  "args": [
-   "build",
-   "add a column to the existing table",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_13_a-new-dashboard-like-the-existing-dashboard",
-  "args": [
-   "build",
-   "a new dashboard like the existing dashboard"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_13_a-new-dashboard-like-the-existing-dashboard_--json",
-  "args": [
-   "build",
-   "a new dashboard like the existing dashboard",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_14_clone-the-existing-dashboard-as-a-new-page",
-  "args": [
-   "build",
-   "clone the existing dashboard as a new page"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_14_clone-the-existing-dashboard-as-a-new-page_--json",
-  "args": [
-   "build",
-   "clone the existing dashboard as a new page",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_15_existing-reports-dashboard-with-a-date-filter",
-  "args": [
-   "build",
-   "existing reports dashboard with a date filter"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_15_existing-reports-dashboard-with-a-date-filter_--json",
-  "args": [
-   "build",
-   "existing reports dashboard with a date filter",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_15_existing-reports-dashboard-with-a-date-filter_--verbose",
-  "args": [
-   "build",
-   "existing reports dashboard with a date filter",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_16_status-pill-with-a-tooltip",
-  "args": [
-   "build",
-   "status pill with a tooltip"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_16_status-pill-with-a-tooltip_--json",
-  "args": [
-   "build",
-   "status pill with a tooltip",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_17_actionable-warning-banner",
-  "args": [
-   "build",
-   "actionable warning banner"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_17_actionable-warning-banner_--json",
-  "args": [
-   "build",
-   "actionable warning banner",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_18_weekly-brief",
-  "args": [
-   "build",
-   "weekly brief"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_18_weekly-brief_--json",
-  "args": [
-   "build",
-   "weekly brief",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_18_weekly-brief_--verbose",
-  "args": [
-   "build",
-   "weekly brief",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_19_tic-tac-toe-game-board",
-  "args": [
-   "build",
-   "tic-tac-toe game board"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_19_tic-tac-toe-game-board_--json",
-  "args": [
-   "build",
-   "tic-tac-toe game board",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_20_a-calendar-page",
-  "args": [
-   "build",
-   "a calendar page"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_20_a-calendar-page_--json",
-  "args": [
-   "build",
-   "a calendar page",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_21_date-range-picker",
-  "args": [
-   "build",
-   "date range picker"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_21_date-range-picker_--json",
-  "args": [
-   "build",
-   "date range picker",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_21_date-range-picker_--verbose",
-  "args": [
-   "build",
-   "date range picker",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_22_pricing-page-with-three-tiers",
-  "args": [
-   "build",
-   "pricing page with three tiers"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_22_pricing-page-with-three-tiers_--json",
-  "args": [
-   "build",
-   "pricing page with three tiers",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_23_checkout-wizard",
-  "args": [
-   "build",
-   "checkout wizard"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_23_checkout-wizard_--json",
-  "args": [
-   "build",
-   "checkout wizard",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_24_filter-bar-above-the-table",
-  "args": [
-   "build",
-   "filter bar above the table"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_24_filter-bar-above-the-table_--json",
-  "args": [
-   "build",
-   "filter bar above the table",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_24_filter-bar-above-the-table_--verbose",
-  "args": [
-   "build",
-   "filter bar above the table",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_25_bulk-actions-bar",
-  "args": [
-   "build",
-   "bulk actions bar"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_25_bulk-actions-bar_--json",
-  "args": [
-   "build",
-   "bulk actions bar",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_26_sortable-column-header",
-  "args": [
-   "build",
-   "sortable column header"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_26_sortable-column-header_--json",
-  "args": [
-   "build",
-   "sortable column header",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_27_time-entry-detail-popover",
-  "args": [
-   "build",
-   "time entry detail popover"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_27_time-entry-detail-popover_--json",
-  "args": [
-   "build",
-   "time entry detail popover",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_27_time-entry-detail-popover_--verbose",
-  "args": [
-   "build",
-   "time entry detail popover",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_28_GridDashboardLayout",
-  "args": [
-   "build",
-   "GridDashboardLayout"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_28_GridDashboardLayout_--json",
-  "args": [
-   "build",
-   "GridDashboardLayout",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_29_DividerVertical",
-  "args": [
-   "build",
-   "DividerVertical"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_29_DividerVertical_--json",
-  "args": [
-   "build",
-   "DividerVertical",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_30_SideNavNestedItems",
-  "args": [
-   "build",
-   "SideNavNestedItems"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_30_SideNavNestedItems_--json",
-  "args": [
-   "build",
-   "SideNavNestedItems",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_30_SideNavNestedItems_--verbose",
-  "args": [
-   "build",
-   "SideNavNestedItems",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_31_caf-menu",
-  "args": [
-   "build",
-   "café menu"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_31_caf-menu_--json",
-  "args": [
-   "build",
-   "café menu",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_32_na-ve-r-sum-builder-modern",
-  "args": [
-   "build",
-   "naïve résumé builder — modern"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_32_na-ve-r-sum-builder-modern_--json",
-  "args": [
-   "build",
-   "naïve résumé builder — modern",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_33_blank",
-  "args": [
-   "build",
-   "日本語のダッシュボード"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_33_blank_--json",
-  "args": [
-   "build",
-   "日本語のダッシュボード",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_33_blank_--verbose",
-  "args": [
-   "build",
-   "日本語のダッシュボード",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_34_emoji-party-planner",
-  "args": [
-   "build",
-   "emoji 🎉 party planner"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_34_emoji-party-planner_--json",
-  "args": [
-   "build",
-   "emoji 🎉 party planner",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_35_dashboard",
-  "args": [
-   "build",
-   "dashboard!!!"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_35_dashboard_--json",
-  "args": [
-   "build",
-   "dashboard!!!",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_36_DASHBOARD-WITH-CHARTS",
-  "args": [
-   "build",
-   "DASHBOARD WITH CHARTS"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_36_DASHBOARD-WITH-CHARTS_--json",
-  "args": [
-   "build",
-   "DASHBOARD WITH CHARTS",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_36_DASHBOARD-WITH-CHARTS_--verbose",
-  "args": [
-   "build",
-   "DASHBOARD WITH CHARTS",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_37_I-want-to-build-a-page-where-users-can-see-their-business-st",
-  "args": [
-   "build",
-   "I want to build a page where users can see their business stats over time with charts and a table of recent orders and some filters on the side, plus a header with their avatar and a settings menu, and it should work on mobile"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_37_I-want-to-build-a-page-where-users-can-see-their-business-st_--json",
-  "args": [
-   "build",
-   "I want to build a page where users can see their business stats over time with charts and a table of recent orders and some filters on the side, plus a header with their avatar and a settings menu, and it should work on mobile",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_38_a-really-really-long-query-a-really-really-long-query-a-real",
-  "args": [
-   "build",
-   "a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query "
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_38_a-really-really-long-query-a-really-really-long-query-a-real_--json",
-  "args": [
-   "build",
-   "a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query a really really long query ",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_39_blank",
-  "args": [
-   "build",
-   "   "
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_39_blank_--json",
-  "args": [
-   "build",
-   "   ",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_39_blank_--verbose",
-  "args": [
-   "build",
-   "   ",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_40_calender-setings-tabel",
-  "args": [
-   "build",
-   "calender setings tabel"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_40_calender-setings-tabel_--json",
-  "args": [
-   "build",
-   "calender setings tabel",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_41_in-a-modal",
-  "args": [
-   "build",
-   "in a modal"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_41_in-a-modal_--json",
-  "args": [
-   "build",
-   "in a modal",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_42_new-page",
-  "args": [
-   "build",
-   "new page"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_42_new-page_--json",
-  "args": [
-   "build",
-   "new page",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_42_new-page_--verbose",
-  "args": [
-   "build",
-   "new page",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_43_a-new-column",
-  "args": [
-   "build",
-   "a new column"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_43_a-new-column_--json",
-  "args": [
-   "build",
-   "a new column",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_44_existing",
-  "args": [
-   "build",
-   "existing"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_44_existing_--json",
-  "args": [
-   "build",
-   "existing",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x00_analytics-dashboard-with-a-kpi-row-limit-1-json_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "1",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x01_analytics-dashboard-with-a-kpi-row-limit-2_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "2"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x02_analytics-dashboard-with-a-kpi-row-limit-1e1-json_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "1e1",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x03_analytics-dashboard-with-a-kpi-row-limit-0x10-json_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "0x10",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x04_analytics-dashboard-with-a-kpi-row-limit-7-json_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   " 7 ",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x05_analytics-dashboard-with-a-kpi-row-limit-json_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x06_analytics-dashboard-with-a-kpi-row-limit-Infinity_@app",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--limit",
-   "Infinity"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x07_data-table-with-filters-type-template-json_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "template",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x08_data-table-with-filters-type-template_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "template"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x09_data-table-with-filters-type-component-verbose_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "component",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x10_data-table-with-filters-type-doc_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "doc"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x11_data-table-with-filters-type-theme-json_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "theme",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x12_data-table-with-filters-type-hook_@app",
-  "args": [
-   "build",
-   "data table with filters",
-   "--type",
-   "hook"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_x13_analytics-dashboard-with-a-kpi-row_@large",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row"
-  ],
-  "fixture": "large"
- },
- {
-  "id": "wide_build_x14_analytics-dashboard-with-a-kpi-row-json_@integration",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--json"
-  ],
-  "fixture": "integration"
- },
- {
-  "id": "wide_build_x15_acme-kit-block-json_@integration",
-  "args": [
-   "build",
-   "acme kit block",
-   "--json"
-  ],
-  "fixture": "integration"
- },
- {
-  "id": "wide_build_x16_analytics-dashboard-with-a-kpi-row_@nocore",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row"
-  ],
-  "fixture": "nocore"
- },
- {
-  "id": "wide_build_x17_analytics-dashboard-with-a-kpi-row-json_@brokencore",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row",
-   "--json"
-  ],
-  "fixture": "brokencore"
- },
- {
-  "id": "wide_build_x18_analytics-dashboard-with-a-kpi-row_@plain",
-  "args": [
-   "build",
-   "analytics dashboard with a kpi row"
-  ],
-  "fixture": "plain"
- },
- {
-  "id": "wide_build_x19_login-page-verbose_@empty",
+  "id": "build_login-page_--json_@pm-npm",
   "args": [
    "build",
    "login page",
-   "--verbose"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "wide_build_r00",
-  "args": [
-   "build",
-   "Field Layout holds : through"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r00_--json",
-  "args": [
-   "build",
-   "Field Layout holds : through",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "pm-npm",
+  "gen": true
  },
  {
-  "id": "wide_build_r00_--verbose",
+  "id": "build_dashboard_@pm-pnpm",
   "args": [
    "build",
-   "Field Layout holds : through",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "pm-pnpm",
+  "gen": true
  },
  {
-  "id": "wide_build_r01",
+  "id": "build_login-page_--json_@pm-pnpm",
   "args": [
    "build",
-   "and a rows the navigation"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r01_--json",
-  "args": [
-   "build",
-   "and a rows the navigation",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "pm-pnpm",
+  "gen": true
  },
  {
-  "id": "wide_build_r02",
+  "id": "build_dashboard_@pm-yarn",
   "args": [
    "build",
-   "details plus uploads and of sizes"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "pm-yarn",
+  "gen": true
  },
  {
-  "id": "wide_build_r02_--json",
+  "id": "build_login-page_--json_@pm-yarn",
   "args": [
    "build",
-   "details plus uploads and of sizes",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "pm-yarn",
+  "gen": true
  },
  {
-  "id": "wide_build_r03",
+  "id": "build_dashboard_@pm-yarnberry",
   "args": [
    "build",
-   "Scrollable with palette showing a with or udner new & — commandpaletteinput the variants counts with any new by dialogheroheader is a"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "pm-yarnberry",
+  "gen": true
  },
  {
-  "id": "wide_build_r03_--json",
+  "id": "build_login-page_--json_@pm-yarnberry",
   "args": [
    "build",
-   "Scrollable with palette showing a with or udner new & — commandpaletteinput the variants counts with any new by dialogheroheader is a",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "pm-yarnberry",
+  "gen": true
  },
  {
-  "id": "wide_build_r04",
+  "id": "build_dashboard_@pm-bun",
   "args": [
    "build",
-   "of and with statuses"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "pm-bun",
+  "gen": true
  },
  {
-  "id": "wide_build_r04_--json",
+  "id": "build_login-page_--json_@pm-bun",
   "args": [
    "build",
-   "of and with statuses",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "pm-bun",
+  "gen": true
  },
  {
-  "id": "wide_build_r04_--verbose",
+  "id": "build_dashboard_@monorepo",
   "args": [
    "build",
-   "of and with statuses",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true
  },
  {
-  "id": "wide_build_r05",
+  "id": "build_login-page_--json_@monorepo",
   "args": [
    "build",
-   "conversation wizard surfaces the themselves The and in rolled-up chatmessage inside the an to a fully : with within committed —"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r05_--json",
-  "args": [
-   "build",
-   "conversation wizard surfaces the themselves The and in rolled-up chatmessage inside the an to a fully : with within committed —",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true
  },
  {
-  "id": "wide_build_r06",
+  "id": "in-monorepo.packages.web_build_dashboard_@monorepo",
   "args": [
    "build",
-   "the bottomsheet existing and if"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web"
  },
  {
-  "id": "wide_build_r06_--json",
+  "id": "in-monorepo.packages.web_build_login-page_--json_@monorepo",
   "args": [
    "build",
-   "the bottomsheet existing and if",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web"
  },
  {
-  "id": "wide_build_r07",
+  "id": "in-monorepo.packages.web.src_build_dashboard_@monorepo",
   "args": [
    "build",
-   "email inside the navigatino how"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web/src"
  },
  {
-  "id": "wide_build_r07_--json",
+  "id": "in-monorepo.packages.web.src_build_login-page_--json_@monorepo",
   "args": [
    "build",
-   "email inside the navigatino how",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/web/src"
  },
  {
-  "id": "wide_build_r08",
+  "id": "in-monorepo.packages.api_build_dashboard_@monorepo",
   "args": [
    "build",
-   "Blurb ( related - question overflow"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/api"
  },
  {
-  "id": "wide_build_r08_--json",
+  "id": "in-monorepo.packages.api_build_login-page_--json_@monorepo",
   "args": [
    "build",
-   "Blurb ( related - question overflow",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo",
+  "gen": true,
+  "cwd": "monorepo/packages/api"
  },
  {
-  "id": "wide_build_r08_--verbose",
+  "id": "build_dashboard_@monorepo-local",
   "args": [
    "build",
-   "Blurb ( related - question overflow",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo-local",
+  "gen": true
  },
  {
-  "id": "wide_build_r09",
+  "id": "build_login-page_--json_@monorepo-local",
   "args": [
    "build",
-   "types"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r09_--json",
-  "args": [
-   "build",
-   "types",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo-local",
+  "gen": true
  },
  {
-  "id": "wide_build_r10",
+  "id": "in-monorepo-local.apps.site_build_dashboard_@monorepo-local",
   "args": [
    "build",
-   "both panels ( addons multi-step uniform — for column content avatars for actions a credit updatse showing records"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "monorepo-local",
+  "gen": true,
+  "cwd": "monorepo-local/apps/site"
  },
  {
-  "id": "wide_build_r10_--json",
+  "id": "in-monorepo-local.apps.site_build_login-page_--json_@monorepo-local",
   "args": [
    "build",
-   "both panels ( addons multi-step uniform — for column content avatars for actions a credit updatse showing records",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "monorepo-local",
+  "gen": true,
+  "cwd": "monorepo-local/apps/site"
  },
  {
-  "id": "wide_build_r11",
+  "id": "build_dashboard_@configured",
   "args": [
    "build",
-   "simple link no partial in a Metdaata group epxirations metadata shapes — list of wiring the an Color rows"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "configured",
+  "gen": true
  },
  {
-  "id": "wide_build_r11_--json",
+  "id": "build_login-page_--json_@configured",
   "args": [
    "build",
-   "simple link no partial in a Metdaata group epxirations metadata shapes — list of wiring the an Color rows",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "configured",
+  "gen": true
  },
  {
-  "id": "wide_build_r12",
+  "id": "build_dashboard_@configts",
   "args": [
    "build",
-   "plus checklist group",
-   "--limit",
-   "4"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "configts",
+  "gen": true
  },
  {
-  "id": "wide_build_r12_--json",
+  "id": "build_login-page_--json_@configts",
   "args": [
    "build",
-   "plus checklist group",
-   "--limit",
-   "4",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "configts",
+  "gen": true
  },
  {
-  "id": "wide_build_r12_--verbose",
+  "id": "build_dashboard_@badconfig",
   "args": [
    "build",
-   "plus checklist group",
-   "--limit",
-   "4",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "badconfig",
+  "gen": true
  },
  {
-  "id": "wide_build_r13",
+  "id": "build_login-page_--json_@badconfig",
   "args": [
    "build",
-   "Categories to heading image new and states ( the - hand-rolling the descriptions showing that"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r13_--json",
-  "args": [
-   "build",
-   "Categories to heading image new and states ( the - hand-rolling the descriptions showing that",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "badconfig",
+  "gen": true
  },
  {
-  "id": "wide_build_r14",
+  "id": "build_dashboard_@syntaxconfig",
   "args": [
    "build",
-   "Selected of appearance raised modifier details"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "syntaxconfig",
+  "gen": true
  },
  {
-  "id": "wide_build_r14_--json",
+  "id": "build_login-page_--json_@syntaxconfig",
   "args": [
    "build",
-   "Selected of appearance raised modifier details",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "syntaxconfig",
+  "gen": true
  },
  {
-  "id": "wide_build_r15",
+  "id": "build_dashboard_@unknownint",
   "args": [
    "build",
-   "relaese license inside the its navigation Step Different scrolling listings other no the within tables then footer Error"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "unknownint",
+  "gen": true
  },
  {
-  "id": "wide_build_r15_--json",
+  "id": "build_login-page_--json_@unknownint",
   "args": [
    "build",
-   "relaese license inside the its navigation Step Different scrolling listings other no the within tables then footer Error",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "unknownint",
+  "gen": true
  },
  {
-  "id": "wide_build_r16",
+  "id": "in-app.src_build_dashboard",
   "args": [
    "build",
-   "when unlike showing the swatches existing devices"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/src"
  },
  {
-  "id": "wide_build_r16_--json",
+  "id": "in-app.src_build_login-page_--json",
   "args": [
    "build",
-   "when unlike showing the swatches existing devices",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/src"
  },
  {
-  "id": "wide_build_r16_--verbose",
+  "id": "in-app.node_modules.@astryxdesign.core_build_dashboard",
   "args": [
    "build",
-   "when unlike showing the swatches existing devices",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/node_modules/@astryxdesign/core"
  },
  {
-  "id": "wide_build_r17",
+  "id": "in-app.node_modules.@astryxdesign.core_build_login-page_--json",
   "args": [
    "build",
-   "people bar center — hiearrchy : detail embedded"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r17_--json",
-  "args": [
-   "build",
-   "people bar center — hiearrchy : detail embedded",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "cwd": "app/node_modules/@astryxdesign/core"
  },
  {
-  "id": "wide_build_r18",
+  "id": "in-large.src_build_dashboard_@large",
   "args": [
    "build",
-   "adapting a The panels supporting"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "large",
+  "gen": true,
+  "cwd": "large/src"
  },
  {
-  "id": "wide_build_r18_--json",
+  "id": "in-large.src_build_login-page_--json_@large",
   "args": [
    "build",
-   "adapting a The panels supporting",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "large",
+  "gen": true,
+  "cwd": "large/src"
  },
  {
-  "id": "wide_build_r19",
+  "id": "in-integration.node_modules.@acme.kit_build_dashboard_@integration",
   "args": [
    "build",
-   "padding existing a the `elevation=\"high\"` ( that to rows consistent",
-   "--limit",
-   "3"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "integration",
+  "gen": true,
+  "cwd": "integration/node_modules/@acme/kit"
  },
  {
-  "id": "wide_build_r19_--json",
+  "id": "in-integration.node_modules.@acme.kit_build_login-page_--json_@integration",
   "args": [
    "build",
-   "padding existing a the `elevation=\"high\"` ( that to rows consistent",
-   "--limit",
-   "3",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "integration",
+  "gen": true,
+  "cwd": "integration/node_modules/@acme/kit"
  },
  {
-  "id": "wide_build_r20",
+  "id": "in-._build_dashboard_@empty",
   "args": [
    "build",
-   "rows and and Use for edge and form"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "cwd": "."
  },
  {
-  "id": "wide_build_r20_--json",
+  "id": "in-._build_login-page_--json_@empty",
   "args": [
    "build",
-   "rows and and Use for edge and form",
+   "login page",
    "--json"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "cwd": "."
  },
  {
-  "id": "wide_build_r20_--verbose",
+  "id": "env-ua-pnpm_build_dashboard",
   "args": [
    "build",
-   "rows and and Use for edge and form",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r21",
+  "id": "env-ua-pnpm_build_dashboard_@empty",
   "args": [
    "build",
-   "side for responsive and Edge-to-edge sets inside the imxing the kbd on of the Own Rather steps an viewers",
-   "--limit",
-   "4"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r21_--json",
+  "id": "env-ua-yarn1_build_dashboard",
   "args": [
    "build",
-   "side for responsive and Edge-to-edge sets inside the imxing the kbd on of the Own Rather steps an viewers",
-   "--limit",
-   "4",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r22",
+  "id": "env-ua-yarn1_build_dashboard_@empty",
   "args": [
    "build",
-   "composed shortcuts"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r22_--json",
+  "id": "env-ua-yarn4_build_dashboard",
   "args": [
    "build",
-   "composed shortcuts",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r23",
+  "id": "env-ua-yarn4_build_dashboard_@empty",
   "args": [
    "build",
-   "sidenav"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r23_--json",
+  "id": "env-ua-bun_build_dashboard",
   "args": [
    "build",
-   "sidenav",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r24",
+  "id": "env-ua-bun_build_dashboard_@empty",
   "args": [
    "build",
-   "quotes input mark item : use the no block renders items of won't the Show , colleciton the , height"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+  }
  },
  {
-  "id": "wide_build_r24_--json",
+  "id": "env-ua-npm-exec_build_dashboard",
   "args": [
    "build",
-   "quotes input mark item : use the no block renders items of won't the Show , colleciton the , height",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+   "npm_command": "exec"
+  }
  },
  {
-  "id": "wide_build_r24_--verbose",
+  "id": "env-ua-npm-exec_build_dashboard_@empty",
   "args": [
    "build",
-   "quotes input mark item : use the no block renders items of won't the Show , colleciton the , height",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "empty",
+  "gen": true,
+  "env": {
+   "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+   "npm_command": "exec"
+  }
  },
  {
-  "id": "wide_build_r25",
+  "id": "env-ci-1_build_dashboard",
   "args": [
    "build",
-   "badge in a items"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "CI": "1"
+  }
  },
  {
-  "id": "wide_build_r25_--json",
+  "id": "env-ci-true_build_dashboard",
   "args": [
    "build",
-   "badge in a items",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "CI": "true"
+  }
  },
  {
-  "id": "wide_build_r26",
+  "id": "env-ci-false_build_dashboard",
   "args": [
    "build",
-   "Over in existing existing level with full-bleed image link",
-   "--limit",
-   "8"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "CI": "false"
+  }
  },
  {
-  "id": "wide_build_r26_--json",
+  "id": "env-ci-0_build_dashboard",
   "args": [
    "build",
-   "Over in existing existing level with full-bleed image link",
-   "--limit",
-   "8",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "CI": "0"
+  }
  },
  {
-  "id": "wide_build_r27",
+  "id": "env-ci-github_build_dashboard",
   "args": [
    "build",
-   "bottomsheet : Picker is expirations for — dateinput showing the"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "GITHUB_ACTIONS": "true",
+   "CI": "true"
+  }
  },
  {
-  "id": "wide_build_r27_--json",
+  "id": "env-xdg_build_dashboard",
   "args": [
    "build",
-   "bottomsheet : Picker is expirations for — dateinput showing the",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+   "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+   "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+  }
  },
  {
-  "id": "wide_build_r28",
+  "id": "env-xdg-relative_build_dashboard",
   "args": [
    "build",
-   "For picker for copy for new In for Date : required , heading comments — banner basic on two contact —"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "XDG_CONFIG_HOME": "relative/config",
+   "XDG_CACHE_HOME": "relative/cache"
+  }
  },
  {
-  "id": "wide_build_r28_--json",
+  "id": "env-node-env-prod_build_dashboard",
   "args": [
    "build",
-   "For picker for copy for new In for Date : required , heading comments — banner basic on two contact —",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "NODE_ENV": "production"
+  }
  },
  {
-  "id": "wide_build_r28_--verbose",
+  "id": "env-agent_build_dashboard",
   "args": [
    "build",
-   "For picker for copy for new In for Date : required , heading comments — banner basic on two contact —",
-   "--verbose"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "AGENT": "some-agent",
+   "AGENT_SESSION_ID": "abc123",
+   "TERM_PROGRAM": "vscode"
+  }
  },
  {
-  "id": "wide_build_r29",
+  "id": "env-pnpm-home_build_dashboard",
   "args": [
    "build",
-   "commandpalettefooter Paired in a above — coolrs command balanced the"
+   "dashboard"
   ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+  }
  },
  {
-  "id": "wide_build_r29_--json",
+  "id": "env-lang-zh_build_dashboard",
   "args": [
    "build",
-   "commandpalettefooter Paired in a above — coolrs command balanced the",
-   "--json"
+   "dashboard"
   ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r30",
-  "args": [
-   "build",
-   "Button that error chat , stops - header plus for constrain use dropdownmenu in a button existing and an , user filter"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r30_--json",
-  "args": [
-   "build",
-   "Button that error chat , stops - header plus for constrain use dropdownmenu in a button existing and an , user filter",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r31",
-  "args": [
-   "build",
-   "and , Search existing end-aligned an Accent of as a"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r31_--json",
-  "args": [
-   "build",
-   "and , Search existing end-aligned an Accent of as a",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r32",
-  "args": [
-   "build",
-   "setup showing list settings inside the for and message upload of palette"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r32_--json",
-  "args": [
-   "build",
-   "setup showing list settings inside the for and message upload of palette",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r32_--verbose",
-  "args": [
-   "build",
-   "setup showing list settings inside the for and message upload of palette",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r33",
-  "args": [
-   "build",
-   "and snap periods ( text page"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r33_--json",
-  "args": [
-   "build",
-   "and snap periods ( text page",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r34",
-  "args": [
-   "build",
-   "— color"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r34_--json",
-  "args": [
-   "build",
-   "— color",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r35",
-  "args": [
-   "build",
-   "flat card new for app"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r35_--json",
-  "args": [
-   "build",
-   "flat card new for app",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r36",
-  "args": [
-   "build",
-   "a the action light dialgo in a provides with landing with profile"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r36_--json",
-  "args": [
-   "build",
-   "a the action light dialgo in a provides with landing with profile",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r36_--verbose",
-  "args": [
-   "build",
-   "a the action light dialgo in a provides with landing with profile",
-   "--verbose"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r37",
-  "args": [
-   "build",
-   "Card — checkboxes , navigation - validation"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r37_--json",
-  "args": [
-   "build",
-   "Card — checkboxes , navigation - validation",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r38",
-  "args": [
-   "build",
-   "reading"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r38_--json",
-  "args": [
-   "build",
-   "reading",
-   "--json"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r39",
-  "args": [
-   "build",
-   "set Like for handles"
-  ],
-  "fixture": "app"
- },
- {
-  "id": "wide_build_r39_--json",
-  "args": [
-   "build",
-   "set Like for handles",
-   "--json"
-  ],
-  "fixture": "app"
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "LANG": "zh_CN.UTF-8",
+   "LC_ALL": "zh_CN.UTF-8"
+  }
  }
 ]

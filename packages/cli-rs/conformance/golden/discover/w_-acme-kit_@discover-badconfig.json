@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-kit_@discover-badconfig",
+ "args": [
+  "discover",
+  "@acme/kit"
+ ],
+ "fixture": "discover-badconfig",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

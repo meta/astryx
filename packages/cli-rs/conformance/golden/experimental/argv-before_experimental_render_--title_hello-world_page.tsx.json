@@ -1,0 +1,15 @@
+{
+ "id": "argv-before_experimental_render_--title_hello-world_page.tsx",
+ "args": [
+  "experimental",
+  "render",
+  "--title",
+  "hello world",
+  "page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

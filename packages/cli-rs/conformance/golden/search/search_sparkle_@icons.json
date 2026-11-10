@@ -1,0 +1,18 @@
+{
+ "id": "search_sparkle_@icons",
+ "args": [
+  "search",
+  "sparkle"
+ ],
+ "fixture": "icons",
+ "stdout": "Results for \"sparkle\" (2)\n\nname:        Icon\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Icon\ndescription: Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.\ncommand:     npx @astryxdesign/cli@0.7.12 component Icon\n\nname:        ChatSendButtonCustomIcon\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatSendButton - Custom Icon\nkind:        block\ndescription: Send buttons with custom icons via sendIcon and stopIcon props. Use to match the personality of the chat experience: a paper airplane for messaging, sparkles for AI generation, or a check mark for confirmation flows.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatSendButtonCustomIcon --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover sparkle\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/icons\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_init_--features_-1",
+ "args": [
+  "init",
+  "--features",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown features: -1. Valid features: agents, theme, template\n",
+ "exit": 1,
+ "files": []
+}

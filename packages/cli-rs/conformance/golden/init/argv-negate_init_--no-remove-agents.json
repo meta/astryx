@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_init_--no-remove-agents",
+ "args": [
+  "init",
+  "--no-remove-agents"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-remove-agents'\n(Did you mean --remove-agents?)\n",
+ "exit": 1,
+ "files": []
+}

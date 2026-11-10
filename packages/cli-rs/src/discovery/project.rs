@@ -233,6 +233,17 @@ impl Project {
         Self::load_with(cwd, false)
     }
 
+    /// `Project.load(cwd, {fresh, core})`: with `fresh`, the config and
+    /// every integration manifest are reread from disk (and serve later
+    /// imports of those files).
+    pub fn load_opts(cwd: &str, core_project_only: bool, fresh: bool) -> Result<Project, String> {
+        if fresh {
+            super::docmod::with_fresh_imports(|| Self::load_with(cwd, core_project_only))
+        } else {
+            Self::load_with(cwd, core_project_only)
+        }
+    }
+
     /// `Project.load(cwd, {core: 'project'})`.
     pub fn load_with(cwd: &str, core_project_only: bool) -> Result<Project, String> {
         let config_path = find_config_path(cwd)?;

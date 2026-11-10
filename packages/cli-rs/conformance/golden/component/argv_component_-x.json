@@ -1,0 +1,12 @@
+{
+ "id": "argv_component_-x",
+ "args": [
+  "component",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

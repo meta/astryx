@@ -1,0 +1,13 @@
+{
+ "id": "argv-negate_experimental_icon_--no-all-icons",
+ "args": [
+  "experimental",
+  "icon",
+  "--no-all-icons"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-all-icons'\n(Did you mean --all-icons?)\n",
+ "exit": 1,
+ "files": []
+}

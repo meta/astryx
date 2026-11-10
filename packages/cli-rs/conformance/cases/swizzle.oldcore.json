@@ -1,0 +1,110 @@
+[
+  {
+    "id": "oldcore_swizzle_--list_@core-0.7.11",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.7.11",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_--list_@core-0.7.5",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.7.5",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_--list_@core-0.6.8",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.6.8",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_--list_@core-0.5.4",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.5.4",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_--list_@core-0.4.7",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.4.7",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_--list_@core-0.3.0",
+    "args": [
+      "swizzle",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_swizzle_Button_@core-0.3.0",
+    "args": [
+      "swizzle",
+      "Button"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

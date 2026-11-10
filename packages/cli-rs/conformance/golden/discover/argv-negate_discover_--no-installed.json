@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_discover_--no-installed",
+ "args": [
+  "discover",
+  "--no-installed"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-installed'\n(Did you mean --installed?)\n",
+ "exit": 1,
+ "files": []
+}

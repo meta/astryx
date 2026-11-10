@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_theme_build_theme.ts_--no-check",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--no-check"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-check'\n(Did you mean --check?)\n",
+ "exit": 1,
+ "files": []
+}

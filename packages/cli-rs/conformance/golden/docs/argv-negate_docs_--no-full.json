@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_docs_--no-full",
+ "args": [
+  "docs",
+  "--no-full"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-full'\n(Did you mean --full?)\n",
+ "exit": 1,
+ "files": []
+}

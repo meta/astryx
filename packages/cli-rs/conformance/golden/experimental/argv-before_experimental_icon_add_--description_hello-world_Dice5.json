@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_experimental_icon_add_--description_hello-world_Dice5",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--description",
+  "hello world",
+  "Dice5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --description describes a new definition, so it needs --new-definition\n\n  --new-definition <name> --description '<what it is for>' --words a,b  (add your own definition)\n",
+ "exit": 1,
+ "files": []
+}

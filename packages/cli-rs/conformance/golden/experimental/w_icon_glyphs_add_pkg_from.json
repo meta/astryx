@@ -1,0 +1,16 @@
+{
+ "id": "w_icon_glyphs_add_pkg_from",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "HomeIcon",
+  "--from",
+  "@acme/missing"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"@acme/missing\" does not resolve from @acme/glyphs. Install it as a dependency, or check the specifier.\n",
+ "exit": 1,
+ "files": []
+}

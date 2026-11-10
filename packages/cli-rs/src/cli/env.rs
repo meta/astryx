@@ -19,14 +19,10 @@ pub fn cli_invocation(cwd: &Path) -> String {
     crate::cli::release::cli_invocation(cwd)
 }
 
-/// `formatCliCommand(cmd)` for a run in `cwd`.
+/// `formatCliCommand(cmd, dir)`: a leading `astryx` is dropped and the
+/// rest trimmed, as in JS.
 pub fn format_cli_command_at(cwd: &Path, cmd: &str) -> String {
-    let inv = cli_invocation(cwd);
-    if cmd.is_empty() {
-        inv
-    } else {
-        format!("{inv} {cmd}")
-    }
+    crate::discovery::package_manager::format_cli_command(cmd, Some(&cwd.to_string_lossy()))
 }
 
 /// `formatCliCommand(cmd)` in the current folder.

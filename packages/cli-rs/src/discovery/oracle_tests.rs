@@ -490,3 +490,161 @@ fn matches_js_older_cli_and_icon_notes() {
     );
     assert_eq!(icons, o["icons"], "\n rust {icons}\n js   {}", o["icons"]);
 }
+
+#[test]
+fn matches_js_contribution_fixes() {
+    use super::contribution_fixes as cf;
+    use_js_cli_root();
+    let file = std::env::var("FIXES_ORACLE").unwrap_or_else(|_| "/tmp/fixes-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    for c in &cases {
+        let integ = c["integration"].as_object().unwrap().clone();
+        let ctx = cf::create_fix_context(c["dir"].as_str().unwrap(), &integ);
+        let args = c["args"].as_array().unwrap();
+        let a = |i: usize| args.get(i).and_then(|v| v.as_str());
+        let file = a(0).unwrap_or("");
+        let stamp = if file.is_empty() { None } else { cf::stamp_of(&ctx, file) };
+        let st = || stamp.clone().unwrap();
+        let s = |v: Option<String>| v.map(Value::String).unwrap_or(Value::Null);
+        let got = match c["fn"].as_str().unwrap() {
+            "stamp" => stamp.as_ref().map(|s| serde_json::json!({"type": s.kind, "name": s.name})).unwrap_or(Value::Null),
+            "unreachable" => Value::String(cf::unreachable_fix(&ctx, file, &st())),
+            "notAComponent" => Value::String(cf::not_a_component_fix(&ctx, file, &st())),
+            "notACodemod" => Value::String(cf::not_a_codemod_fix(&ctx, file, &st(), a(1), a(2))),
+            "sharedCodemods" => s(cf::shared_codemods_root_fix(&ctx, a(1))),
+            "heldRoot" => s(cf::held_root_fix(&ctx, &np::join2(&np::dirname(c["dir"].as_str().unwrap()), a(1).unwrap()))),
+            "newComponentDocNote" => Value::String(cf::new_component_doc_note(&ctx)),
+            "themeImporting" => cf::theme_importing(&ctx, file)
+                .map(|(d, s, src)| serde_json::json!({"doc": d, "stamp": {"type": s.kind, "name": s.name}, "source": src}))
+                .unwrap_or(Value::Null),
+            _ => Value::Null,
+        };
+        if got != c["result"] {
+            failures.push(format!("{} {} {:?}:\n rust {got}\n js   {}", c["pkg"], c["fn"], a(0), c["result"]));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn matches_js_module_origins() {
+    use super::module_origins as mo;
+    let file = std::env::var("ORIGINS_ORACLE").unwrap_or_else(|_| "/tmp/origins-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let ser = |o: Option<mo::Origin>| o.map(|o| serde_json::json!({"file": o.file, "name": o.name})).unwrap_or(Value::Null);
+    let mut failures = Vec::new();
+    for c in o["cases"].as_array().unwrap() {
+        let f = c["file"].as_str().unwrap();
+        let n = c["name"].as_str().unwrap();
+        let v = mo::export_origin_verdict(f, n);
+        let (origin, reason) = match &v {
+            mo::Verdict::Exports(o) => (ser(o.clone()), Value::Null),
+            mo::Verdict::Unknown(r) => (Value::Null, Value::String(r.clone())),
+            mo::Verdict::Lacks => (Value::Null, Value::Null),
+        };
+        let org = mo::module_export_origin(f, n);
+        let got = serde_json::json!({
+            "file": f, "name": n, "verdict": v.name(), "origin": origin, "reason": reason,
+            "plain": mo::module_export_verdict(f, n).name(),
+            "kind": mo::export_value_kind(f, n).as_str(),
+            "scalar": mo::export_scalar_type(f, n),
+            "aliased": org.as_ref().map(|o| ser(mo::aliased_origin(o))).unwrap_or(Value::Null),
+            "bindings": mo::static_export_bindings(f, n).map(|b| b.into_iter().map(|(k, o)| serde_json::json!([k, ser(o)])).collect::<Vec<_>>()),
+        });
+        if &got != c {
+            failures.push(format!("{f} {n}:\n rust {got}\n js   {c}"));
+        }
+    }
+    for c in o["followed"].as_array().unwrap() {
+        let got = serde_json::json!(mo::followed_export_names(c[0].as_str().unwrap()));
+        if got != c[1] {
+            failures.push(format!("followed {}: rust {got} js {}", c[0], c[1]));
+        }
+    }
+    for c in o["failures"].as_array().unwrap() {
+        let got = mo::module_parse_failure(c[0].as_str().unwrap()).map(|(f, m)| serde_json::json!([f, m])).unwrap_or(Value::Null);
+        if got != c[1] {
+            failures.push(format!("parse failure {}: rust {got} js {}", c[0], c[1]));
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn matches_js_icon_set_checks() {
+    use_js_cli_root();
+    let file = std::env::var("ICONCHECKS_ORACLE").unwrap_or_else(|_| "/tmp/iconchecks-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    for c in &cases {
+        let loaded = c["loaded"].as_object().unwrap().clone();
+        let mut unchecked = super::icon_set_checks::Unchecked::new();
+        let issues = Value::Array(super::icon_set_checks::icon_set_issues(c["dir"].as_str().unwrap(), &loaded, &mut unchecked));
+        if issues != c["issues"] {
+            failures.push(format!("{} issues:\n rust {issues}\n js   {}", c["name"], c["issues"]));
+        }
+        let un = Value::Array(unchecked.iter().map(|(k, v)| serde_json::json!([k, v])).collect());
+        if un != c["unchecked"] {
+            failures.push(format!("{} unchecked:\n rust {un}\n js   {}", c["name"], c["unchecked"]));
+        }
+        let cov = Value::Array(super::icon_set_checks::icon_set_coverage(&loaded, &unchecked));
+        if cov != c["coverage"] {
+            failures.push(format!("{} coverage:\n rust {cov}\n js   {}", c["name"], c["coverage"]));
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn fresh_load_rereads_the_config() {
+    let dir = std::env::temp_dir().join(format!("astryx-fresh-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), "{\"name\":\"app\"}").unwrap();
+    let cfg = dir.join("astryx.config.mjs");
+    std::fs::write(&cfg, "export default {integrations: []};\n").unwrap();
+    let d = dir.to_string_lossy().to_string();
+    assert!(super::project::Project::load(&d).is_ok());
+    std::fs::write(&cfg, "export default {integrations: [], layout: 1};\n").unwrap();
+    assert!(super::project::Project::load(&d).is_ok(), "a plain load serves the cached config");
+    let e = super::project::Project::load_opts(&d, true, true).err().expect("fresh load rereads");
+    assert!(e.contains("layout"), "{e}");
+    assert!(super::project::Project::load(&d).is_err(), "the reread replaces the cached config");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn matches_js_unread_theme_folders() {
+    let file = std::env::var("UNREAD_ORACLE").unwrap_or_else(|_| "/tmp/unread-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let got = super::theme_unread::unread_theme_folders(o["root"].as_str().unwrap(), o["dir"].as_str(), Some("@x/pkg"));
+    assert_eq!(serde_json::json!(got), o["result"]);
+}
+
+#[test]
+fn matches_js_set_config_string() {
+    let file = std::env::var("CONFIGWRITER_ORACLE").unwrap_or_else(|_| "/tmp/configwriter-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    for c in &cases {
+        let dir = c["dir"].as_str().unwrap();
+        let r = super::config_writer::set_config_string(dir, c["key"].as_str().unwrap(), c["value"].as_str().unwrap());
+        let got = match &r {
+            Ok(w) => serde_json::json!({"file": w.file, "created": w.created, "previous": w.previous, "changed": w.changed}),
+            Err(e) => serde_json::json!({"error": e.message, "code": e.code}),
+        };
+        let f = ["astryx.config.ts", "astryx.config.mjs"].iter().map(|n| np::join2(dir, n)).find(|f| np::exists(f));
+        let output = f.as_deref().and_then(np::read_text).unwrap_or_default();
+        if got != c["result"] || output != c["output"].as_str().unwrap() {
+            failures.push(format!("{} {}:\n rust {got}\n{output}\n js   {}\n{}", c["name"], c["key"], c["result"], c["output"].as_str().unwrap()));
+        }
+        // Put the input back so the test can run again.
+        match (c["input"].as_str(), &f) {
+            (Some(t), Some(f)) => std::fs::write(f, t).unwrap(),
+            (None, Some(f)) => std::fs::remove_file(f).unwrap(),
+            _ => {}
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}

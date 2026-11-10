@@ -1,0 +1,26 @@
+// Test oracle only: unreadThemeFolders over a crafted themes root.
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import {pathToFileURL} from 'node:url';
+const [cliRoot, out] = process.argv.slice(2);
+const td = await import(pathToFileURL(path.join(cliRoot, 'foundation/discovery/theme-discovery.mjs')).href);
+const base = path.join(os.tmpdir(), 'astryx-unread');
+fs.rmSync(base, {recursive: true, force: true});
+const w = (rel, text) => { const f = path.join(base, rel); fs.mkdirSync(path.dirname(f), {recursive: true}); fs.writeFileSync(f, text); };
+w('pkg/package.json', '{"name":"@x/pkg"}');
+w('pkg/themes/ocean/ocean.doc.mjs', "export default {type: 'theme', name: 'ocean', description: 'd'};\n");
+w('pkg/themes/ocean/oceanTheme.ts', 'export const oceanTheme = {};\n');
+w('pkg/themes/draft/index.ts', 'export const x = 1;\n');
+w('pkg/themes/forest/forest.ts', 'export const y = 1;\n');
+w('pkg/themes/forest/helper.mjs', 'export {};\n');
+w('pkg/themes/shared/tokens.ts', 'export const t = 1;\n');
+w('pkg/themes/shared/themeBits.ts', 'export const b = 1;\n');
+w('pkg/themes/lib/index.js', "import '../forest/forest.ts';\nexport {};\n");
+w('pkg/themes/notes/readme.md', '# x');
+w('pkg/themes/.hidden/index.ts', 'export {};\n');
+w('pkg/themes/root.ts', "export * from '@x/pkg/themes/shared/tokens';\n");
+w('pkg/themes/broken/index.ts', 'export const = ;\n');
+const r = td.unreadThemeFolders(path.join(base, 'pkg/themes'), {packageDir: path.join(base, 'pkg'), packageName: '@x/pkg'});
+fs.writeFileSync(out, JSON.stringify({root: path.join(base, 'pkg/themes'), dir: path.join(base, 'pkg'), result: r}, null, 1));
+console.log(r);

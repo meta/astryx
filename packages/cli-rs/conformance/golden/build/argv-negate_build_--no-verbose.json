@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_build_--no-verbose",
+ "args": [
+  "build",
+  "--no-verbose"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-verbose'\n(Did you mean --verbose?)\n",
+ "exit": 1,
+ "files": []
+}

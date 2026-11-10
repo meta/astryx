@@ -1,0 +1,650 @@
+[
+  {
+    "id": "oldcore_component_--list_@core-0.7.11",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.7.11",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.7.11",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.7.11",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.7.11",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.7.11",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.7.11",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.7.11",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.7.11",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.7.11",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.7.11",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "cwd": "core-0.7.11/src"
+  },
+  {
+    "id": "oldcore_component_--list_@core-0.7.5",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.7.5",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.7.5",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.7.5",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.7.5",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.7.5",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.7.5",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.7.5",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.7.5",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.7.5",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.7.5",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "cwd": "core-0.7.5/src"
+  },
+  {
+    "id": "oldcore_component_--list_@core-0.6.8",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.6.8",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.6.8",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.6.8",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.6.8",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.6.8",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.6.8",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.6.8",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.6.8",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.6.8",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.6.8",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "cwd": "core-0.6.8/src"
+  },
+  {
+    "id": "oldcore_component_--list_@core-0.5.4",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.5.4",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.5.4",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.5.4",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.5.4",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.5.4",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.5.4",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.5.4",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.5.4",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.5.4",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.5.4",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "cwd": "core-0.5.4/src"
+  },
+  {
+    "id": "oldcore_component_--list_@core-0.4.7",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.4.7",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.4.7",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.4.7",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.4.7",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.4.7",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.4.7",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.4.7",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.4.7",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.4.7",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.4.7",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "cwd": "core-0.4.7/src"
+  },
+  {
+    "id": "oldcore_component_--list_@core-0.3.0",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_--list_--json_@core-0.3.0",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_@core-0.3.0",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--json_@core-0.3.0",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--dense_@core-0.3.0",
+    "args": [
+      "component",
+      "Button",
+      "--dense"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Button_--props_@core-0.3.0",
+    "args": [
+      "component",
+      "Button",
+      "--props"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Card_--zh_@core-0.3.0",
+    "args": [
+      "component",
+      "Card",
+      "--zh"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Table_--detail_brief_@core-0.3.0",
+    "args": [
+      "component",
+      "Table",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Buton_@core-0.3.0",
+    "args": [
+      "component",
+      "Buton"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_component_Dialog_Selector_@core-0.3.0",
+    "args": [
+      "component",
+      "Dialog",
+      "Selector"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_in-src_component_Button_@core-0.3.0",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "cwd": "core-0.3.0/src"
+  }
+]

@@ -1,0 +1,12 @@
+{
+ "id": "argv_hook_---json",
+ "args": [
+  "hook",
+  "---json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '---json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

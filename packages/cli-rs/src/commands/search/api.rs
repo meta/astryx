@@ -84,12 +84,7 @@ fn gather_raw(cwd: &Path, type_: Option<&str>) -> Result<Raw, SearchError> {
         all.extend(gather::gather_hooks(core.as_deref().unwrap()));
     }
     if wants("doc") {
-        let mut docs = gather::own_docs(&pm);
-        let extra = gather::integration_docs(cwd);
-        if !extra.is_empty() {
-            let at = gather::own_topic_count().min(docs.len());
-            docs.splice(at..at, extra);
-        }
+        let docs = super::docs::project_docs(&cwd_s, &pm, false).unwrap_or_else(|| gather::own_docs(&pm));
         all.extend(docs);
     }
     if wants("template") {

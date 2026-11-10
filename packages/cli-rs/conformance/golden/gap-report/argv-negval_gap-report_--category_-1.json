@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_gap-report_--category_-1",
+ "args": [
+  "gap-report",
+  "--category",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

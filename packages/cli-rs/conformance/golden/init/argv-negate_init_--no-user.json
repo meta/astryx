@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_init_--no-user",
+ "args": [
+  "init",
+  "--no-user"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-user'\n(Did you mean --user?)\n",
+ "exit": 1,
+ "files": []
+}

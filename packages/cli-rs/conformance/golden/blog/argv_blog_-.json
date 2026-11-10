@@ -1,0 +1,12 @@
+{
+ "id": "argv_blog_-",
+ "args": [
+  "blog",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\n",
+ "exit": 1,
+ "files": []
+}

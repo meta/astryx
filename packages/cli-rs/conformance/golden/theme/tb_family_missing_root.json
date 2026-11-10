@@ -1,0 +1,17 @@
+{
+ "id": "tb_family_missing_root",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/.hidden/ocean-calm.mjs",
+  "fam/themes/ocean-midnight.mjs",
+  "--family-key",
+  "fam"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from fam/themes/.hidden/ocean-calm.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n",
+ "stderr": "Error: Theme \"ocean-calm\" is missing selected ancestor \"ocean\".\n",
+ "exit": 1,
+ "files": []
+}

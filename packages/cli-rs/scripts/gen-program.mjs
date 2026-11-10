@@ -7,7 +7,8 @@
  * carries.
  *
  * The run prefix (`pnpm exec astryx`, ...) is written as U+0001, so the shell
- * fills in the run's own prefix. Text that depends on the package manager
+ * fills in the run's own prefix; U+0002 where the JS CLI computes it while
+ * assembling the program, before the project's integrations load. Text that depends on the package manager
  * (doc command tokens) is recorded once per doc package manager.
  *
  * Usage: [ASTRYX_JS_CLI=<packages/cli>] node scripts/gen-program.mjs [--check]
@@ -25,6 +26,7 @@ const crateDir = path.join(here, '..');
 const cliDir = process.env.ASTRYX_JS_CLI ?? path.join(crateDir, '..', 'cli');
 const outFile = path.join(crateDir, 'src', 'cli', 'program.json');
 const STEM = '\u0001';
+const EARLY_STEM = '\u0002';
 const PMS = ['npm', 'pnpm', 'yarn', 'yarn-classic', 'bun'];
 
 const imp = rel => import(pathToFileURL(path.join(cliDir, rel)).href);
@@ -35,7 +37,9 @@ fs.writeFileSync(path.join(tmp, 'package.json'), '{"name":"gen"}\n');
 process.chdir(tmp);
 
 const {recordDeclaredCliCommands} = await imp('foundation/env/cli-command.mjs');
-recordDeclaredCliCommands(tmp, [{name: 'gen', cliCommand: STEM}]);
+// Text built while the program is assembled runs before any project loads,
+// so it never sees a declared cliCommand: mark it apart (U+0002).
+recordDeclaredCliCommands(tmp, [{name: 'gen', cliCommand: EARLY_STEM}]);
 const {runWithDocPackageManager} = await imp('foundation/env/package-manager.mjs');
 const {createProgram, JSON_SUPPORTED, COMMAND_NAMES} = await imp('clients/cli/index.mjs');
 const {commandDocsOf} = await imp('clients/cli/lib/define-command.mjs');
@@ -45,6 +49,8 @@ const programs = {};
 for (const pm of PMS) {
   programs[pm] = await runWithDocPackageManager(pm, () => createProgram());
 }
+
+recordDeclaredCliCommands(tmp, [{name: 'gen', cliCommand: STEM}]);
 
 /** Help text Commander writes after the options for `cmd`. */
 function afterHelp(cmd, position) {

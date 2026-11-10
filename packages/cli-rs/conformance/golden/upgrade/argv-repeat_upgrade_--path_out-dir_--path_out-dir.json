@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat_upgrade_--path_out-dir_--path_out-dir",
+ "args": [
+  "upgrade",
+  "--path",
+  "out-dir",
+  "--path",
+  "out-dir"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

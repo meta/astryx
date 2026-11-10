@@ -1,0 +1,13 @@
+{
+ "id": "argv-negate_integration_check_--no-strict",
+ "args": [
+  "integration",
+  "check",
+  "--no-strict"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-strict'\n(Did you mean --strict?)\n",
+ "exit": 1,
+ "files": []
+}

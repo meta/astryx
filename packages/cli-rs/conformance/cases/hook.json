@@ -464,6 +464,333 @@
     "gen": true
   },
   {
+    "id": "argv_hook_--json_--json",
+    "args": [
+      "hook",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--help_--json",
+    "args": [
+      "hook",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--json_--help",
+    "args": [
+      "hook",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-h_--bogus",
+    "args": [
+      "hook",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--bogus_-h",
+    "args": [
+      "hook",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-V",
+    "args": [
+      "hook",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--version",
+    "args": [
+      "hook",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--JSON",
+    "args": [
+      "hook",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--jso",
+    "args": [
+      "hook",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--no-json",
+    "args": [
+      "hook",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--json-1",
+    "args": [
+      "hook",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-x",
+    "args": [
+      "hook",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-hV",
+    "args": [
+      "hook",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--_--json",
+    "args": [
+      "hook",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_--_-h",
+    "args": [
+      "hook",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_x",
+    "args": [
+      "hook",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-",
+    "args": [
+      "hook",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_-5",
+    "args": [
+      "hook",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_---x",
+    "args": [
+      "hook",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_hook_---json",
+    "args": [
+      "hook",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_hook_--list_useClipboard",
+    "args": [
+      "hook",
+      "--list",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_hook_--list_--list",
+    "args": [
+      "hook",
+      "--list",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_hook_--list-yes",
+    "args": [
+      "hook",
+      "--list=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_hook_--no-list",
+    "args": [
+      "hook",
+      "--no-list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_hook_--category_Layout_useClipboard",
+    "args": [
+      "hook",
+      "--category",
+      "Layout",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_hook_--category_Layout_--category_Layout",
+    "args": [
+      "hook",
+      "--category",
+      "Layout",
+      "--category",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_hook_--category_Layout_--category_Inputs",
+    "args": [
+      "hook",
+      "--category",
+      "Layout",
+      "--category",
+      "Inputs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_hook_--category_x",
+    "args": [
+      "hook",
+      "--category",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_hook_--category-",
+    "args": [
+      "hook",
+      "--category="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_hook_--category_-1",
+    "args": [
+      "hook",
+      "--category",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_hook_--params_useClipboard",
+    "args": [
+      "hook",
+      "--params",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_hook_--params_--params",
+    "args": [
+      "hook",
+      "--params",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_hook_--params-yes",
+    "args": [
+      "hook",
+      "--params=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_hook_--no-params",
+    "args": [
+      "hook",
+      "--no-params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
     "id": "hook_nosuchsub",
     "args": [
       "hook",
@@ -5005,192 +5332,201 @@
     }
   },
   {
-    "id": "w_hook_useFocusTrap_--detail_compact",
+    "id": "hook_useClipboard_@pm-npm",
     "args": [
       "hook",
-      "useFocusTrap",
-      "--detail",
-      "compact"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "pm-npm",
+    "gen": true
   },
   {
-    "id": "w_hook_useFocusTrap_--detail_brief",
+    "id": "hook_useClipboard_@pm-pnpm",
     "args": [
       "hook",
-      "useFocusTrap",
-      "--detail",
-      "brief"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "pm-pnpm",
+    "gen": true
   },
   {
-    "id": "w_hook_focustrap",
+    "id": "hook_useClipboard_@pm-yarn",
     "args": [
       "hook",
-      "focustrap"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "pm-yarn",
+    "gen": true
   },
   {
-    "id": "w_hook_FocusTrap",
+    "id": "hook_useClipboard_@pm-yarnberry",
     "args": [
       "hook",
-      "FocusTrap"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "pm-yarnberry",
+    "gen": true
   },
   {
-    "id": "w_hook_useFocusTrp",
+    "id": "hook_useClipboard_@pm-bun",
     "args": [
       "hook",
-      "useFocusTrp"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "pm-bun",
+    "gen": true
   },
   {
-    "id": "w_hook_useNope",
+    "id": "hook_useClipboard_@monorepo",
     "args": [
       "hook",
-      "useNope"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo",
+    "gen": true
   },
   {
-    "id": "w_hook_zzzzzzzzzzzz",
+    "id": "in-monorepo.packages.web_hook_useClipboard_@monorepo",
     "args": [
       "hook",
-      "zzzzzzzzzzzz"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
   },
   {
-    "id": "w_hook_useFocusTrap_--params_--json",
+    "id": "in-monorepo.packages.web.src_hook_useClipboard_@monorepo",
     "args": [
       "hook",
-      "useFocusTrap",
-      "--params",
-      "--json"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
   },
   {
-    "id": "w_hook_useAnnounce_--params",
+    "id": "in-monorepo.packages.api_hook_useClipboard_@monorepo",
     "args": [
       "hook",
-      "useAnnounce",
-      "--params"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
   },
   {
-    "id": "w_hook_--category_focus_--detail_compact",
+    "id": "hook_useClipboard_@monorepo-local",
     "args": [
       "hook",
-      "--category",
-      "focus",
-      "--detail",
-      "compact"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo-local",
+    "gen": true
   },
   {
-    "id": "w_hook_--category_focus_--detail_full",
+    "id": "in-monorepo-local.apps.site_hook_useClipboard_@monorepo-local",
     "args": [
       "hook",
-      "--category",
-      "focus",
-      "--detail",
-      "full"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
   },
   {
-    "id": "w_hook_--category_nope_--json",
+    "id": "hook_useClipboard_@configured",
     "args": [
       "hook",
-      "--category",
-      "nope",
-      "--json"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "configured",
+    "gen": true
   },
   {
-    "id": "w_hook_--list_--detail_compact",
+    "id": "hook_useClipboard_@configts",
     "args": [
       "hook",
-      "--list",
-      "--detail",
-      "compact"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "configts",
+    "gen": true
   },
   {
-    "id": "w_hook_--list_--detail_full",
+    "id": "hook_useClipboard_@badconfig",
     "args": [
       "hook",
-      "--list",
-      "--detail",
-      "full"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "badconfig",
+    "gen": true
   },
   {
-    "id": "w_hook_useFocusTrap_--zh",
+    "id": "hook_useClipboard_@syntaxconfig",
     "args": [
       "hook",
-      "useFocusTrap",
-      "--zh"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "syntaxconfig",
+    "gen": true
   },
   {
-    "id": "w_hook_useTooltip_--lang_dense",
+    "id": "hook_useClipboard_@unknownint",
     "args": [
       "hook",
-      "useTooltip",
-      "--lang",
-      "dense"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "unknownint",
+    "gen": true
   },
   {
-    "id": "w_hook_useTooltip_--detail_bogus",
+    "id": "in-app.src_hook_useClipboard",
     "args": [
       "hook",
-      "useTooltip",
-      "--detail",
-      "bogus"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
   },
   {
-    "id": "w_hook_createReorderable",
+    "id": "in-app.node_modules.@astryxdesign.core_hook_useClipboard",
     "args": [
       "hook",
-      "createReorderable"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
   },
   {
-    "id": "w_hook_useTableSortable_--detail_compact",
+    "id": "in-large.src_hook_useClipboard_@large",
     "args": [
       "hook",
-      "useTableSortable",
-      "--detail",
-      "compact"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
   },
   {
-    "id": "w_hook_--list_--json_--detail_compact",
+    "id": "in-integration.node_modules.@acme.kit_hook_useClipboard_@integration",
     "args": [
       "hook",
-      "--list",
-      "--json",
-      "--detail",
-      "compact"
+      "useClipboard"
     ],
-    "fixture": "app"
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._hook_useClipboard_@empty",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
   }
 ]

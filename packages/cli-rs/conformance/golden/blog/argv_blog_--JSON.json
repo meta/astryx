@@ -1,0 +1,12 @@
+{
+ "id": "argv_blog_--JSON",
+ "args": [
+  "blog",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,7 +1,7 @@
 //! `integrationPackCheck` (`api/integration/pack-check.mjs`): check the
 //! package the way npm will publish it.
 
-use super::add_helpers::{find_manifest_paths, normalize, relative};
+use super::add_helpers::normalize;
 use super::jsjson;
 use crate::json::{Map, Value};
 use std::path::Path;
@@ -90,220 +90,11 @@ pub fn integration_pack_check(cwd: &Path) -> Value {
         }
         return empty_receipt(Value::String(name), issues);
     }
-    full_check(&dir, &pkg, name, issues)
+    let loaded = local.integration.clone().and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    full_check(&dir, &pkg, name, issues, &loaded)
 }
 
 // ── The packed-package check ─────────────────────────────────────────
-
-const ROOT_KINDS: [&str; 5] = ["themes", "components", "templates", "codemods", "docs"];
-
-fn walk(dir: &Path, filter: &dyn Fn(&str) -> bool, out: &mut Vec<std::path::PathBuf>) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
-    let mut v: Vec<std::path::PathBuf> = Vec::new();
-    for e in rd.flatten() {
-        let n = e.file_name().to_string_lossy().to_string();
-        if ["node_modules", ".git", "__tests__", "__fixtures__"].contains(&n.as_str()) {
-            continue;
-        }
-        let p = e.path();
-        if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            walk(&p, filter, &mut v);
-        } else if filter(&n) {
-            v.push(p);
-        }
-    }
-    v.sort();
-    out.extend(v);
-}
-
-fn doc_ext(n: &str) -> Option<usize> {
-    for x in [".doc.ts", ".doc.mjs", ".doc.js"] {
-        if n.ends_with(x) {
-            return Some(x.len());
-        }
-    }
-    None
-}
-
-fn enumerate(kind: &str, root: &Path, pkg_dir: &Path) -> Vec<String> {
-    let rel = |p: &Path| relative(pkg_dir, p);
-    let mut out = Vec::new();
-    match kind {
-        "components" | "templates" => {
-            let mut docs = Vec::new();
-            let tmpl = kind == "templates";
-            walk(root, &|n| doc_ext(n).is_some() || (tmpl && [".template.ts", ".template.mjs", ".template.js"].iter().any(|x| n.ends_with(x))), &mut docs);
-            for d in docs {
-                out.push(rel(&d));
-                let s = d.to_string_lossy().to_string();
-                let cut = [".doc.ts", ".doc.mjs", ".doc.js", ".template.ts", ".template.mjs", ".template.js"].iter().find(|x| s.ends_with(*x)).map(|x| x.len()).unwrap_or(0);
-                let src = std::path::PathBuf::from(format!("{}.tsx", &s[..s.len() - cut]));
-                if src.exists() {
-                    out.push(rel(&src));
-                }
-            }
-        }
-        "codemods" => {
-            let mut f = Vec::new();
-            walk(root, &|n| (n.ends_with(".ts") || n.ends_with(".mjs") || n.ends_with(".js")) && ![".test.", ".spec.", ".fixture."].iter().any(|x| n.contains(x)), &mut f);
-            out.extend(f.iter().map(|p| rel(p)));
-        }
-        "docs" => {
-            let mut f = Vec::new();
-            walk(root, &|n| doc_ext(n).is_some(), &mut f);
-            out.extend(f.iter().map(|p| rel(p)));
-        }
-        _ => {
-            // themes: every file of each theme folder.
-            let Ok(rd) = std::fs::read_dir(root) else { return out };
-            let mut files = Vec::new();
-            for e in rd.flatten() {
-                if e.file_type().map(|t| t.is_dir()).unwrap_or(false) && !e.file_name().to_string_lossy().starts_with('.') {
-                    let mut f = Vec::new();
-                    walk(&e.path(), &|n| !n.starts_with('.'), &mut f);
-                    files.extend(f);
-                }
-            }
-            files.sort();
-            out.extend(files.iter().map(|p| rel(p)));
-        }
-    }
-    out
-}
-
-#[derive(Default, Clone, PartialEq)]
-struct Identities {
-    themes: Vec<Value>,
-    components: Vec<String>,
-    templates: Vec<Value>,
-    codemods: Vec<Value>,
-    docs: Vec<String>,
-    agent_docs_append: Vec<String>,
-}
-
-impl Identities {
-    fn to_json(&self) -> Value {
-        let mut m = Map::new();
-        m.insert("themes".into(), Value::Array(self.themes.clone()));
-        m.insert("components".into(), Value::Array(self.components.iter().cloned().map(Value::String).collect()));
-        m.insert("templates".into(), Value::Array(self.templates.clone()));
-        m.insert("codemods".into(), Value::Array(self.codemods.clone()));
-        m.insert("docs".into(), Value::Array(self.docs.iter().cloned().map(Value::String).collect()));
-        m.insert("agentDocsAppend".into(), Value::Array(self.agent_docs_append.iter().cloned().map(Value::String).collect()));
-        Value::Object(m)
-    }
-}
-
-/// TEMP: replace with the discovery lanes' component, template, docs,
-/// codemod and theme discovery.
-fn collect_identities(pkg_dir: &Path, manifest: &Value) -> Identities {
-    let mut id = Identities::default();
-    let root = |k: &str| manifest.get(k).and_then(|v| v.as_str()).map(|r| super::add_helpers::resolve(pkg_dir, r)).filter(|p| p.is_dir());
-    if let Some(Value::Array(a)) = manifest.get("agentDocs").and_then(|a| a.get("append")) {
-        id.agent_docs_append = a.iter().filter_map(|x| x.as_str().map(String::from)).collect();
-    }
-    if let Some(r) = root("components") {
-        let mut docs = Vec::new();
-        walk(&r, &|n| doc_ext(n).is_some(), &mut docs);
-        for d in docs {
-            if let Some(v) = super::manifest_load::load_default(&d) {
-                if v.get("type").and_then(|t| t.as_str()) == Some("component") {
-                    if let Some(n) = v.get("name").and_then(|t| t.as_str()) {
-                        id.components.push(n.to_string());
-                    }
-                }
-            }
-        }
-        id.components.sort();
-    }
-    if let Some(r) = root("docs") {
-        let mut docs = Vec::new();
-        walk(&r, &|n| doc_ext(n).is_some(), &mut docs);
-        for d in docs {
-            if let Some(v) = super::manifest_load::load_default(&d) {
-                if v.get("type").and_then(|t| t.as_str()) != Some("namespace") {
-                    if let Some(n) = v.get("name").and_then(|t| t.as_str()) {
-                        id.docs.push(n.to_string());
-                    }
-                }
-            }
-        }
-        id.docs.sort();
-    }
-    if let Some(r) = root("templates") {
-        let mut docs = Vec::new();
-        walk(&r, &|n| doc_ext(n).is_some(), &mut docs);
-        for d in docs {
-            if let Some(v) = super::manifest_load::load_default(&d) {
-                let fname = super::add_helpers::basename(&d);
-                let stem = &fname[..fname.len() - doc_ext(&fname).unwrap()];
-                let mut t = Map::new();
-                t.insert("id".into(), Value::String(stem.into()));
-                t.insert("type".into(), v.get("type").cloned().unwrap_or(Value::Null));
-                t.insert("name".into(), v.get("name").cloned().unwrap_or(Value::Null));
-                if let Some(rp) = v.get("replaces") {
-                    t.insert("replaces".into(), rp.clone());
-                }
-                id.templates.push(Value::Object(t));
-            }
-        }
-    }
-    if let Some(r) = root("codemods") {
-        if let Ok(rd) = std::fs::read_dir(&r) {
-            let mut entries: Vec<(String, String)> = Vec::new();
-            for v in rd.flatten().filter(|e| e.path().is_dir()) {
-                let version = v.file_name().to_string_lossy().to_string();
-                for f in std::fs::read_dir(v.path()).into_iter().flatten().flatten() {
-                    let n = f.file_name().to_string_lossy().to_string();
-                    if let Some(stem) = n.strip_suffix(".mjs").or_else(|| n.strip_suffix(".js")).or_else(|| n.strip_suffix(".ts")) {
-                        entries.push((version.clone(), stem.to_string()));
-                    }
-                }
-            }
-            entries.sort_by(|a, b| crate::text::collate::locale_compare(&format!("{}/{}", a.0, a.1), &format!("{}/{}", b.0, b.1)));
-            id.codemods = entries
-                .into_iter()
-                .map(|(v, i)| {
-                    let mut m = Map::new();
-                    m.insert("version".into(), Value::String(v));
-                    m.insert("id".into(), Value::String(i));
-                    Value::Object(m)
-                })
-                .collect();
-        }
-    }
-    id
-}
-
-fn compare_identities(local: &Identities, packed: &Identities) -> Vec<Value> {
-    let mut issues = Vec::new();
-    let mut kind = |label: &str, l: Vec<(String, Value)>, p: Vec<(String, Value)>| {
-        for (k, item) in &l {
-            match p.iter().find(|(pk, _)| pk == k) {
-                None => issues.push(issue("identity_not_packed", "error", format!("{label} \"{k}\" is discoverable locally but missing from the packed tarball."))),
-                Some((_, pi)) if pi != item => issues.push(issue("identity_mismatch", "error", format!("{label} \"{k}\" resolves differently from the packed tarball."))),
-                _ => {}
-            }
-        }
-        for (k, _) in &p {
-            if !l.iter().any(|(lk, _)| lk == k) {
-                issues.push(issue("packed_identity_unexpected", "error", format!("{label} \"{k}\" exists only in the packed tarball.")));
-            }
-        }
-    };
-    let by = |v: &[Value], f: &dyn Fn(&Value) -> String| v.iter().map(|x| (f(x), x.clone())).collect::<Vec<_>>();
-    let strs = |v: &[String]| v.iter().map(|x| (x.clone(), Value::String(x.clone()))).collect::<Vec<_>>();
-    kind("Theme", by(&local.themes, &|x| x["slug"].as_str().unwrap_or("").into()), by(&packed.themes, &|x| x["slug"].as_str().unwrap_or("").into()));
-    kind("Component", strs(&local.components), strs(&packed.components));
-    kind("Template", by(&local.templates, &|x| x["id"].as_str().unwrap_or("").into()), by(&packed.templates, &|x| x["id"].as_str().unwrap_or("").into()));
-    let cm = |x: &Value| format!("{}/{}", x["version"].as_str().unwrap_or(""), x["id"].as_str().unwrap_or(""));
-    kind("Codemod", by(&local.codemods, &cm), by(&packed.codemods, &cm));
-    kind("Doc topic", strs(&local.docs), strs(&packed.docs));
-    if local.agent_docs_append != packed.agent_docs_append {
-        issues.push(issue("agent_docs_mismatch", "error", "agentDocs.append lines differ between local and packed manifests.".into()));
-    }
-    issues
-}
 
 fn copy_packed(src: &Path, dest: &Path, files: &[String]) -> std::io::Result<()> {
     for f in files {
@@ -389,41 +180,58 @@ fn package_relative(issues: &mut [Value], packed: &Path, consumer: &Path) {
     }
 }
 
-fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>) -> Value {
+fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>, loaded: &crate::discovery::integrations::Record) -> Value {
+    use crate::discovery::contribution_inventory as ci;
     let version = match pkg.get("version") {
         Some(Value::String(v)) => Value::String(v.clone()),
         _ => Value::Null,
     };
-    let manifest_file = find_manifest_paths(dir).into_iter().next().unwrap();
-    let manifest = match super::manifest_load::load_manifest_value(&manifest_file) {
-        Ok(m) => m,
-        Err(e) => {
-            issues.push(issue("invalid_manifest", "error", e.message));
-            return empty_receipt(Value::String(name), issues);
-        }
-    };
-    let manifest_rel = relative(dir, &manifest_file);
-    let mut roots: Vec<(String, String, Vec<String>)> = Vec::new();
-    let mut all_files = vec![manifest_rel.clone()];
-    for kind in ROOT_KINDS {
-        let Some(r) = manifest.get(kind).and_then(|v| v.as_str()) else { continue };
-        let abs = super::add_helpers::resolve(dir, r);
-        let files = enumerate(kind, &abs, dir);
-        for f in &files {
-            if !all_files.contains(f) {
-                all_files.push(f.clone());
-            }
-        }
-        roots.push((kind.to_string(), relative(dir, &abs), files));
+    let (manifest_rel, roots, all_files) = ci::compute_required_files(loaded);
+    let (local, local_errors) = ci::collect_identities(loaded);
+    for e in &local_errors {
+        issues.push(issue("local_discovery_failed", "error", format!("{}: {}", e.kind, e.message)));
     }
-    let local = collect_identities(dir, &manifest);
     for (kind, path, files) in &roots {
-        let abs = dir.join(path);
-        if !abs.is_dir() {
+        let abs = loaded.get(kind.as_str()).and_then(|v| v.as_str()).map(std::path::PathBuf::from).unwrap_or_else(|| dir.join(path));
+        if !abs.is_dir() || std::fs::read_dir(&abs).is_err() {
             continue;
         }
         if files.is_empty() {
             issues.push(issue("empty_contribution_root", "error", format!("Declared {kind} root \"{path}\" contains no discoverable contribution files.")));
+        }
+    }
+    if loaded.get("docs").map(|v| v.is_string()).unwrap_or(false) {
+        let docs = crate::discovery::docs_discovery::discover_integration_docs(loaded);
+        let problem = if !docs.namespaces.is_empty() || !docs.guides.is_empty() { super::cli_requirement::docs_tree_cli_problem(pkg) } else { None };
+        let mut files: Vec<String> = docs.records.iter().map(|r| r.path.clone()).collect();
+        for g in &docs.guides {
+            if let Some(f) = g.get("ref").and_then(|r| r.get("topicFile")).and_then(|f| f.as_str()) {
+                files.push(f.to_string());
+            }
+        }
+        let sets_field = |fields: &[&str]| {
+            files.iter().any(|f| {
+                let Ok(doc) = crate::discovery::docs_discovery::load_topic_module(f) else { return false };
+                doc.get("sections").and_then(|s| s.as_array()).map(|a| a.iter().any(|sec| fields.iter().any(|k| !matches!(sec.get(*k), None | Some(Value::Null))))).unwrap_or(false)
+            })
+        };
+        if let Some(p) = problem.clone() {
+            issues.push(issue("docs_tree_needs_cli", "error", p));
+        } else if sets_field(&["id"]) {
+            if let Some(p) = crate::discovery::cli_requirement::section_ids_cli_problem(pkg) {
+                issues.push(issue("section_ids_need_cli", "error", p));
+            }
+        }
+        if sets_field(&["before", "after"]) {
+            if let Some(p) = crate::discovery::cli_requirement::section_position_cli_problem(pkg) {
+                issues.push(issue("section_position_needs_cli", "warning", p));
+            }
+        }
+        let writes_tokens = files.iter().any(|f| std::fs::read_to_string(f).map(|t| !crate::discovery::doc_tokens::command_tokens_in(&t).is_empty()).unwrap_or(false));
+        if problem.is_none() && writes_tokens {
+            if let Some(p) = crate::discovery::cli_requirement::doc_tokens_cli_problem(pkg) {
+                issues.push(issue("doc_tokens_need_cli", "warning", p));
+            }
         }
     }
     if !local.themes.is_empty() {
@@ -435,7 +243,7 @@ fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>) -> 
         Ok(p) => p,
         Err(e) => {
             issues.push(issue("pack_failed", "error", e));
-            return build_receipt(name, version, &manifest_rel, &roots, &all_files, None, Some(&local), None, issues);
+            return build_receipt(name, version, &manifest_rel, &roots, &all_files, None, Some(&local.to_json()), None, issues);
         }
     };
     let issues_before = issues.len();
@@ -485,19 +293,24 @@ fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>) -> 
             }
             issues.push(Value::Object(m));
         }
-        let packed_manifest_file = if packed_result.integration.is_some() { find_manifest_paths(&extract).into_iter().next() } else { None };
-        if let Some(pmf) = packed_manifest_file {
-            if let Ok(pm) = super::manifest_load::load_manifest_value(&pmf) {
-                let packed = collect_identities(&extract, &pm);
-                issues.extend(compare_identities(&local, &packed));
-                issues.extend(packed_component_exports(&extract, &pm, &name, &scratch));
-                packed_ids = Some(packed);
+        if let Some(Value::Object(packed_loaded)) = &packed_result.integration {
+            let (packed, errs) = ci::collect_identities(packed_loaded);
+            for e in &errs {
+                issues.push(issue("packed_discovery_failed", "error", format!("{}: {}", e.kind, e.message)));
             }
+            for (code, msg_sev, msg) in ci::compare_identities(&local, &packed) {
+                let (sev, message) = if msg_sev == "error" || msg_sev == "warning" { (msg_sev, msg) } else { ("error".to_string(), msg_sev) };
+                let _ = &message;
+                issues.push(issue(&code, &sev, message));
+            }
+            let pm = Value::Object(packed_loaded.clone());
+            issues.extend(packed_component_exports(&extract, &pm, &name, &scratch));
+            packed_ids = Some(packed.to_json());
         }
     }
     package_relative(&mut issues[issues_before..], &extract, &scratch);
     let _ = std::fs::remove_dir_all(&scratch);
-    build_receipt(name, version, &manifest_rel, &roots, &all_files, Some(&pack), Some(&local), packed_ids.as_ref(), issues)
+    build_receipt(name, version, &manifest_rel, &roots, &all_files, Some(&pack), Some(&local.to_json()), packed_ids.as_ref(), issues)
 }
 
 /// `validatePackedComponentExports`: each packed component's advertised
@@ -539,8 +352,8 @@ fn build_receipt(
     roots: &[(String, String, Vec<String>)],
     all_files: &[String],
     pack: Option<&super::pack::PackResult>,
-    local: Option<&Identities>,
-    packed: Option<&Identities>,
+    local: Option<&Value>,
+    packed: Option<&Value>,
     issues: Vec<Value>,
 ) -> Value {
     let packed_paths: Vec<String> = pack.map(|p| p.files.clone()).unwrap_or_default();
@@ -587,12 +400,38 @@ fn build_receipt(
     inv.insert("packedFiles".into(), Value::from(all_files.iter().filter(|f| packed_paths.contains(f)).count() as u64));
     d.insert("inventory".into(), Value::Object(inv));
     let mut c = Map::new();
-    c.insert("local".into(), local.map(|l| l.to_json()).unwrap_or(Value::Null));
-    c.insert("packed".into(), packed.map(|l| l.to_json()).unwrap_or(Value::Null));
+    c.insert("local".into(), local.cloned().unwrap_or(Value::Null));
+    c.insert("packed".into(), packed.cloned().unwrap_or(Value::Null));
     d.insert("contributions".into(), Value::Object(c));
     d.insert("issues".into(), Value::Array(issues));
     let mut m = Map::new();
     m.insert("type".into(), Value::String("integration.pack-check".into()));
     m.insert("data".into(), Value::Object(d));
     Value::Object(m)
+}
+
+
+
+
+fn walk(dir: &Path, filter: &dyn Fn(&str) -> bool, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut v: Vec<std::path::PathBuf> = Vec::new();
+    for e in rd.flatten() {
+        let n = e.file_name().to_string_lossy().to_string();
+        if ["node_modules", ".git", "__tests__", "__fixtures__"].contains(&n.as_str()) {
+            continue;
+        }
+        let p = e.path();
+        if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            walk(&p, filter, &mut v);
+        } else if filter(&n) {
+            v.push(p);
+        }
+    }
+    v.sort();
+    out.extend(v);
+}
+
+fn doc_ext(n: &str) -> Option<usize> {
+    [".doc.ts", ".doc.mjs", ".doc.js"].iter().find(|x| n.ends_with(*x)).map(|x| x.len())
 }

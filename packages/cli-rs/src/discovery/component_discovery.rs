@@ -34,16 +34,13 @@ pub struct DirEntry {
 /// `fs.readdirSync(dir, {withFileTypes: true})`, in byte order of the names.
 /// Empty when the folder cannot be read.
 pub fn list_dir_entries(dir: &Path) -> Vec<DirEntry> {
-    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    let Some(rd) = crate::discovery::listing_cache::read_dir(dir) else { return Vec::new() };
     let mut out: Vec<DirEntry> = rd
-        .filter_map(|e| e.ok())
-        .map(|e| {
-            let ft = e.file_type().ok();
-            DirEntry {
-                name: e.file_name().to_string_lossy().into_owned(),
-                is_dir: ft.map(|t| t.is_dir()).unwrap_or(false),
-                is_symlink: ft.map(|t| t.is_symlink()).unwrap_or(false),
-            }
+        .iter()
+        .map(|e| DirEntry {
+            name: e.name.clone(),
+            is_dir: e.kind.is_some_and(|k| k.is_dir),
+            is_symlink: e.kind.is_some_and(|k| k.is_symlink),
         })
         .collect();
     out.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
@@ -57,7 +54,7 @@ pub fn list_dir(dir: &Path) -> Vec<String> {
 
 /// `fs.existsSync`: follows symbolic links.
 pub fn path_exists(p: &Path) -> bool {
-    p.exists()
+    crate::discovery::listing_cache::exists(p)
 }
 
 /// `existsCaseExact(target, root)`: the path exists and every segment below
@@ -66,6 +63,15 @@ pub fn exists_case_exact(target: &Path, root: &Path) -> bool {
     let Ok(rel) = target.strip_prefix(root) else { return false };
     if rel.as_os_str().is_empty() {
         return path_exists(target);
+    }
+    if crate::discovery::listing_cache::active() {
+        // Inside an operation the folders' listings answer, so a name that a
+        // listing lacks costs no probe of the disk. A link still needs its
+        // target.
+        return match crate::discovery::listing_cache::find_entry_path(root, rel) {
+            None => false,
+            Some(kind) => !kind.is_some_and(|k| k.is_symlink) || path_exists(target),
+        };
     }
     if !path_exists(target) {
         return false;

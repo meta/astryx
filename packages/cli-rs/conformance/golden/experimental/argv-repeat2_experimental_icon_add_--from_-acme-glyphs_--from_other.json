@@ -1,0 +1,17 @@
+{
+ "id": "argv-repeat2_experimental_icon_add_--from_-acme-glyphs_--from_other",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--from",
+  "@acme/glyphs",
+  "--from",
+  "other"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

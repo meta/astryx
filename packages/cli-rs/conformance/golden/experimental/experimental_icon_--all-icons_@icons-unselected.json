@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_--all-icons_@icons-unselected",
+ "args": [
+  "experimental",
+  "icon",
+  "--all-icons"
+ ],
+ "fixture": "icons-unselected",
+ "stdout": "",
+ "stderr": "Error: --all-icons lists every icon of one set: pass --set\n\n  npx @astryxdesign/cli@0.7.12 experimental icon --set <name> --all-icons  (list one set's icons)\n",
+ "exit": 1,
+ "files": []
+}

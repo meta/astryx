@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_--_--json",
+ "args": [
+  "theme",
+  "build",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/--json\n",
+ "exit": 1,
+ "files": []
+}

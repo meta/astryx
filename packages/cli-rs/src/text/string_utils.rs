@@ -82,11 +82,37 @@ fn doc_path_of(src_dir: &Path, comp: &str) -> Option<PathBuf> {
 
 /// `searchComponents(needle, coreDir, components)`. `doc_view` reads the
 /// `docs` export of a component doc (the doc compiler's `readDocView`).
+/// Every component's doc view, read on several threads (each doc evaluates
+/// on its own, so the order they finish in changes nothing).
+fn doc_views(paths: Vec<Option<PathBuf>>, doc_view: &(dyn Fn(&Path) -> Option<Value> + Sync)) -> Vec<Option<Value>> {
+    let slots: Vec<std::sync::Mutex<Option<Value>>> = paths.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let listings = crate::discovery::listing_cache::scope();
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            // The main thread's stack size: deep docs recurse in the engine.
+            let builder = std::thread::Builder::new().stack_size(8 << 20);
+            builder.spawn_scoped(scope, || {
+                listings.enter(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    if let Some(p) = path {
+                        *slots[i].lock().unwrap() = doc_view(p);
+                    }
+                })
+            })
+            .expect("spawn a doc reader");
+        }
+    });
+    slots.into_iter().map(|m| m.into_inner().unwrap()).collect()
+}
+
 pub fn search_components(
     needle: &str,
     core_dir: &Path,
     all_names: &[String],
-    doc_view: &dyn Fn(&Path) -> Option<Value>,
+    doc_view: &(dyn Fn(&Path) -> Option<Value> + Sync),
 ) -> Vec<ScoredMatch> {
     let term = js_lower(needle);
     let term_len = js_len(&term);
@@ -140,9 +166,9 @@ pub fn search_components(
     }
 
     let src_dir = core_dir.join("src");
-    for comp in all_names {
-        let Some(doc_path) = doc_path_of(&src_dir, comp) else { continue };
-        let Some(docs) = doc_view(&doc_path) else { continue };
+    let views = doc_views(all_names.iter().map(|c| doc_path_of(&src_dir, c)).collect(), doc_view);
+    for (comp, view) in all_names.iter().zip(views) {
+        let Some(docs) = view else { continue };
         if docs.is_null() {
             continue;
         }

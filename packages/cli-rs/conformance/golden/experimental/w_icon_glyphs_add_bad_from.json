@@ -1,0 +1,16 @@
+{
+ "id": "w_icon_glyphs_add_bad_from",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "HomeIcon",
+  "--from",
+  "./nothere.js"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"./nothere.js\" does not resolve to a module file in this package.\n",
+ "exit": 1,
+ "files": []
+}

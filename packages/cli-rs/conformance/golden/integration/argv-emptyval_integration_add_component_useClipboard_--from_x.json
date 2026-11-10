@@ -1,0 +1,16 @@
+{
+ "id": "argv-emptyval_integration_add_component_useClipboard_--from_x",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--from",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"from\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

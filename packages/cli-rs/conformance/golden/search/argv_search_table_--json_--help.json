@@ -1,0 +1,14 @@
+{
+ "id": "argv_search_table_--json_--help",
+ "args": [
+  "search",
+  "table",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx search\",\n    \"description\": \"Search components, hooks, docs, templates, and themes in one ranked list\",\n    \"usage\": \"astryx search [options] <query...>\",\n    \"options\": [\n      {\n        \"flags\": \"--type <domain>\",\n        \"description\": \"Filter to one domain (component|hook|doc|template|theme)\"\n      },\n      {\n        \"flags\": \"--limit <n>\",\n        \"description\": \"Max number of results, a positive integer (default 20)\"\n      },\n      {\n        \"flags\": \"--verbose\",\n        \"description\": \"Also print each result's score and match reason\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

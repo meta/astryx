@@ -1,0 +1,13 @@
+{
+ "id": "argv_gap-report_--_-h",
+ "args": [
+  "gap-report",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

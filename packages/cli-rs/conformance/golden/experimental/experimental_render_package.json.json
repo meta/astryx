@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_package.json",
+ "args": [
+  "experimental",
+  "render",
+  "package.json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: render reads a page module (.tsx, .jsx, .ts, .js, .mjs); package.json is not one\n",
+ "exit": 1,
+ "files": []
+}

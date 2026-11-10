@@ -51,8 +51,10 @@ pub fn write(cli_root: &std::path::Path, cwd: &str, target: &str, overwrite: boo
     }
     let src = cli_root.join("assets").join("theme.template.ts");
     let contents = fsutil::strip_copyright_header(&std::fs::read_to_string(src).unwrap_or_default());
-    let res = std::fs::create_dir_all(fsutil::dirname(&resolved)).and_then(|_| std::fs::write(&resolved, contents));
-    if let Err(e) = res {
+    if let Err((_, m)) = crate::commands::template::mkdir_p(&fsutil::dirname(&resolved)) {
+        return Err(ApiError::new(&format!("Failed to write the theme template to {rel}: {m}"), "ERR_WRITE_FAILED"));
+    }
+    if let Err(e) = std::fs::write(&resolved, contents) {
         return Err(ApiError::new(
             &format!("Failed to write the theme template to {rel}: {}", crate::commands::template::node_err(&e, "open", &resolved)),
             "ERR_WRITE_FAILED",

@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_components_-5",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

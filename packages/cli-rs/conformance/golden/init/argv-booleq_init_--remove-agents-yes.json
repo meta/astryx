@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_init_--remove-agents-yes",
+ "args": [
+  "init",
+  "--remove-agents=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--remove-agents=yes'\n",
+ "exit": 1,
+ "files": []
+}

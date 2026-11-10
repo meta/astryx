@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_component_--package_Button_Button",
+ "args": [
+  "component",
+  "--package",
+  "Button",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: External package \"Button\" not found\n",
+ "exit": 1,
+ "files": []
+}

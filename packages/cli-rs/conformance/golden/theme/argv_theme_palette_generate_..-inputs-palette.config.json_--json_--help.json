@@ -1,0 +1,16 @@
+{
+ "id": "argv_theme_palette_generate_..-inputs-palette.config.json_--json_--help",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme palette generate\",\n    \"description\": \"Generate an OKLCH palette candidate for human review\",\n    \"usage\": \"astryx theme palette generate [options] <config>\",\n    \"options\": [\n      {\n        \"flags\": \"-o, --out <path>\",\n        \"description\": \"Write a candidate TypeScript or JSON file and a sibling receipt\"\n      },\n      {\n        \"flags\": \"--preview <path>\",\n        \"description\": \"Write a self-contained HTML preview page; the path must end in .html\"\n      },\n      {\n        \"flags\": \"-f, --overwrite\",\n        \"description\": \"Replace existing candidate, receipt, and preview files. Without it, if any of them exists, nothing is written\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

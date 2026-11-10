@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--variants_a-b_--variants_other",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--variants",
+  "a,b",
+  "--variants",
+  "other"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid icon set name \"useClipboard\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

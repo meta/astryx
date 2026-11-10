@@ -1,0 +1,12 @@
+{
+ "id": "argv_discover_---json",
+ "args": [
+  "discover",
+  "---json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '---json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_upgrade_--no-force",
+ "args": [
+  "upgrade",
+  "--no-force"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-force'\n(Did you mean --force?)\n",
+ "exit": 1,
+ "files": []
+}

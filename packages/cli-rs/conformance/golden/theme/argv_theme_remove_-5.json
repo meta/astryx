@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_remove_-5",
+ "args": [
+  "theme",
+  "remove",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

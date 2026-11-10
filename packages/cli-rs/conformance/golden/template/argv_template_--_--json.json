@@ -1,0 +1,13 @@
+{
+ "id": "argv_template_--_--json",
+ "args": [
+  "template",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"--json\"\n\n  CodeBlockJSONConfig  (block template)\n",
+ "exit": 1,
+ "files": []
+}

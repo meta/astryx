@@ -1,0 +1,12 @@
+{
+ "id": "argv_hook_-hV",
+ "args": [
+  "hook",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

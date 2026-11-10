@@ -1,0 +1,41 @@
+[
+  {
+    "id": "fuzz_init_--_--agent-docs-path-.tsx_--remove-agents@fuzzodd_3c56f6",
+    "args": [
+      "init",
+      "--",
+      "--agent-docs-path=\u00fc.tsx",
+      "--remove-agents"
+    ],
+    "fixture": "fuzzodd",
+    "cwd": "fuzzodd/emptyconfig"
+  },
+  {
+    "id": "fuzz_init_--_--agent-windsurf_6e6494",
+    "args": [
+      "init",
+      "--",
+      "--agent=windsurf"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_--_init_--all@initdone_b6fccd",
+    "args": [
+      "--",
+      "init",
+      "--all"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "fuzz_init_--_--agent-docs-path_-tmp-x_f4590d",
+    "args": [
+      "init",
+      "--",
+      "--agent-docs-path",
+      "/tmp/x"
+    ],
+    "fixture": "app"
+  }
+]

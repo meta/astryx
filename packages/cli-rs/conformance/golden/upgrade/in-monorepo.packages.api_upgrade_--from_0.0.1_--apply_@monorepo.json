@@ -1,0 +1,14 @@
+{
+ "id": "in-monorepo.packages.api_upgrade_--from_0.0.1_--apply_@monorepo",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--apply"
+ ],
+ "fixture": "monorepo",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Could not find installed @astryxdesign/core (or legacy @xds/core). Install the target version first, then rerun `pnpm dlx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

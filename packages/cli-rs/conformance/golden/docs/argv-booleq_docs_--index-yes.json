@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_docs_--index-yes",
+ "args": [
+  "docs",
+  "--index=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--index=yes'\n",
+ "exit": 1,
+ "files": []
+}

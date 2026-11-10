@@ -1,0 +1,13 @@
+{
+ "id": "fuzz_theme_build_..-inputs-page.tsx_2e4ced",
+ "args": [
+  "theme",
+  "build",
+  "../inputs/page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/inputs/page.tsx: Could not find a defineTheme() result in /tmp/astryx-conformance/work/inputs/page.tsx.\nExpected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })\nMake sure all imports in the theme file are resolvable.\n",
+ "exit": 1,
+ "files": []
+}

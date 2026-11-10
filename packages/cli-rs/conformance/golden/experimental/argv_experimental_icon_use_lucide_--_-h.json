@@ -1,0 +1,16 @@
+{
+ "id": "argv_experimental_icon_use_lucide_--_-h",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "lucide",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"lucide\"\n",
+ "exit": 1,
+ "files": []
+}

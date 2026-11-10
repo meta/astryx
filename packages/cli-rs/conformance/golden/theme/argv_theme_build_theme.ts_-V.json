@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_theme.ts_-V",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

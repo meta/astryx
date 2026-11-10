@@ -1,0 +1,12 @@
+{
+ "id": "argv_docs_--jso",
+ "args": [
+  "docs",
+  "--jso"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--jso'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

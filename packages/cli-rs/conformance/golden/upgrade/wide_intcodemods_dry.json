@@ -1,0 +1,13 @@
+{
+ "id": "wide_intcodemods_dry",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.8"
+ ],
+ "fixture": "upgrade-intcodemods",
+ "stdout": "\nUpgrade\nFrom version: 0.7.8\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-intcodemods/src for source files...\nFound 3 source files\n\n[ok] No changes needed - your code is already up to date!\nIntegrations: @acme/widgets\n4 codemods to run (dry run)\nApplying integration codemods...\n  Add widgets theme note (v0.7.10, @acme/widgets)\n!     ~ astryx.config.mjs (would change)\n  Drop legacy flag (v0.7.9, @acme/widgets)\n!     ~ src/App.tsx (would change)\n  Rename OldWidget to Widget (v0.7.9, @acme/widgets)\n!     ~ src/App.tsx (would change)\n!     ~ src/util.js (would change)\n  Explodes on Panel (v0.7.11, @acme/widgets)\n!!     !! src/Panel.tsx - cannot migrate Panel in Panel.tsx\nUpgrade failed\n\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

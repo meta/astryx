@@ -1,0 +1,19 @@
+{
+ "id": "oldcore_template_dashboard_--skeleton_@core-0.4.7",
+ "args": [
+  "template",
+  "dashboard",
+  "--skeleton"
+ ],
+ "fixture": "core-0.4.7",
+ "stdout": "package: @astryxdesign/core\n\n# dashboard - Three-band analytics: a row of headline tiles, then charts, then supporting tables, all re-reading from one global filter bar. Breadth over depth, a summary surface rather than a drill-down.\n# Components: Bar, BarChart, Card, CartesianGrid, Divider, Grid, Layout, Line, LineChart, ProgressBar, ResponsiveContainer, Table, Tooltip, XAxis, YAxis\n\n<Layout padding={6} height=\"fill\">\n  /* content: */\n  <LayoutContent padding={6}>\n    <VStack gap={6}>\n      <VStack gap={6}>\n        <Heading />\n        <Button variant=\"secondary\" />\n        <ActiveUsersChart />\n      </VStack>\n      <Grid gap={4} columns={{minWidth: 320, repeat: 'fit'}}>\n        <Grid gap={4} columns={{minWidth: 240, repeat: 'fit'}}>\n          <MetricCard />\n        </Grid>\n      </Grid>\n      <Divider />\n      <Heading />\n      <Button variant=\"secondary\" />\n      <Grid gap={4} columns={{minWidth: 320, repeat: 'fit'}}>\n        <StackedBarCard />\n        <StackedBarCard />\n      </Grid>\n      <Divider />\n      <Heading />\n      <Button variant=\"secondary\" />\n      <Grid gap={4} columns={{minWidth: 320, repeat: 'fit'}}>\n        <TableCard columns={topPagesColumns} />\n        <TableCard columns={topEventsColumns} />\n      </Grid>\n    </VStack>\n  </LayoutContent>\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.4.7`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.4.7\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

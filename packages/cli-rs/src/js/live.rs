@@ -135,3 +135,76 @@ impl LiveSession<'_> {
         v.to_string(&mut self.engine.ctx).map(|s| s.to_std_string_lossy()).unwrap_or_default()
     }
 }
+
+impl LiveSession<'_> {
+    /// Register `obj` as a synthetic module (`JitiOptions::virtual_modules`).
+    pub fn register_virtual(&mut self, obj: JsObject) -> Result<u64, String> {
+        self.engine.register_virtual(obj).map_err(|e| e.to_string())
+    }
+
+    /// A `defineTheme` stand-in that calls `real` and appends
+    /// `[input, result]` to `log` (an array).
+    pub fn recorder(&mut self, real: JsObject, log: JsObject) -> JsObject {
+        boa_engine::object::FunctionObjectBuilder::new(
+            self.engine.ctx.realm(),
+            boa_engine::NativeFunction::from_copy_closure_with_captures(
+                |this, args, (real, log): &(JsObject, JsObject), ctx| {
+                    let result = real.call(this, args, ctx)?;
+                    let input = args.first().cloned().unwrap_or_default();
+                    let pair = boa_engine::object::builtins::JsArray::from_iter([input, result.clone()], ctx);
+                    let arr = boa_engine::object::builtins::JsArray::from_object(log.clone())?;
+                    arr.push(pair.clone(), ctx)?;
+                    // Enumerable, so a spread copy of the theme carries it.
+                    if let Some(obj) = result.as_object() {
+                        let symbol_ctor = ctx.global_object().get(boa_engine::js_string!("Symbol"), ctx)?;
+                        if let Some(sc) = symbol_ctor.as_object() {
+                            let for_fn = sc.get(boa_engine::js_string!("for"), ctx)?;
+                            if let Some(f) = for_fn.as_object() {
+                                let sym = f.call(&symbol_ctor, &[boa_engine::js_string!("astryx.theme.lineage").into()], ctx)?;
+                                if let Some(sym) = sym.as_symbol() {
+                                    let _ = obj.set(sym, pair, false, ctx);
+                                }
+                            }
+                        }
+                    }
+                    Ok(result)
+                },
+                (real, log),
+            ),
+        )
+        .name(boa_engine::js_string!("defineTheme"))
+        .length(1)
+        .build()
+        .into()
+    }
+
+    /// `{...ns, [key]: value}`.
+    pub fn spread_with(&mut self, ns: &JsObject, key: &str, value: JsValue) -> JsObject {
+        let object = self.global("Object");
+        let assign = object.as_object().map(|o| self.get(&o, "assign")).unwrap_or_default();
+        let empty = boa_engine::object::ObjectInitializer::new(&mut self.engine.ctx).build();
+        let copy = self.call(&assign, &[empty.into(), ns.clone().into()]).unwrap_or_default();
+        let copy = copy.as_object().unwrap_or_else(|| boa_engine::object::ObjectInitializer::new(&mut self.engine.ctx).build());
+        let _ = copy.set(boa_engine::JsString::from(key), value, false, &mut self.engine.ctx);
+        copy
+    }
+
+    /// `obj[Symbol.for(name)]`.
+    pub fn get_symbol_for(&mut self, obj: &JsObject, name: &str) -> JsValue {
+        let ctx = &mut self.engine.ctx;
+        let symbol_ctor = ctx.global_object().get(boa_engine::js_string!("Symbol"), ctx).unwrap_or_default();
+        let Some(sc) = symbol_ctor.as_object() else { return JsValue::undefined() };
+        let f = sc.get(boa_engine::js_string!("for"), ctx).unwrap_or_default();
+        let Some(f) = f.as_object() else { return JsValue::undefined() };
+        let sym = f.call(&symbol_ctor, &[boa_engine::JsString::from(name).into()], ctx).unwrap_or_default();
+        match sym.as_symbol() {
+            Some(sym) => obj.get(sym, ctx).unwrap_or_default(),
+            None => JsValue::undefined(),
+        }
+    }
+
+    /// `Object.hasOwn(obj, key)`.
+    pub fn has_own(&mut self, obj: &JsObject, key: &str) -> bool {
+        obj.has_own_property(boa_engine::JsString::from(key), &mut self.engine.ctx).unwrap_or(false)
+    }
+}

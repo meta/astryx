@@ -1,0 +1,37 @@
+[
+  {
+    "id": "w_tpl_copy_under_file",
+    "args": [
+      "template",
+      "login",
+      "package.json/x.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_dir_is_file_json",
+    "args": [
+      "template",
+      "login",
+      "package.json",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_target_is_dir",
+    "args": [
+      "template",
+      "login",
+      "src.tsx"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "login",
+        "src.tsx/inner"
+      ]
+    ]
+  }
+]

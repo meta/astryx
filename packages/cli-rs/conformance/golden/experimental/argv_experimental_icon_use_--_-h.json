@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_--_-h",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"-h\"\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_use_-",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"ü中文\"\n",
+ "exit": 1,
+ "files": []
+}

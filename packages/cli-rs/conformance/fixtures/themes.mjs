@@ -205,4 +205,72 @@ export const reefTheme = defineTheme({
   t('themes/icons/slotfns.tsx', "import React from 'react';\nexport const slotFns = { chevron: ({size}) => React.createElement('span', null, size) };\nexport const chevron = slotFns.chevron;\n");
   t('themes/icons/slotted.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {chevron, slotFns} from './slotfns';\nexport default defineTheme({ name: 'slotted2', tokens: { '--color-bg': '#fff' }, componentIcons: { chevronDown: chevron, close: 'x-mark', spare: null, ...{ more: slotFns.chevron } } });\n");
   t('themes/icons/slotted-whole.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {slotFns} from './slotfns';\nexport default defineTheme({ name: 'slotted3', tokens: { '--color-bg': '#fff' }, componentIcons: slotFns });\n");
+
+  // A selected theme family (the CLI's own family contract fixture).
+  (() => { const themes=path.join(dir,'fam/themes'); const hidden=path.join(themes,'.hidden');
+const write=(root,name,src)=>fs.writeFileSync(path.join(root,name),src);
+const helper=path.join(dir,'node_modules/@fixture/static-helper');
+fs.mkdirSync(hidden,{recursive:true}); fs.mkdirSync(helper,{recursive:true});
+fs.writeFileSync(path.join(helper,'package.json'),JSON.stringify({name:'@fixture/static-helper',type:'module',exports:{import:'./index.mjs'}}));
+fs.writeFileSync(path.join(helper,'index.mjs'),`export const marker=true;\n`);
+for (const [root, name, source] of [[themes, 'base-icons.mjs', `import '@fixture/static-helper';export {icons} from './base-icons-leaf.mjs';\n`], [themes, 'base-icons-leaf.mjs', `export const icons={close:'base-close',menu:'base-menu'};\n`], [hidden, 'child-icons.mjs', `export const icons={close:'child-close'};\n`], [themes, 'base-indicators.mjs', `export const indicators={check:'base-check',radio:'base-radio'};\n`], [hidden, 'child-indicators.mjs', `export const indicators={check:'child-check'};\n`]]) write(root, name, source);
+write(themes,'ocean.mjs',`import {defineTheme} from '@astryxdesign/core/theme';
+import {icons} from './base-icons.mjs';
+import {indicators} from './base-indicators.mjs';
+await Promise.resolve();
+export const oceanTheme=defineTheme({
+ name:'ocean',icons,indicators,
+ tokens:{'--color-accent':'rgb(0 119 182)','--color-background-body':'rgb(240 248 255)'},
+ localTokens:{'--tide':'8px','--wash':'linear-gradient(\\nred,\\nblue\\n)','--commented':'red /* ) */','--payload':'[one; two]'},
+ components:{button:{base:{borderRadius:'6px',backgroundImage:'url(/icons/*/mark.svg)',':hover':{backgroundColor:'rgb(220 40 40)'}},'variant:a{b':{color:'rgb(1 2 3)'}},card:{base:{padding:'8px 16px'}},text:{'type:body':{letterSpacing:'0.01em'}}},
+ adaptations:{rules:[{when:{width:{below:'md'}},value:{tokens:{'--spacing-4':'12px'},components:{button:{base:{minHeight:'40px'}}}}}]},
+ onDark:{tokens:{'--color-border':'rgb(80 120 140)'},components:{button:{base:{borderColor:'rgb(80 120 140)','::before':{content:\`'@scope ([data-astryx-theme="ocean"])'\`}}}}},
+});export default oceanTheme;\n`);
+write(themes,'ocean-barrel.mjs',`export {oceanTheme} from './ocean.mjs';\n`);
+write(hidden,'ocean-calm.mjs',`import {defineTheme} from '@astryxdesign/core/theme';
+import {oceanTheme} from '../ocean-barrel.mjs';
+import {icons as brandIcons} from './child-icons.mjs';
+import {indicators as brandIndicators} from './child-indicators.mjs';
+export const resolvedOceanCalmTheme=defineTheme({
+ name:'ocean-calm',extends:oceanTheme,icons:brandIcons,indicators:brandIndicators,
+ tokens:{'--color-accent':['rgb(0 150 170)','rgb(0 170 190)']},
+ localTokens:{'--tide':'10px','--wash':'linear-gradient(\\nred,\\ngreen\\n)','--payload':'[one; three]'},
+ components:{button:{base:{backgroundColor:'rgb(220 250 250)',borderColor:'rgb(0 0 0)',minHeight:'28px'},'variant:lagoon':{backgroundColor:'rgb(0 90 110)'}},card:{base:{padding:'24px'}}},
+ adaptations:{widthBreakpoints:{md:900}},
+});export const oceanCalmTheme={...resolvedOceanCalmTheme};export default oceanCalmTheme;\n`);
+write(hidden,'ocean-calm-deep.mjs',`import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanCalmTheme} from './ocean-calm.mjs';\nexport const oceanCalmDeepTheme=defineTheme({name:'ocean-calm-deep',extends:oceanCalmTheme});\n`);
+write(themes,'ocean-midnight.mjs',`import {oceanTheme} from './ocean.mjs';\nexport const oceanMidnightTheme={name:'ocean-midnight',extends:oceanTheme,tokens:{'--color-background-body':'rgb(4 20 32)'},components:{button:{base:{color:'rgb(235 250 255)'}}}};export default oceanMidnightTheme;\n`);
+
+  write(themes, 'lone.mjs', `export default {name:'lone', tokens:{'--color-bg':'#fff'}};\n`);
+  write(themes, 'stranger.mjs', `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name:'stranger', extends:{name:'ghost', tokens:{}}, tokens:{'--color-bg':'#111'}});\n`);
+  write(themes, 'dupe.mjs', `export default {name:'ocean', tokens:{'--color-bg':'#222'}};\n`);
+  })();
+
+  // Family registry graphs: installed, local, broken and CSS-importing registries.
+  (() => {
+    const pkg = (name, files) => {
+      const root = path.join(dir, 'node_modules', name);
+      fs.mkdirSync(root, {recursive: true});
+      for (const [f, src] of Object.entries(files)) fs.writeFileSync(path.join(root, f), src);
+    };
+    pkg('@acme/broken-icons', {'package.json': '{"name":"@acme/broken-icons","type":"module","exports":"./index.mjs"}', 'index.mjs': "throw new Error('registry exploded');\n"});
+    pkg('@acme/thin-icons', {'package.json': '{"name":"@acme/thin-icons","type":"module","exports":"./index.mjs"}', 'index.mjs': 'export const other = {};\n'});
+    pkg('@acme/good-icons', {'package.json': '{"name":"@acme/good-icons","type":"module","exports":"./index.mjs"}', 'index.mjs': "export const icons = {close:'x'};\n"});
+    pkg('@acme/split-icons', {'package.json': '{"name":"@acme/split-icons","exports":{"import":"./index.mjs","require":"./index.cjs"}}', 'index.mjs': "throw new Error('esm registry exploded');\n", 'index.cjs': "exports.icons = {close:'x'};\n"});
+    const reg = path.join(dir, 'reg');
+    fs.mkdirSync(reg, {recursive: true});
+    const w = (f, src) => fs.writeFileSync(path.join(reg, f), src);
+    const mk = (n, spec) => {
+      w(`${n}.mjs`, `import {defineTheme} from '@astryxdesign/core/theme';\nimport {icons} from '${spec}';\nexport const rootTheme = defineTheme({name:'r-${n}', icons, tokens:{'--color-bg':'#fff'}});\nexport default rootTheme;\n`);
+      w(`${n}-child.mjs`, `import base from './${n}.mjs';\nexport default {name:'c-${n}', extends: base, tokens:{'--color-bg':'#000'}};\n`);
+    };
+    for (const n of ['broken', 'thin', 'good', 'split']) mk(n, `@acme/${n}-icons`);
+    w('local-missing-icons.mjs', 'export const nope = {};\n'); mk('lmiss', './local-missing-icons.mjs');
+    w('extless-icons.mjs', 'export const icons = {};\n'); mk('extless', './extless-icons');
+    w('css-icons.mjs', "import './x.css';\nexport const icons = {a:'b'};\n"); w('x.css', ''); mk('css', './css-icons.mjs');
+    w('dyn-icons.mjs', "const m = './good-leaf.mjs';\nexport const load = () => import(m);\nexport const icons = {a:'b'};\n"); mk('dyn', './dyn-icons.mjs');
+    w('sdyn-icons.mjs', "export const load = () => import('./good-leaf.mjs');\nexport const icons = {a:'b'};\n"); mk('sdyn', './sdyn-icons.mjs');
+    w('good-leaf.mjs', "export const icons={q:'r'};\n");
+    w('star-icons.mjs', "export * from './good-leaf.mjs';\n"); mk('star', './star-icons.mjs');
+  })();
 }

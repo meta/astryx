@@ -1,0 +1,17 @@
+{
+ "id": "shell_postinstall_@oneclicommand",
+ "args": [
+  "postinstall"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "\n  ╭───────────────────────────────────────────────────╮\n  │                                                  │\n  │   Design system installed!                       │\n  │                                                  │\n  │   Get started:                                   │\n  │     acme astryx init          Setup + AI agent docs│\n  │     acme astryx --help        See all commands   │\n  │                                                  │\n  │   Or run directly:                               │\n  │     acme astryx init           Setup + AI agent docs│\n  │     acme astryx component     Browse component docs│\n  │     acme astryx hook          Browse hook docs   │\n  │     acme astryx docs          Design system reference│\n  │     acme astryx swizzle       Customize a component│\n  │     acme astryx template      Add a page template│\n  │                                                  │\n  ╰───────────────────────────────────────────────────╯\n\n",
+ "stderr": "\nNext step: run `acme astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/doctor-integrations/oneclicommand\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

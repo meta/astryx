@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_--_--json",
+ "args": [
+  "theme",
+  "palette",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette --json'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "w_layout_@docsint",
+ "args": [
+  "docs",
+  "layout"
+ ],
+ "fixture": "docsint",
+ "stdout": "Layout\nBuild an app layout outside-in: scaffold the regions, structure the content, tune the spacing, then adapt across widths.\n\npackage: @astryxdesign/cli\n\nBuild a layout outside-in. Settle the shell and its region budgets before any content exists, then work inward.\nContent-first layouts drift into a padded column of cards, because every section ends up inventing its own container.\n\n1. Scaffold: pick the shell, budget each region, and choose navigation\n2. Structure: rank each region's content and choose its container\n3. Spacing: align each region to one content line, then set gaps and density\n4. Breakpoints: decide what each region does as width changes\n\nThis guide decides layout, not component APIs. Run `npx @astryxdesign/cli@0.7.12 build \"<idea>\"` to start from the\nclosest template for your app type, and `npx @astryxdesign/cli@0.7.12 component <Name>` for a component's props.\n\nGuides\n\nscaffold                 Pick the shell, budget each region, and choose navigation, before any content exists.\nstructure                Rank the content in each region, then pick the weakest container that groups it.\nheaders-and-footers      Pin a header or footer while the body scrolls, so the title and commit actions stay reachable.\nside-panels              Add a master-detail side panel that opens on row select instead of navigating away.\nlayout-spacing           Hold one content line per region, then tune gaps and density.\nresponsive (@acme/docs)  Responsive, the Acme way. See `npx @astryxdesign/cli@0.7.12 docs acme-colors`.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs layout/<name>\nUp: npx @astryxdesign/cli@0.7.12 docs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

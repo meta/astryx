@@ -1,0 +1,3823 @@
+[
+  {
+    "id": "w_-acme-kit_@integration",
+    "args": [
+      "discover",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-9.9.9_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@9.9.9"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-acmecard_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/acmecard"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeBadge_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeBadge"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-hero_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/hero"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-acme-guide_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/acme-guide"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-ocean_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/ocean"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-Nope_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/Nope"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-Acme_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/Acme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.7.12_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.7.12"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.1.0_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.1.0"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-gothic_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/gothic"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-goth_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/goth"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-RichTextEditor_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/RichTextEditor"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-richtexteditor_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/richtexteditor"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-Editor_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/Editor"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-lab_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/lab"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/charts"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts-ChartShowcase_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/ChartShowcase"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter-butter_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter/butter"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-nope_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/nope"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-vega_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/vega"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_gothic_@integration",
+    "args": [
+      "discover",
+      "gothic"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich_@integration",
+    "args": [
+      "discover",
+      "rich"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card_@integration",
+    "args": [
+      "discover",
+      "card"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme_@integration",
+    "args": [
+      "discover",
+      "acme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_ocean_@integration",
+    "args": [
+      "discover",
+      "ocean"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_hero_@integration",
+    "args": [
+      "discover",
+      "hero"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_chart_@integration",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_AcmeCrad_@integration",
+    "args": [
+      "discover",
+      "AcmeCrad"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_theme-butter_@integration",
+    "args": [
+      "discover",
+      "theme-butter"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme_@integration",
+    "args": [
+      "discover",
+      "@acme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_kit_@integration",
+    "args": [
+      "discover",
+      "kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-theme---available_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--available"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-component---installed_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--installed"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-template_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "template"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-doc_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "doc"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-codemod_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "codemod"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-agent-doc_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "agent-doc"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-icon-set_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich---limit-1_@integration",
+    "args": [
+      "discover",
+      "rich",
+      "--limit",
+      "1"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_chart---limit-2_@integration",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "2"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---installed_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--installed"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---available_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--available"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich---type-template_@integration",
+    "args": [
+      "discover",
+      "rich",
+      "--type",
+      "template"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_a---limit-3_@integration",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "3"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_theme---type-theme---installed_@integration",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "theme",
+      "--installed"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-9.9.9---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@9.9.9",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-acmecard---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/acmecard",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeBadge---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeBadge",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-hero---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/hero",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-acme-guide---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/acme-guide",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-ocean---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/ocean",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-Nope---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/Nope",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-Acme---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/Acme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.7.12---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.7.12",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.1.0---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.1.0",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-gothic---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/gothic",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-goth---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/goth",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-RichTextEditor---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/RichTextEditor",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-richtexteditor---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/richtexteditor",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-Editor---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/Editor",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-lab---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/lab",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/charts",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts-ChartShowcase---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/ChartShowcase",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter-butter---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter/butter",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-nope---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/nope",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-vega---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/vega",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_gothic---json_@integration",
+    "args": [
+      "discover",
+      "gothic",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich---json_@integration",
+    "args": [
+      "discover",
+      "rich",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---json_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme---json_@integration",
+    "args": [
+      "discover",
+      "acme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_ocean---json_@integration",
+    "args": [
+      "discover",
+      "ocean",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_hero---json_@integration",
+    "args": [
+      "discover",
+      "hero",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_chart---json_@integration",
+    "args": [
+      "discover",
+      "chart",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_AcmeCrad---json_@integration",
+    "args": [
+      "discover",
+      "AcmeCrad",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_theme-butter---json_@integration",
+    "args": [
+      "discover",
+      "theme-butter",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme---json_@integration",
+    "args": [
+      "discover",
+      "@acme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_kit---json_@integration",
+    "args": [
+      "discover",
+      "kit",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-theme---available---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--available",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-component---installed---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-template---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-doc---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "doc",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-codemod---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "codemod",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-agent-doc---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "agent-doc",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-icon-set---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich---limit-1---json_@integration",
+    "args": [
+      "discover",
+      "rich",
+      "--limit",
+      "1",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_chart---limit-2---json_@integration",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "2",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---installed---json_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---available---json_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--available",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_rich---type-template---json_@integration",
+    "args": [
+      "discover",
+      "rich",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_a---limit-3---json_@integration",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "3",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_theme---type-theme---installed---json_@integration",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "theme",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit_@large",
+    "args": [
+      "discover",
+      "@acme/kit"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3_@large",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-9.9.9_@large",
+    "args": [
+      "discover",
+      "@acme/kit@9.9.9"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard_@large",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-acmecard_@large",
+    "args": [
+      "discover",
+      "@acme/kit/acmecard"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-AcmeBadge_@large",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeBadge"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-hero_@large",
+    "args": [
+      "discover",
+      "@acme/kit/hero"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-acme-guide_@large",
+    "args": [
+      "discover",
+      "@acme/kit/acme-guide"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-ocean_@large",
+    "args": [
+      "discover",
+      "@acme/kit/ocean"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-Nope_@large",
+    "args": [
+      "discover",
+      "@acme/kit/Nope"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-Acme_@large",
+    "args": [
+      "discover",
+      "@acme/kit/Acme"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.7.12_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.7.12"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.1.0_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.1.0"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-gothic_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/gothic"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-goth_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/goth"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-RichTextEditor_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/RichTextEditor"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-richtexteditor_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/richtexteditor"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-Editor_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/Editor"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-charts_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-charts-ChartShowcase_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/ChartShowcase"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter-butter_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter/butter"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-nope_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/nope"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-vega_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/vega"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_gothic_@large",
+    "args": [
+      "discover",
+      "gothic"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich_@large",
+    "args": [
+      "discover",
+      "rich"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card_@large",
+    "args": [
+      "discover",
+      "card"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_acme_@large",
+    "args": [
+      "discover",
+      "acme"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_ocean_@large",
+    "args": [
+      "discover",
+      "ocean"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_hero_@large",
+    "args": [
+      "discover",
+      "hero"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart_@large",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_AcmeCrad_@large",
+    "args": [
+      "discover",
+      "AcmeCrad"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_theme-butter_@large",
+    "args": [
+      "discover",
+      "theme-butter"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-_@large",
+    "args": [
+      "discover",
+      "@acme/kit/"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme_@large",
+    "args": [
+      "discover",
+      "@acme"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_kit_@large",
+    "args": [
+      "discover",
+      "kit"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-theme---available_@large",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--available"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-component---installed_@large",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--installed"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-template_@large",
+    "args": [
+      "discover",
+      "--type",
+      "template"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-doc_@large",
+    "args": [
+      "discover",
+      "--type",
+      "doc"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-codemod_@large",
+    "args": [
+      "discover",
+      "--type",
+      "codemod"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-agent-doc_@large",
+    "args": [
+      "discover",
+      "--type",
+      "agent-doc"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-icon-set_@large",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich---limit-1_@large",
+    "args": [
+      "discover",
+      "rich",
+      "--limit",
+      "1"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---limit-2_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "2"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card---installed_@large",
+    "args": [
+      "discover",
+      "card",
+      "--installed"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card---available_@large",
+    "args": [
+      "discover",
+      "card",
+      "--available"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich---type-template_@large",
+    "args": [
+      "discover",
+      "rich",
+      "--type",
+      "template"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_a---limit-3_@large",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "3"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_theme---type-theme---installed_@large",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "theme",
+      "--installed"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-9.9.9---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit@9.9.9",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-acmecard---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/acmecard",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-AcmeBadge---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeBadge",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-hero---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/hero",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-acme-guide---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/acme-guide",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-ocean---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/ocean",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-Nope---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/Nope",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme-kit-Acme---json_@large",
+    "args": [
+      "discover",
+      "@acme/kit/Acme",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.7.12---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.7.12",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-0.1.0---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@0.1.0",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-gothic---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/gothic",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-goth---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic/goth",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-RichTextEditor---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/RichTextEditor",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-richtexteditor---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/richtexteditor",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-Editor---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext/Editor",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-charts---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-charts-ChartShowcase---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/ChartShowcase",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-butter-butter---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-butter/butter",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-nope---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/nope",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-vega---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/vega",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_gothic---json_@large",
+    "args": [
+      "discover",
+      "gothic",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich---json_@large",
+    "args": [
+      "discover",
+      "rich",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card---json_@large",
+    "args": [
+      "discover",
+      "card",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_acme---json_@large",
+    "args": [
+      "discover",
+      "acme",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_ocean---json_@large",
+    "args": [
+      "discover",
+      "ocean",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_hero---json_@large",
+    "args": [
+      "discover",
+      "hero",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---json_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_AcmeCrad---json_@large",
+    "args": [
+      "discover",
+      "AcmeCrad",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_theme-butter---json_@large",
+    "args": [
+      "discover",
+      "theme-butter",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-acme---json_@large",
+    "args": [
+      "discover",
+      "@acme",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_kit---json_@large",
+    "args": [
+      "discover",
+      "kit",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-theme---available---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--available",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-component---installed---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-template---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-doc---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "doc",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-codemod---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "codemod",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-agent-doc---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "agent-doc",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-icon-set---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich---limit-1---json_@large",
+    "args": [
+      "discover",
+      "rich",
+      "--limit",
+      "1",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---limit-2---json_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "2",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card---installed---json_@large",
+    "args": [
+      "discover",
+      "card",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_card---available---json_@large",
+    "args": [
+      "discover",
+      "card",
+      "--available",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_rich---type-template---json_@large",
+    "args": [
+      "discover",
+      "rich",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_a---limit-3---json_@large",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "3",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_theme---type-theme---installed---json_@large",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "theme",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic_@app",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--components---type-theme_@app",
+    "args": [
+      "discover",
+      "--components",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--installed_@integration",
+    "args": [
+      "discover",
+      "--installed"
+    ],
+    "fixture": "integration",
+    "cwd": "integration/node_modules/@acme/kit/components"
+  },
+  {
+    "id": "w_--installed---components_@large",
+    "args": [
+      "discover",
+      "--installed",
+      "--components"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--available_@large",
+    "args": [
+      "discover",
+      "--available"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic_@nocore",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic"
+    ],
+    "fixture": "nocore"
+  },
+  {
+    "id": "w_gothic_@plain",
+    "args": [
+      "discover",
+      "gothic"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_gothic_@empty",
+    "args": [
+      "discover",
+      "gothic"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_--available---type-theme_@integration",
+    "args": [
+      "discover",
+      "--available",
+      "--type",
+      "theme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic---json_@app",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--components---type-theme---json_@app",
+    "args": [
+      "discover",
+      "--components",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--installed---json_@integration",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration",
+    "cwd": "integration/node_modules/@acme/kit/components"
+  },
+  {
+    "id": "w_--installed---components---json_@large",
+    "args": [
+      "discover",
+      "--installed",
+      "--components",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--available---json_@large",
+    "args": [
+      "discover",
+      "--available",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic---json_@nocore",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic",
+      "--json"
+    ],
+    "fixture": "nocore"
+  },
+  {
+    "id": "w_gothic---json_@plain",
+    "args": [
+      "discover",
+      "gothic",
+      "--json"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_gothic---json_@empty",
+    "args": [
+      "discover",
+      "gothic",
+      "--json"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_--available---type-theme---json_@integration",
+    "args": [
+      "discover",
+      "--available",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_bare_@discover-sources",
+    "args": [
+      "discover"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--available_@discover-sources",
+    "args": [
+      "discover",
+      "--available"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--installed_@discover-sources",
+    "args": [
+      "discover",
+      "--installed"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--type-template_@discover-sources",
+    "args": [
+      "discover",
+      "--type",
+      "template"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--type-component---available_@discover-sources",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--available"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--components_@discover-sources",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.2.0_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.2.0"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.1.4_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.1.4"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-1.0.0_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@1.0.0"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-Dial_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit/Dial"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.1.0-beta.1_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.1.0-beta.1"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.0.0_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.0.0"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-9.9.9_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@9.9.9"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-pages-Report_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/pages/Report"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Chart_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Chart"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-chart_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/chart"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Nope_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Nope"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Char_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Char"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-boards_@discover-sources",
+    "args": [
+      "discover",
+      "@test/boards"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-boards-pages-DialBoard_@discover-sources",
+    "args": [
+      "discover",
+      "@test/boards/pages/DialBoard"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-nope_@discover-sources",
+    "args": [
+      "discover",
+      "@test/nope"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial_@discover-sources",
+    "args": [
+      "discover",
+      "dial"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_Dial_@discover-sources",
+    "args": [
+      "discover",
+      "Dial"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_chart_@discover-sources",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_pages_@discover-sources",
+    "args": [
+      "discover",
+      "pages"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_report_@discover-sources",
+    "args": [
+      "discover",
+      "report"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_board---available_@discover-sources",
+    "args": [
+      "discover",
+      "board",
+      "--available"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial---installed_@discover-sources",
+    "args": [
+      "discover",
+      "dial",
+      "--installed"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial---type-template_@discover-sources",
+    "args": [
+      "discover",
+      "dial",
+      "--type",
+      "template"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_a---limit-2_@discover-sources",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "2"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic_@discover-sources",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_test_@discover-sources",
+    "args": [
+      "discover",
+      "test"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_bare_@discover-badsource",
+    "args": [
+      "discover"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_--available_@discover-badsource",
+    "args": [
+      "discover",
+      "--available"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-charts_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/charts"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-boards_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/boards"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-kit_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/kit"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-kit-Dial_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/kit/Dial"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_dial_@discover-badsource",
+    "args": [
+      "discover",
+      "dial"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_chart_@discover-badsource",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_bare_@discover-broken",
+    "args": [
+      "discover"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_--installed_@discover-broken",
+    "args": [
+      "discover",
+      "--installed"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_-test-broken_@discover-broken",
+    "args": [
+      "discover",
+      "@test/broken"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_-test-broken-X_@discover-broken",
+    "args": [
+      "discover",
+      "@test/broken/X"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_broken_@discover-broken",
+    "args": [
+      "discover",
+      "broken"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_gothic_@discover-broken",
+    "args": [
+      "discover",
+      "gothic"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_bare_@discover-iconsets",
+    "args": [
+      "discover"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-icon-set_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-theme_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs-glyphs_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs/glyphs"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs-nope_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs/nope"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_glyphs_@discover-iconsets",
+    "args": [
+      "discover",
+      "glyphs"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-icon-set-glyph_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "glyph"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--json_@discover-sources",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--available---json_@discover-sources",
+    "args": [
+      "discover",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--installed---json_@discover-sources",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--type-template---json_@discover-sources",
+    "args": [
+      "discover",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--type-component---available---json_@discover-sources",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--components---json_@discover-sources",
+    "args": [
+      "discover",
+      "--components",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.2.0---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.2.0",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.1.4---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.1.4",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-1.0.0---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@1.0.0",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-Dial---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit/Dial",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.1.0-beta.1---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.1.0-beta.1",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.0.0---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.0.0",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-9.9.9---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@9.9.9",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-pages-Report---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/pages/Report",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Chart---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Chart",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-chart---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/chart",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Nope---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Nope",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-Char---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts/Char",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-boards---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/boards",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-boards-pages-DialBoard---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/boards/pages/DialBoard",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-nope---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/nope",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial---json_@discover-sources",
+    "args": [
+      "discover",
+      "dial",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_Dial---json_@discover-sources",
+    "args": [
+      "discover",
+      "Dial",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_chart---json_@discover-sources",
+    "args": [
+      "discover",
+      "chart",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_pages---json_@discover-sources",
+    "args": [
+      "discover",
+      "pages",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_report---json_@discover-sources",
+    "args": [
+      "discover",
+      "report",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_board---available---json_@discover-sources",
+    "args": [
+      "discover",
+      "board",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial---installed---json_@discover-sources",
+    "args": [
+      "discover",
+      "dial",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_dial---type-template---json_@discover-sources",
+    "args": [
+      "discover",
+      "dial",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_a---limit-2---json_@discover-sources",
+    "args": [
+      "discover",
+      "a",
+      "--limit",
+      "2",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic---json_@discover-sources",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_test---json_@discover-sources",
+    "args": [
+      "discover",
+      "test",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_--json_@discover-badsource",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_--available---json_@discover-badsource",
+    "args": [
+      "discover",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-charts---json_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/charts",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-boards---json_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/boards",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-kit---json_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/kit",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_-test-kit-Dial---json_@discover-badsource",
+    "args": [
+      "discover",
+      "@test/kit/Dial",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_dial---json_@discover-badsource",
+    "args": [
+      "discover",
+      "dial",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_chart---json_@discover-badsource",
+    "args": [
+      "discover",
+      "chart",
+      "--json"
+    ],
+    "fixture": "discover-badsource"
+  },
+  {
+    "id": "w_--json_@discover-broken",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_--installed---json_@discover-broken",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_-test-broken---json_@discover-broken",
+    "args": [
+      "discover",
+      "@test/broken",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_-test-broken-X---json_@discover-broken",
+    "args": [
+      "discover",
+      "@test/broken/X",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_broken---json_@discover-broken",
+    "args": [
+      "discover",
+      "broken",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_gothic---json_@discover-broken",
+    "args": [
+      "discover",
+      "gothic",
+      "--json"
+    ],
+    "fixture": "discover-broken"
+  },
+  {
+    "id": "w_--json_@discover-iconsets",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-icon-set---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-theme---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs-glyphs---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs/glyphs",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-glyphs-nope---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "@acme/glyphs/nope",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_glyphs---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "glyphs",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_--type-icon-set-glyph---json_@discover-iconsets",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "glyph",
+      "--json"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---detail-brief_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---detail-compact_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---zh_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--zh"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---lang-zh_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--lang",
+      "zh"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---dense_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--dense"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3-AcmeCard_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3/AcmeCard"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3-hero_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3/hero"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard-extra_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard/extra"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-x_@integration",
+    "args": [
+      "discover",
+      "@/x"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-kit_@integration",
+    "args": [
+      "discover",
+      "acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_kit-hero_@integration",
+    "args": [
+      "discover",
+      "kit/hero"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-ACME-KIT_@integration",
+    "args": [
+      "discover",
+      "@ACME/KIT"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-cmeCard_@integration",
+    "args": [
+      "discover",
+      "\u00c4cmeCard"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-_@integration",
+    "args": [
+      "discover",
+      "\u00e9"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---limit-1_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--limit",
+      "1"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_hero---type-template_@integration",
+    "args": [
+      "discover",
+      "hero",
+      "--type",
+      "template"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_ocean---type-theme_@integration",
+    "args": [
+      "discover",
+      "ocean",
+      "--type",
+      "theme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide---type-doc_@integration",
+    "args": [
+      "discover",
+      "acme-guide",
+      "--type",
+      "doc"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---type-codemod_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--type",
+      "codemod"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-theme---installed_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--installed"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--installed---type-doc_@integration",
+    "args": [
+      "discover",
+      "--installed",
+      "--type",
+      "doc"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-theme-gothic-_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/theme-gothic@"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-0.7.12-RichTextEditor_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext@0.7.12/RichTextEditor"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-1.0.0-RichTextEditor_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext@1.0.0/RichTextEditor"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_bareempty_@integration",
+    "args": [
+      "discover",
+      ""
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts-Chart---detail-brief_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/Chart",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar---detail-compact_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---limit-50_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "50"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---type-template_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "template"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-component---components_@large",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--components"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-test-kit-Dial---detail-brief_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit/Dial",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts---installed_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts",
+      "--installed"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_pages---type-template---available_@discover-sources",
+    "args": [
+      "discover",
+      "pages",
+      "--type",
+      "template",
+      "--available"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.2.0-Dial_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.2.0/Dial"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.0.0-pages-Report_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.0.0/pages/Report"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.1.0-beta.1-pages-Report_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.1.0-beta.1/pages/Report"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---detail-brief---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--detail",
+      "brief",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---detail-compact---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--detail",
+      "compact",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---zh---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--zh",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---lang-zh---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--lang",
+      "zh",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard---dense---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard",
+      "--dense",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3-AcmeCard---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3/AcmeCard",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-1.2.3-hero---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit@1.2.3/hero",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-acme-kit-AcmeCard-extra---json_@integration",
+    "args": [
+      "discover",
+      "@acme/kit/AcmeCard/extra",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-x---json_@integration",
+    "args": [
+      "discover",
+      "@/x",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-kit---json_@integration",
+    "args": [
+      "discover",
+      "acme/kit",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_kit-hero---json_@integration",
+    "args": [
+      "discover",
+      "kit/hero",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-ACME-KIT---json_@integration",
+    "args": [
+      "discover",
+      "@ACME/KIT",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-cmeCard---json_@integration",
+    "args": [
+      "discover",
+      "\u00c4cmeCard",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_---json_@integration",
+    "args": [
+      "discover",
+      "\u00e9",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---limit-1---json_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--limit",
+      "1",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_hero---type-template---json_@integration",
+    "args": [
+      "discover",
+      "hero",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_ocean---type-theme---json_@integration",
+    "args": [
+      "discover",
+      "ocean",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide---type-doc---json_@integration",
+    "args": [
+      "discover",
+      "acme-guide",
+      "--type",
+      "doc",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_card---type-codemod---json_@integration",
+    "args": [
+      "discover",
+      "card",
+      "--type",
+      "codemod",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--type-theme---installed---json_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--installed---type-doc---json_@integration",
+    "args": [
+      "discover",
+      "--installed",
+      "--type",
+      "doc",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-0.7.12-RichTextEditor---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext@0.7.12/RichTextEditor",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-richtext-1.0.0-RichTextEditor---json_@integration",
+    "args": [
+      "discover",
+      "@astryxdesign/richtext@1.0.0/RichTextEditor",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_---jsonempty_@integration",
+    "args": [
+      "discover",
+      "",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_-astryxdesign-charts-Chart---detail-brief---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/charts/Chart",
+      "--detail",
+      "brief",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-astryxdesign-lab-ChartBar---detail-compact---json_@large",
+    "args": [
+      "discover",
+      "@astryxdesign/lab/ChartBar",
+      "--detail",
+      "compact",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---limit-50---json_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--limit",
+      "50",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_chart---type-template---json_@large",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_--type-component---components---json_@large",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--components",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_-test-kit-Dial---detail-brief---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit/Dial",
+      "--detail",
+      "brief",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts---installed---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_pages---type-template---available---json_@discover-sources",
+    "args": [
+      "discover",
+      "pages",
+      "--type",
+      "template",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-kit-3.2.0-Dial---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/kit@3.2.0/Dial",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.0.0-pages-Report---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.0.0/pages/Report",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_-test-charts-2.1.0-beta.1-pages-Report---json_@discover-sources",
+    "args": [
+      "discover",
+      "@test/charts@2.1.0-beta.1/pages/Report",
+      "--json"
+    ],
+    "fixture": "discover-sources"
+  },
+  {
+    "id": "w_bare_@author",
+    "args": [
+      "discover"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_--json_@author",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_--installed_@author",
+    "args": [
+      "discover",
+      "--installed"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_--installed---json_@author",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_-acme-widgets_@author",
+    "args": [
+      "discover",
+      "@acme/widgets"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_-acme-widgets---json_@author",
+    "args": [
+      "discover",
+      "@acme/widgets",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_widget_@author",
+    "args": [
+      "discover",
+      "widget"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_widget---json_@author",
+    "args": [
+      "discover",
+      "widget",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_--type-theme_@author",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_--type-theme---json_@author",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "author"
+  }
+]

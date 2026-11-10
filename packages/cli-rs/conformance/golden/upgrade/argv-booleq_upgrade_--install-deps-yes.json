@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_upgrade_--install-deps-yes",
+ "args": [
+  "upgrade",
+  "--install-deps=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--install-deps=yes'\n",
+ "exit": 1,
+ "files": []
+}

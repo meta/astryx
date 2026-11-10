@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_verify_---x",
+ "args": [
+  "integration",
+  "verify",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

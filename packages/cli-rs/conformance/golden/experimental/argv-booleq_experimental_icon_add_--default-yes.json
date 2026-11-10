@@ -1,0 +1,14 @@
+{
+ "id": "argv-booleq_experimental_icon_add_--default-yes",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--default=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--default=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_use_---json",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "---json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '---json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

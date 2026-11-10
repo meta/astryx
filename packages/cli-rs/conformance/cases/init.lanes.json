@@ -1,0 +1,198 @@
+[
+  {
+    "id": "ig_neg",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/neg"
+  },
+  {
+    "id": "ig_neg_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/neg"
+  },
+  {
+    "id": "ig_neg_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/neg"
+  },
+  {
+    "id": "ig_dironly",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dironly"
+  },
+  {
+    "id": "ig_dironly_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dironly"
+  },
+  {
+    "id": "ig_dironly_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dironly"
+  },
+  {
+    "id": "ig_nested",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nested"
+  },
+  {
+    "id": "ig_nested_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nested"
+  },
+  {
+    "id": "ig_nested_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nested"
+  },
+  {
+    "id": "ig_nestedignored",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nestedignored"
+  },
+  {
+    "id": "ig_nestedignored_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nestedignored"
+  },
+  {
+    "id": "ig_nestedignored_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/nestedignored"
+  },
+  {
+    "id": "ig_glob",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/glob"
+  },
+  {
+    "id": "ig_glob_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/glob"
+  },
+  {
+    "id": "ig_glob_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/glob"
+  },
+  {
+    "id": "ig_dirpattern",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dirpattern"
+  },
+  {
+    "id": "ig_dirpattern_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dirpattern"
+  },
+  {
+    "id": "ig_dirpattern_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/dirpattern"
+  },
+  {
+    "id": "ig_escaped",
+    "args": [
+      "init"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/escaped"
+  },
+  {
+    "id": "ig_escaped_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/escaped"
+  },
+  {
+    "id": "ig_escaped_all",
+    "args": [
+      "init",
+      "--agent",
+      "all"
+    ],
+    "fixture": "initignore",
+    "cwd": "initignore/escaped"
+  }
+]

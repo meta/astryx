@@ -1,0 +1,17 @@
+{
+ "id": "tb_family_two_roots",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/lone.mjs",
+  "--family-key",
+  "fam"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/lone.mjs...\n",
+ "stderr": "Error: Theme \"lone\" exact family ancestry could not be observed during CLI loading.\n",
+ "exit": 1,
+ "files": []
+}

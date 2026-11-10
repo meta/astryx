@@ -1001,7 +1001,7 @@ fn assert_removable_within(target: &str, skip: &HashSet<String>) -> Result<(), P
         .filter(|r| !skip.contains(*r) && has_removable_block(&p::join2(target, r)))
         .map(String::from)
         .collect();
-    assert_targets_within(target, &all).map_err(|e| PathSafetyError { message: e.message, code: "ERR_PATH_TRAVERSAL".into() })
+    assert_targets_within(target, &all).map_err(|e| PathSafetyError { message: e.message, code: "ERR_PATH_TRAVERSAL" })
 }
 
 pub fn remove_agent_docs(target: &str, shown_from: &str, skip: &HashSet<String>, log: &mut Log) -> Result<Vec<String>, DocsError> {

@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_gap-report_--no-list-categories",
+ "args": [
+  "gap-report",
+  "--no-list-categories"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-list-categories'\n(Did you mean --list-categories?)\n",
+ "exit": 1,
+ "files": []
+}

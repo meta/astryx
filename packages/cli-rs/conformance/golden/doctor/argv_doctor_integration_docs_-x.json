@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_docs_-x",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

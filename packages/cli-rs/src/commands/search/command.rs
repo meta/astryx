@@ -86,6 +86,11 @@ fn discover_hint(run: &str, query: &str, type_: Option<&str>) -> Vec<Block> {
 }
 
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
+    // Read-only: list each folder once (as the JS command's withListingCache).
+    crate::discovery::listing_cache::with_listing_cache(|| run_uncached(inv, out))
+}
+
+fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
     let json = inv.json();
     let query = inv.arg_list(0).join(" ");
     let cwd = inv.cwd.clone();

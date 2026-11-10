@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_--_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"--json\"\n",
+ "exit": 1,
+ "files": []
+}

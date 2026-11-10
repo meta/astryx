@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_discover_--installed-yes",
+ "args": [
+  "discover",
+  "--installed=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--installed=yes'\n",
+ "exit": 1,
+ "files": []
+}

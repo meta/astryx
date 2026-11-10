@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_generate_-hV",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

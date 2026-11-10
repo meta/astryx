@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_template_--no-overwrite",
+ "args": [
+  "template",
+  "--no-overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-overwrite'\n(Did you mean --overwrite?)\n",
+ "exit": 1,
+ "files": []
+}

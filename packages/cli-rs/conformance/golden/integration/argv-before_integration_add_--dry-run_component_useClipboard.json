@@ -1,0 +1,15 @@
+{
+ "id": "argv-before_integration_add_--dry-run_component_useClipboard",
+ "args": [
+  "integration",
+  "add",
+  "--dry-run",
+  "component",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"useClipboard\": use PascalCase starting with an uppercase letter (e.g. MyWidget).\n",
+ "exit": 1,
+ "files": []
+}

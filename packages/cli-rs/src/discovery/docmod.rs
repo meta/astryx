@@ -71,12 +71,40 @@ pub fn embedded(file: &str) -> Option<Result<Namespace, JsError>> {
     }))
 }
 
+thread_local! {
+    static FRESH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Namespaces a fresh import read, served in place of the engine's
+    /// cached ones from then on.
+    static REREAD: std::cell::RefCell<std::collections::HashMap<(String, bool), Namespace>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Run `f` with every user module it imports read fresh from disk (the JS
+/// `{fresh: true}` loads). A module read this way replaces the cached
+/// namespace for later imports of the same file.
+pub fn with_fresh_imports<R>(f: impl FnOnce() -> R) -> R {
+    let was = FRESH.with(|c| c.replace(true));
+    let r = f();
+    FRESH.with(|c| c.set(was));
+    r
+}
+
 /// Import a doc module with the given loader.
 pub fn import(file: &str, loader: Loader) -> Result<Namespace, JsError> {
     if let Some(r) = embedded(file) {
         return r;
     }
     let jsx = loader == Loader::Template && file.ends_with(".ts");
+    let key = (np::resolve1(file), jsx);
+    if FRESH.with(|c| c.get()) {
+        let r = crate::js::import_module(Path::new(file), &ImportOptions { jsx, fresh: true });
+        if let Ok(ns) = &r {
+            REREAD.with(|m| m.borrow_mut().insert(key, ns.clone()));
+        }
+        return r;
+    }
+    if let Some(ns) = REREAD.with(|m| m.borrow().get(&key).cloned()) {
+        return Ok(ns);
+    }
     crate::js::import_module(Path::new(file), &ImportOptions { jsx, fresh: false })
 }
 

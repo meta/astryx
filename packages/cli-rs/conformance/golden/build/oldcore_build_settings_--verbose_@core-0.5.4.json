@@ -1,0 +1,19 @@
+{
+ "id": "oldcore_build_settings_--verbose_@core-0.5.4",
+ "args": [
+  "build",
+  "settings",
+  "--verbose"
+ ],
+ "fixture": "core-0.5.4",
+ "stdout": "Build kit for \"settings\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        settings\npackage:     @astryxdesign/core\ndisplayName: Settings Form\ndescription: Preferences as one continuously scrolling form, sections stacked in order with no navigation between them. The simplest settings shape: everything reachable by scrolling.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        settings-sidebar\npackage:     @astryxdesign/core\ndisplayName: Settings Panels\ndescription: Preferences split into nav-switched panels: a persistent section list swaps the pane beside it, and rows edit in place rather than opening a separate form.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-sidebar --type page <path>\n\nname:        settings-dialog\npackage:     @astryxdesign/core\ndisplayName: Settings Dialog\ndescription: Preferences inside a modal container with searchable section navigation, so configuration happens without leaving whatever is underneath. Grouped toggles, live preview of appearance choices, rebindable shortcuts.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-dialog --type page <path>\n\nSEARCH MATCHES\nPage templates keyword search matched, best first.\n\nname:        settings\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Settings Form\nscore:       100\nreason:      exact name\ndescription: Preferences as one continuously scrolling form, sections stacked in order with no navigation between them. The simplest settings shape: everything reachable by scrolling.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings --type page\n\nname:        settings-dialog\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Settings Dialog\nscore:       90\nreason:      keyword \"Settings\"\ndescription: Preferences inside a modal container with searchable section navigation, so configuration happens without leaving whatever is underneath. Grouped toggles, live preview of appearance choices, rebindable shortcuts.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-dialog --type page\n\nname:        settings-sidebar\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Settings Panels\nscore:       90\nreason:      keyword \"Settings\"\ndescription: Preferences split into nav-switched panels: a persistent section list swaps the pane beside it, and rows edit in place rather than opening a separate form.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-sidebar --type page\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.5.4`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.5.4\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

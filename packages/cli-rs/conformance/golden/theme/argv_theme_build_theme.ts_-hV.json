@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_theme.ts_-hV",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv_doctor_integration_templates_--_-h",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "Checking integration templates: -h\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"-h\" at /tmp/astryx-conformance/work/app/node_modules/-h/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat_init_--features_a-b_--features_a-b",
+ "args": [
+  "init",
+  "--features",
+  "a,b",
+  "--features",
+  "a,b"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown features: a, b. Valid features: agents, theme, template\n",
+ "exit": 1,
+ "files": []
+}

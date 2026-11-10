@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_theme.ts_--no-json",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -675,6 +675,48 @@ impl Tree {
         }
     }
 
+    /// `node.replaceWith(...other.nodes)`: the other tree's top nodes take
+    /// this node's place.
+    pub fn replace_with_tree(&mut self, id: usize, other: Tree) {
+        let Some(parent) = self.nodes[id].parent else { return };
+        let offset = self.nodes.len();
+        let tops: Vec<usize> = other.nodes[0].nodes.clone().unwrap_or_default();
+        // Moving each node out of the other root removes it there first, and
+        // Root.removeChild hands the first node's `before` down the line.
+        let mut other = other;
+        if let Some(&first) = tops.first() {
+            let b = other.nodes[first].before.clone();
+            for &t in tops.iter().skip(1) {
+                other.nodes[t].before = b.clone();
+            }
+        }
+        for (i, mut n) in other.nodes.into_iter().enumerate() {
+            if i == 0 {
+                // The other root: a placeholder, never linked.
+                n.removed = true;
+                self.nodes.push(n);
+                continue;
+            }
+            n.parent = match n.parent {
+                Some(0) | None => Some(parent),
+                Some(p) => Some(p + offset),
+            };
+            if let Some(kids) = n.nodes.as_mut() {
+                for k in kids.iter_mut() {
+                    *k += offset;
+                }
+            }
+            self.nodes.push(n);
+        }
+        if let Some(list) = self.nodes[parent].nodes.as_mut() {
+            if let Some(pos) = list.iter().position(|&c| c == id) {
+                let new: Vec<usize> = tops.iter().map(|t| t + offset).collect();
+                list.splice(pos..pos, new);
+            }
+        }
+        self.remove(id);
+    }
+
     /// Every live node in document order (PostCSS `walk`).
     pub fn walk(&self) -> Vec<usize> {
         let mut out = vec![];

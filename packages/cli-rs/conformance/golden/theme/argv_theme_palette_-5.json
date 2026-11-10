@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_palette_-5",
+ "args": [
+  "theme",
+  "palette",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

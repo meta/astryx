@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_--help_--json",
+ "args": [
+  "theme",
+  "palette",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme palette\",\n    \"description\": \"Create and work with theme-owned color palettes\",\n    \"usage\": \"astryx theme palette [options] [command]\",\n    \"options\": [],\n    \"subcommands\": [\n      {\n        \"name\": \"generate\",\n        \"description\": \"Generate an OKLCH palette candidate for human review\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

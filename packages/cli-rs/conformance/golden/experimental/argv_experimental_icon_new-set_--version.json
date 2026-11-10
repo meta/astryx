@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_new-set_--version",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

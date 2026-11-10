@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_integration_add_--type_page_component_useClipboard",
+ "args": [
+  "integration",
+  "add",
+  "--type",
+  "page",
+  "component",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"templateType\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_use_--_-h",
+ "args": [
+  "theme",
+  "use",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme \"-h\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add -h` first.\n",
+ "exit": 1,
+ "files": []
+}

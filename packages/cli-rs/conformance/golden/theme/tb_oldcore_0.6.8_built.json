@@ -1,0 +1,13 @@
+{
+ "id": "tb_oldcore_0.6.8_built",
+ "args": [
+  "theme",
+  "build",
+  "themes/built.mjs"
+ ],
+ "fixture": "themes-core-0.6.8",
+ "stdout": "",
+ "stderr": "Error: defineTheme(\"built\").extends.__adaptations.widthBreakpoints must be an object.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_component_--props-yes",
+ "args": [
+  "component",
+  "--props=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--props=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_--components_@discover-badconfig",
+ "args": [
+  "discover",
+  "--components"
+ ],
+ "fixture": "discover-badconfig",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

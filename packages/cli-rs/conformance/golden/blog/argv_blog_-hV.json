@@ -1,0 +1,12 @@
+{
+ "id": "argv_blog_-hV",
+ "args": [
+  "blog",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

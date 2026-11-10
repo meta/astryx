@@ -1,0 +1,13 @@
+{
+ "id": "fuzz_theme_build_package.json_ed6455",
+ "args": [
+  "theme",
+  "build",
+  "package.json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Cannot convert undefined or null to object\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv-repeat_experimental_render_--reverse_--reverse",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "--reverse"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: A rendered HTML file is required\n\n  npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html  (turn a rendered file back into a page)\n",
+ "exit": 1,
+ "files": []
+}

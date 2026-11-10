@@ -1,0 +1,14 @@
+{
+ "id": "argv-repeat_integration_pack_--check_--check",
+ "args": [
+  "integration",
+  "pack",
+  "--check",
+  "--check"
+ ],
+ "fixture": "app",
+ "stdout": "Integration package check failed\n\n[fail] app\n\n- [fail] No astryx.integration.{ts,mjs,js} found next to package.json.\n",
+ "stderr": "Note: `integration pack --check` is deprecated. Run `npx @astryxdesign/cli@0.7.12 integration verify`: it runs the same check.\n",
+ "exit": 1,
+ "files": []
+}

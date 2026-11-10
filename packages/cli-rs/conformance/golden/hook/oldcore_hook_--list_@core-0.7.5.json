@@ -1,0 +1,18 @@
+{
+ "id": "oldcore_hook_--list_@core-0.7.5",
+ "args": [
+  "hook",
+  "--list"
+ ],
+ "fixture": "core-0.7.5",
+ "stdout": "package: @astryxdesign/core\nAccessibility\n\n- useAnnounce\n\nAnimation\n\n- useAnimatedLayout\n- useEntryAnimation\n\nFocus\n\n- useCombobox\n- useFocusTrap\n- useGridFocus\n- useIndicatorFocusRing\n- useKeyboardHint\n- useListFocus\n- useMultiCombobox\n- useTreeFocus\n- useTypeahead\n\nInteraction\n\n- useClickableContainer\n- useClipboard\n- useCollapsible\n- useContainerReveal\n- useHotkeys\n- useHoverCard\n- useInputContainer\n- useInputStatusIcon\n- useInteractiveRole\n- useLayer\n- useLongPress\n- useMenuPress\n- usePopover\n- usePressFeedback\n- useToast\n- useTooltip\n\nLayout\n\n- useAppShellMobile\n- useOverflow\n- useResizable\n- useScrollLock\n- useScrollOverflow\n- useScrollableArea\n\nMedia\n\n- useImageMode\n- useMediaQuery\n\nStreaming\n\n- useStreamingText\n\nUtilities\n\n- useCollator\n- useLocale\n- useTranslator\n\nUtility\n\n- useDevWarning\n- useMergedRefs\n- useTheme\n\nOther\n\n- useImperativeAlertDialog\n- useImperativeDialog\n- useTableColumnResize\n- useTableColumnSettings\n- useTableFilterState\n- useTableFiltering\n- useTableGroupedRows\n- useTablePagination\n- useTableRowExpansion\n- useTableRowIndex\n- useTableRowStatus\n- useTableSelection\n- useTableSelectionState\n- useTableSortable\n- useTableStickyColumns\n- useTableTreeData\n- useTableTreeState\n\nUsage: npx @astryxdesign/cli@0.7.12 hook <name>\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.7.5`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.7.5\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

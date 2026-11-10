@@ -1,0 +1,13 @@
+{
+ "id": "argv-before_template_--skeleton_useClipboard",
+ "args": [
+  "template",
+  "--skeleton",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"useClipboard\"\n\n  useClipboardHookUsage  (block template)\n",
+ "exit": 1,
+ "files": []
+}

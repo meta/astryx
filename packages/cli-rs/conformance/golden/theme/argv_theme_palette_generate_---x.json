@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_generate_---x",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "--=x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--=x'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_component_--no-source",
+ "args": [
+  "component",
+  "--no-source"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-source'\n(Did you mean --source?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "argv-before_hook_--params_useClipboard",
+ "args": [
+  "hook",
+  "--params",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseClipboardOptions` | - | Configuration object. |\n| `options.announce` | `string` | - | Message announced to a polite live region on a successful copy. A swapped aria-label alone is not reliably announced, so pass the localized confirmation (e.g. \"Copied\") to have it spoken. Omit to skip the announcement. |\n| `options.resetAfterMs` | `number` | `2000` | Milliseconds isCopied stays true after a successful copy before reverting. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

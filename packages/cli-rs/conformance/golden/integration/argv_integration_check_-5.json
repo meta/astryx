@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_check_-5",
+ "args": [
+  "integration",
+  "check",
+  "-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-5'\n",
+ "exit": 1,
+ "files": []
+}

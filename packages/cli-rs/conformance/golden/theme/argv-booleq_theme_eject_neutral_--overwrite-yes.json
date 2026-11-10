@@ -1,0 +1,14 @@
+{
+ "id": "argv-booleq_theme_eject_neutral_--overwrite-yes",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--overwrite=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--overwrite=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_hook_--list-yes",
+ "args": [
+  "hook",
+  "--list=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--list=yes'\n",
+ "exit": 1,
+ "files": []
+}

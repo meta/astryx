@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_template_--no-skeleton",
+ "args": [
+  "template",
+  "--no-skeleton"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-skeleton'\n(Did you mean --skeleton?)\n",
+ "exit": 1,
+ "files": []
+}

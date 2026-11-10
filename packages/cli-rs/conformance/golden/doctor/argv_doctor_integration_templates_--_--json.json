@@ -1,0 +1,15 @@
+{
+ "id": "argv_doctor_integration_templates_--_--json",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "Checking integration templates: --json\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"--json\" at /tmp/astryx-conformance/work/app/node_modules/--json/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

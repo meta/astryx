@@ -1,0 +1,15 @@
+{
+ "id": "argv-emptyeq_experimental_icon_new-set_useClipboard_--display-name-",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--display-name="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid icon set name \"useClipboard\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

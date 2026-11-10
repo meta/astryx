@@ -8,7 +8,7 @@ pub mod text;
 
 pub use runtime::{link_resolver, LinkResolver};
 
-use crate::cli::command::{CmdResult, ErrorOpts, Invocation, OptSource, Out, Suggestion};
+use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out, Suggestion};
 use crate::json::Value;
 use std::path::Path;
 
@@ -18,63 +18,29 @@ pub fn doc_package_manager(cwd: &Path) -> String {
     crate::discovery::package_manager::doc_package_manager(Some(&cwd.to_string_lossy()))
 }
 
-/// The parsed command line. TEMP: read from the shell's parse once it fills
-/// `args`/`opts`; until then parsed here from the raw operands.
+/// The parsed command line.
 struct Parsed {
     topic: Option<String>,
     section: Option<String>,
     index: bool,
     full: bool,
     depth: Option<String>,
+    /// `program.getOptionValueSource('detail') !== 'default'`.
     detail_given: bool,
 }
 
 fn parse(inv: &Invocation) -> (Parsed, crate::cli::command::Globals) {
-    let mut g = inv.globals.clone();
-    if !inv.args.is_empty() || !inv.opts.is_empty() {
-        return (
-            Parsed {
-                topic: inv.arg(0).map(String::from),
-                section: inv.arg(1).map(String::from),
-                index: inv.flag("index"),
-                full: inv.flag("full"),
-                depth: inv.opt_str("depth").map(String::from),
-                // TEMP: the shell does not say where a global option's value
-                // came from yet (`program.getOptionValueSource('detail')`).
-                detail_given: matches!(inv.opt_sources.get("detail"), Some(OptSource::Cli))
-                    || inv.argv.iter().any(|a| a == "--detail" || a.starts_with("--detail=")),
-            },
-            g,
-        );
-    }
-    let mut p = Parsed { topic: None, section: None, index: false, full: false, depth: None, detail_given: false };
-    let mut pos = Vec::new();
-    let mut it = inv.extra_args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--index" => p.index = true,
-            "--full" => p.full = true,
-            "--depth" => p.depth = it.next().cloned(),
-            "--json" => g.json = true,
-            "--dense" => g.dense = true,
-            "--zh" => g.zh = true,
-            "--lang" => g.lang = it.next().cloned(),
-            "--detail" => {
-                g.detail = it.next().cloned().unwrap_or_default();
-                p.detail_given = true;
-            }
-            x if x.starts_with("--depth=") => p.depth = Some(x[8..].to_string()),
-            x if x.starts_with("--lang=") => g.lang = Some(x[7..].to_string()),
-            x if x.starts_with("--detail=") => {
-                g.detail = x[9..].to_string();
-                p.detail_given = true;
-            }
-            x => pos.push(x.to_string()),
-        }
-    }
-    p.topic = pos.first().cloned();
-    p.section = pos.get(1).cloned();
-    (p, g)
+    (
+        Parsed {
+            topic: inv.arg(0).map(String::from),
+            section: inv.arg(1).map(String::from),
+            index: inv.flag("index"),
+            full: inv.flag("full"),
+            depth: inv.opt_str("depth").map(String::from),
+            detail_given: inv.global_opt_source("detail").map(|s| s != "default").unwrap_or(false),
+        },
+        inv.globals.clone(),
+    )
 }
 
 fn suggestions(s: Vec<(String, String)>) -> Vec<Suggestion> {

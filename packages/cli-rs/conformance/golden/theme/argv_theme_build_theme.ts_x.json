@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_theme.ts_x",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

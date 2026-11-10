@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_template_--cdn_-1",
+ "args": [
+  "template",
+  "--cdn",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-1'\n",
+ "exit": 1,
+ "files": []
+}

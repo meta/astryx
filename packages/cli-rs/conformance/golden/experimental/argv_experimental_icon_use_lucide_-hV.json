@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_lucide_-hV",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "lucide",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

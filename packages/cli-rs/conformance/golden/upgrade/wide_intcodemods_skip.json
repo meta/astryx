@@ -1,0 +1,37 @@
+{
+ "id": "wide_intcodemods_skip",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.8",
+  "--skip-codemod",
+  "explode",
+  "--apply"
+ ],
+ "fixture": "upgrade-intcodemods",
+ "stdout": "\nUpgrade\nFrom version: 0.7.8\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-intcodemods/src for source files...\nFound 3 source files\n\n[ok] No changes needed - your code is already up to date!\nIntegrations: @acme/widgets\n3 codemods to run\nApplying integration codemods...\n  Add widgets theme note (v0.7.10, @acme/widgets)\n[ok]     [ok] astryx.config.mjs\n  Drop legacy flag (v0.7.9, @acme/widgets)\n[ok]     [ok] src/App.tsx\n  Rename OldWidget to Widget (v0.7.9, @acme/widgets)\n[ok]     [ok] src/App.tsx\n[ok]     [ok] src/util.js\nUpgrade complete\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/upgrade-intcodemods\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "upgrade-intcodemods/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {integrations: ['@acme/widgets'], widgets: {}};\n"
+  },
+  {
+   "path": "upgrade-intcodemods/src/App.tsx",
+   "status": "changed",
+   "text": "import {Widget} from '@acme/widgets';\n\nexport const A = () => <Widget size=\"m\" />;\n"
+  },
+  {
+   "path": "upgrade-intcodemods/src/util.js",
+   "status": "changed",
+   "text": "export const name = 'Widget';\n"
+  }
+ ]
+}

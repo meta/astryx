@@ -1,0 +1,12 @@
+{
+ "id": "argv_integration_--version",
+ "args": [
+  "integration",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

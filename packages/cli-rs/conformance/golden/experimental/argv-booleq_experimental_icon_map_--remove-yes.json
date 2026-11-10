@@ -1,0 +1,14 @@
+{
+ "id": "argv-booleq_experimental_icon_map_--remove-yes",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--remove=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--remove=yes'\n",
+ "exit": 1,
+ "files": []
+}

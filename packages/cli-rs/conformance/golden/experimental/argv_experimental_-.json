@@ -1,0 +1,12 @@
+{
+ "id": "argv_experimental_-",
+ "args": [
+  "experimental",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'experimental ü中文'\n\n  icon  (available subcommand)\n  render  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

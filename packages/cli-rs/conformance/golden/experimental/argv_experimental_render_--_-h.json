@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_render_--_-h",
+ "args": [
+  "experimental",
+  "render",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: render reads a page module (.tsx, .jsx, .ts, .js, .mjs); -h is not one\n",
+ "exit": 1,
+ "files": []
+}

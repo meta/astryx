@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_component_--source-yes",
+ "args": [
+  "component",
+  "--source=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--source=yes'\n",
+ "exit": 1,
+ "files": []
+}

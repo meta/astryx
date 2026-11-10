@@ -41,6 +41,7 @@ dependencies = [
  "indexmap",
  "libc",
  "libm",
+ "memchr",
  "oxc",
  "oxc_allocator",
  "oxc_ast",

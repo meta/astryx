@@ -1,0 +1,16 @@
+{
+ "id": "in-monorepo.packages.api_gap-report_Button_--category_missing_variant_--reason_x_@monorepo",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x"
+ ],
+ "fixture": "monorepo",
+ "stdout": "Gap report route\n\nstatus:          consent_required\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      consent_required\nmessage:     Rerun with --confirm-public to file this report.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

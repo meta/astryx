@@ -1,0 +1,16 @@
+{
+ "id": "argv-negval_experimental_icon_new-set_useClipboard_--variants_-1",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--variants",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid variant name \"-1\": use lower-kebab, such as outline or solid.\n",
+ "exit": 1,
+ "files": []
+}

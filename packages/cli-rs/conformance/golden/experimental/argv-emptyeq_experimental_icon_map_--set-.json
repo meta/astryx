@@ -1,0 +1,14 @@
+{
+ "id": "argv-emptyeq_experimental_icon_map_--set-",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--set="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon definition to map\n\n  npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions  (every icon definition)\n",
+ "exit": 1,
+ "files": []
+}

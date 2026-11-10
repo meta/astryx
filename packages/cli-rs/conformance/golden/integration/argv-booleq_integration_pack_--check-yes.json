@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_integration_pack_--check-yes",
+ "args": [
+  "integration",
+  "pack",
+  "--check=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--check=yes'\n",
+ "exit": 1,
+ "files": []
+}

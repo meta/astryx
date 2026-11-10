@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_remove_--_--json",
+ "args": [
+  "theme",
+  "remove",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme \"--json\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add --json` first.\n",
+ "exit": 1,
+ "files": []
+}

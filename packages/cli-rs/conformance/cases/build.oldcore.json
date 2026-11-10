@@ -1,0 +1,224 @@
+[
+  {
+    "id": "oldcore_build_@core-0.7.11",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.7.11",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.7.11",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.7.11",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_@core-0.7.5",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.7.5",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.7.5",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.7.5",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_@core-0.6.8",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.6.8",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.6.8",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.6.8",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_@core-0.5.4",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.5.4",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.5.4",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.5.4",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_@core-0.4.7",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.4.7",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.4.7",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.4.7",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_@core-0.3.0",
+    "args": [
+      "build"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_dashboard_@core-0.3.0",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_login-page_--json_@core-0.3.0",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_build_settings_--verbose_@core-0.3.0",
+    "args": [
+      "build",
+      "settings",
+      "--verbose"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

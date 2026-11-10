@@ -228,6 +228,193 @@
   "gen": true
  },
  {
+  "id": "argv_blog_--json_--json",
+  "args": [
+   "blog",
+   "--json",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--help_--json",
+  "args": [
+   "blog",
+   "--help",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--json_--help",
+  "args": [
+   "blog",
+   "--json",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-h_--bogus",
+  "args": [
+   "blog",
+   "-h",
+   "--bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--bogus_-h",
+  "args": [
+   "blog",
+   "--bogus",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-V",
+  "args": [
+   "blog",
+   "-V"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--version",
+  "args": [
+   "blog",
+   "--version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--JSON",
+  "args": [
+   "blog",
+   "--JSON"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--jso",
+  "args": [
+   "blog",
+   "--jso"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--no-json",
+  "args": [
+   "blog",
+   "--no-json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--json-1",
+  "args": [
+   "blog",
+   "--json=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-x",
+  "args": [
+   "blog",
+   "-x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-hV",
+  "args": [
+   "blog",
+   "-hV"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--_--json",
+  "args": [
+   "blog",
+   "--",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_--_-h",
+  "args": [
+   "blog",
+   "--",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_x",
+  "args": [
+   "blog",
+   ""
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-",
+  "args": [
+   "blog",
+   "ü中文"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_-5",
+  "args": [
+   "blog",
+   "-5"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_---x",
+  "args": [
+   "blog",
+   "--=x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "argv_blog_---json",
+  "args": [
+   "blog",
+   "---json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
   "id": "blog_nosuchsub",
   "args": [
    "blog",

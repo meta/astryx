@@ -1,0 +1,12 @@
+{
+ "id": "argv_template_--no-json",
+ "args": [
+  "template",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_theme_template_--overwrite-yes",
+ "args": [
+  "theme",
+  "template",
+  "--overwrite=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--overwrite=yes'\n",
+ "exit": 1,
+ "files": []
+}

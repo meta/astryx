@@ -6,6 +6,7 @@ pub mod cmd;
 pub mod demo_content;
 pub mod discovery;
 pub mod fsutil;
+pub mod icons;
 pub mod integration;
 pub mod needs;
 pub mod skeleton;
@@ -48,4 +49,34 @@ pub fn node_err(e: &std::io::Error, syscall: &str, path: &str) -> String {
         _ => ("EIO", "i/o error"),
     };
     format!("{code}: {desc}, {syscall} '{path}'")
+}
+
+/// `fs.mkdirSync(path, {recursive: true})`, with Node's error message
+/// (`EEXIST: file already exists, mkdir '<path>'`) and code on failure.
+pub fn mkdir_p(path: &str) -> Result<(), (String, String)> {
+    let p = std::path::Path::new(path);
+    if let Ok(m) = std::fs::metadata(p) {
+        if m.is_dir() {
+            return Ok(());
+        }
+        return Err(("EEXIST".into(), format!("EEXIST: file already exists, mkdir '{path}'")));
+    }
+    let mut anc = fsutil::dirname(path);
+    loop {
+        match std::fs::metadata(&anc) {
+            Ok(m) if m.is_dir() => break,
+            Ok(_) => return Err(("ENOTDIR".into(), format!("ENOTDIR: not a directory, mkdir '{path}'"))),
+            Err(_) => {
+                let up = fsutil::dirname(&anc);
+                if up == anc {
+                    break;
+                }
+                anc = up;
+            }
+        }
+    }
+    std::fs::create_dir_all(p).map_err(|e| {
+        let m = node_err(&e, "mkdir", path);
+        (m.split(':').next().unwrap_or("").to_string(), m)
+    })
 }

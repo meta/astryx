@@ -9,6 +9,7 @@ pub mod env;
 pub mod integration;
 pub mod project;
 pub mod themes;
+pub mod ts;
 pub mod support;
 pub mod jsonerr;
 pub mod util;
@@ -162,25 +163,10 @@ fn unknown_word(inv: &Invocation) -> Option<String> {
     temp_operands(inv).0.into_iter().next()
 }
 
-/// TEMP: until the shell's Commander parser fills `opts`, read `--built`
-/// from the raw operands. Returns (operands, built).
+/// The operands after `doctor`, and `--built`.
 fn temp_operands(inv: &Invocation) -> (Vec<String>, Option<String>) {
-    if let Some(b) = inv.opt_str("built") {
-        return (inv.extra_args.iter().filter(|a| !a.starts_with('-')).cloned().collect(), Some(b.to_string()));
-    }
-    let mut ops = Vec::new();
-    let mut built = None;
-    let mut it = inv.extra_args.iter();
-    while let Some(a) = it.next() {
-        if a == "--built" {
-            built = it.next().cloned();
-        } else if let Some(v) = a.strip_prefix("--built=") {
-            built = Some(v.to_string());
-        } else if !a.starts_with('-') {
-            ops.push(a.clone());
-        }
-    }
-    (ops, built)
+    let ops = inv.extra_args.iter().filter(|a| !a.starts_with('-')).cloned().collect();
+    (ops, inv.opt_str("built").map(String::from))
 }
 
 fn unknown_subcommand(out: &mut Out, label: &str, word: &str, children: &[&str]) -> CmdResult {

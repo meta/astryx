@@ -1,0 +1,15 @@
+{
+ "id": "fuzz_component_--category_CdeEditor-_DropdownMenuRadioItem_TabMenu-TabMenu_b7bd0d",
+ "args": [
+  "component",
+  "--category",
+  "CdeEditor (@",
+  "DropdownMenuRadioItem",
+  "TabMenu TabMenu"
+ ],
+ "fixture": "app",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nDropdownMenuRadioItem\n\nselector: DropdownMenuRadioItem\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nDropdownMenuRadioItem  <- from '@astryxdesign/core/DropdownMenu'\n  A single option in a DropdownMenuRadioGroup (role=\"menuitemradio\"). Must be u...\n  label: ReactNode, value: string, description, icon, isDisabled, endContent, ref\n\n\nTabMenu TabMenu\n\nselector: TabMenu TabMenu\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"TabMenu TabMenu\"\n\nSuggestions\n\nname:   TabMenu\nreason: name part \"tabmenu\"\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

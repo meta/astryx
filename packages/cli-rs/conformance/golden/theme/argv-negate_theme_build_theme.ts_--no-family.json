@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_theme_build_theme.ts_--no-family",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--no-family"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-family'\n(Did you mean --family?)\n",
+ "exit": 1,
+ "files": []
+}

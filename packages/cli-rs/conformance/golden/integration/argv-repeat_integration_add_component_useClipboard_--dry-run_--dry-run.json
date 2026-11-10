@@ -1,0 +1,16 @@
+{
+ "id": "argv-repeat_integration_add_component_useClipboard_--dry-run_--dry-run",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--dry-run",
+  "--dry-run"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"useClipboard\": use PascalCase starting with an uppercase letter (e.g. MyWidget).\n",
+ "exit": 1,
+ "files": []
+}

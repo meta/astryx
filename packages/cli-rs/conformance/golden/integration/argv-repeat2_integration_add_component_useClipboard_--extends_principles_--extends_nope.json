@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat2_integration_add_component_useClipboard_--extends_principles_--extends_nope",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--extends",
+  "principles",
+  "--extends",
+  "nope"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"extends\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

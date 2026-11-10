@@ -232,7 +232,7 @@ pub struct Ctx<'a> {
 
 /// `runCodeCodemod(entry, files, ...)`
 pub fn run_code_codemod(out: &mut Out, entry: &Entry, files: &[PathBuf], ctx: &Ctx, resolver: &Resolver, contents: &mut HashMap<PathBuf, String>, outcomes: &mut Vec<OutcomeRow>) -> StepResult {
-    let name = format!("core:{}", entry.name);
+    let name = format!("{}:{}", entry.package, entry.name);
     let exts: Vec<String> = entry.file_extensions.clone().unwrap_or_else(|| DEFAULT_CODE_EXTENSIONS.iter().map(|s| s.to_string()).collect());
     let mut res = StepResult::default();
     let mut candidates: Vec<(PathBuf, String, String)> = Vec::new();
@@ -255,15 +255,15 @@ pub fn run_code_codemod(out: &mut Out, entry: &Entry, files: &[PathBuf], ctx: &C
             },
         };
         let path_s = s(fp);
-        let t = match &entry.kind {
-            Kind::Code(t) => *t,
+        let r = match &entry.kind {
+            Kind::Code(t) => t(&source, &path_s, &serde_json::Value::Null),
+            Kind::Js(file) => call_js_transform(file, &source, &path_s),
             _ => {
                 let message = format!("codemod {} has no native implementation", entry.name);
                 res.errors.push(ErrorRow { file: rel, codemod: name.clone(), error: message });
                 continue;
             }
         };
-        let r = t(&source, &path_s, &serde_json::Value::Null);
         match r {
             Ok(None) => continue,
             Ok(Some(result)) => {
@@ -345,7 +345,7 @@ pub fn run_code_codemod(out: &mut Out, entry: &Entry, files: &[PathBuf], ctx: &C
 
 /// `runConfigCodemod(entry, ...)`
 pub fn run_config_codemod(out: &mut Out, entry: &Entry, ctx: &Ctx, resolver: &Resolver, contents: &mut HashMap<PathBuf, String>) -> StepResult {
-    let name = format!("core:{}", entry.name);
+    let name = format!("{}:{}", entry.package, entry.name);
     let mut res = StepResult::default();
     let config_path = match crate::discovery::project::find_config_path(&s(ctx.root)) {
         Err(message) => {
@@ -372,12 +372,13 @@ pub fn run_config_codemod(out: &mut Out, entry: &Entry, ctx: &Ctx, resolver: &Re
             }
         },
     };
-    let t = match &entry.kind {
-        Kind::Config(t) => *t,
+    let path_s = s(&config_path);
+    let called = match &entry.kind {
+        Kind::Config(t) => t(&source, &path_s, &serde_json::Value::Null),
+        Kind::Js(file) => call_js_transform(file, &source, &path_s),
         _ => return res,
     };
-    let path_s = s(&config_path);
-    let result = match t(&source, &path_s, &serde_json::Value::Null) {
+    let result = match called {
         Ok(None) => return res,
         Ok(Some(r)) if r == source => return res,
         Ok(Some(r)) => r,
@@ -714,4 +715,117 @@ pub fn run_codemods(out: &mut Out, manifests: &[VersionManifest], o: &RunOptions
         staged_contents: virtual_contents,
         errors,
     })
+}
+
+/// Run an integration codemod's `transform({source, path}, api)` in the JS
+/// engine. The result string is the new source; `undefined`/`null` means no
+/// change.
+pub fn call_js_transform(file: &Path, source: &str, path: &str) -> super::jsc::TResult {
+    let file_arg = serde_json::json!({"source": source, "path": path});
+    let api = serde_json::json!({});
+    let opts = crate::js::CallOptions::default();
+    match crate::js::call_export(file, &["default", "transform"], &[file_arg, api], &opts) {
+        Ok(r) => match r.value {
+            serde_json::Value::String(s) => Ok(Some(s)),
+            serde_json::Value::Null => Ok(None),
+            v if v.get("__js").is_some() => Ok(None),
+            v => Ok(Some(crate::discovery::paths::js_string(Some(&v)))),
+        },
+        Err(crate::js::CallError::Thrown { error, .. }) => Err(super::jsc::CodemodError::msg(error.message)),
+        Err(crate::js::CallError::Load(e)) => Err(super::jsc::CodemodError::msg(e.message)),
+        Err(crate::js::CallError::NotAFunction(p)) => Err(super::jsc::CodemodError::msg(format!("codemod.transform is not a function ({})", p))),
+        Err(_) => Err(super::jsc::CodemodError::msg("The codemod did not finish.".to_string())),
+    }
+}
+
+pub struct IntegrationRunOptions<'a> {
+    pub apply: bool,
+    pub path: &'a Path,
+    pub codemod: Option<&'a str>,
+    pub skip: &'a HashSet<String>,
+    pub silent: bool,
+    pub root: &'a Path,
+}
+
+/// `runIntegrationCodemods(versionGroups, ...)`
+pub fn run_integration_codemods(out: &mut Out, groups: &[(String, Vec<super::integration_discovery::IntegrationCodemod>)], o: &IntegrationRunOptions, protection: Resolver, contents: HashMap<PathBuf, String>, outcomes: &mut Vec<OutcomeRow>) -> RunResult {
+    let log = TermLog { silent: o.silent };
+    let mut protection = protection;
+    let mut prot_write_count = 0usize;
+    let mut contents = contents;
+    let mut res = RunResult { total_files_changed: 0, total_transforms_applied: 0, changed_files: vec![], written_files: vec![], protected_files: vec![], declined: vec![], staged_contents: HashMap::new(), errors: vec![] };
+    let mut config_entries: Vec<(String, Entry)> = Vec::new();
+    let mut code_entries: Vec<(String, Entry)> = Vec::new();
+    for (version, list) in groups {
+        for c in list {
+            if o.skip.contains(&c.id) {
+                continue;
+            }
+            if c.is_optional && o.codemod.is_none() {
+                continue;
+            }
+            if let Some(want) = o.codemod {
+                if c.id != want {
+                    continue;
+                }
+            }
+            let e = Entry {
+                name: c.id.clone(),
+                package: c.package.clone(),
+                title: c.title.clone(),
+                description: c.description.clone(),
+                pr: None,
+                codemod_type: Some(c.kind.clone()),
+                file_extensions: c.file_extensions.clone(),
+                optional: c.is_optional,
+                kind: Kind::Js(c.file.clone()),
+            };
+            if c.kind == "config" {
+                config_entries.push((version.clone(), e));
+            } else {
+                code_entries.push((version.clone(), e));
+            }
+        }
+    }
+    let ctx = Ctx { apply: o.apply, root: o.root, log: &log };
+    for (version, e) in &config_entries {
+        if o.apply && res.written_files.len() != prot_write_count {
+            if let Ok(p) = Resolver::new(o.root, HashMap::new()) {
+                protection = p;
+            }
+            prot_write_count = res.written_files.len();
+        }
+        log.info(out, &format!("  {} (v{}, {})", e.title, version, e.package));
+        let r = run_config_codemod(out, e, &ctx, &protection, &mut contents);
+        res.total_transforms_applied += r.files_changed;
+        res.changed_files.extend(r.changed_files);
+        res.written_files.extend(r.written_files);
+        res.protected_files.extend(r.protected_files);
+        res.errors.extend(r.errors);
+    }
+    if !code_entries.is_empty() {
+        let resolved = super::fsutil::resolve(o.path);
+        let files = if resolved.exists() { find_source_files(&resolved, &super::fsutil::resolve(o.root), None) } else { vec![] };
+        for (version, e) in &code_entries {
+            if o.apply && res.written_files.len() != prot_write_count {
+                if let Ok(p) = Resolver::new(o.root, HashMap::new()) {
+                    protection = p;
+                }
+                prot_write_count = res.written_files.len();
+            }
+            log.info(out, &format!("  {} (v{}, {})", e.title, version, e.package));
+            let r = run_code_codemod(out, e, &files, &ctx, &protection, &mut contents, outcomes);
+            res.total_transforms_applied += r.files_changed;
+            res.changed_files.extend(r.changed_files);
+            res.written_files.extend(r.written_files);
+            res.protected_files.extend(r.protected_files);
+            res.declined.extend(r.declined);
+            res.errors.extend(r.errors);
+        }
+    }
+    let pfiles: HashSet<String> = res.protected_files.iter().map(|p| p.file.clone()).collect();
+    res.declined.retain(|d| !pfiles.contains(&d.file));
+    res.total_files_changed = res.changed_files.iter().collect::<HashSet<_>>().len();
+    res.staged_contents = contents;
+    res
 }

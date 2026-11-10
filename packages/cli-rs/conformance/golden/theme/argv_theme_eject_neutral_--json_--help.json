@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_eject_neutral_--json_--help",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme eject\",\n    \"description\": \"Fork a theme as editable local source\",\n    \"usage\": \"astryx theme eject [options] <slug> [path]\",\n    \"options\": [\n      {\n        \"flags\": \"-f, --overwrite\",\n        \"description\": \"Replace existing files. Without it, an existing file fails with ERR_FILE_EXISTS and nothing is written\"\n      },\n      {\n        \"flags\": \"--package <package>\",\n        \"description\": \"Select the package that owns the theme\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

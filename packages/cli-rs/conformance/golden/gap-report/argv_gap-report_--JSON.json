@@ -1,0 +1,12 @@
+{
+ "id": "argv_gap-report_--JSON",
+ "args": [
+  "gap-report",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

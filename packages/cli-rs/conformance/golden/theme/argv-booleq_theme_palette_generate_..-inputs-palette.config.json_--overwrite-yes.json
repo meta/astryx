@@ -1,0 +1,15 @@
+{
+ "id": "argv-booleq_theme_palette_generate_..-inputs-palette.config.json_--overwrite-yes",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--overwrite=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--overwrite=yes'\n",
+ "exit": 1,
+ "files": []
+}

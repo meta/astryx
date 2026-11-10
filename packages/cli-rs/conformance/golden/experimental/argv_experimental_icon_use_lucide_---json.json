@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_lucide_---json",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "lucide",
+  "---json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '---json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

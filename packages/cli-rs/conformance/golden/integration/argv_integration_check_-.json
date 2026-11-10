@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_check_-",
+ "args": [
+  "integration",
+  "check",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'check'. Expected 0 arguments but got 1.\n",
+ "exit": 1,
+ "files": []
+}

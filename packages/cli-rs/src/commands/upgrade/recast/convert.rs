@@ -920,11 +920,43 @@ fn babel_message(msg: &str, src: &[u16], off: usize, line: usize, col: usize) ->
         if j > 0 && at(j - 1) == b'>' as u16 && !rest.iter().any(|&c| c == b'<' as u16 || c == b'{' as u16) {
             return ("Unterminated JSX contents.".into(), line, col);
         }
+        if at(off) == b'<' as u16 {
+            // oxc reports the `<` of a JSX element whose name is invalid; Babel reports the token after it.
+            let mut k = off + 1;
+            while at(k) == b' ' as u16 || at(k) == b'\t' as u16 {
+                k += 1;
+            }
+            let c = at(k);
+            let name_start = c < 128 && ((c as u8).is_ascii_alphabetic() || c == b'_' as u16 || c == b'$' as u16 || c == b'>' as u16 || c == b'/' as u16 || c == b'{' as u16);
+            if c != 0 && !name_start && c < 128 {
+                return (msg.into(), line, col + (k - off));
+            }
+        }
         return (msg.into(), line, col);
     }
     if msg.starts_with("Unterminated string") {
         if at(off) == b'`' as u16 {
             return ("Unterminated template.".into(), line, col + 1);
+        }
+        // Inside a JSX tag Babel reads a multi-line JSX string up to the next
+        // matching quote, then rejects the token where an attribute name belongs.
+        let q = at(off);
+        let mut k = off;
+        let mut in_tag = false;
+        while k > 0 {
+            let c = at(k - 1);
+            if c == b'\n' as u16 || c == b'>' as u16 {
+                break;
+            }
+            if c == b'<' as u16 {
+                let n = at(k);
+                in_tag = n < 128 && ((n as u8).is_ascii_alphabetic() || n == b'_' as u16 || n == b'$' as u16);
+                break;
+            }
+            k -= 1;
+        }
+        if in_tag && (q == b'"' as u16 || q == b'\'' as u16) && src[off + 1..].contains(&q) {
+            return ("Unexpected token".into(), line, col);
         }
         return ("Unterminated string constant.".into(), line, col);
     }
@@ -947,6 +979,19 @@ fn babel_message(msg: &str, src: &[u16], off: usize, line: usize, col: usize) ->
         }
         let c = if c >= 2 { c - 2 } else { col };
         return (format!("Expected corresponding JSX closing tag for <{}>.", name), line, c);
+    }
+    if msg.starts_with("Expected `(`") && at(off) == b'<' as u16 {
+        // A JSX tag whose name runs into `=`: Babel stops at the `=`.
+        let mut k = off + 1;
+        while {
+            let c = at(k);
+            c < 128 && ((c as u8).is_ascii_alphanumeric() || matches!(c as u8, b'_' | b'$' | b'.' | b':' | b'-'))
+        } {
+            k += 1;
+        }
+        if k > off + 1 && at(k) == b'=' as u16 {
+            return ("Unexpected token".into(), line, col + (k - off));
+        }
     }
     if let Some(rest) = msg.strip_prefix("Expected `") {
         if msg.ends_with("but found `EOF`") {

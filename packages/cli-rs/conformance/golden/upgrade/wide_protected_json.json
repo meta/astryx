@@ -1,0 +1,28 @@
+{
+ "id": "wide_protected_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--codemod",
+  "rename-selector-items-to-options",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "upgrade-protected",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 1,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"current\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"none\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 2,\n    \"transformsApplied\": 2,\n    \"modifiedFiles\": [\n      \"src/App.tsx\",\n      \"src/gen/hand.tsx\"\n    ],\n    \"protectedFiles\": [\n      {\n        \"file\": \"src/gen/panel.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"generated\"\n        ],\n        \"declarations\": [\n          \"linguist-generated in .gitattributes:1\"\n        ],\n        \"commands\": []\n      },\n      {\n        \"file\": \"src/header.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"generated\"\n        ],\n        \"declarations\": [\n          \"@generated in the leading comment block\"\n        ],\n        \"commands\": [\n          \"pnpm run gen:header\"\n        ]\n      },\n      {\n        \"file\": \"src/ignored/keep.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"ignored\"\n        ],\n        \"declarations\": [\n          \"excluded by .gitignore\"\n        ],\n        \"commands\": []\n      },\n      {\n        \"file\": \"src/ignored/skip.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"ignored\"\n        ],\n        \"declarations\": [\n          \"excluded by .gitignore\"\n        ],\n        \"commands\": []\n      },\n      {\n        \"file\": \"src/linked.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"symlink\"\n        ],\n        \"declarations\": [\n          \"symbolic link at src/linked.tsx\"\n        ],\n        \"commands\": []\n      },\n      {\n        \"file\": \"src/vendor/lib.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"vendored\"\n        ],\n        \"declarations\": [\n          \"linguist-vendored in .gitattributes:2\"\n        ],\n        \"commands\": []\n      }\n    ],\n    \"declinedCandidates\": [\n      {\n        \"file\": \"src/vendor/bundle.js\",\n        \"location\": \"1:19\",\n        \"reason\": \"unparseable protected file (vendored): Unexpected token\"\n      }\n    ],\n    \"regenerate\": [\n      {\n        \"file\": \"src/gen/panel.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"commands\": [],\n        \"messages\": []\n      },\n      {\n        \"file\": \"src/header.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"commands\": [\n          \"pnpm run gen:header\"\n        ],\n        \"messages\": []\n      }\n    ],\n    \"complete\": false,\n    \"errorCode\": \"ERR_CODEMOD_PROTECTED\",\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "upgrade-protected/src/App.tsx",
+   "status": "changed",
+   "text": "import {XDSSelector} from '@xds/core';\nexport const A = () => <XDSSelector options={[]} />;\n"
+  },
+  {
+   "path": "upgrade-protected/src/gen/hand.tsx",
+   "status": "changed",
+   "text": "import {XDSSelector} from '@xds/core';\nexport const A = () => <XDSSelector options={[]} />;\n"
+  }
+ ]
+}

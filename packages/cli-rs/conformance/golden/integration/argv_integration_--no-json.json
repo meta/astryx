@@ -1,0 +1,12 @@
+{
+ "id": "argv_integration_--no-json",
+ "args": [
+  "integration",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n",
+ "exit": 1,
+ "files": []
+}

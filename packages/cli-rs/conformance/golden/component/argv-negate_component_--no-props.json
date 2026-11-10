@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_component_--no-props",
+ "args": [
+  "component",
+  "--no-props"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-props'\n(Did you mean --props?)\n",
+ "exit": 1,
+ "files": []
+}

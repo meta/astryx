@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_hook_--params-yes",
+ "args": [
+  "hook",
+  "--params=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--params=yes'\n",
+ "exit": 1,
+ "files": []
+}

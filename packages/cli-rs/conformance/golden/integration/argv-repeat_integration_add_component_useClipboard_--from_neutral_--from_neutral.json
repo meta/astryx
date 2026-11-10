@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat_integration_add_component_useClipboard_--from_neutral_--from_neutral",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--from",
+  "neutral",
+  "--from",
+  "neutral"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"from\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

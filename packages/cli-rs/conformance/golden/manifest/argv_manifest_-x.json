@@ -1,0 +1,12 @@
+{
+ "id": "argv_manifest_-x",
+ "args": [
+  "manifest",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

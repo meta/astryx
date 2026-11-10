@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_component_--showcase-yes",
+ "args": [
+  "component",
+  "--showcase=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--showcase=yes'\n",
+ "exit": 1,
+ "files": []
+}

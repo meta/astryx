@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_use_lucide_-V",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "lucide",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

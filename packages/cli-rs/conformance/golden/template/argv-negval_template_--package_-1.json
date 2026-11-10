@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_template_--package_-1",
+ "args": [
+  "template",
+  "--package",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No templates found in package \"-1\".\n\n  @astryxdesign/core  (has templates)\n",
+ "exit": 1,
+ "files": []
+}

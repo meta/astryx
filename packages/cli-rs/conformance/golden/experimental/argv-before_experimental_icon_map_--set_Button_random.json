@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_experimental_icon_map_--set_Button_random",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--set",
+  "Button",
+  "random"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon id to map it to, or pass --remove\n",
+ "exit": 1,
+ "files": []
+}

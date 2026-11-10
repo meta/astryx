@@ -22,6 +22,8 @@ pub struct Resolved {
     pub listed: Vec<Value>,
     pub integration: Option<Value>,
     pub public_imports: Option<Value>,
+    pub older_cli_notes: Vec<Value>,
+    pub icon_sets: Option<Value>,
 }
 
 fn find_manifest_paths(dir: &str) -> Vec<String> {
@@ -311,7 +313,44 @@ fn validate_at_package_dir(package_dir: &str, name: &str, version: Option<Value>
             r.notes.push(Value::Object(m));
         }
     }
-    // TEMP: unread theme folders and icon-set checks (theme and icon readers).
+    if let Some(themes) = rec.get("themes").and_then(|v| v.as_str()).filter(|t| vc::root_problem(t).is_none()) {
+        for folder in crate::discovery::theme_unread::unread_theme_folders(themes, Some(package_dir), Some(name)) {
+            let fname = np::basename(&folder);
+            let shown = format!("{}/", np::relative(package_dir, &folder));
+            let hide = format!("rename it to .{fname} so Astryx skips it");
+            let fix = if crate::doctor_re!(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "u").find(&fname).is_some() {
+                let mut stem = String::new();
+                let mut up = false;
+                for c in fname.chars() {
+                    if c == '-' {
+                        up = true;
+                    } else if up {
+                        stem.extend(c.to_uppercase());
+                        up = false;
+                    } else {
+                        stem.push(c);
+                    }
+                }
+                let stem = format!("{stem}Theme");
+                format!(
+                    "if it is a theme, add {stem}.ts and {stem}.doc.mjs to it (`{}` writes both) and move its code into {stem}.ts; if not, {hide}.",
+                    crate::commands::doctor::env::fmt(&format!("integration add theme {fname}"), package_dir)
+                )
+            } else {
+                format!("{hide}; a theme folder needs a lower-kebab name.")
+            };
+            r.issues.push(super::issue(
+                "unread_theme_folder",
+                "warning",
+                format!("Folder \"{shown}\" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: {fix}"),
+            ));
+        }
+    }
+    if rec.get("iconSets").and_then(|v| v.as_str()).filter(|t| vc::root_problem(t).is_none()).is_some() {
+        let mut unchecked: crate::discovery::icon_set_checks::Unchecked = Vec::new();
+        r.issues.extend(crate::discovery::icon_set_checks::icon_set_issues(package_dir, &rec, &mut unchecked));
+        r.icon_sets = Some(Value::Array(crate::discovery::icon_set_checks::icon_set_coverage(&rec, &unchecked)));
+    }
     let usable = |k: &str| rec.get(k).and_then(|v| v.as_str()).filter(|r| vc::root_problem(r).is_none()).map(String::from);
     let mut consistency_rec = Map::new();
     consistency_rec.insert("components".into(), usable("components").map(Value::String).unwrap_or(Value::Null));
@@ -326,8 +365,124 @@ fn validate_at_package_dir(package_dir: &str, name: &str, version: Option<Value>
         r.notes.push(Value::Object(m));
     }
     r.public_imports = Some(report);
+    if opts.scan {
+        r.issues.extend(unreachable_issues(package_dir, &rec, &absolute_roots));
+        let pkg = np::read_json(&np::join2(package_dir, "package.json")).filter(|p| p.is_object()).unwrap_or_else(|| Value::Object(Map::new()));
+        r.older_cli_notes = crate::discovery::doc_stability::older_cli_notes(&rec, &pkg, package_dir).iter().map(|n| n.to_json()).collect();
+        for (code, message) in crate::discovery::doc_stability::template_icon_notes(&rec, package_dir) {
+            let mut m = Map::new();
+            m.insert("code".into(), Value::String(code));
+            m.insert("message".into(), Value::String(message));
+            r.notes.push(Value::Object(m));
+        }
+    }
     r.integration = Some(Value::Object(rec));
     r
+}
+
+const UNREACHABLE_SKIP: &[&str] = &["node_modules", ".git", "dist", "build", "coverage", ".next", "out"];
+
+/// `findUnreachableContributionIssues(packageDir, loaded, reported)`.
+fn unreachable_issues(package_dir: &str, loaded: &Map<String, Value>, reported: &[String]) -> Vec<Value> {
+    use crate::discovery::contribution_fixes as cf;
+    let kinds = ["components", "templates", "codemods", "docs", "themes"];
+    let mut usable = loaded.clone();
+    for k in kinds {
+        if let Some(r) = loaded.get(k).and_then(|v| v.as_str()) {
+            if crate::discovery::validate_contributions::root_problem(r).is_some() {
+                usable.insert(k.into(), Value::Null);
+            }
+        }
+    }
+    let roots: Vec<String> = kinds.iter().filter_map(|k| loaded.get(*k).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from)).collect();
+    let real_roots: Vec<String> = roots.iter().map(|r| std::fs::canonicalize(r).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| r.clone())).collect();
+    let context = cf::create_fix_context(package_dir, &usable);
+    let mut issues = Vec::new();
+    let mut scanned = 0usize;
+    let mut truncated = false;
+    fn walk(
+        dir: &str,
+        package_dir: &str,
+        roots: &[String],
+        real_roots: &[String],
+        reported: &[String],
+        context: &cf::FixContext,
+        issues: &mut Vec<Value>,
+        scanned: &mut usize,
+        truncated: &mut bool,
+    ) {
+        if roots.iter().any(|r| cf::path_is_inside(dir, r)) || reported.iter().any(|f| cf::path_is_inside(dir, f)) {
+            return;
+        }
+        let real = std::fs::canonicalize(dir).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| dir.to_string());
+        if real_roots.iter().any(|r| cf::path_is_inside(&real, r)) {
+            return;
+        }
+        let entries = match std::fs::read_dir(dir) {
+            Ok(_) => crate::commands::doctor::support::read_dir_sorted(dir).unwrap_or_default(),
+            Err(e) => {
+                let rel = np::relative(package_dir, dir);
+                let shown = format!("{}/", if rel.is_empty() { "." } else { rel.as_str() });
+                let code = match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => "EACCES".to_string(),
+                    _ => e.to_string(),
+                };
+                issues.push(super::issue(
+                    "unreadable_folder",
+                    "warning",
+                    format!("Could not read \"{shown}\" ({code}), so it was not checked for contributions outside a declared root. Fix: make it readable by the user running astryx, or remove it if it does not belong in the package."),
+                ));
+                return;
+            }
+        };
+        let mut entries = entries;
+        entries.sort_by(|a, b| crate::discovery::jsort::locale_compare(&a.name, &b.name));
+        for e in entries {
+            if *truncated {
+                return;
+            }
+            if UNREACHABLE_SKIP.contains(&e.name.as_str()) {
+                continue;
+            }
+            let full = np::join2(dir, &e.name);
+            if e.is_dir {
+                walk(&full, package_dir, roots, real_roots, reported, context, issues, scanned, truncated);
+                continue;
+            }
+            if !e.is_file {
+                continue;
+            }
+            *scanned += 1;
+            if *scanned > 5000 {
+                *truncated = true;
+                return;
+            }
+            let doc = crate::doctor_re!(r"\.doc\.(?:ts|mjs|js)$").find(&e.name).is_some();
+            let tpl = crate::doctor_re!(r"\.template\.(?:ts|mjs|js)$").find(&e.name).is_some();
+            if !doc && !tpl {
+                continue;
+            }
+            let Some(stamp) = cf::stamp_of(context, &full) else { continue };
+            issues.push(super::issue(
+                "unreachable_contribution",
+                "warning",
+                format!(
+                    "Found contribution metadata \"{}\" outside every declared integration root, so it contributes nothing. {}",
+                    np::relative(package_dir, &full),
+                    cf::unreachable_fix(context, &full, &stamp)
+                ),
+            ));
+        }
+    }
+    walk(package_dir, package_dir, &roots, &real_roots, reported, &context, &mut issues, &mut scanned, &mut truncated);
+    if truncated {
+        issues.push(super::issue(
+            "unreachable_scan_truncated",
+            "warning",
+            "Stopped unreachable-contribution scanning after 5000 files. Narrow the package or move generated output under dist/build.".to_string(),
+        ));
+    }
+    issues
 }
 
 /// TypeScript as `resolveProjectTypeScript([cwd, packageDir])` finds it:
@@ -372,28 +527,36 @@ fn prop_drift_report(cwd: &str, integration: &Value) -> Value {
 }
 
 fn doc_types_report(cwd: &str, integration: &Value) -> Value {
-    let pd = integration.get("__packageDir").and_then(|v| v.as_str()).unwrap_or(cwd).to_string();
-    let mut files = 0usize;
-    for k in ["components", "templates", "docs", "themes"] {
-        if let Some(root) = integration.get(k).and_then(|v| v.as_str()) {
-            files += count_docs(root);
+    let Some(rec) = integration.as_object() else { return empty_checked() };
+    let pd = rec.get("__packageDir").and_then(|v| v.as_str()).map(String::from);
+    let df = crate::discovery::integration_doc_files::integration_doc_files(rec);
+    let files: Vec<(String, String)> = df.files.iter().map(|f| (f.path.clone(), f.root.clone())).collect();
+    let base = pd.clone().unwrap_or_else(|| cwd.to_string());
+    let mut dirs: Vec<&str> = vec![cwd];
+    if let Some(p) = &pd {
+        dirs.push(p);
+    }
+    let mut report = crate::commands::doctor::ts::doc_types::check_doc_types(&files, &base, &dirs, false);
+    if report.get("status").and_then(|v| v.as_str()) == Some("checked") {
+        if let Value::Object(m) = &mut report {
+            if df.fixtures > 0 {
+                m.insert("fixtures".into(), Value::from(df.fixtures));
+            }
+            if !df.unread.is_empty() {
+                let mut un = m.get("unchecked").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                for (path, reason) in &df.unread {
+                    let r = np::relative(&base, path);
+                    let mut x = Map::new();
+                    x.insert("doc".into(), Value::String(if r.is_empty() { ".".into() } else { r }));
+                    x.insert("reason".into(), Value::String(reason.clone()));
+                    un.push(Value::Object(x));
+                }
+                un.sort_by(|a, b| crate::discovery::jsort::locale_compare(a.get("doc").and_then(|v| v.as_str()).unwrap_or(""), b.get("doc").and_then(|v| v.as_str()).unwrap_or("")));
+                m.insert("unchecked".into(), Value::Array(un));
+            }
         }
     }
-    let mut m = Map::new();
-    if files == 0 {
-        m.insert("status".into(), Value::String("checked".into()));
-    } else {
-        let _ts = project_typescript(&[cwd, &pd]);
-        m.insert("status".into(), Value::String("skipped".into()));
-        m.insert(
-            "reason".into(),
-            Value::String(format!("TypeScript is not installed in this project, so docs were not checked against the authoring types. {TYPESCRIPT_FIX}")),
-        );
-    }
-    m.insert("docs".into(), Value::from(0));
-    m.insert("findings".into(), Value::Array(vec![]));
-    m.insert("unchecked".into(), Value::Array(vec![]));
-    Value::Object(m)
+    report
 }
 
 fn count_docs(dir: &str) -> usize {
@@ -422,7 +585,7 @@ fn empty_checked() -> Value {
 }
 
 fn resolve(pkg: Option<&str>, cwd: &str) -> Resolved {
-    match pkg {
+    match pkg.filter(|p| !p.is_empty()) {
         Some(p) => validate_installed(p, cwd),
         None => validate_local(cwd),
     }
@@ -467,6 +630,13 @@ pub fn validate_integration(pkg: Option<&str>, cwd: &str) -> Value {
             notes.push(Value::Object(m));
         }
     }
+    if let Some(rec) = r.integration.as_ref().filter(|_| r.found).and_then(|i| i.as_object()) {
+        for n in super::names_check::component_doc_names_check(rec).1.into_iter().chain(super::names_check::block_components_check(rec).1) {
+            let mut m = n.as_object().cloned().unwrap_or_default();
+            m.insert("next".into(), Value::Bool(true));
+            notes.push(Value::Object(m));
+        }
+    }
     let examples = r.integration.as_ref().filter(|_| r.found).map(super::examples::component_examples_check);
     if let Some(ex) = &examples {
         notes.extend(ex.notes.iter().cloned());
@@ -486,7 +656,11 @@ pub fn validate_integration(pkg: Option<&str>, cwd: &str) -> Value {
                 m.insert("next".into(), Value::Bool(true));
                 notes.push(Value::Object(m));
             }
-            // TEMP: docTargetNotes (the docs tree's target reader).
+            for n in doc_target_notes(rec) {
+                let mut m = n.as_object().cloned().unwrap_or_default();
+                m.insert("next".into(), Value::Bool(true));
+                notes.push(Value::Object(m));
+            }
         }
     }
     if !notes.is_empty() {
@@ -494,8 +668,18 @@ pub fn validate_integration(pkg: Option<&str>, cwd: &str) -> Value {
     }
     if let Some(integ) = r.integration.as_ref().filter(|_| r.found) {
         d.insert("docTypes".into(), doc_types_report(cwd, integ));
-        d.insert("docNames".into(), empty_checked());
-        d.insert("blockComponents".into(), empty_checked());
+        if let Some(rec) = integ.as_object() {
+            let (report, _) = super::names_check::component_doc_names_check(rec);
+            d.insert("docNames".into(), report);
+            let (report, _) = super::names_check::block_components_check(rec);
+            d.insert("blockComponents".into(), report);
+        }
+    }
+    if let (true, Some(i)) = (r.found, &r.icon_sets) {
+        d.insert("iconSets".into(), i.clone());
+    }
+    if r.found && !r.older_cli_notes.is_empty() {
+        d.insert("olderCliNotes".into(), Value::Array(r.older_cli_notes.clone()));
     }
     if let Some(ex) = examples.filter(|e| !e.unchecked.is_empty()) {
         let mut m = Map::new();
@@ -510,6 +694,98 @@ pub fn validate_integration(pkg: Option<&str>, cwd: &str) -> Value {
         }
     }
     envelope("integration.validate", d)
+}
+
+/// `integrationDocTargets(integration)`.
+fn integration_doc_targets(integ: &Map<String, Value>) -> Vec<crate::commands::docs::runtime::DocTarget> {
+    let discovered = crate::discovery::docs_discovery::discover_integration_docs(integ);
+    if !discovered.errors.is_empty() {
+        return vec![];
+    }
+    crate::commands::docs::runtime::package_doc_targets(integ, &discovered)
+}
+
+/// `docTargetNotes(integration)`.
+fn doc_target_notes(integ: &Map<String, Value>) -> Vec<Value> {
+    let note = |code: &str, message: String| {
+        let mut m = Map::new();
+        m.insert("code".into(), Value::String(code.into()));
+        m.insert("message".into(), Value::String(message));
+        Value::Object(m)
+    };
+    let mut notes = Vec::new();
+    let targets = integration_doc_targets(integ);
+    let mut replacers: Vec<(String, Vec<String>)> = Vec::new();
+    for t in &targets {
+        if t.kind != Some("guide") || t.relationship != "replaces" {
+            continue;
+        }
+        let key = t.guide.clone().unwrap_or_else(|| t.target.to_lowercase());
+        match replacers.iter_mut().find(|(k, _)| *k == key) {
+            Some(e) => e.1.push(t.topic.clone()),
+            None => replacers.push((key, vec![t.topic.clone()])),
+        }
+    }
+    for (route, topics) in &replacers {
+        if topics.len() < 2 {
+            continue;
+        }
+        notes.push(note(
+            "duplicate_guide_replacement",
+            format!(
+                "\"{}\" all replace the guide \"{route}\", and only the last, \"{}\", is read. Fix: keep one replacement, or make the others extend it.",
+                topics.join("\", \""),
+                topics.last().unwrap()
+            ),
+        ));
+    }
+    let fmt0 = crate::commands::doctor::env::fmt0;
+    for t in &targets {
+        if t.kind == Some("namespace") {
+            let shown: Vec<&String> = t.guides_below.iter().take(8).collect();
+            let more = t.guides_below.len() - shown.len();
+            notes.push(note(
+                "doc_target_not_found",
+                format!(
+                    "\"{}\" {} \"{}\", which is a namespace of the docs tree: it holds no sections to {}, so this changes nothing. Fix: name the route of a guide below it{}.",
+                    t.topic,
+                    t.relationship,
+                    t.target,
+                    if t.relationship == "replaces" { "replace" } else { "extend" },
+                    if shown.is_empty() {
+                        String::new()
+                    } else {
+                        format!(": {}{}", shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "), if more > 0 { format!(", and {more} more") } else { String::new() })
+                    }
+                ),
+            ));
+        } else if t.kind.is_none() {
+            notes.push(note(
+                "doc_target_not_found",
+                format!(
+                    "\"{}\" {} \"{}\", which is neither a topic nor a guide of the CLI's docs or this package's own: it changes nothing unless an app also installs a package that provides it. Fix: if it should name one of those, name a topic as `{}` lists it, or a guide's route as `{}` or `{}` lists it.",
+                    t.topic,
+                    t.relationship,
+                    t.target,
+                    fmt0("docs"),
+                    fmt0("docs authoring --depth all"),
+                    fmt0("docs cli --depth all")
+                ),
+            ));
+        }
+        for (section, field, key) in &t.unplaced {
+            let g = t.guide.clone().unwrap_or_else(|| t.target.clone());
+            notes.push(note(
+                "doc_section_unplaced",
+                format!(
+                    "Section \"{section}\" of \"{}\" goes {field} \"{key}\", which is no section of \"{g}\", so it is added at the end. Fix: use a key `{}` lists.",
+                    t.topic,
+                    fmt0(&format!("docs {g} --index"))
+                ),
+            ));
+        }
+    }
+    notes
 }
 
 /// `resolveIntegration(pkg, cwd)` (authoring-checks): unusable roots dropped,
@@ -689,6 +965,7 @@ pub fn component_conflicts(pkg: Option<&str>, cwd: &str) -> Value {
 }
 
 const UNNAMED_PROVIDER: &str = "astryx-unnamed-local-package";
+const CLI_PROVIDER: &str = "@astryxdesign/cli";
 
 fn unnamed_shown(m: &str) -> String {
     m.split(&format!("{UNNAMED_PROVIDER}/")).collect::<Vec<_>>().join("").split(UNNAMED_PROVIDER).collect::<Vec<_>>().join("this package")
@@ -785,9 +1062,24 @@ pub fn doc_conflicts(pkg: Option<&str>, cwd: &str) -> Value {
                 }
             }
         }
-        // TEMP: CLI-guide targets, docs graph and reference checks (docs lane).
+        if discovered.errors.is_empty() {
+            for t in crate::commands::docs::runtime::package_doc_targets(&docs_integ, &discovered) {
+                if t.kind != Some("guide") || t.owner.as_deref() != Some(CLI_PROVIDER) {
+                    continue;
+                }
+                let route = t.guide.clone().unwrap_or_else(|| t.target.clone());
+                let what = if t.relationship == "replaces" { "override" } else { "extension" };
+                findings.push(finding(&t.topic, "info", t.relationship, &route, format!("Intentional {what}: \"{}\" {} the CLI guide \"{route}\".", t.topic, t.relationship)));
+            }
+        }
         findings.sort_by(|a, b| crate::discovery::jsort::locale_compare(&a.0, &b.0));
         if discovered.errors.is_empty() {
+            for (severity, message) in crate::commands::docs::runtime::package_docs_problems(&docs_integ, &discovered) {
+                issues.push(super::issue("invalid_doc_graph", severity, unnamed_shown(&message)));
+            }
+            for message in crate::commands::docs::runtime::package_reference_problems(&docs_integ, &discovered) {
+                issues.push(super::issue("invalid_doc_reference", "error", unnamed_shown(&message)));
+            }
             for c in crate::discovery::copied_passages::find_copied_passages(&discovered) {
                 let msg = unnamed_shown(&c.message);
                 issues.push(super::issue("copied_passage", "warning", msg.clone()));

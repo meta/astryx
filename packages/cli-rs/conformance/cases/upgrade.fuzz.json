@@ -1,0 +1,10 @@
+[
+  {
+    "id": "fuzz_upgrade_--from-0.7.0@upgrade-configured_69da65",
+    "args": [
+      "upgrade",
+      "--from=0.7.0"
+    ],
+    "fixture": "upgrade-configured"
+  }
+]

@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_use_-hV",
+ "args": [
+  "theme",
+  "use",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

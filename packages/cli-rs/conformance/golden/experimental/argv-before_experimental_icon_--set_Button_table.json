@@ -1,0 +1,15 @@
+{
+ "id": "argv-before_experimental_icon_--set_Button_table",
+ "args": [
+  "experimental",
+  "icon",
+  "--set",
+  "Button",
+  "table"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"Button\"\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv-negval_init_--agent_-1",
+ "args": [
+  "init",
+  "--agent",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown agent \"-1\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
+ "exit": 1,
+ "files": []
+}

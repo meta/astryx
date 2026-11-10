@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_glyphs_map_unknown_icon",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "check",
+  "nothere"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"glyphs\" has no icon \"nothere\". Name an icon by its id, its export name, or another name its library exports it as; a word it carries is not its name.\n",
+ "exit": 1,
+ "files": []
+}

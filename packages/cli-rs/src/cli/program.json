@@ -1297,7 +1297,7 @@
     "args": [],
     "options": [],
     "beforeHelp": "",
-    "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List available and added themes\n  \u0001 theme list\n  # Import a theme into the app\n  \u0001 theme add ocean\n  # Choose the default\n  \u0001 theme use ocean\n  # Fork source to customize\n  \u0001 theme eject ocean\n  # Generate a palette candidate\n  \u0001 theme palette generate palette.config.json\n  # See what a theme can override\n  \u0001 theme targets\n\nMore: \u0001 docs cli/commands/theme\n\nComponent style overrides:\n  \u0001 theme targets            Every themeable class, with its props and states\n  \u0001 component <Name>         One component's theming table\n  \u0001 docs theme               How component overrides work\n\n",
+    "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List available and added themes\n  \u0001 theme list\n  # Import a theme into the app\n  \u0001 theme add ocean\n  # Choose the default\n  \u0001 theme use ocean\n  # Fork source to customize\n  \u0001 theme eject ocean\n  # Generate a palette candidate\n  \u0001 theme palette generate palette.config.json\n  # See what a theme can override\n  \u0001 theme targets\n\nMore: \u0001 docs cli/commands/theme\n\nComponent style overrides:\n  \u0002 theme targets            Every themeable class, with its props and states\n  \u0002 component <Name>         One component's theming table\n  \u0002 docs theme               How component overrides work\n\n",
     "json": false,
     "responseTypes": [],
     "examples": [

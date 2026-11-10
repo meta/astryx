@@ -1,0 +1,12 @@
+{
+ "id": "oldcore_hook_useClipboard_@core-0.3.0",
+ "args": [
+  "hook",
+  "useClipboard"
+ ],
+ "fixture": "core-0.3.0",
+ "stdout": "",
+ "stderr": "Error: No hook named \"useClipboard\"\n",
+ "exit": 1,
+ "files": []
+}

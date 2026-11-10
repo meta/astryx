@@ -1,0 +1,12 @@
+{
+ "id": "argv_template_-x",
+ "args": [
+  "template",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

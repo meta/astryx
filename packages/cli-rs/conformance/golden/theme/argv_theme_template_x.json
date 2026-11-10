@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_template_x",
+ "args": [
+  "theme",
+  "template",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid theme template path: must be a non-empty string\n",
+ "exit": 1,
+ "files": []
+}

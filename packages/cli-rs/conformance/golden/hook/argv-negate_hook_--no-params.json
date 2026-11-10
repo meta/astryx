@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_hook_--no-params",
+ "args": [
+  "hook",
+  "--no-params"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-params'\n(Did you mean --params?)\n",
+ "exit": 1,
+ "files": []
+}

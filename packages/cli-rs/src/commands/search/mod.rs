@@ -5,6 +5,7 @@
 pub mod api;
 pub mod cand;
 pub mod command;
+pub mod docs;
 pub mod collate;
 pub mod gather;
 pub mod index;

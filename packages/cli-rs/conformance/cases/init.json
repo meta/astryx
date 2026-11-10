@@ -1,1433 +1,1870 @@
 [
- {
-  "id": "init_--help",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_-h",
-  "args": [
-   "init",
-   "-h"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "help_init",
-  "args": [
-   "help",
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--bogus-flag",
-  "args": [
-   "init",
-   "--bogus-flag"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--bogus-flag_--json",
-  "args": [
-   "init",
-   "--bogus-flag",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_extra1_extra2_extra3",
-  "args": [
-   "init",
-   "extra1",
-   "extra2",
-   "extra3"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_extra1_extra2_extra3_--json",
-  "args": [
-   "init",
-   "extra1",
-   "extra2",
-   "extra3",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_@empty",
-  "args": [
-   "init"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "init_--json_@empty",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "init_@nocore",
-  "args": [
-   "init"
-  ],
-  "fixture": "nocore",
-  "gen": true
- },
- {
-  "id": "init_--json_@nocore",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "nocore",
-  "gen": true
- },
- {
-  "id": "init_@brokencore",
-  "args": [
-   "init"
-  ],
-  "fixture": "brokencore",
-  "gen": true
- },
- {
-  "id": "init_--json_@brokencore",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "brokencore",
-  "gen": true
- },
- {
-  "id": "init_@plain",
-  "args": [
-   "init"
-  ],
-  "fixture": "plain",
-  "gen": true
- },
- {
-  "id": "init_--json_@plain",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "plain",
-  "gen": true
- },
- {
-  "id": "init_@large",
-  "args": [
-   "init"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "init_--json_@large",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "init_@integration",
-  "args": [
-   "init"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "init_--json_@integration",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "ex_init_--all",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "ex_init_--all_@empty",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "ex_init_--all_@integration",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "ex_init_--all_@large",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "ex_init_--all_--json",
-  "args": [
-   "init",
-   "--all",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "ex_init_--user",
-  "args": [
-   "init",
-   "--user"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_@empty",
-  "args": [
-   "init",
-   "--user"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_@integration",
-  "args": [
-   "init",
-   "--user"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_@large",
-  "args": [
-   "init",
-   "--user"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--json",
-  "args": [
-   "init",
-   "--user",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--remove-agents",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--remove-agents_@empty",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--remove-agents_@integration",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--remove-agents_@large",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "ex_init_--user_--remove-agents_--json",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features_a-b",
-  "args": [
-   "init",
-   "--features",
-   "a,b"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features_a-b_--json",
-  "args": [
-   "init",
-   "--features",
-   "a,b",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features-a-b",
-  "args": [
-   "init",
-   "--features=a,b"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features",
-  "args": [
-   "init",
-   "--features"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features_--json",
-  "args": [
-   "init",
-   "--features",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--features_a-b_--help",
-  "args": [
-   "init",
-   "--features",
-   "a,b",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--all_--help",
-  "args": [
-   "init",
-   "--all",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--remove-agents",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--remove-agents_--json",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--remove-agents_--help",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--user_--help",
-  "args": [
-   "init",
-   "--user",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_claude",
-  "args": [
-   "init",
-   "--agent",
-   "claude"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_claude_--json",
-  "args": [
-   "init",
-   "--agent",
-   "claude",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-claude",
-  "args": [
-   "init",
-   "--agent=claude"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_cursor",
-  "args": [
-   "init",
-   "--agent",
-   "cursor"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_cursor_--json",
-  "args": [
-   "init",
-   "--agent",
-   "cursor",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-cursor",
-  "args": [
-   "init",
-   "--agent=cursor"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_bogus",
-  "args": [
-   "init",
-   "--agent",
-   "bogus"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_bogus_--json",
-  "args": [
-   "init",
-   "--agent",
-   "bogus",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-bogus",
-  "args": [
-   "init",
-   "--agent=bogus"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent",
-  "args": [
-   "init",
-   "--agent"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_--json",
-  "args": [
-   "init",
-   "--agent",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_claude_--help",
-  "args": [
-   "init",
-   "--agent",
-   "claude",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path_docs-agents",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "docs/agents"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path_docs-agents_--json",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "docs/agents",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path-docs-agents",
-  "args": [
-   "init",
-   "--agent-docs-path=docs/agents"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path",
-  "args": [
-   "init",
-   "--agent-docs-path"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path_--json",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent-docs-path_docs-agents_--help",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "docs/agents",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_nosuchsub",
-  "args": [
-   "init",
-   "nosuchsub"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--all_@plain",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "plain",
-  "gen": true
- },
- {
-  "id": "init_--all_@nocore",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "nocore",
-  "gen": true
- },
- {
-  "id": "init_--agent_codex",
-  "args": [
-   "init",
-   "--agent",
-   "codex"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_copilot",
-  "args": [
-   "init",
-   "--agent",
-   "copilot"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_gemini",
-  "args": [
-   "init",
-   "--agent",
-   "gemini"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "init_--agent_windsurf",
-  "args": [
-   "init",
-   "--agent",
-   "windsurf"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "again_after-init_init",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "after-init_init_--remove-agents",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "init_--agent-docs-path_a_b",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "a",
-   "b"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "cols40_init_--help",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "COLUMNS": "40"
+  {
+    "id": "init_--help",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--json",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_-h",
+    "args": [
+      "init",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_init",
+    "args": [
+      "help",
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--bogus-flag",
+    "args": [
+      "init",
+      "--bogus-flag"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--bogus-flag_--json",
+    "args": [
+      "init",
+      "--bogus-flag",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_extra1_extra2_extra3",
+    "args": [
+      "init",
+      "extra1",
+      "extra2",
+      "extra3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_extra1_extra2_extra3_--json",
+    "args": [
+      "init",
+      "extra1",
+      "extra2",
+      "extra3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@empty",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "init_@nocore",
+    "args": [
+      "init"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@nocore",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "init_@brokencore",
+    "args": [
+      "init"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@brokencore",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "init_@plain",
+    "args": [
+      "init"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@plain",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "init_@large",
+    "args": [
+      "init"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@large",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "init_@integration",
+    "args": [
+      "init"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "init_--json_@integration",
+    "args": [
+      "init",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--all",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--all_@empty",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--all_@integration",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--all_@large",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--all_--json",
+    "args": [
+      "init",
+      "--all",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user",
+    "args": [
+      "init",
+      "--user"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_@empty",
+    "args": [
+      "init",
+      "--user"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_@integration",
+    "args": [
+      "init",
+      "--user"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_@large",
+    "args": [
+      "init",
+      "--user"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--json",
+    "args": [
+      "init",
+      "--user",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--remove-agents",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--remove-agents_@empty",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--remove-agents_@integration",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--remove-agents_@large",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_init_--user_--remove-agents_--json",
+    "args": [
+      "init",
+      "--user",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features_a-b",
+    "args": [
+      "init",
+      "--features",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features_a-b_--json",
+    "args": [
+      "init",
+      "--features",
+      "a,b",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features-a-b",
+    "args": [
+      "init",
+      "--features=a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features",
+    "args": [
+      "init",
+      "--features"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features_--json",
+    "args": [
+      "init",
+      "--features",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--features_a-b_--help",
+    "args": [
+      "init",
+      "--features",
+      "a,b",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--all_--help",
+    "args": [
+      "init",
+      "--all",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--remove-agents",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--remove-agents_--json",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--remove-agents_--help",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--user_--help",
+    "args": [
+      "init",
+      "--user",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_claude_--json",
+    "args": [
+      "init",
+      "--agent",
+      "claude",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-claude",
+    "args": [
+      "init",
+      "--agent=claude"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_cursor",
+    "args": [
+      "init",
+      "--agent",
+      "cursor"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_cursor_--json",
+    "args": [
+      "init",
+      "--agent",
+      "cursor",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-cursor",
+    "args": [
+      "init",
+      "--agent=cursor"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_bogus",
+    "args": [
+      "init",
+      "--agent",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_bogus_--json",
+    "args": [
+      "init",
+      "--agent",
+      "bogus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-bogus",
+    "args": [
+      "init",
+      "--agent=bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent",
+    "args": [
+      "init",
+      "--agent"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_--json",
+    "args": [
+      "init",
+      "--agent",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_claude_--help",
+    "args": [
+      "init",
+      "--agent",
+      "claude",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path_docs-agents",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "docs/agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path_docs-agents_--json",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "docs/agents",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path-docs-agents",
+    "args": [
+      "init",
+      "--agent-docs-path=docs/agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path",
+    "args": [
+      "init",
+      "--agent-docs-path"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path_--json",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent-docs-path_docs-agents_--help",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "docs/agents",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--json_--json",
+    "args": [
+      "init",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--help_--json",
+    "args": [
+      "init",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--json_--help",
+    "args": [
+      "init",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-h_--bogus",
+    "args": [
+      "init",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--bogus_-h",
+    "args": [
+      "init",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-V",
+    "args": [
+      "init",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--version",
+    "args": [
+      "init",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--JSON",
+    "args": [
+      "init",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--jso",
+    "args": [
+      "init",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--no-json",
+    "args": [
+      "init",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--json-1",
+    "args": [
+      "init",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-x",
+    "args": [
+      "init",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-hV",
+    "args": [
+      "init",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--_--json",
+    "args": [
+      "init",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_--_-h",
+    "args": [
+      "init",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_x",
+    "args": [
+      "init",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-",
+    "args": [
+      "init",
+      "\u00fc\u4e2d\u6587"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_-5",
+    "args": [
+      "init",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_---x",
+    "args": [
+      "init",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_init_---json",
+    "args": [
+      "init",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--features_a-b_--features_a-b",
+    "args": [
+      "init",
+      "--features",
+      "a,b",
+      "--features",
+      "a,b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_init_--features_a-b_--features_other",
+    "args": [
+      "init",
+      "--features",
+      "a,b",
+      "--features",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_init_--features_x",
+    "args": [
+      "init",
+      "--features",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_init_--features-",
+    "args": [
+      "init",
+      "--features="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_init_--features_-1",
+    "args": [
+      "init",
+      "--features",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--all_--all",
+    "args": [
+      "init",
+      "--all",
+      "--all"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_init_--all-yes",
+    "args": [
+      "init",
+      "--all=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_init_--no-all",
+    "args": [
+      "init",
+      "--no-all"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--remove-agents_--remove-agents",
+    "args": [
+      "init",
+      "--remove-agents",
+      "--remove-agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_init_--remove-agents-yes",
+    "args": [
+      "init",
+      "--remove-agents=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_init_--no-remove-agents",
+    "args": [
+      "init",
+      "--no-remove-agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--user_--user",
+    "args": [
+      "init",
+      "--user",
+      "--user"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_init_--user-yes",
+    "args": [
+      "init",
+      "--user=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_init_--no-user",
+    "args": [
+      "init",
+      "--no-user"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--agent_claude_--agent_claude",
+    "args": [
+      "init",
+      "--agent",
+      "claude",
+      "--agent",
+      "claude"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_init_--agent_claude_--agent_cursor",
+    "args": [
+      "init",
+      "--agent",
+      "claude",
+      "--agent",
+      "cursor"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_init_--agent_x",
+    "args": [
+      "init",
+      "--agent",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_init_--agent-",
+    "args": [
+      "init",
+      "--agent="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_init_--agent_-1",
+    "args": [
+      "init",
+      "--agent",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_init_--agent-docs-path_docs-agents_--agent-docs-path_docs-agents",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "docs/agents",
+      "--agent-docs-path",
+      "docs/agents"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_init_--agent-docs-path_docs-agents_--agent-docs-path_other",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "docs/agents",
+      "--agent-docs-path",
+      "other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_init_--agent-docs-path_x",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_init_--agent-docs-path-",
+    "args": [
+      "init",
+      "--agent-docs-path="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_init_--agent-docs-path_-1",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_nosuchsub",
+    "args": [
+      "init",
+      "nosuchsub"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@plain",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@nocore",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_codex",
+    "args": [
+      "init",
+      "--agent",
+      "codex"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_copilot",
+    "args": [
+      "init",
+      "--agent",
+      "copilot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_gemini",
+    "args": [
+      "init",
+      "--agent",
+      "gemini"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "init_--agent_windsurf",
+    "args": [
+      "init",
+      "--agent",
+      "windsurf"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "again_after-init_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "after-init_init_--remove-agents",
+    "args": [
+      "init",
+      "--remove-agents"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "init_--agent-docs-path_a_b",
+    "args": [
+      "init",
+      "--agent-docs-path",
+      "a",
+      "b"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "cols40_init_--help",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "40"
+    }
+  },
+  {
+    "id": "cols80_init_--help",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "80"
+    }
+  },
+  {
+    "id": "cols200_init_--help",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "200"
+    }
+  },
+  {
+    "id": "cols-empty_init_--help",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": ""
+    }
+  },
+  {
+    "id": "init_--help_tty",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "cols60_init_--help_tty",
+    "args": [
+      "init",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true,
+    "env": {
+      "COLUMNS": "60"
+    }
+  },
+  {
+    "id": "stdin_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "stdin": "y\nn\n\n"
+  },
+  {
+    "id": "init_@pm-npm",
+    "args": [
+      "init"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@pm-npm",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "init_@pm-pnpm",
+    "args": [
+      "init"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@pm-pnpm",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "init_@pm-yarn",
+    "args": [
+      "init"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@pm-yarn",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "init_@pm-yarnberry",
+    "args": [
+      "init"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@pm-yarnberry",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "init_@pm-bun",
+    "args": [
+      "init"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@pm-bun",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "init_@monorepo",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@monorepo",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_init_@monorepo",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web_init_--all_@monorepo",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_init_@monorepo",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_init_--all_@monorepo",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_init_@monorepo",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "in-monorepo.packages.api_init_--all_@monorepo",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "init_@monorepo-local",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@monorepo-local",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_init_@monorepo-local",
+    "args": [
+      "init"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "in-monorepo-local.apps.site_init_--all_@monorepo-local",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "init_@configured",
+    "args": [
+      "init"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@configured",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "init_@configts",
+    "args": [
+      "init"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@configts",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "init_@badconfig",
+    "args": [
+      "init"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@badconfig",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "init_@syntaxconfig",
+    "args": [
+      "init"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@syntaxconfig",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "init_@unknownint",
+    "args": [
+      "init"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "init_--all_@unknownint",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.src_init_--all",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_init_--all",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_init_@large",
+    "args": [
+      "init"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-large.src_init_--all_@large",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_init_@integration",
+    "args": [
+      "init"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_init_--all_@integration",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "in-._init_--all_@empty",
+    "args": [
+      "init",
+      "--all"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "env-ua-pnpm_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_init_@empty",
+    "args": [
+      "init"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ci-1_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-true_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-false_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-0_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-github_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-xdg_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg-relative_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-node-env-prod_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-agent_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-pnpm-home_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-lang-zh_init",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  },
+  {
+    "id": "init_tty",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "init~2",
+    "args": [
+      "init"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "stdin": "y\n"
   }
- },
- {
-  "id": "cols80_init_--help",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "COLUMNS": "80"
-  }
- },
- {
-  "id": "cols200_init_--help",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "COLUMNS": "200"
-  }
- },
- {
-  "id": "cols-empty_init_--help",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "COLUMNS": ""
-  }
- },
- {
-  "id": "init_--help_tty",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "tty": true
- },
- {
-  "id": "cols60_init_--help_tty",
-  "args": [
-   "init",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "tty": true,
-  "env": {
-   "COLUMNS": "60"
-  }
- },
- {
-  "id": "stdin_init",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "stdin": "y\nn\n\n"
- },
- {
-  "id": "init_tty",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "tty": true
- },
- {
-  "id": "init~2",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "stdin": "y\n"
- },
- {
-  "id": "w_features_agents_theme",
-  "args": [
-   "init",
-   "--features",
-   "agents,theme"
-  ]
- },
- {
-  "id": "w_features_spaced_case",
-  "args": [
-   "init",
-   "--features",
-   " Agents , THEME "
-  ]
- },
- {
-  "id": "w_features_template_json",
-  "args": [
-   "--json",
-   "init",
-   "--features",
-   "template"
-  ]
- },
- {
-  "id": "w_features_theme_empty",
-  "args": [
-   "init",
-   "--features",
-   "theme"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "w_features_bad_mixed",
-  "args": [
-   "init",
-   "--features",
-   "agents,nope,x"
-  ]
- },
- {
-  "id": "w_features_empty_string",
-  "args": [
-   "init",
-   "--features",
-   ""
-  ]
- },
- {
-  "id": "w_all_features",
-  "args": [
-   "init",
-   "--all",
-   "--features",
-   "agents"
-  ]
- },
- {
-  "id": "w_all_features_json",
-  "args": [
-   "init",
-   "--all",
-   "--features",
-   "agents",
-   "--json"
-  ]
- },
- {
-  "id": "w_remove_with_all",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--all"
-  ]
- },
- {
-  "id": "w_remove_with_agent_path",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--agent",
-   "claude",
-   "--agent-docs-path",
-   "x.md"
-  ]
- },
- {
-  "id": "w_user_with_features",
-  "args": [
-   "init",
-   "--user",
-   "--features",
-   "agents",
-   "--agent",
-   "claude"
-  ]
- },
- {
-  "id": "w_user_with_all_json",
-  "args": [
-   "--json",
-   "init",
-   "--user",
-   "--all"
-  ]
- },
- {
-  "id": "w_agent_all",
-  "args": [
-   "init",
-   "--agent",
-   "all"
-  ]
- },
- {
-  "id": "w_agent_codex",
-  "args": [
-   "init",
-   "--agent",
-   "codex"
-  ]
- },
- {
-  "id": "w_agent_hermes_json",
-  "args": [
-   "init",
-   "--agent",
-   "hermes",
-   "--json"
-  ]
- },
- {
-  "id": "w_agent_muse_empty",
-  "args": [
-   "init",
-   "--agent",
-   "muse"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "w_agent_claude_features_agents",
-  "args": [
-   "init",
-   "--features",
-   "agents",
-   "--agent",
-   "claude"
-  ]
- },
- {
-  "id": "w_agent_bogus_features_theme",
-  "args": [
-   "init",
-   "--features",
-   "theme",
-   "--agent",
-   "bogus"
-  ]
- },
- {
-  "id": "w_docs_path_multi",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "a/AI.md",
-   "b/notes.txt"
-  ]
- },
- {
-  "id": "w_docs_path_escape",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "../outside.md"
-  ]
- },
- {
-  "id": "w_docs_path_escape_json",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "../outside.md",
-   "--json"
-  ]
- },
- {
-  "id": "w_docs_path_abs",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "/tmp/abs.md"
-  ]
- },
- {
-  "id": "w_docs_path_home",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "../home/AGENTS.md"
-  ]
- },
- {
-  "id": "w_subfolder",
-  "args": [
-   "init"
-  ],
-  "cwd": "app/src"
- },
- {
-  "id": "w_subfolder_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "cwd": "app/src"
- },
- {
-  "id": "w_subfolder_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "cwd": "app/src"
- },
- {
-  "id": "w_author",
-  "args": [
-   "init"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_author_all",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "author"
- },
- {
-  "id": "w_home",
-  "args": [
-   "init"
-  ],
-  "cwd": "home"
- },
- {
-  "id": "w_home_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "cwd": "home"
- },
- {
-  "id": "w_remove_empty",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "w_large_agent_claude",
-  "args": [
-   "init",
-   "--agent",
-   "claude"
-  ],
-  "fixture": "large"
- },
- {
-  "id": "w_integration_features_agents",
-  "args": [
-   "init",
-   "--features",
-   "agents",
-   "--json"
-  ],
-  "fixture": "integration"
- },
- {
-  "id": "w_user_remove_json_empty",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "empty"
- },
- {
-  "id": "d_init",
-  "args": [
-   "init"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_init_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_init_twice",
-  "args": [
-   "init"
-  ],
-  "fixture": "initdone",
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "d_init_all",
-  "args": [
-   "init",
-   "--all"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_init_all_json",
-  "args": [
-   "init",
-   "--all",
-   "--json"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_remove_json",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_remove_after_init",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "initdone",
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "d_agent_claude",
-  "args": [
-   "init",
-   "--agent",
-   "claude"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_agent_all",
-  "args": [
-   "init",
-   "--agent",
-   "all"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_agent_cursor",
-  "args": [
-   "init",
-   "--agent",
-   "cursor"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_agent_hermes",
-  "args": [
-   "init",
-   "--agent",
-   "hermes"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_agent_codex",
-  "args": [
-   "init",
-   "--agent",
-   "codex"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_web",
-  "args": [
-   "init"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/packages/web"
- },
- {
-  "id": "d_web_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/packages/web"
- },
- {
-  "id": "d_web_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/packages/web",
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "d_web_agent_claude",
-  "args": [
-   "init",
-   "--agent",
-   "claude"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/packages/web"
- },
- {
-  "id": "d_broken",
-  "args": [
-   "init"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/broken"
- },
- {
-  "id": "d_broken_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/broken"
- },
- {
-  "id": "d_broken_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/broken"
- },
- {
-  "id": "d_dup",
-  "args": [
-   "init"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/dup"
- },
- {
-  "id": "d_dup_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "initdone",
-  "cwd": "initdone/dup"
- },
- {
-  "id": "d_docs_path_existing",
-  "args": [
-   "init",
-   "--agent-docs-path",
-   "CLAUDE.md",
-   "GEMINI.md"
-  ],
-  "fixture": "initdone"
- },
- {
-  "id": "d_user_twice",
-  "args": [
-   "init",
-   "--user"
-  ],
-  "fixture": "initdone",
-  "pre": [
-   [
-    "init",
-    "--user"
-   ]
-  ]
- },
- {
-  "id": "d_user_then_remove",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents"
-  ],
-  "fixture": "initdone",
-  "pre": [
-   [
-    "init",
-    "--user"
-   ]
-  ]
- },
- {
-  "id": "d_user_then_remove_json",
-  "args": [
-   "init",
-   "--user",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "initdone",
-  "pre": [
-   [
-    "init",
-    "--user"
-   ]
-  ]
- },
- {
-  "id": "d_app_init_twice_json",
-  "args": [
-   "init",
-   "--json"
-  ],
-  "fixture": "app",
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "d_app_init_then_remove",
-  "args": [
-   "init",
-   "--remove-agents"
-  ],
-  "fixture": "app",
-  "pre": [
-   [
-    "init"
-   ]
-  ]
- },
- {
-  "id": "d_app_claude_then_default",
-  "args": [
-   "init"
-  ],
-  "fixture": "app",
-  "pre": [
-   [
-    "init",
-    "--agent",
-    "claude"
-   ]
-  ]
- },
- {
-  "id": "d_app_all_then_remove_json",
-  "args": [
-   "init",
-   "--remove-agents",
-   "--json"
-  ],
-  "fixture": "app",
-  "pre": [
-   [
-    "init",
-    "--agent",
-    "all"
-   ]
-  ]
- }
 ]

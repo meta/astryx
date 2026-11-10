@@ -1,0 +1,12 @@
+{
+ "id": "argv-negate_upgrade_--no-registry",
+ "args": [
+  "upgrade",
+  "--no-registry"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-registry'\n(Did you mean --registry?)\n",
+ "exit": 1,
+ "files": []
+}

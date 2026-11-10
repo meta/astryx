@@ -1,0 +1,13 @@
+{
+ "id": "argv-negate_search_table_--no-verbose",
+ "args": [
+  "search",
+  "table",
+  "--no-verbose"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-verbose'\n(Did you mean --verbose?)\n",
+ "exit": 1,
+ "files": []
+}

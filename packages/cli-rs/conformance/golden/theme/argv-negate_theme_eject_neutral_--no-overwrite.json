@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_theme_eject_neutral_--no-overwrite",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--no-overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-overwrite'\n(Did you mean --overwrite?)\n",
+ "exit": 1,
+ "files": []
+}

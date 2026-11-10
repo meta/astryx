@@ -1,0 +1,14 @@
+{
+ "id": "w_output_below_file",
+ "args": [
+  "swizzle",
+  "Badge",
+  "--output",
+  "package.json/x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: ENOTDIR: not a directory, unlink '/tmp/astryx-conformance/work/app/package.json/x/Badge'\n",
+ "exit": 1,
+ "files": []
+}

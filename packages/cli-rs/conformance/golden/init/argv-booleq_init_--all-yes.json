@@ -1,0 +1,12 @@
+{
+ "id": "argv-booleq_init_--all-yes",
+ "args": [
+  "init",
+  "--all=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--all=yes'\n",
+ "exit": 1,
+ "files": []
+}

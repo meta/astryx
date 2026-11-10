@@ -1,0 +1,23 @@
+{
+ "id": "tb_family_all_full",
+ "args": [
+  "--detail",
+  "full",
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/.hidden/ocean-calm.mjs",
+  "fam/themes/.hidden/ocean-calm-deep.mjs",
+  "fam/themes/ocean-midnight.mjs",
+  "--family-key",
+  "ocean-family",
+  "--icons-specifier",
+  "./x.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm-deep.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n",
+ "stderr": "Error: Cannot resolve registry import \"./x.mjs\" from /tmp/astryx-conformance/work/themes/fam/themes/ocean-family.js.\n",
+ "exit": 1,
+ "files": []
+}

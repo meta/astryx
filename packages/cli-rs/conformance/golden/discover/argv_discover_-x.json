@@ -1,0 +1,12 @@
+{
+ "id": "argv_discover_-x",
+ "args": [
+  "discover",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

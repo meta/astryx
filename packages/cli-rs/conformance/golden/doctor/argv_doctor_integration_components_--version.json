@@ -1,0 +1,14 @@
+{
+ "id": "argv_doctor_integration_components_--version",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

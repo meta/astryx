@@ -30,6 +30,10 @@ struct RawVariant<'a> {
     topics: &'a serde_json::value::RawValue,
     #[serde(borrow)]
     reads: HashMap<String, &'a serde_json::value::RawValue>,
+    #[serde(borrow)]
+    authoring: &'a serde_json::value::RawValue,
+    #[serde(borrow, rename = "schemaFields")]
+    schema_fields: &'a serde_json::value::RawValue,
 }
 
 fn raw() -> &'static Raw<'static> {
@@ -95,6 +99,18 @@ impl Variant {
             Value::Array(a) => a,
             _ => Vec::new(),
         }
+    }
+    /// The CLI's authoring self-docs: `{type, name, displayName, description,
+    /// experimental, content, fieldOrder, fields}` each.
+    pub fn authoring(&self) -> Vec<Value> {
+        match decode_raw(self.raw.authoring) {
+            Value::Array(a) => a,
+            _ => Vec::new(),
+        }
+    }
+    /// Each tree schema's fields by route: `{fieldOrder, fields}`.
+    pub fn schema_fields(&self) -> Value {
+        decode_raw(self.raw.schema_fields)
     }
     /// One topic read: `topic:<name>:<lang>` or `guide:<route>:<lang>`.
     pub fn read(&self, key: &str) -> Option<Value> {

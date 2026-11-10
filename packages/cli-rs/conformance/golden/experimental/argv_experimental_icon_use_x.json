@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_icon_use_x",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon set to use\n\n  npx @astryxdesign/cli@0.7.12 experimental icon --list  (list the installed sets)\n",
+ "exit": 1,
+ "files": []
+}

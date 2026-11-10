@@ -13,11 +13,16 @@ pub enum Kind {
     Project(ProjectFn),
     /// No native port yet: running it fails the codemod.
     Missing,
+    /// An integration's codemod module: its default export's `transform`
+    /// runs in the JS engine.
+    Js(std::path::PathBuf),
 }
 
 #[derive(Clone)]
 pub struct Entry {
     pub name: String,
+    /// `core` for Core's codemods, else the integration package.
+    pub package: String,
     pub title: String,
     pub description: Option<String>,
     pub pr: Option<String>,
@@ -58,6 +63,7 @@ pub fn registry() -> &'static Registry {
                 };
                 ts.push(Entry {
                     name,
+                    package: "core".into(),
                     title: t["title"].as_str().unwrap_or("").to_string(),
                     description: t["description"].as_str().map(|s| s.to_string()),
                     pr: t["pr"].as_str().map(|s| s.to_string()),

@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_experimental_icon_--all-icons-yes",
+ "args": [
+  "experimental",
+  "icon",
+  "--all-icons=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--all-icons=yes'\n",
+ "exit": 1,
+ "files": []
+}

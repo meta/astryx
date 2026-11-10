@@ -134,6 +134,11 @@ fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option
 
 /// The `component` command handler.
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
+    // Read-only: list each folder once (as the JS command's withListingCache).
+    crate::discovery::listing_cache::with_listing_cache(|| run_uncached(inv, out))
+}
+
+fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
     let run = crate::cli::env::cli_invocation(&inv.cwd);
     let names = inv.arg_list(0);
     let name = if names.len() == 1 { Some(names[0].clone()) } else { None };

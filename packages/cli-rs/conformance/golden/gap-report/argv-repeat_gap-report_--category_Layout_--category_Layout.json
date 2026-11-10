@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat_gap-report_--category_Layout_--category_Layout",
+ "args": [
+  "gap-report",
+  "--category",
+  "Layout",
+  "--category",
+  "Layout"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

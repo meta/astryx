@@ -87,7 +87,9 @@ pub struct AppResult {
 
 /// `applyWrites([plan])` for one file.
 fn apply_write(path: &str, contents: &str, create_only: bool, expected: Option<&[u8]>) -> Result<(), ApiError> {
-    let _ = std::fs::create_dir_all(fsutil::dirname(path));
+    if let Err((_, m)) = crate::commands::template::mkdir_p(&fsutil::dirname(path)) {
+        return Err(ApiError::new(&format!("Failed to write the generated theme module: {m}"), "ERR_WRITE_FAILED"));
+    }
     let exists = Path::new(path).exists();
     if create_only && exists {
         return Err(ApiError::new(&format!("Refusing to overwrite existing file {path}."), "ERR_FILE_EXISTS"));
@@ -162,7 +164,7 @@ fn unknown_theme(inv: &Invocation, slug: &str, package: Option<&str>, include_lo
     ApiError::with(
         &format!(
             "Unknown theme \"{slug}\"{}{}",
-            package.map(|p| format!(" in package \"{p}\"")).unwrap_or_default(),
+            package.filter(|p| !p.is_empty()).map(|p| format!(" in package \"{p}\"")).unwrap_or_default(),
             if dot { "." } else { "" }
         ),
         available
@@ -602,9 +604,14 @@ pub fn eject_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
             ));
         }
     }
-    let _ = std::fs::create_dir_all(&resolved);
+    let wfail = |m: String| ApiError::new(&format!("Failed to write theme files: {m}"), "ERR_WRITE_FAILED");
+    if let Err((_, m)) = crate::commands::template::mkdir_p(&resolved) {
+        return fail(out, wfail(m));
+    }
     for (_, src, dest) in &writes {
-        let _ = std::fs::create_dir_all(fsutil::dirname(dest));
+        if let Err((_, m)) = crate::commands::template::mkdir_p(&fsutil::dirname(dest)) {
+            return fail(out, wfail(m));
+        }
         let bytes: Vec<u8> = if fsutil::resolve("/", src) == fsutil::resolve("/", &m.doc_path) {
             local_descriptor(&m).into_bytes()
         } else {

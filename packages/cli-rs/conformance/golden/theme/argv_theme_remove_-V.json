@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_remove_-V",
+ "args": [
+  "theme",
+  "remove",
+  "-V"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -7,7 +7,6 @@ pub mod graph;
 pub mod jspath;
 pub mod module_info;
 pub mod path_safety;
-pub mod temp_args;
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out};
 use crate::cli::format::{list, record, section, text, Field};
@@ -35,17 +34,6 @@ pub fn swizzle_api(component: Option<&str>, list: bool, opts: &copy::CopyOptions
 }
 
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
-    use temp_args::{Kind, OptSpec};
-    let inv = &temp_args::normalize(
-        inv,
-        &[
-            OptSpec { long: "--output", short: None, key: "output", kind: Kind::Value },
-            OptSpec { long: "--package", short: None, key: "package", kind: Kind::Value },
-            OptSpec { long: "--list", short: None, key: "list", kind: Kind::Bool },
-            OptSpec { long: "--overwrite", short: Some("-f"), key: "overwrite", kind: Kind::Bool },
-        ],
-        1,
-    );
     let component = inv.arg(0);
     let list_flag = inv.flag("list");
     if !list_flag {

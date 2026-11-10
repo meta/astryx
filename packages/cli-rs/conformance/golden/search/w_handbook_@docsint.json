@@ -1,0 +1,18 @@
+{
+ "id": "w_handbook_@docsint",
+ "args": [
+  "search",
+  "handbook"
+ ],
+ "fixture": "docsint",
+ "stdout": "Results for \"handbook\" (3)\n\nname:        acme-handbook\ndomain:      doc\npackage:     @acme/docs\ntitle:       Acme handbook\ndescription: Everything about Acme. See {@link generic:theme}.\ncommand:     npx @astryxdesign/cli@0.7.12 docs acme-handbook\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nname:        acme-handbook/deploying\nsection:     cross-links\ndomain:      doc\npackage:     @acme/docs\ntitle:       Acme handbook › Deploying › Cross links\ndescription: See `astryx docs theme`, `astryx docs cli/commands/docs`, `astryx docs authoring component-doc`, `astryx docs acme-handbook`, `astryx component Button`, `astryx template dashboard --type page` and `{@link generic:theme}`.\ncommand:     npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying cross-links\nparent:      npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying --index\n\nname:        documentation\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Documentation Catalog\nkind:        page\ndescription: Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.\ncommand:     npx @astryxdesign/cli@0.7.12 template documentation --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover handbook\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "discover_chart_@badconfig",
+ "args": [
+  "discover",
+  "chart"
+ ],
+ "fixture": "badconfig",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

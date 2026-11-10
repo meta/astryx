@@ -1,0 +1,12 @@
+{
+ "id": "argv_manifest_--JSON",
+ "args": [
+  "manifest",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat_experimental_icon_new-set_useClipboard_--default-variant_outline_--default-variant_outline",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--default-variant",
+  "outline",
+  "--default-variant",
+  "outline"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --default-variant names one of the set's variants, so it needs --variants.\n\n  --variants outline,<other>  (declare the variants)\n",
+ "exit": 1,
+ "files": []
+}

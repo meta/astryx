@@ -8,6 +8,8 @@ use std::sync::OnceLock;
 
 /// The invocation placeholder `program.json` uses for the run prefix.
 pub const STEM: char = '\u{1}';
+/// The run prefix as the JS CLI computes it while assembling the program.
+pub const EARLY_STEM: char = '\u{2}';
 
 /// Text that may differ by the doc package manager.
 #[derive(Debug, Clone, Deserialize)]
@@ -196,10 +198,17 @@ pub fn doc_pm(cwd: &Path) -> String {
 
 /// Fill in the run prefix.
 pub fn fill_stem(s: &str, cwd: &Path) -> String {
-    if !s.contains(STEM) {
-        return s.to_string();
+    let mut out = s.to_string();
+    if out.contains(EARLY_STEM) {
+        // Computed before any project loads: the guess, never a declared
+        // `cliCommand`.
+        let guess = crate::discovery::package_manager::guess_cli_invocation(Some(&cwd.to_string_lossy()));
+        out = out.replace(EARLY_STEM, &guess);
     }
-    s.replace(STEM, &crate::cli::env::cli_invocation(cwd))
+    if out.contains(STEM) {
+        out = out.replace(STEM, &crate::cli::env::cli_invocation(cwd));
+    }
+    out
 }
 
 /// The ancestors' names then this command's, as `commandUsage` lists them.

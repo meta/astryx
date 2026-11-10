@@ -1,0 +1,710 @@
+[
+  {
+    "id": "oldcore_upgrade_@core-0.7.11",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.11_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.11"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.11_--apply_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.11",
+      "--apply"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.11_--json_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.11",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.7.11",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_upgrade_@core-0.7.5",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.5_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.5"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.5_--apply_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.5",
+      "--apply"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.7.5_--json_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.5",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.7.5",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_upgrade_@core-0.6.8",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.6.8_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.8"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.6.8_--apply_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.8",
+      "--apply"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.6.8_--json_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.8",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.6.8",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_upgrade_@core-0.5.4",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.5.4_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.4"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.5.4_--apply_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.4",
+      "--apply"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.5.4_--json_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.4",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.5.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_upgrade_@core-0.4.7",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.4.7_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.4.7"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.4.7_--apply_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.4.7",
+      "--apply"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.4.7_--json_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.4.7",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.4.7",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_upgrade_@core-0.3.0",
+    "args": [
+      "upgrade"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--list_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--json_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.3.0_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.3.0"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.3.0_--apply_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.3.0",
+      "--apply"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.3.0_--json_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.3.0",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--apply_--json_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_upgrade_--from_0.0.1_--force_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--force"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_after-init_upgrade_--from_0.0.1_--apply_@core-0.3.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "pre": [
+      [
+        "init"
+      ]
+    ]
+  }
+]

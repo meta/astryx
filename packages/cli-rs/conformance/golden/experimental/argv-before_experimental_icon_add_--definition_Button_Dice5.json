@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_experimental_icon_add_--definition_Button_Dice5",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--definition",
+  "Button",
+  "Dice5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Pass --from with the module the icon is exported from: a package, a package subpath, or a relative path in this package.\n",
+ "exit": 1,
+ "files": []
+}

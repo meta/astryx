@@ -1,0 +1,14 @@
+{
+ "id": "fuzz_theme_palette_generate_._69651b",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "."
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Could not parse palette config: EISDIR: illegal operation on a directory, read\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "argv_integration_-x",
+ "args": [
+  "integration",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

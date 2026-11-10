@@ -1,0 +1,557 @@
+[
+  {
+    "id": "w_handlers_Button",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Button_confirm",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--confirm-public"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Button_json",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Throw",
+    "args": [
+      "gap-report",
+      "Throw",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Throw_confirm",
+    "args": [
+      "gap-report",
+      "Throw",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--confirm-public"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Throw_json",
+    "args": [
+      "gap-report",
+      "Throw",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Exit",
+    "args": [
+      "gap-report",
+      "Exit",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Code",
+    "args": [
+      "gap-report",
+      "Code",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Bad",
+    "args": [
+      "gap-report",
+      "Bad",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Skip",
+    "args": [
+      "gap-report",
+      "Skip",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Route",
+    "args": [
+      "gap-report",
+      "Route",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Never",
+    "args": [
+      "gap-report",
+      "Never",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport",
+    "timeoutMs": 60000
+  },
+  {
+    "id": "w_handlers_HookCard",
+    "args": [
+      "gap-report",
+      "HookCard",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_HookCard_confirm",
+    "args": [
+      "gap-report",
+      "HookCard",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--confirm-public"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_HookCard_json",
+    "args": [
+      "gap-report",
+      "HookCard",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_PublicThrow",
+    "args": [
+      "gap-report",
+      "PublicThrow",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_PublicThrow_confirm",
+    "args": [
+      "gap-report",
+      "PublicThrow",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--confirm-public"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_PublicThrow_json",
+    "args": [
+      "gap-report",
+      "PublicThrow",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_Log_detail",
+    "args": [
+      "gap-report",
+      "Log",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--additional-context",
+      "  some detail  "
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_hooks",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      "@acme/hooks"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_hooks_json",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      "@acme/hooks",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_broken",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      "@acme/broken"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_broken_confirm",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      "@acme/broken",
+      "--confirm-public"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_unknown",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      "@acme/nope"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_to_empty",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--to",
+      ""
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_list",
+    "args": [
+      "gap-report",
+      "--list-categories"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_list_json",
+    "args": [
+      "gap-report",
+      "--list-categories",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_package_hooks",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--package",
+      "@acme/hooks"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_package_broken",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--package",
+      "@acme/broken"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_package_unknown",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size",
+      "--package",
+      "@acme/zzz",
+      "--json"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_xds_prefix",
+    "args": [
+      "gap-report",
+      "XDSHookCard",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_handlers_lowercase",
+    "args": [
+      "gap-report",
+      "hookcard",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "gapreport"
+  },
+  {
+    "id": "w_long_component",
+    "args": [
+      "gap-report",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "--category",
+      "missing_variant",
+      "--reason",
+      "Need a compact size"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_long_reason",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_long_detail",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "x",
+      "--additional-context",
+      "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_blank_reason",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "   "
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_blank_component",
+    "args": [
+      "gap-report",
+      "  ",
+      "--category",
+      "other",
+      "--reason",
+      "x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_list_with_flags",
+    "args": [
+      "gap-report",
+      "--list-categories",
+      "--category",
+      "x",
+      "--reason",
+      "y",
+      "--additional-context",
+      "z",
+      "--package",
+      "p",
+      "--confirm-public",
+      "--to",
+      "t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_list_with_flags_json",
+    "args": [
+      "gap-report",
+      "--list-categories",
+      "--to",
+      "",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_confirm_github",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "x",
+      "--confirm-public"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_confirm_github_json",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "x",
+      "--confirm-public",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_emoji",
+    "args": [
+      "gap-report",
+      "B\u00fctton\ud83d\ude42",
+      "--category",
+      "a11y_gap",
+      "--reason",
+      "\u00fcn\u00efcode \ud83d\ude42 reason"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_lab_large",
+    "args": [
+      "gap-report",
+      "Button",
+      "--category",
+      "other",
+      "--reason",
+      "x",
+      "--to",
+      "@astryxdesign/lab",
+      "--confirm-public"
+    ],
+    "fixture": "large"
+  }
+]

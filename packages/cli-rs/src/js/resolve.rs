@@ -173,10 +173,14 @@ pub struct Profile {
     pub extensions: Option<Vec<String>>,
     /// Specifier -> virtual module id (the engine resolves these itself).
     pub virtuals: Vec<(String, u64)>,
+    /// jiti's synchronous `jiti(file)` path: package `exports` match the
+    /// require conditions first, then the import conditions.
+    pub sync: bool,
 }
 
 thread_local! {
     static JITI_EXTS_OVERRIDE: std::cell::RefCell<Option<Vec<String>>> = const { std::cell::RefCell::new(None) };
+    static JITI_CONDITIONS_OVERRIDE: std::cell::Cell<Option<&'static [&'static str]>> = const { std::cell::Cell::new(None) };
 }
 
 /// Resolve `specifier` imported from the file `from`.
@@ -195,7 +199,16 @@ pub fn resolve_with(
         return Ok(Resolved::File(real(target)));
     }
     let prev = JITI_EXTS_OVERRIDE.with(|o| std::mem::replace(&mut *o.borrow_mut(), profile.extensions.clone()));
-    let result = resolve_inner(specifier, from, mode);
+    let result = if profile.sync && mode == Mode::Jiti {
+        // jiti tries the require conditions, then the import conditions.
+        let first = with_jiti_conditions(CJS_CONDITIONS, || resolve_inner(specifier, from, mode));
+        match first {
+            Err(e) => with_jiti_conditions(JITI_IMPORT_CONDITIONS, || resolve_inner(specifier, from, mode)).map_err(|_| e),
+            ok => ok,
+        }
+    } else {
+        resolve_inner(specifier, from, mode)
+    };
     JITI_EXTS_OVERRIDE.with(|o| *o.borrow_mut() = prev);
     // CommonJS (and jiti) name the specifier as written.
     match result {
@@ -349,10 +362,20 @@ fn split_package(spec: &str) -> Option<(String, String)> {
 
 const CJS_CONDITIONS: &[&str] = &["node", "require", "module-sync", "node-addons", "default"];
 
+/// The import conditions jiti's synchronous path falls back to.
+const JITI_IMPORT_CONDITIONS: &[&str] = &["node", "import", "default"];
+
+fn with_jiti_conditions<R>(c: &'static [&'static str], f: impl FnOnce() -> R) -> R {
+    let prev = JITI_CONDITIONS_OVERRIDE.with(|o| o.replace(Some(c)));
+    let r = f();
+    JITI_CONDITIONS_OVERRIDE.with(|o| o.set(prev));
+    r
+}
+
 fn conditions(mode: Mode) -> &'static [&'static str] {
     match mode {
         Mode::Esm => ESM_CONDITIONS,
-        Mode::Jiti => JITI_CONDITIONS,
+        Mode::Jiti => JITI_CONDITIONS_OVERRIDE.with(|o| o.get()).unwrap_or(JITI_CONDITIONS),
         Mode::Cjs => CJS_CONDITIONS,
     }
 }

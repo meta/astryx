@@ -1,0 +1,14 @@
+{
+ "id": "argv-emptyeq_experimental_icon_map_--pairs-",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--pairs="
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Pass --pairs with <definition>=<icon> entries, such as close=x-mark,search=magnifying-glass.\n",
+ "exit": 1,
+ "files": []
+}

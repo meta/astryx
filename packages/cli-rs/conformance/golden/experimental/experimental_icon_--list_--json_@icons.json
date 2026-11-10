@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_--list_--json_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "--list",
+  "--json"
+ ],
+ "fixture": "icons",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.list\",\n  \"data\": {\n    \"status\": \"selected\",\n    \"projectSet\": \"@acme/glyphs/glyphs\",\n    \"reason\": \"experimental.iconSet names \\\"glyphs\\\".\",\n    \"sets\": [\n      {\n        \"name\": \"glyphs\",\n        \"displayName\": \"Acme glyphs\",\n        \"description\": \"Hand-drawn test icons.\",\n        \"package\": \"@acme/glyphs\",\n        \"license\": \"MIT\",\n        \"iconCount\": 4,\n        \"default\": {\n          \"variant\": \"outline\"\n        },\n        \"variants\": [\n          \"outline\",\n          \"solid\"\n        ],\n        \"coverage\": {\n          \"builtIn\": {\n            \"mapped\": 2,\n            \"total\": 29,\n            \"missing\": [\n              \"arrowDown\",\n              \"arrowsUpDown\",\n              \"arrowUp\",\n              \"calendar\",\n              \"check\",\n              \"checkDouble\",\n              \"chevronDown\",\n              \"chevronLeft\",\n              \"chevronRight\",\n              \"chevronsLeft\",\n              \"chevronsRight\",\n              \"clock\",\n              \"copy\",\n              \"error\",\n              \"externalLink\",\n              \"eyeSlash\",\n              \"funnel\",\n              \"info\",\n              \"menu\",\n              \"microphone\",\n              \"moreHorizontal\",\n              \"stop\",\n              \"success\",\n              \"upload\",\n              \"viewColumns\",\n              \"warning\",\n              \"wrench\"\n            ]\n          },\n          \"astryx\": {\n            \"mapped\": 2,\n            \"total\": 145\n          },\n          \"own\": [\n            \"random\",\n            \"sparkle\"\n          ]\n        },\n        \"project\": true\n      }\n    ],\n    \"withdrawn\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,22 @@
+{
+ "id": "oldcore_gap-report_Button_--category_missing_variant_--reason_x_@core-0.7.11",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x"
+ ],
+ "fixture": "core-0.7.11",
+ "stdout": "Gap report route\n\nstatus:          consent_required\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      consent_required\nmessage:     Rerun with --confirm-public to file this report.\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.7.11`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.7.11\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

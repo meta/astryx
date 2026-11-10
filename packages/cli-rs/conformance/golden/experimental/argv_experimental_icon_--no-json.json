@@ -1,0 +1,13 @@
+{
+ "id": "argv_experimental_icon_--no-json",
+ "args": [
+  "experimental",
+  "icon",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-set_useClipboard_--version",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

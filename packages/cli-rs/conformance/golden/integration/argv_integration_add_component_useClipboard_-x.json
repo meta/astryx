@@ -1,0 +1,15 @@
+{
+ "id": "argv_integration_add_component_useClipboard_-x",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "-x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-x'\n",
+ "exit": 1,
+ "files": []
+}

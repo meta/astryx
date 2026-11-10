@@ -1,0 +1,13 @@
+{
+ "id": "argv_manifest_--bogus_-h",
+ "args": [
+  "manifest",
+  "--bogus",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx manifest [options]\n\nPrint the full CLI capability manifest (use with --json)\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n  1  the manifest cannot be generated\n\nExamples:\n  # Full manifest\n  npx @astryxdesign/cli@0.7.12 manifest --json\n  # The same manifest, under data.manifest (type \"help\")\n  npx @astryxdesign/cli@0.7.12 --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/manifest\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_eject_neutral_-hV",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "-hV"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv-booleq_theme_build_theme.ts_--check-yes",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--check=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--check=yes'\n",
+ "exit": 1,
+ "files": []
+}

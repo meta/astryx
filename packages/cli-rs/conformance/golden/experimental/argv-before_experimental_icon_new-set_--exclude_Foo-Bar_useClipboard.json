@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_experimental_icon_new-set_--exclude_Foo-Bar_useClipboard",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "--exclude",
+  "Foo,Bar",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --exclude names library exports to leave out, so it needs --from.\n",
+ "exit": 1,
+ "files": []
+}

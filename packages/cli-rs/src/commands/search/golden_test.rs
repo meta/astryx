@@ -214,3 +214,33 @@ fn time_gather() {
     for c in &names { let _ = crate::discovery::component_discovery::resolve_import_path(&core, c); }
     eprintln!("imports {:?}", t.elapsed());
 }
+
+#[test]
+#[ignore]
+fn forced_project_docs() {
+    let Ok(cwd) = std::env::var("SEARCH_CWD") else { return };
+    let pm = crate::discovery::package_manager::doc_package_manager(Some(&cwd));
+    let t = std::time::Instant::now();
+    let got = super::docs::project_docs(&cwd, &pm, true).unwrap();
+    eprintln!("runtime docs {:?}", t.elapsed());
+    let want = super::gather::own_docs(&pm);
+    eprintln!("got {} want {}", got.len(), want.len());
+    let key = |c: &Value| format!("{}#{}", c["_topic"].as_str().unwrap_or(""), c["_section"].as_str().unwrap_or(""));
+    let mut bad = 0;
+    for (i, (a, b)) in got.iter().zip(&want).enumerate() {
+        if a != b {
+            bad += 1;
+            if bad <= 6 {
+                eprintln!("#{i} got {} want {}", key(a), key(b));
+                if key(a) == key(b) {
+                    for (k, v) in b.as_object().unwrap() {
+                        if a.get(k) != Some(v) {
+                            eprintln!("   {k}: got {} want {}", a.get(k).map(|x| json::stringify(x, 0)).unwrap_or_default().chars().take(200).collect::<String>(), json::stringify(v, 0).chars().take(200).collect::<String>());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("differ {bad}");
+}

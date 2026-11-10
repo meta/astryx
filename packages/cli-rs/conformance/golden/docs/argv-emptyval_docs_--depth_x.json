@@ -1,0 +1,13 @@
+{
+ "id": "argv-emptyval_docs_--depth_x",
+ "args": [
+  "docs",
+  "--depth",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --depth takes a number of levels (0, 1, 2, ...) or all, not \"\".\n",
+ "exit": 1,
+ "files": []
+}

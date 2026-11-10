@@ -1,0 +1,13 @@
+{
+ "id": "argv_integration_check_---json",
+ "args": [
+  "integration",
+  "check",
+  "---json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '---json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

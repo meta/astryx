@@ -12,6 +12,7 @@ pub mod recast;
 pub mod registry;
 pub mod registry_compositions;
 pub mod run;
+pub mod shadcn;
 pub mod runner;
 pub mod transforms;
 pub mod ui;
@@ -119,9 +120,6 @@ fn canonical(target: &Path, hops: usize) -> Option<PathBuf> {
         }
     }
 }
-
-/// TEMP: replace with crate::discovery::integration_warnings once it lands.
-pub fn integration_warn(_ui: &mut Ui, _cwd: &Path) {}
 
 pub struct Scoped {
     pub opts: Opts,

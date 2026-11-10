@@ -1,0 +1,19 @@
+{
+ "id": "w_layout-scaffold_acme-shell_@docsint",
+ "args": [
+  "docs",
+  "layout/scaffold",
+  "acme-shell"
+ ],
+ "fixture": "docsint",
+ "stdout": "package: @acme/docs\n\n## Acme shell\n\nUse the Acme shell.\n\nUp: npx @astryxdesign/cli@0.7.12 docs layout/scaffold --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs layout/scaffold navigation\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

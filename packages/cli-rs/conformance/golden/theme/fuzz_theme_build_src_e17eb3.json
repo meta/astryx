@@ -1,0 +1,13 @@
+{
+ "id": "fuzz_theme_build_src_e17eb3",
+ "args": [
+  "theme",
+  "build",
+  "src"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: EISDIR: illegal operation on a directory, read\n",
+ "exit": 1,
+ "files": []
+}

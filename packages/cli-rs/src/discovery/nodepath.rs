@@ -179,7 +179,7 @@ pub fn is_absolute(p: &str) -> bool {
 
 /// `fs.existsSync` (follows symbolic links).
 pub fn exists(p: &str) -> bool {
-    std::fs::metadata(p).is_ok()
+    super::listing_cache::exists(Path::new(p))
 }
 
 /// A directory, following links (`statSync(p).isDirectory()`).
@@ -237,22 +237,17 @@ pub struct Dirent {
 }
 
 /// `fs.readdirSync(dir, {withFileTypes: true})`, in the order Node returns
-/// it (the OS order; Node does not sort). None when the folder cannot be read.
+/// it: libuv's scandir sorts by name bytes. None when the folder cannot be read.
 pub fn read_dir(dir: &str) -> Option<Vec<Dirent>> {
-    let rd = std::fs::read_dir(dir).ok()?;
-    let mut out = Vec::new();
-    for e in rd.flatten() {
-        let ft = match e.file_type() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        out.push(Dirent {
-            name: e.file_name().to_string_lossy().into_owned(),
-            is_dir: ft.is_dir(),
-            is_file: ft.is_file(),
-            is_symlink: ft.is_symlink(),
-        });
-    }
+    let raw = super::listing_cache::read_dir(Path::new(dir))?;
+    let mut out: Vec<Dirent> = raw
+        .iter()
+        .filter_map(|e| {
+            let k = e.kind?;
+            Some(Dirent { name: e.name.clone(), is_dir: k.is_dir, is_file: k.is_file, is_symlink: k.is_symlink })
+        })
+        .collect();
+    out.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
     Some(out)
 }
 

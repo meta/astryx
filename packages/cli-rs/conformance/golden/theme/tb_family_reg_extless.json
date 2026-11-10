@@ -1,0 +1,17 @@
+{
+ "id": "tb_family_reg_extless",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "reg/extless.mjs",
+  "reg/extless-child.mjs",
+  "--family-key",
+  "fam-extless"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from reg/extless.mjs...\n\nBuilding theme from reg/extless-child.mjs...\n",
+ "stderr": "Error: Cannot resolve registry import \"./extless-icons\" from /tmp/astryx-conformance/work/themes/reg/fam-extless.js.\n",
+ "exit": 1,
+ "files": []
+}

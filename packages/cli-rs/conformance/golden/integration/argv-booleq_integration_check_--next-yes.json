@@ -1,0 +1,13 @@
+{
+ "id": "argv-booleq_integration_check_--next-yes",
+ "args": [
+  "integration",
+  "check",
+  "--next=yes"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--next=yes'\n",
+ "exit": 1,
+ "files": []
+}

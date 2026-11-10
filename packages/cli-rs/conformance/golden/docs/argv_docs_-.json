@@ -1,0 +1,12 @@
+{
+ "id": "argv_docs_-",
+ "args": [
+  "docs",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"ü中文\"\n\n  authoring  (docs namespace)\n  calendars  (docs namespace)\n  cli  (docs namespace)\n  foundations  (docs namespace)\n  global  (docs namespace)\n  guides  (docs namespace)\n  internationalization  (docs namespace)\n  layout  (docs namespace)\n  migration  (docs namespace)\n  styling  (docs namespace)\n  styling-libraries  (docs namespace)\n  tokens  (docs namespace)\n  typography  (docs namespace)\n  author-a-theme  (available topic)\n  browser-support  (available topic)\n  color  (available topic)\n  elevation  (available topic)\n  getting-started  (available topic)\n  icons  (available topic)\n  illustrations  (available topic)\n  is-my-code-good  (available topic)\n  motion  (available topic)\n  principles  (available topic)\n  shape  (available topic)\n  spacing  (available topic)\n  styling-overview  (available topic)\n  theme  (available topic)\n  use-a-theme  (available topic)\n  use-integrations  (available topic)\n  working-with-ai  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

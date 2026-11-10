@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_Button_@monorepo-local",
+ "args": [
+  "swizzle",
+  "Button"
+ ],
+ "fixture": "monorepo-local",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.\n",
+ "exit": 1,
+ "files": []
+}

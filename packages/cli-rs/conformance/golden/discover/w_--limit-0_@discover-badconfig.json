@@ -1,0 +1,13 @@
+{
+ "id": "w_--limit-0_@discover-badconfig",
+ "args": [
+  "discover",
+  "--limit",
+  "0"
+ ],
+ "fixture": "discover-badconfig",
+ "stdout": "",
+ "stderr": "Error: --limit must be a positive integer, not \"0\"\n",
+ "exit": 1,
+ "files": []
+}

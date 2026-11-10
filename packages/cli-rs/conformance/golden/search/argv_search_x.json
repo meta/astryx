@@ -1,0 +1,12 @@
+{
+ "id": "argv_search_x",
+ "args": [
+  "search",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: A search query is required\n\n  npx @astryxdesign/cli@0.7.12 search button  (example)\n",
+ "exit": 1,
+ "files": []
+}

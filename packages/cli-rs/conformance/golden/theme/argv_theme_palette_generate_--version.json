@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_generate_--version",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

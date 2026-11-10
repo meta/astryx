@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat2_gap-report_--reason_Need-a-compact-size_--reason_other",
+ "args": [
+  "gap-report",
+  "--reason",
+  "Need a compact size",
+  "--reason",
+  "other"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

@@ -29,6 +29,9 @@ pub fn strip(source: &str, path: &Path, jsx: bool, automatic: bool) -> Result<St
     let jsx = jsx || is_jsx(path);
     let mut source_type = if ts { SourceType::ts() } else { SourceType::mjs() };
     source_type = source_type.with_module(true).with_jsx(jsx);
+    // Where babel and oxc read JSX differently, give oxc babel's reading.
+    let rewritten = super::syntax::babel_normalize(source, ts, jsx);
+    let source = rewritten.as_deref().unwrap_or(source);
     let ret = Parser::new(&allocator, source, source_type).parse();
     if let Some(err) = ret.diagnostics.first() {
         return Err(err.message.to_string());

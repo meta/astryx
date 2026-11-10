@@ -561,8 +561,11 @@ fn component_batch(selectors: &[String], opts: &Options, core_dir: &Path) -> Res
         let r = (|| -> Result<Response, ApiError> {
             let t = parse_component_selector(sel, opts.package.as_deref())?;
             require_installed_version(&t, core_dir, &integrations)?;
+            // A batch passes only the detail options on: never list or category.
             let mut o = opts.clone();
             o.package = t.package.clone();
+            o.list = false;
+            o.category = None;
             component(&Name::One(t.name.clone()), &o)
         })();
         match r {

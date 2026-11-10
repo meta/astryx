@@ -1,0 +1,13 @@
+{
+ "id": "argv_theme_remove_--JSON",
+ "args": [
+  "theme",
+  "remove",
+  "--JSON"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--JSON'\n",
+ "exit": 1,
+ "files": []
+}

@@ -27,7 +27,7 @@ if (!binArg) {
   process.exit(2);
 }
 const RUST = path.resolve(binArg);
-const RUNS = Number(opt('runs') ?? 5);
+const RUNS = Number(opt('runs') ?? 7);
 const TIMER = path.join(BIN_DIR, 'benchtime');
 
 // [fixture, args]: every command, start-up, the app, large and empty fixtures.
@@ -208,6 +208,8 @@ const rows = await pool(list, jobs, async c => {
   return row;
 });
 
+const load = fs.readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).join(' ');
+const cores = (await import('node:os')).cpus().length;
 const sha = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {cwd: HERE, encoding: 'utf8'}).stdout.trim();
 const quote = a => (/[\s'"]/.test(a) || a === '' ? JSON.stringify(a) : a);
 const lines = [
@@ -217,6 +219,8 @@ const lines = [
   'interleaved, in the conformance sandbox (pinned env, overlay over the fixtures, no network). Only the',
   'CLI process is timed. Times are milliseconds: best of the runs, then the median. "Same" says whether',
   'stdout, stderr and exit code were equal in the last run (the suite is the real output check).',
+  '',
+  `Load average at the end of the run: ${load} on ${cores} cores${Number(load.split(' ')[0]) > cores / 4 ? ' (**box under load**: absolute times are inflated; the A/B interleaving keeps the speedup ratios fair)' : ''}.`,
   '',
   '| command | case (fixture: args) | JS best | JS median | Rust best | Rust median | speedup (best) | same |',
   '| --- | --- | ---: | ---: | ---: | ---: | ---: | :---: |',

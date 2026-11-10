@@ -10,6 +10,7 @@ export const DOCS = {
   title: 'Acme handbook',
   summary: 'Everything about Acme. See {@link generic:theme}.',
   slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}},
+  blocks: [{type: 'prose', text: 'Start with {@link namespace:acme-handbook} or {@link @astryxdesign/cli:generic:spacing}.'}],
 };
 `,
   'deploying.doc.mjs': `export default {
@@ -32,6 +33,23 @@ export const DOCS = {
       content: [
         {type: 'list', style: 'unordered', items: ['one {@link generic:nope}', 'two']},
         {type: 'reference', target: 'command:docs'},
+      ],
+    },
+    {
+      id: 'cross-links',
+      title: 'Cross links',
+      content: [
+        {type: 'prose', text: 'See {@link @astryxdesign/cli:generic:theme}, {@link @astryxdesign/cli:command:docs}, {@link @astryxdesign/cli:schema:component-doc}, {@link namespace:acme-handbook}, {@link @astryxdesign/core:component:Button}, {@link @astryxdesign/core:page:dashboard} and \`{@link generic:theme}\`.'},
+        {type: 'reference', target: '@astryxdesign/cli:command:docs'},
+        {type: 'reference', target: '@astryxdesign/cli:command:docs', presentation: 'compact'},
+        {type: 'reference', target: '@astryxdesign/cli:command:docs', presentation: 'summary'},
+        {type: 'reference', target: '@astryxdesign/cli:schema:component-doc', projection: {fields: ['name', 'props', 'nope']}}, {type: 'reference', target: '@astryxdesign/cli:command:docs', projection: {fields: ['name']}},
+        {type: 'reference', target: '@astryxdesign/cli:schema:component-doc', presentation: 'summary'},
+        {type: 'reference', target: '@astryxdesign/cli:generic:theme'},
+        {type: 'reference', target: 'namespace:acme-handbook'},
+        {type: 'reference', target: '@astryxdesign/core:component:Button'},
+        {type: 'prose', text: 'Our panel: {@link component:AcmePanel}; missing: {@link component:AcmeNope}; Core Button again: {@link @astryxdesign/core:component:Button}.'},
+        {type: 'reference', target: 'component:AcmePanel'},
       ],
     },
   ],
@@ -66,6 +84,25 @@ export const DOCS = {
 `,
 };
 
+DOCS['layout-extra.doc.mjs'] = `export default {
+  type: 'generic',
+  name: 'layout-extra',
+  title: 'Layout extra',
+  description: 'Acme notes on the shell.',
+  extends: 'layout/scaffold',
+  sections: [{id: 'acme-shell', title: 'Acme shell', content: [{type: 'prose', text: 'Use the Acme shell.'}]}],
+};
+`;
+DOCS['responsive-acme.doc.mjs'] = `export default {
+  type: 'generic',
+  name: 'responsive-acme',
+  title: 'Acme responsive',
+  description: 'Responsive, the Acme way. See {@link generic:acme-colors}.',
+  replaces: 'layout/responsive',
+  sections: [{title: 'Breakpoints', content: [{type: 'prose', text: 'Two of them.'}]}],
+};
+`;
+
 export async function makeDocsApp(dir, h, docs) {
   await h.makeApp(dir);
   await h.writeJson(path.join(dir, 'package.json'), {
@@ -75,7 +112,10 @@ export async function makeDocsApp(dir, h, docs) {
   });
   const pkg = path.join(dir, 'node_modules', '@acme', 'docs');
   await h.writeJson(path.join(pkg, 'package.json'), {name: '@acme/docs', version: '1.0.0'});
-  await h.writeFile(path.join(pkg, 'astryx.integration.mjs'), "export default {docs: './docs'};\n");
+  await h.writeFile(path.join(pkg, 'astryx.integration.mjs'), "export default {docs: './docs', components: './components'};\n");
+  await h.writeFile(path.join(pkg, 'components', 'AcmePanel.tsx'), 'export function AcmePanel() { return null; }\n');
+  await h.writeFile(path.join(pkg, 'components', 'AcmePanel.doc.mjs'), "export default {type: 'component', name: 'AcmePanel', displayName: 'Acme Panel', category: 'Layout', usage: {description: 'A panel. See {@link generic:theme} and {@link generic:nope}.'}, props: [{name: 'tone', type: 'string', description: 'Tone, see {@link component:AcmeNope}.'}]};\n");
+  await h.writeJson(path.join(pkg, 'package.json'), {name: '@acme/docs', version: '1.0.0', exports: {'.': './components/AcmePanel.tsx'}});
   for (const [file, text] of Object.entries(docs)) {
     await h.writeFile(path.join(pkg, 'docs', file), text);
   }

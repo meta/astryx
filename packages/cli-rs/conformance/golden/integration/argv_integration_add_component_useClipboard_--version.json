@@ -1,0 +1,15 @@
+{
+ "id": "argv_integration_add_component_useClipboard_--version",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--version"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

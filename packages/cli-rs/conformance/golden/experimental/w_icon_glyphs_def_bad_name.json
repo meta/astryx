@@ -1,0 +1,18 @@
+{
+ "id": "w_icon_glyphs_def_bad_name",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "Bad_Name",
+  "--description",
+  "x",
+  "--words",
+  "y"
+ ],
+ "fixture": "iconglyphs",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Invalid icon definition name \"Bad_Name\": use camelCase (aiHelper) or kebab-case (ai-helper), starting with a lower-case letter.\n",
+ "exit": 1,
+ "files": []
+}
