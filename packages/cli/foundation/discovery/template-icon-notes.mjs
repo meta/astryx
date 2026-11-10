@@ -8,15 +8,18 @@
  * the template's source binds can never map to a project's icon set, so each
  * one gets a note with its fix. An icon the template imports but does not
  * declare never maps either: in a package whose templates declare `icons`,
- * each one gets a note too, which `validate` marks `next`. A generic
+ * each one gets a note too, which `validate` marks `next`. An import counts
+ * only when the template renders it as an element without children or
+ * passes it as a value. Any other import from that module, a generic
  * renderer, and an import that matches an icon by its name only, are listed
  * as not checked instead.
  *
  * @input A loaded integration (absolute roots) and its package directory.
  * @output One `template_icon_not_imported` note per such key, one
- *   `template_icon_undeclared` note per undeclared icon, and each generic
- *   renderer or import matched by its name only, as not checked. A note is never an error or a
- *   warning, even under `--strict`.
+ *   `template_icon_undeclared` note per undeclared icon, and each import not
+ *   rendered as an icon, generic renderer, or import matched by its name
+ *   only, as not checked. A note is never an error or a warning, even under
+ *   `--strict`.
  * @position foundation/discovery; read by `doctor integration validate` (and
  *   so `integration check`) for the package being authored.
  */
@@ -133,7 +136,9 @@ export async function templateIconUndeclaredNotes(loaded, packageDir) {
       reason:
         why === 'renderer'
           ? `"${key}" is a generic renderer: it is a bare \`Icon\`, or every use gives it an icon prop, so it draws no one icon definition and needs no \`icons\` key.`
-          : `"${key}" matches an icon by its name only: no template in the package declares an icon from ${module}, so the check cannot tell whether it draws one icon definition. Declare an icon from ${module} in a template's \`icons\` to have its imports checked.`,
+          : why === 'use'
+            ? `"${key}" is not rendered as an icon: the template never renders it as an element without children or passes it as a value, so it needs no \`icons\` key. Declaring it would make \`astryx template\` swap it for an icon.`
+            : `"${key}" matches an icon by its name only: no template in the package declares an icon from ${module}, so the check cannot tell whether it draws one icon definition. Declare an icon from ${module} in a template's \`icons\` to have its imports checked.`,
     })),
   };
 }

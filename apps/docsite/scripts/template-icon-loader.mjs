@@ -15,21 +15,20 @@
  * placeholder the preview's source declares. The sets must be installed in
  * the docsite.
  *
- * @input A template's `.tsx` source, its sibling doc's `icons`, and the
- *   installed icon sets
+ * @input A template's `.tsx` source, the `icons` template discovery reads
+ *   from its doc, and the installed icon sets
  * @output The source with its icon imports rewritten
  * @position Build-time docsite tooling, read by next.config.mjs
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {Project} from '../../../packages/cli/foundation/config/project.mjs';
 import {
   chooseProjectIconSet,
   orderIconSets,
 } from '../../../packages/cli/foundation/discovery/icon-set-discovery.mjs';
 import {mapTemplateIcons} from '../../../packages/cli/foundation/discovery/template-icons.mjs';
+import {discoverCoreTemplates} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 /** The build setting that chooses the preview icon set. */
 export const ICON_SET_SETTING = 'DOCSITE_ICON_SET';
@@ -47,19 +46,32 @@ export function previewIconSetList(value) {
     .filter(Boolean);
 }
 
+/** @typedef {import('../../../packages/cli/foundation/discovery/template-adapter.mjs').DiscoveredTemplate} DiscoveredTemplate */
+
+/** @type {WeakMap<() => Promise<DiscoveredTemplate[]>, Promise<Map<string, DiscoveredTemplate>>>} */
+const templatesByDiscover = new WeakMap();
+
 /**
- * The doc beside a template source: `template.doc.mjs` for a page, the
- * same-stem `.doc.mjs` for a block. Null when there is none.
- * @param {string} file
- * @returns {string | null}
+ * The discovered templates by source path. Discovery runs once per build, so
+ * each preview reads the same `icons` that `astryx template` reads, whatever
+ * doc suffix its template uses.
+ * @param {() => Promise<DiscoveredTemplate[]>} discover
  */
-export function templateDocPath(file) {
-  const dir = path.dirname(file);
-  const candidates =
-    path.basename(file) === 'page.tsx'
-      ? [path.join(dir, 'template.doc.mjs')]
-      : [file.replace(/\.tsx$/u, '.doc.mjs')];
-  return candidates.find(each => fs.existsSync(each)) ?? null;
+function templatesFor(discover) {
+  let found = templatesByDiscover.get(discover);
+  if (!found) {
+    found = discover().then(
+      templates =>
+        new Map(
+          templates.map(template => [
+            path.resolve(template.filePath),
+            template,
+          ]),
+        ),
+    );
+    templatesByDiscover.set(discover, found);
+  }
+  return found;
 }
 
 /** @type {Map<string, Promise<{sets: any[], choice: any}>>} */
@@ -90,20 +102,24 @@ function iconSetsFor(projectDir, list) {
 }
 
 /**
- * Rewrite one template source's icons to the chosen sets. A source with no
- * doc, or a doc that declares no `icons`, is returned unchanged.
+ * Rewrite one template source's icons to the chosen sets. A source that no
+ * discovered template owns, or whose template declares no `icons`, is
+ * returned unchanged.
  * @param {string} source
  * @param {string} file the source's path
- * @param {{projectDir: string, list: string[], onDoc?: (file: string) => void}} options
+ * @param {{projectDir: string, list: string[], onDoc?: (file: string) => void, discover?: () => Promise<DiscoveredTemplate[]>}} options
+ *   `discover` lists the templates; it defaults to Astryx's own templates
  * @returns {Promise<string>}
  */
 export async function rewriteTemplatePreview(source, file, options) {
   if (options.list.length === 0) return source;
-  const docPath = templateDocPath(file);
-  if (!docPath) return source;
-  options.onDoc?.(docPath);
-  const loaded = await import(pathToFileURL(docPath).href);
-  const declared = (loaded.doc ?? loaded.default)?.icons;
+  const templates = await templatesFor(
+    options.discover ?? discoverCoreTemplates,
+  );
+  const template = templates.get(path.resolve(file));
+  if (!template) return source;
+  options.onDoc?.(template.docPath);
+  const declared = template.icons;
   if (declared == null || typeof declared !== 'object') return source;
   const iconSets = await iconSetsFor(options.projectDir, options.list);
   return mapTemplateIcons(source, iconSets, declared).source;

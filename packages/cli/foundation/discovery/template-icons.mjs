@@ -599,15 +599,95 @@ function iconPropRenderers(ast) {
   return new Set([...uses].filter(([, every]) => every).map(([name]) => name));
 }
 
+/** Parents under which a reference passes the name on as a value. */
+const VALUE_POSITIONS = new Set([
+  'JSXExpressionContainer',
+  'ArrayExpression',
+  'ObjectProperty',
+  'VariableDeclarator',
+  'AssignmentExpression',
+  'AssignmentPattern',
+  'ConditionalExpression',
+  'LogicalExpression',
+  'ReturnStatement',
+  'ArrowFunctionExpression',
+  'CallExpression',
+  'NewExpression',
+  'SpreadElement',
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'ParenthesizedExpression',
+  'ExportDefaultDeclaration',
+]);
+
+/**
+ * Whether a JSX element has no children. Text that is only white space is
+ * layout, not a child.
+ * @param {any} element
+ */
+function isChildless(element) {
+  return element.children.every(
+    (/** @type {any} */ child) =>
+      child.type === 'JSXText' && child.value.trim() === '',
+  );
+}
+
+/**
+ * The local names a template uses as an icon: it renders the name as a
+ * childless JSX element that passes no icon-choosing prop (`<Trash />`), or it
+ * passes the name as a value (`icon={Trash}`, `[Trash]`, `{icon: Trash}`). A
+ * type position, the callee of a call, a member access, and an element with
+ * children are not icon uses.
+ * @param {any} ast
+ * @returns {Set<string>}
+ */
+function iconUses(ast) {
+  /** @type {Set<string>} */
+  const used = new Set();
+  walk(ast.program, (node, parent, key) => {
+    if (node.type === 'JSXElement') {
+      const opening = node.openingElement;
+      if (opening.name.type !== 'JSXIdentifier' || !isChildless(node)) return;
+      const chooses = opening.attributes.some(
+        (/** @type {any} */ attribute) =>
+          attribute.type === 'JSXAttribute' &&
+          attribute.name.type === 'JSXIdentifier' &&
+          ICON_CHOOSING_PROPS.has(attribute.name.name),
+      );
+      if (!chooses) used.add(opening.name.name);
+      return;
+    }
+    if (node.type !== 'Identifier' || !parent) return;
+    if (!VALUE_POSITIONS.has(parent.type) || !isReference(node, parent, key)) {
+      return;
+    }
+    if (
+      (parent.type === 'CallExpression' || parent.type === 'NewExpression') &&
+      key === 'callee'
+    ) {
+      return;
+    }
+    if (parent.type === 'VariableDeclarator' && key !== 'init') return;
+    if (parent.type === 'AssignmentExpression' && key !== 'right') return;
+    if (parent.type === 'AssignmentPattern' && key !== 'right') return;
+    if (parent.type === 'ArrowFunctionExpression' && key !== 'body') return;
+    if (parent.type === 'ConditionalExpression' && key === 'test') return;
+    used.add(node.name);
+  });
+  return used;
+}
+
 /**
  * The value imports a template takes from other packages, as the keys its
  * `icons` uses: a named import by the name it imports, a default import by
  * its local name. Astryx's own packages, relative files, namespace imports,
  * and type-only imports are left out. `renderer` marks a generic renderer:
- * the key is `Icon`, or every JSX use passes an icon-choosing prop. Null
- * when the source does not parse.
+ * the key is `Icon`, or every JSX use passes an icon-choosing prop. `icon`
+ * marks an import the template uses as an icon: it renders it as a childless
+ * element or passes it as a value. Null when the source does not parse.
  * @param {string} source
- * @returns {Array<{key: string, module: string, renderer: boolean}> | null}
+ * @returns {Array<{key: string, module: string, renderer: boolean, icon: boolean}> | null}
  */
 export function packageImports(source) {
   let ast;
@@ -617,6 +697,7 @@ export function packageImports(source) {
     return null;
   }
   const renderers = iconPropRenderers(ast);
+  const uses = iconUses(ast);
   return iconBindings(ast)
     .filter(
       binding =>
@@ -628,19 +709,24 @@ export function packageImports(source) {
       key,
       module,
       renderer: key === 'Icon' || renderers.has(local ?? key),
+      icon: uses.has(local ?? key),
     }));
 }
 
 /**
  * The icons each template imports but does not declare in its `icons`. An
  * import is undeclared when it comes from a module that some template
- * declares an icon from (an icon library). The check cannot tell that an
- * import draws one icon definition when it is a generic renderer, or when it
- * comes from any other package and only its key ends in `Icon`, so it lists
- * those as not checked (`architecture:cli-surface` DEC-7). Only templates
- * that parse are read.
+ * declares an icon from (an icon library) and the template uses it as an
+ * icon: it renders it as a childless element or passes it as a value. Any
+ * other import from that module, such as a type, a factory it calls, or a
+ * provider with children, is listed as not checked (`use`): declaring it
+ * would make a template swap it for an icon. The check also cannot tell that
+ * an import draws one icon definition when it is a generic renderer, or when
+ * it comes from any other package and only its key ends in `Icon`, so it
+ * lists those as not checked (`architecture:cli-surface` DEC-7). Only
+ * templates that parse are read.
  * @param {Array<{id: string, source: string, declared: Record<string, string>}>} templates
- * @returns {{undeclared: Array<{id: string, key: string, module: string}>, unchecked: Array<{id: string, key: string, module: string, why: 'renderer' | 'name'}>}}
+ * @returns {{undeclared: Array<{id: string, key: string, module: string}>, unchecked: Array<{id: string, key: string, module: string, why: 'renderer' | 'use' | 'name'}>}}
  */
 export function undeclaredTemplateIcons(templates) {
   const read = templates.flatMap(template => {
@@ -657,7 +743,7 @@ export function undeclaredTemplateIcons(templates) {
   );
   /** @type {Array<{id: string, key: string, module: string}>} */
   const undeclared = [];
-  /** @type {Array<{id: string, key: string, module: string, why: 'renderer' | 'name'}>} */
+  /** @type {Array<{id: string, key: string, module: string, why: 'renderer' | 'use' | 'name'}>} */
   const unchecked = [];
   for (const template of read) {
     for (const each of template.imports) {
@@ -666,8 +752,10 @@ export function undeclaredTemplateIcons(templates) {
       if (!iconLike) continue;
       const found = {id: template.id, key: each.key, module: each.module};
       if (each.renderer) unchecked.push({...found, why: 'renderer'});
-      else if (iconModules.has(each.module)) undeclared.push(found);
-      else unchecked.push({...found, why: 'name'});
+      else if (!iconModules.has(each.module))
+        unchecked.push({...found, why: 'name'});
+      else if (each.icon) undeclared.push(found);
+      else unchecked.push({...found, why: 'use'});
     }
   }
   return {undeclared, unchecked};

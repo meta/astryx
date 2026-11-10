@@ -20,9 +20,9 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   previewIconSetList,
   rewriteTemplatePreview,
-  templateDocPath,
 } from '../../scripts/template-icon-loader.mjs';
 import {writeIconSetProject} from '../../../../packages/cli/test-utils/icon-set-fixture.mjs';
+import {discoverIntegrationTemplatesForOne} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 let tmp: string;
 beforeEach(() => {
@@ -42,16 +42,33 @@ const SOURCE = [
   '',
 ].join('\n');
 
-/** A page template with its doc, in a templates/pages folder. */
-function writeTemplate(): string {
-  const dir = path.join(tmp, 'templates', 'pages', 'demo');
+const ICONS = "icons: {XMarkIcon: 'close', ScissorsIcon: 'cut'}";
+
+/**
+ * A block template and its doc, in a templates folder, under a doc suffix
+ * template discovery accepts. Returns the source path.
+ */
+function writeTemplate(docSuffix = '.doc.mjs'): string {
+  const dir = path.join(tmp, 'templates');
   fs.mkdirSync(dir, {recursive: true});
-  fs.writeFileSync(path.join(dir, 'page.tsx'), SOURCE);
+  fs.writeFileSync(path.join(dir, 'demo.tsx'), SOURCE);
   fs.writeFileSync(
-    path.join(dir, 'template.doc.mjs'),
-    "export const doc = {icons: {XMarkIcon: 'close', ScissorsIcon: 'cut'}};\n",
+    path.join(dir, `demo${docSuffix}`),
+    `export default {type: 'block', name: 'Demo', description: 'A demo.', aspectRatio: 1, componentsUsed: [], ${ICONS}};\n`,
   );
-  return path.join(dir, 'page.tsx');
+  return path.join(dir, 'demo.tsx');
+}
+
+/**
+ * Template discovery over this test's templates folder. The loader reads each
+ * discovery once, so every test takes its own.
+ */
+function discoverer() {
+  const templates = path.join(tmp, 'templates');
+  return () =>
+    discoverIntegrationTemplatesForOne({name: '@acme/demo', templates}).then(
+      found => found.templates,
+    );
 }
 
 describe('DOCSITE_ICON_SET values', () => {
@@ -63,21 +80,6 @@ describe('DOCSITE_ICON_SET values', () => {
     expect(previewIconSetList(undefined)).toEqual([]);
     expect(previewIconSetList('')).toEqual([]);
   });
-
-  it('finds a page template doc and a block doc', () => {
-    const page = writeTemplate();
-    expect(templateDocPath(page)).toBe(
-      path.join(path.dirname(page), 'template.doc.mjs'),
-    );
-    const block = path.join(tmp, 'Block.tsx');
-    fs.writeFileSync(block, SOURCE);
-    expect(templateDocPath(block)).toBeNull();
-    fs.writeFileSync(
-      path.join(tmp, 'Block.doc.mjs'),
-      'export const doc = {};\n',
-    );
-    expect(templateDocPath(block)).toBe(path.join(tmp, 'Block.doc.mjs'));
-  });
 });
 
 describe('rewriteTemplatePreview', () => {
@@ -86,11 +88,41 @@ describe('rewriteTemplatePreview', () => {
     const out = await rewriteTemplatePreview(SOURCE, writeTemplate(), {
       projectDir,
       list: ['glyphs'],
+      discover: discoverer(),
     });
     expect(out).toContain("import {XIcon} from '@acme/glyphs';");
     expect(out).toContain('MissingIcon /* missing icon: cut */');
     expect(out).toContain('function MissingIcon(');
     expect(out).not.toContain('@heroicons/react');
+  });
+
+  it('reads icons from a doc under another accepted suffix, and names that doc as a dependency', async () => {
+    const projectDir = writeIconSetProject(tmp);
+    const docs: string[] = [];
+    const out = await rewriteTemplatePreview(
+      SOURCE,
+      writeTemplate('.template.mjs'),
+      {
+        projectDir,
+        list: ['glyphs'],
+        discover: discoverer(),
+        onDoc: file => docs.push(file),
+      },
+    );
+    expect(out).toContain("import {XIcon} from '@acme/glyphs';");
+    expect(docs).toEqual([path.join(tmp, 'templates', 'demo.template.mjs')]);
+  });
+
+  it('leaves a source no discovered template owns as it is', async () => {
+    const projectDir = writeIconSetProject(tmp);
+    writeTemplate();
+    expect(
+      await rewriteTemplatePreview(SOURCE, path.join(tmp, 'Other.tsx'), {
+        projectDir,
+        list: ['glyphs'],
+        discover: discoverer(),
+      }),
+    ).toBe(SOURCE);
   });
 
   it('leaves the source as it is with no set named', async () => {
@@ -99,6 +131,7 @@ describe('rewriteTemplatePreview', () => {
       await rewriteTemplatePreview(SOURCE, writeTemplate(), {
         projectDir,
         list: [],
+        discover: discoverer(),
       }),
     ).toBe(SOURCE);
   });
@@ -109,6 +142,7 @@ describe('rewriteTemplatePreview', () => {
       rewriteTemplatePreview(SOURCE, writeTemplate(), {
         projectDir,
         list: ['nope'],
+        discover: discoverer(),
       }),
     ).rejects.toThrow(/DOCSITE_ICON_SET: .*"nope"/u);
   });

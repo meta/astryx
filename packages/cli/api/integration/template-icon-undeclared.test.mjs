@@ -3,8 +3,10 @@
 /**
  * @file `integration check` notes each icon a template imports but does not
  * declare in its `icons` (`template_icon_undeclared`), in a package whose
- * templates declare `icons`. A generic renderer, and an import matched by its
- * name only, are listed as not checked instead. The note is marked `next`: it fails
+ * templates declare `icons`. An import counts when the template renders it as
+ * a childless element or passes it as a value. Any other import from that
+ * module, a generic renderer, and an import matched by its name only, are
+ * listed as not checked instead. The note is marked `next`: it fails
  * `--strict --next` and leaves `--strict` as it was. A package that never
  * declares `icons` sees no change.
  */
@@ -176,6 +178,36 @@ describe('template_icon_undeclared', () => {
     ]);
   }, 60_000);
 
+  it('notes an icon rendered as a childless element or passed as a value, and lists a type, a factory call, and a provider with children as not checked', async () => {
+    writePackage(
+      ", icons: {Trash2: 'delete'}",
+      [
+        "import {Trash2, Scissors, Copy, LucideIcon, createLucideIcon, LucideProvider} from 'lucide-react';",
+        "import {Button} from '@astryxdesign/core/Button';",
+        'interface ItemProps { icon: LucideIcon }',
+        "const Custom = createLucideIcon('custom', []);",
+        'export default function AcmeBar(props: ItemProps) { return <LucideProvider size={16}><Trash2 /><Scissors /><Button icon={Copy} /><Custom /></LucideProvider>; }',
+        '',
+      ].join('\n'),
+    );
+    const data = await validated();
+    expect(
+      undeclaredNotes(data).map((/** @type {any} */ note) => note.message),
+    ).toEqual([
+      expect.stringContaining('imports icon "Scissors" from lucide-react'),
+      expect.stringContaining('imports icon "Copy" from lucide-react'),
+    ]);
+    expect(data.templateIcons.unchecked).toEqual(
+      ['LucideIcon', 'createLucideIcon', 'LucideProvider'].map(icon =>
+        expect.objectContaining({
+          icon,
+          module: 'lucide-react',
+          reason: expect.stringContaining('not rendered as an icon'),
+        }),
+      ),
+    );
+  }, 60_000);
+
   it('says nothing in a package whose templates declare no icons', async () => {
     writePackage('', SOURCE);
     const data = await validated();
@@ -190,7 +222,7 @@ describe('template_icon_undeclared', () => {
 });
 
 describe('undeclaredTemplateIcons', () => {
-  it('counts any import from a module another template declares an icon from, and lists a name ending in Icon from another module as not checked', () => {
+  it('reads a module another template declares an icon from as an icon module, lists its unused imports as not checked, and lists a name ending in Icon from another module as not checked', () => {
     expect(
       undeclaredTemplateIcons([
         {
@@ -207,11 +239,43 @@ describe('undeclaredTemplateIcons', () => {
         },
       ]),
     ).toEqual({
+      undeclared: [],
+      unchecked: [
+        {id: 'a', key: 'Cut', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'HomeIcon', module: 'other', why: 'name'},
+        {id: 'b', key: 'Scan', module: 'glyphs', why: 'use'},
+      ],
+    });
+  });
+
+  it('counts an import from an icon module only when it renders as a childless element or passes as a value', () => {
+    expect(
+      undeclaredTemplateIcons([
+        {
+          id: 'a',
+          source: [
+            "import {Trash, Cut, Copy, Pin, Glyph, makeGlyph, Provider, Wrap} from 'glyphs';",
+            'interface P { icon: Glyph }',
+            "const Made = makeGlyph('made');",
+            'const list = [Pin];',
+            'const x = <Provider size={16}><Trash /><Cut></Cut><Wrap>text</Wrap><Made /><B icon={Copy} /></Provider>;',
+            '',
+          ].join('\n'),
+          declared: {Trash: 'delete'},
+        },
+      ]),
+    ).toEqual({
       undeclared: [
         {id: 'a', key: 'Cut', module: 'glyphs'},
-        {id: 'b', key: 'Scan', module: 'glyphs'},
+        {id: 'a', key: 'Copy', module: 'glyphs'},
+        {id: 'a', key: 'Pin', module: 'glyphs'},
       ],
-      unchecked: [{id: 'a', key: 'HomeIcon', module: 'other', why: 'name'}],
+      unchecked: [
+        {id: 'a', key: 'Glyph', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'makeGlyph', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'Provider', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'Wrap', module: 'glyphs', why: 'use'},
+      ],
     });
   });
 

@@ -95,7 +95,7 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   its `doctor integration` subcommands for an installed package included,
   give the output they give without this feature, whatever sets are
   installed, and so do `integration check` and `verify` for a package that
-  declares no `experimental.iconSets`, with three differences. Two come
+  declares no `experimental.iconSets`, with four differences. Two come
   from the manifest key `experimental`, which a CLI without this feature
   does not know. With a package that declares `experimental.iconSets` installed, that CLI
   warns about the key in Doctor's `integration-issues` check and in
@@ -103,10 +103,15 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   that prints the integration-issue nudge (`component`,
   `discover`, `search`, `template`, `theme list`, `theme add`, `theme remove`,
   `theme use`, `theme eject`, and `upgrade`) prints "Warning: <package> has 1
-  integration issue(s)" to stderr; this CLI does neither. The third is the
-  `template_icon_undeclared` note (FR10): `integration check` lists it,
-  marked `next`, for a package whose templates declare `icons`, and a CLI
-  without this feature does not. The note fails nothing under `--strict`.
+  integration issue(s)" to stderr; this CLI does neither. The other two
+  apply to a package whose templates declare `icons`, with or without
+  `experimental.iconSets`. The third is the `template_icon_undeclared` note
+  (FR10): `integration check` lists it, marked `next`, and a CLI without
+  this feature does not. The fourth is the `templateIcons` not-checked list
+  (FR10): `integration check` lists each template import the check does not
+  judge, and its not-checked count is higher by that number; a CLI without
+  this feature has neither. The note and the list fail nothing under
+  `--strict`.
   Discover refuses
   `--type icon-set` and ignores `icon-set` catalog items and their fields
   exactly as it does any unknown kind or field. With the opt-in, `icon-set`
@@ -262,10 +267,16 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   failing, under `--strict` or `--next`. In a package whose templates declare
   `icons`, it notes each icon a template imports but does not declare
   (`template_icon_undeclared`): an import from a module some template in
-  the package declares an icon from; an import from another package whose
-  name ends in `Icon` matches by name only and is listed as not checked, and
-  a generic renderer (a bare `Icon`, or one every use gives an icon prop) is
-  listed as not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
+  the package declares an icon from, which the template renders as a JSX
+  element with no children and no icon-choosing prop (`<Scissors />`) or
+  passes as a value (`icon={Scissors}`, `[Scissors]`, `{icon: Scissors}`).
+  Any other import from that module, such as a type, a function the
+  template calls, or a provider with children, is listed as not checked
+  (not rendered as an icon), because a declared key makes `astryx template`
+  swap it for an icon. An import from another package whose name ends in
+  `Icon` matches by name only and is listed as not checked, and a generic
+  renderer (a bare `Icon`, or one every use gives an icon prop) is listed as
+  not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
   it fails `--strict --next`, and `--strict` does not fail on it. A package
   whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
   declared.
