@@ -31,6 +31,11 @@ export interface TooltipPresentInterestState {
   interest: TooltipPresentInterest;
   /** The `click` that completed the tap, for the touch trigger's rules. */
   tapEvent: Event | null;
+  /**
+   * A touch or pen press that has no `click` yet. Its `click` makes it a
+   * tap; its `pointercancel` drops it.
+   */
+  pressEvent?: PointerEvent | null;
   isRead: boolean;
 }
 
