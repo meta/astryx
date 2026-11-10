@@ -4,7 +4,10 @@
 
 /**
  * @file TransferList.tsx
- * @input Controlled option data, React DOM portals, local action glyphs, shared Lab reorder styles, and the core i18n catalog
+ * @input Controlled option data, local action glyphs, core's reorder (List
+ *   `reorderable` and ListItem `itemKey`) and the core i18n catalog. The
+ *   owner's createReorderable object is adapted through Core's internal
+ *   reorder entry, which loads no reorder code of its own
  * @output Exports TransferList with immediate transfers, vertical reordering, and responsive scroll ownership
  * @position Lab collection input; consumed by index.ts, TransferListSelector, docs, and tests
  *
@@ -17,28 +20,30 @@
 import {
   Fragment,
   useCallback,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
   type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {flushSync} from 'react-dom';
 import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Item} from '@astryxdesign/core/Item';
-import {useLayer} from '@astryxdesign/core/Layer';
-import {List} from '@astryxdesign/core/List';
+import {List, ListItem} from '@astryxdesign/core/List';
+import {type Reorderable, type ReorderMove} from '@astryxdesign/core';
+import {
+  adaptReorderable,
+  reorderableOptions,
+} from '@astryxdesign/core/internal/reorder';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useAnnounce} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
@@ -55,11 +60,10 @@ import {
   mergeRefs,
   themeProps,
 } from '@astryxdesign/core/utils';
-import {reorderStyles} from '../reorderStyles';
 import {transferListVars} from './tokens.stylex';
 
-// Lucide glyphs the shared icon registry does not carry (there is no `add` or
-// `grip` semantic name). Typed as icon components and rendered through `Icon`
+// A Lucide glyph the shared icon registry does not carry (there is no `add`
+// semantic name). Typed as icon components and rendered through `Icon`
 // so sizing, colour and a11y come from the icon pipeline rather than a raw
 // inline `<svg>`. Removal reuses the registry `close` glyph instead.
 function PlusIcon(props: SVGProps<SVGSVGElement>) {
@@ -78,26 +82,6 @@ function PlusIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function GripVerticalIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}>
-      <circle cx="9" cy="5" r="1" />
-      <circle cx="9" cy="12" r="1" />
-      <circle cx="9" cy="19" r="1" />
-      <circle cx="15" cy="5" r="1" />
-      <circle cx="15" cy="12" r="1" />
-      <circle cx="15" cy="19" r="1" />
-    </svg>
-  );
-}
-
 export interface TransferListOption<T extends string = string> {
   /** Stable value written to the controlled value array. */
   value: T;
@@ -109,9 +93,7 @@ export interface TransferListOption<T extends string = string> {
   group?: string;
   /** Prevents moving the option between the selected and available lists. */
   isTransferDisabled?: boolean;
-  /** Prevents reordering the selected option and keeps its position fixed. */
-  isReorderDisabled?: boolean;
-  /** Explains why a transfer or reorder action is unavailable. */
+  /** Explains why a transfer is unavailable. */
   disabledMessage?: string;
 }
 
@@ -148,8 +130,17 @@ export interface TransferListProps<T extends string = string> extends Omit<
   searchLabel?: string;
   /** Search input placeholder. @default 'Search…' */
   searchPlaceholder?: string;
-  /** Enables pointer and keyboard ordering on selected options. @default true */
-  isReorderable?: boolean;
+  /**
+   * Makes the selected options reorderable through core List's reorder
+   * handle (touch hold, mouse drag, keys, reorder mode): pass the object
+   * `createReorderable` makes. Its `isReorderable(value)` decides which
+   * options move. One it rejects at either end of the list also keeps the
+   * others from moving past it. Each move goes to its `onReorder({key, to})`,
+   * `to` being the value's index in `value` after the move. Paused while a
+   * search filters the panel. Without it, the selected options keep their
+   * order.
+   */
+  reorderable?: Reorderable<T>;
   /** Shows an Add all action. @default false */
   hasSelectAll?: boolean;
   /** Shows a Clear action. Transfer-disabled selected options are retained. */
@@ -164,35 +155,14 @@ export interface TransferListProps<T extends string = string> extends Omit<
   noResultsText?: string;
 }
 
-interface ReorderSession<T extends string> {
-  value: T;
-  label: string;
-  mode: 'keyboard' | 'pointer';
-  originalValue: readonly T[];
-  fromIndex: number;
-  toIndex: number;
-  pointerId?: number;
-  pointerStartY?: number;
-  pointerOffsetY?: number;
-  pointerClientY?: number;
-  previewX?: number;
-  previewWidth?: number;
-  hasPointerMoved?: boolean;
-}
-
-type PointerGeometry = Required<
-  Pick<
-    ReorderSession<string>,
-    | 'pointerId'
-    | 'pointerStartY'
-    | 'pointerOffsetY'
-    | 'pointerClientY'
-    | 'previewX'
-    | 'previewWidth'
-  >
->;
-
 const styles = stylex.create({
+  // Core List's reorder handle is a small control, 28 px for every pointer,
+  // overlapping the row's end padding by 8 px. A finger's 44 px target is its
+  // invisible hit layer. A row without one keeps its end content clear of
+  // it, so every Remove sits in one column.
+  clearsHandle: {
+    marginInlineEnd: 20,
+  },
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -227,7 +197,13 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
-    overflow: 'hidden',
+    // In the phone layout the body does not scroll, so the panel does not
+    // clip. On iOS, that clip around the list's own clip draws the row at its
+    // edge one point off while rows glide.
+    overflow: {
+      default: 'hidden',
+      '@container (max-width: 40rem)': 'visible',
+    },
     // Inset, not the shared offset: the panel's own edge is the container
     // boundary, so an outset ring would fall outside the component.
     outlineOffset: {default: '0', ':focus-visible': -2},
@@ -317,15 +293,20 @@ const styles = stylex.create({
       ':first-child': 0,
     },
   },
+  // A disabled row still takes the pointer, so its disabled controls show
+  // their tooltips on hover.
+  disabledItem: {
+    pointerEvents: 'auto',
+  },
+  // A disabled row already dims its end content, Remove included. Remove's
+  // own disabled dim would make it fainter than the list's other controls.
+  removeInDisabledRow: {
+    opacity: 1,
+  },
   item: {
     minWidth: 0,
     paddingInline: spacingVars['--spacing-3'],
   },
-  reorderHandle: {
-    marginInlineStart: `calc(-1 * ${spacingVars['--spacing-1-5']})`,
-  },
-  draggingItem: {backgroundColor: colorVars['--color-accent-muted']},
-  dragPreviewContainer: {listStyleType: 'none'},
   empty: {
     display: 'flex',
     alignItems: 'center',
@@ -338,24 +319,6 @@ const styles = stylex.create({
     textAlign: 'center',
   },
 });
-
-const dynamicStyles = stylex.create({
-  // Only the width is dynamic here. The layer owns the placement: it reads the
-  // same viewport coordinates as `position: fixed` insets, which is what
-  // getBoundingClientRect gives us.
-  dragPreview: (width: number) => ({width}),
-});
-
-function moveItem<T>(
-  value: readonly T[],
-  fromIndex: number,
-  toIndex: number,
-): T[] {
-  const nextValue = [...value];
-  const [item] = nextValue.splice(fromIndex, 1);
-  nextValue.splice(toIndex, 0, item);
-  return nextValue;
-}
 
 // Case folding is locale-independent here, matching Selector, MultiSelector,
 // and CommandPalette. Locale-sensitive folding would mean raw Intl access,
@@ -372,6 +335,39 @@ function matchesQuery<T extends string>(
   return [option.label, description, option.group ?? ''].some(part =>
     part.toLowerCase().includes(query),
   );
+}
+
+interface DisabledHandleTooltipProps {
+  rootRef: RefObject<HTMLElement | null>;
+  value: string;
+  content: string;
+}
+
+/**
+ * The tooltip and description of a disabled list's reorder handle, which say
+ * why the row does not move. Core List renders the handle. So the tooltip
+ * finds it in its row when it attaches. It takes the row's last toggle
+ * button: the handle comes after the row's own content.
+ */
+function DisabledHandleTooltip({
+  rootRef,
+  value,
+  content,
+}: DisabledHandleTooltipProps) {
+  const anchorRef = useMemo(
+    () => ({
+      get current() {
+        const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
+          `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
+        );
+        return toggles == null || toggles.length === 0
+          ? null
+          : toggles[toggles.length - 1];
+      },
+    }),
+    [rootRef, value],
+  );
+  return <Tooltip anchorRef={anchorRef} content={content} />;
 }
 
 /**
@@ -403,7 +399,7 @@ export function TransferList<T extends string = string>({
   hasSearch = false,
   searchLabel,
   searchPlaceholder: searchPlaceholderFromProps,
-  isReorderable = true,
+  reorderable: reorderableProp,
   hasSelectAll = false,
   hasClear = false,
   renderOption,
@@ -436,35 +432,19 @@ export function TransferList<T extends string = string>({
   const descriptionId = useId();
   const selectedHeadingId = useId();
   const availableHeadingId = useId();
-  const reorderInstructionsId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const selectedPanelRef = useRef<HTMLDivElement | null>(null);
   const availablePanelRef = useRef<HTMLDivElement | null>(null);
-  const selectedRowRefs = useRef(new Map<T, HTMLElement>());
-  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
-  // The ghost that follows the pointer is a layer, not a portal into body.
-  // Its coordinates come from getBoundingClientRect, so they are viewport
-  // relative; the top layer is the only host that reads them that way from
-  // any scroll position and still paints above a Popover or open dialog.
-  const dragPreviewLayer = useLayer({mode: 'fixed'});
   const currentValueRef = useRef<readonly T[]>(value);
-  const reorderSessionRef = useRef<ReorderSession<T> | null>(null);
-  const suppressClickRef = useRef(false);
   const [query, setQuery] = useState('');
-  const [reorderSession, setReorderSessionState] =
-    useState<ReorderSession<T> | null>(null);
   const announce = useAnnounce();
 
-  currentValueRef.current = value;
-
-  const setReorderSession = useCallback(
-    (nextSession: ReorderSession<T> | null) => {
-      reorderSessionRef.current = nextSession;
-      setReorderSessionState(nextSession);
-    },
-    [],
-  );
+  // Syncs the handlers' ref with the committed `value`. A render React
+  // discards, as a suspended transition does, must not leave its value.
+  useLayoutEffect(() => {
+    currentValueRef.current = value;
+  });
 
   // An option's own message names its own constraint.
   // It does not apply to a disabled list.
@@ -474,7 +454,6 @@ export function TransferList<T extends string = string>({
         ? optionsFromProps.map(option => ({
             ...option,
             isTransferDisabled: true,
-            isReorderDisabled: true,
             disabledMessage: undefined,
           }))
         : optionsFromProps,
@@ -520,63 +499,6 @@ export function TransferList<T extends string = string>({
     });
     return Array.from(groups.entries());
   }, [availableOptions]);
-
-  const pointerPlacement = useMemo(() => {
-    if (
-      reorderSession?.mode !== 'pointer' ||
-      !reorderSession.hasPointerMoved ||
-      reorderSession.toIndex === reorderSession.fromIndex
-    ) {
-      return null;
-    }
-    const remainingValues = reorderSession.originalValue.filter(
-      optionValue => optionValue !== reorderSession.value,
-    );
-    const beforeValue = remainingValues[reorderSession.toIndex];
-    if (beforeValue != null) {
-      return {value: beforeValue, position: 'before' as const};
-    }
-    const afterValue = remainingValues.at(-1);
-    return afterValue == null
-      ? null
-      : {value: afterValue, position: 'after' as const};
-  }, [reorderSession]);
-
-  const previewCloneValue =
-    reorderSession?.mode === 'pointer' ? reorderSession.value : null;
-
-  useLayoutEffect(() => {
-    const previewHost = dragPreviewRef.current;
-    if (previewHost == null || previewCloneValue == null) {
-      return;
-    }
-    const sourceRow = selectedRowRefs.current.get(previewCloneValue);
-    if (sourceRow == null) {
-      return;
-    }
-    const clone = sourceRow.cloneNode(true) as HTMLElement;
-    previewHost.style.direction = getComputedStyle(sourceRow).direction;
-    clone.style.opacity = '1';
-    clone.setAttribute('aria-hidden', 'true');
-    const clonedElements = [clone, ...clone.querySelectorAll<HTMLElement>('*')];
-    for (const element of clonedElements) {
-      element.removeAttribute('id');
-      element.removeAttribute('aria-describedby');
-      element.removeAttribute('aria-labelledby');
-      element.removeAttribute('name');
-      for (const attribute of Array.from(element.attributes)) {
-        if (attribute.name.startsWith('data-transfer-list-')) {
-          element.removeAttribute(attribute.name);
-        }
-      }
-      element.setAttribute('tabindex', '-1');
-    }
-    previewHost.replaceChildren(clone);
-    return () => {
-      previewHost.replaceChildren();
-      previewHost.style.removeProperty('direction');
-    };
-  }, [previewCloneValue]);
 
   const commit = useCallback(
     (nextValue: readonly T[]) => {
@@ -684,366 +606,55 @@ export function TransferList<T extends string = string>({
     }
   }, [announce, commit, optionByValue, t]);
 
-  const movableRange = useCallback(
-    (optionValue: T, orderedValue: readonly T[]) => {
-      const index = orderedValue.indexOf(optionValue);
-      let start = 0;
-      let end = orderedValue.length - 1;
-      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-        const option = optionByValue.get(orderedValue[cursor] as T);
-        if (option == null || option.isReorderDisabled) {
-          start = cursor + 1;
-          break;
-        }
-      }
-      for (let cursor = index + 1; cursor < orderedValue.length; cursor += 1) {
-        const option = optionByValue.get(orderedValue[cursor] as T);
-        if (option == null || option.isReorderDisabled) {
-          end = cursor - 1;
-          break;
-        }
-      }
-      return {index, start, end};
-    },
-    [optionByValue],
+  // Reordering is off while a search filters the panel. A hidden row could
+  // otherwise move past the shown rows.
+  const isOrdering = reorderableProp != null && normalizedQuery === '';
+  // The owner's object decides which values move and takes each move.
+  const owner =
+    reorderableProp == null ? undefined : reorderableOptions(reorderableProp);
+  const canMove = useCallback(
+    (optionValue: T) => owner?.isReorderable?.(optionValue) ?? true,
+    [owner],
   );
-
-  const moveOption = useCallback(
-    (optionValue: T, requestedIndex: number) => {
-      const nextValue = [...currentValueRef.current];
-      const {index, start, end} = movableRange(optionValue, nextValue);
-      if (index < 0) {
-        return false;
-      }
-      const target = Math.max(start, Math.min(end, requestedIndex));
-      if (target === index) {
-        return false;
-      }
-      nextValue.splice(index, 1);
-      nextValue.splice(target, 0, optionValue);
-      commit(nextValue);
-      return true;
-    },
-    [commit, movableRange],
-  );
-
-  const beginReorder = useCallback(
-    (
-      option: TransferListOption<T>,
-      mode: 'keyboard' | 'pointer',
-      pointerGeometry?: PointerGeometry,
-    ) => {
-      if (option.isReorderDisabled || !isReorderable) {
+  const reorderSelected = useCallback(
+    ({key, to: toIndex}: ReorderMove) => {
+      const shown = selectedOptions.map(option => option.value);
+      const fromIndex = shown.indexOf(key as T);
+      if (fromIndex < 0 || fromIndex === toIndex || shown[toIndex] == null) {
         return;
       }
-      const index = currentValueRef.current.indexOf(option.value);
-      if (index < 0 || (mode === 'pointer' && pointerGeometry == null)) {
-        return;
-      }
-      setReorderSession({
-        value: option.value,
-        label: option.label,
-        mode,
-        originalValue: [...currentValueRef.current],
-        fromIndex: index,
-        toIndex: index,
-        ...pointerGeometry,
-        hasPointerMoved: false,
-      });
-      if (mode === 'keyboard') {
-        announce(
-          t('@astryx.transferList.announceGrabbed', {
-            label: option.label,
-            position: index + 1,
-            total: currentValueRef.current.length,
-          }),
-        );
-      }
-    },
-    [announce, isReorderable, setReorderSession, t],
-  );
-
-  const finishReorder = useCallback(
-    (cancelled: boolean) => {
-      const session = reorderSessionRef.current;
-      if (!session) {
-        return;
-      }
-      // A list disabled mid-reorder takes no change from it, not even the
-      // cancel that restores the order from before the grab.
-      if (isDisabled) {
-        setReorderSession(null);
-        return;
-      }
-      if (session.mode === 'pointer') {
-        if (cancelled || !session.hasPointerMoved) {
-          setReorderSession(null);
-          if (cancelled) {
-            announce(
-              t('@astryx.transferList.announceMoveCancelled', {
-                label: session.label,
-              }),
-            );
-          }
-          return;
-        }
-        const hasChanged = session.fromIndex !== session.toIndex;
-        const nextValue = moveItem(
-          session.originalValue,
-          session.fromIndex,
-          session.toIndex,
-        );
-        flushSync(() => setReorderSession(null));
-        if (hasChanged) {
-          commit(nextValue);
-          announce(
-            t('@astryx.transferList.announceDropped', {
-              label: session.label,
-              position: session.toIndex + 1,
-              total: session.originalValue.length,
-            }),
-          );
-        } else {
-          announce(
-            t('@astryx.transferList.announceReturned', {
-              label: session.label,
-              position: session.fromIndex + 1,
-            }),
-          );
-        }
-        return;
-      }
-      if (cancelled) {
-        commit(session.originalValue);
-        announce(
-          t('@astryx.transferList.announceMoveCancelled', {
-            label: session.label,
-          }),
-        );
-      } else {
-        const index = currentValueRef.current.indexOf(session.value);
-        announce(
-          t('@astryx.transferList.announceDropped', {
-            label: session.label,
-            position: index + 1,
-            total: currentValueRef.current.length,
-          }),
-        );
-      }
-      setReorderSession(null);
-    },
-    [announce, commit, isDisabled, setReorderSession, t],
-  );
-
-  const handleReorderClick = useCallback(
-    (option: TransferListOption<T>) => {
-      if (suppressClickRef.current) {
-        suppressClickRef.current = false;
-        return;
-      }
-      if (reorderSessionRef.current?.value === option.value) {
-        finishReorder(false);
-      } else {
-        beginReorder(option, 'keyboard');
-      }
-    },
-    [beginReorder, finishReorder],
-  );
-
-  const handleReorderKeyDown = useCallback(
-    (
-      event: ReactKeyboardEvent<HTMLButtonElement>,
-      option: TransferListOption<T>,
-    ) => {
-      const session = reorderSessionRef.current;
-      if (session?.value !== option.value || session.mode !== 'keyboard') {
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        finishReorder(true);
-        return;
-      }
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        finishReorder(false);
-        return;
-      }
-      const {index, start, end} = movableRange(
-        option.value,
-        currentValueRef.current,
+      const order = [...shown];
+      const [moved] = order.splice(fromIndex, 1);
+      order.splice(toIndex, 0, moved);
+      // The shown rows' new order goes back into the places the shown values
+      // held. So a value without an option keeps its place in this order.
+      const isShown = new Set(shown);
+      let next = 0;
+      const nextValue = currentValueRef.current.map(item =>
+        isShown.has(item) ? order[next++] : item,
       );
-      const targets: Record<string, number> = {
-        ArrowUp: index - 1,
-        ArrowDown: index + 1,
-        Home: start,
-        End: end,
-      };
-      const target = targets[event.key];
-      if (target == null) {
+      if (owner == null) {
         return;
       }
-      event.preventDefault();
-      if (moveOption(option.value, target)) {
-        const nextIndex = currentValueRef.current.indexOf(option.value);
-        announce(
-          t('@astryx.transferList.announceMovedToPosition', {
-            label: option.label,
-            position: nextIndex + 1,
-            total: currentValueRef.current.length,
-          }),
-        );
-      }
+      // In the value's terms: where the moved value lands. The owner moving
+      // it there keeps the shown rows in this order.
+      owner.onReorder({key: key as T, to: nextValue.indexOf(key as T)});
     },
-    [announce, finishReorder, movableRange, moveOption, t],
+    [owner, selectedOptions],
   );
-
-  const handlePointerDown = useCallback(
-    (
-      event: ReactPointerEvent<HTMLButtonElement>,
-      option: TransferListOption<T>,
-    ) => {
-      if (event.button !== 0 || option.isReorderDisabled) {
-        return;
-      }
-      const sourceRow = selectedRowRefs.current.get(option.value);
-      if (sourceRow == null) {
-        return;
-      }
-      const bounds = sourceRow.getBoundingClientRect();
-      suppressClickRef.current = true;
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      beginReorder(option, 'pointer', {
-        pointerId: event.pointerId,
-        pointerStartY: event.clientY,
-        pointerOffsetY: event.clientY - bounds.top,
-        pointerClientY: event.clientY,
-        previewX: bounds.left,
-        previewWidth: bounds.width,
-      });
-    },
-    [beginReorder],
+  // The owner's object, adapted so List's moves among the shown rows reach
+  // the owner in the value's terms. Its engine is the owner's, so nothing
+  // here loads the reorder, and the owner's `start(key)` finds this list.
+  const reorderable = useMemo(
+    () =>
+      isOrdering && reorderableProp != null
+        ? adaptReorderable<string, number>(reorderableProp, {
+            onReorder: reorderSelected,
+            isReorderable: key => canMove(key as T),
+          })
+        : undefined,
+    [canMove, isOrdering, reorderSelected, reorderableProp],
   );
-
-  const handlePointerMove = useCallback(
-    (
-      event: ReactPointerEvent<HTMLButtonElement>,
-      option: TransferListOption<T>,
-    ) => {
-      const session = reorderSessionRef.current;
-      if (
-        session?.value !== option.value ||
-        session.mode !== 'pointer' ||
-        session.pointerId !== event.pointerId
-      ) {
-        return;
-      }
-      const verticalDistance =
-        event.clientY - (session.pointerStartY ?? event.clientY);
-      const hasCrossedThreshold =
-        session.hasPointerMoved || Math.abs(verticalDistance) >= 5;
-      let targetIndex = session.fromIndex;
-      if (hasCrossedThreshold) {
-        event.preventDefault();
-        const {start, end} = movableRange(session.value, session.originalValue);
-        const remainingValues = session.originalValue.filter(
-          optionValue => optionValue !== session.value,
-        );
-        const candidates = session.originalValue
-          .map((optionValue, originalIndex) => ({optionValue, originalIndex}))
-          .filter(
-            candidate =>
-              candidate.optionValue !== session.value &&
-              candidate.originalIndex >= start &&
-              candidate.originalIndex <= end,
-          )
-          .map(candidate => ({
-            row: selectedRowRefs.current.get(candidate.optionValue),
-            targetIndex: remainingValues.indexOf(candidate.optionValue),
-          }))
-          .filter(
-            (candidate): candidate is {row: HTMLElement; targetIndex: number} =>
-              candidate.row != null,
-          );
-        if (candidates.length > 0) {
-          targetIndex = candidates[candidates.length - 1].targetIndex + 1;
-          for (const candidate of candidates) {
-            const bounds = candidate.row.getBoundingClientRect();
-            if (event.clientY < bounds.top + bounds.height / 2) {
-              targetIndex = candidate.targetIndex;
-              break;
-            }
-          }
-          targetIndex = Math.max(start, Math.min(end, targetIndex));
-        }
-      }
-      const nextSession = {
-        ...session,
-        pointerClientY: event.clientY,
-        hasPointerMoved: hasCrossedThreshold,
-        toIndex: targetIndex,
-      };
-      setReorderSession(nextSession);
-      if (hasCrossedThreshold && session.toIndex !== targetIndex) {
-        announce(
-          t('@astryx.transferList.announceMovedToPosition', {
-            label: option.label,
-            position: targetIndex + 1,
-            total: session.originalValue.length,
-          }),
-        );
-      }
-    },
-    [announce, movableRange, setReorderSession, t],
-  );
-
-  const handlePointerEnd = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>, cancelled: boolean) => {
-      const session = reorderSessionRef.current;
-      if (
-        session?.mode !== 'pointer' ||
-        session.pointerId !== event.pointerId
-      ) {
-        return;
-      }
-      if (cancelled) {
-        suppressClickRef.current = false;
-      } else {
-        setTimeout(() => {
-          suppressClickRef.current = false;
-        }, 0);
-      }
-      finishReorder(cancelled);
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture?.(event.pointerId);
-      }
-    },
-    [finishReorder],
-  );
-
-  // A second pointer that lands anywhere during a pointer reorder (the second
-  // finger of a pinch) cancels the reorder. A pinch whose first finger slid
-  // first zooms without a pointercancel, so the drag would otherwise commit on
-  // release and drop the row at the end of the list.
-  const isPointerReorderActive = previewCloneValue != null;
-  useEffect(() => {
-    if (!isPointerReorderActive) {
-      return;
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      const session = reorderSessionRef.current;
-      if (
-        session?.mode === 'pointer' &&
-        session.pointerId !== event.pointerId
-      ) {
-        suppressClickRef.current = false;
-        finishReorder(true);
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () =>
-      document.removeEventListener('pointerdown', onPointerDown, true);
-  }, [isPointerReorderActive, finishReorder]);
 
   const handleSearch = useCallback(
     (nextQuery: string) => {
@@ -1084,7 +695,7 @@ export function TransferList<T extends string = string>({
         />
       );
     }
-    return (
+    const remove = (
       <IconButton
         label={t('@astryx.transferList.removeOption', {label: option.label})}
         icon={<Icon icon="close" size="sm" />}
@@ -1094,73 +705,28 @@ export function TransferList<T extends string = string>({
         tooltip={isTransferDisabled ? disabledReason : undefined}
         data-transfer-list-action="selected"
         onClick={() => removeOption(option, index)}
+        // A row that keeps its place has no handle: its Remove keeps the
+        // movable rows' column, clear of where their handles sit.
+        xstyle={[
+          isOrdering && !canMove(option.value) && styles.clearsHandle,
+          isDisabled && styles.removeInDisabledRow,
+        ]}
       />
     );
-  };
-
-  const dragPreviewPosition =
-    reorderSession?.mode === 'pointer' &&
-    reorderSession.pointerClientY != null &&
-    reorderSession.pointerOffsetY != null &&
-    reorderSession.previewX != null &&
-    reorderSession.previewWidth != null
-      ? {
-          x: reorderSession.previewX,
-          y: reorderSession.pointerClientY - reorderSession.pointerOffsetY,
-          width: reorderSession.previewWidth,
-        }
-      : null;
-  const isDraggingPreview = dragPreviewPosition != null;
-  const {show: showDragPreview, hide: hideDragPreview} = dragPreviewLayer;
-  useEffect(() => {
-    if (!isDraggingPreview) {
-      return undefined;
+    if (!isDisabled || !isOrdering || !canMove(option.value)) {
+      return remove;
     }
-    showDragPreview();
-    return hideDragPreview;
-  }, [isDraggingPreview, showDragPreview, hideDragPreview]);
-
-  const reorderControl = (option: TransferListOption<T>) => {
-    if (!isReorderable) {
-      return undefined;
-    }
-    const active = reorderSession?.value === option.value;
-    const isReorderDisabled = option.isReorderDisabled === true;
-    const disabledReason =
-      option.disabledMessage ??
-      t('@astryx.transferList.reorderDisabled', {label: option.label});
     return (
-      <IconButton
-        label={t('@astryx.transferList.reorderOption', {label: option.label})}
-        aria-describedby={reorderInstructionsId}
-        aria-pressed={active && !isDisabled}
-        icon={<Icon icon={GripVerticalIcon} size="sm" />}
-        size="sm"
-        variant="ghost"
-        isDisabled={isReorderDisabled}
-        tooltip={isReorderDisabled ? disabledReason : undefined}
-        xstyle={[
-          styles.reorderHandle,
-          reorderStyles.handle,
-          active && reorderStyles.handleActive,
-        ]}
-        onClick={() => handleReorderClick(option)}
-        onKeyDown={event => handleReorderKeyDown(event, option)}
-        onPointerDown={event => handlePointerDown(event, option)}
-        onPointerMove={event => handlePointerMove(event, option)}
-        onPointerUp={event => handlePointerEnd(event, false)}
-        onPointerCancel={event => handlePointerEnd(event, true)}
-        onLostPointerCapture={event => {
-          const session = reorderSessionRef.current;
-          if (
-            session?.mode === 'pointer' &&
-            session.pointerId === event.pointerId
-          ) {
-            suppressClickRef.current = false;
-            finishReorder(true);
-          }
-        }}
-      />
+      <>
+        {remove}
+        <DisabledHandleTooltip
+          rootRef={rootRef}
+          value={option.value}
+          content={t('@astryx.transferList.reorderDisabled', {
+            label: option.label,
+          })}
+        />
+      </>
     );
   };
 
@@ -1169,53 +735,44 @@ export function TransferList<T extends string = string>({
     side: 'selected' | 'available',
     index: number,
   ) => {
-    const active = reorderSession?.value === option.value;
-    const isPointerSource = active && reorderSession?.mode === 'pointer';
-    const dropPosition =
-      pointerPlacement?.value === option.value
-        ? pointerPlacement.position
-        : null;
-    const orderedIndex = currentValueRef.current.indexOf(option.value);
+    // Transfer and reorder are separate states of the row's own target. A
+    // row the owner keeps in place is `fixed`.
+    const theme = themeProps('transfer-list-item', {
+      side,
+      state: option.isTransferDisabled ? 'disabled' : 'enabled',
+      reorder:
+        side === 'selected' && isOrdering
+          ? canMove(option.value)
+            ? 'movable'
+            : 'fixed'
+          : undefined,
+    });
+    if (side === 'selected') {
+      return (
+        <ListItem
+          key={option.value}
+          itemKey={option.value}
+          label={renderOption?.(option) ?? option.label}
+          endContent={optionActions(option, side, index)}
+          // A disabled list keeps each handle as a focusable disabled
+          // control. Core List ends its reorder mode and sends a drag home.
+          isDisabled={isDisabled}
+          xstyle={[styles.item, isDisabled && styles.disabledItem]}
+          data-transfer-list-row={option.value}
+          data-transfer-list-index={String(value.indexOf(option.value))}
+          {...theme}
+        />
+      );
+    }
     return (
       <Item
         key={option.value}
         as="li"
-        ref={node => {
-          if (side !== 'selected') {
-            return;
-          }
-          if (node == null) {
-            selectedRowRefs.current.delete(option.value);
-          } else {
-            selectedRowRefs.current.set(option.value, node);
-          }
-        }}
         density="compact"
-        startContent={side === 'selected' ? reorderControl(option) : undefined}
         label={renderOption?.(option) ?? option.label}
         endContent={optionActions(option, side, index)}
-        xstyle={[
-          styles.item,
-          active && reorderSession?.mode === 'keyboard' && styles.draggingItem,
-          isPointerSource && reorderStyles.source,
-          dropPosition === 'before' && reorderStyles.dropBefore,
-          dropPosition === 'after' && reorderStyles.dropAfter,
-        ]}
-        data-transfer-list-row={side === 'selected' ? option.value : undefined}
-        data-transfer-list-reorder-source={isPointerSource || undefined}
-        data-transfer-list-drop-target={dropPosition ?? undefined}
-        data-transfer-list-index={
-          side === 'selected' ? String(orderedIndex) : undefined
-        }
-        {...themeProps('transfer-list-item', {
-          side,
-          state:
-            option.isTransferDisabled || option.isReorderDisabled
-              ? 'disabled'
-              : active
-                ? 'reordering'
-                : 'enabled',
-        })}
+        xstyle={styles.item}
+        {...theme}
       />
     );
   };
@@ -1274,10 +831,6 @@ export function TransferList<T extends string = string>({
         </div>
       )}
 
-      <VisuallyHidden id={reorderInstructionsId}>
-        {t('@astryx.transferList.reorderInstructions')}
-      </VisuallyHidden>
-
       <div
         {...mergeProps(
           themeProps('transfer-list-collection'),
@@ -1319,7 +872,8 @@ export function TransferList<T extends string = string>({
             {selectedOptions.length > 0 ? (
               <List
                 density="compact"
-                header={<VisuallyHidden>{selectedLabel}</VisuallyHidden>}>
+                header={<VisuallyHidden>{selectedLabel}</VisuallyHidden>}
+                reorderable={reorderable}>
                 {selectedOptions.map((option, index) =>
                   transferItem(option, 'selected', index),
                 )}
@@ -1364,7 +918,7 @@ export function TransferList<T extends string = string>({
                   !options.some(
                     option =>
                       !option.isTransferDisabled &&
-                      !currentValueRef.current.includes(option.value),
+                      !value.includes(option.value),
                   )
                 }
                 onClick={addAll}
@@ -1411,21 +965,6 @@ export function TransferList<T extends string = string>({
           </div>
         </div>
       </div>
-      {dragPreviewPosition != null
-        ? dragPreviewLayer.render(
-            <div
-              ref={dragPreviewRef}
-              aria-hidden="true"
-              data-transfer-list-drag-preview=""
-              {...stylex.props(
-                reorderStyles.preview,
-                styles.dragPreviewContainer,
-                dynamicStyles.dragPreview(dragPreviewPosition.width),
-              )}
-            />,
-            {x: dragPreviewPosition.x, y: dragPreviewPosition.y},
-          )
-        : null}
     </div>
   );
 }

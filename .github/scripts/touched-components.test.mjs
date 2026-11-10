@@ -542,7 +542,7 @@ describe('pr-touched-components routing', () => {
     expect(report.run).toContain('--a11y-step "$A11Y_STEP"');
     expect(report.run).toContain('--rtl-step "$RTL_STEP"');
     expect(report.run).toContain(
-      '--baseline-manifest .github/visual-baseline/manifest.json',
+      '--baseline-manifest .head-baseline/.github/visual-baseline/manifest.json',
     );
   });
 
@@ -553,7 +553,7 @@ describe('pr-touched-components routing', () => {
     const decide = visualStep('Decide the default touched visual check');
     expect(decide.run).toContain('--wide-verdict .visual-run/verdict.json');
     expect(decide.run).toContain(
-      '--baseline-manifest .github/visual-baseline/manifest.json',
+      '--baseline-manifest .head-visual-baseline/.github/visual-baseline/manifest.json',
     );
     expect(decide.env.ASTRYX_PR_HEAD_SHA).toBe(
       '${{ github.event.pull_request.head.sha }}',
@@ -575,7 +575,8 @@ describe('pr-touched-components routing', () => {
     expect(baseline.with).toMatchObject({
       ref: '${{ github.event.pull_request.head.sha }}',
       path: '.head-baseline',
-      'sparse-checkout': '.github/a11y-baseline.json',
+      'sparse-checkout':
+        '.github/a11y-baseline.json\n.github/visual-baseline/manifest.json\n',
     });
     expect(step('Report per-component results').run).toContain(
       '--a11y-baseline .head-baseline/.github/a11y-baseline.json',
@@ -704,8 +705,9 @@ describe('pr-component-a11y-contracts routing', () => {
       'heavy-ci',
       'build-storybook',
     ]);
-    // The same gate as the interaction proofs, which the test join also reads.
-    expect(contracts.if).toBe(ci.jobs['pr-interaction'].if);
+    // The same gate as the WebKit interaction proofs, which the test join
+    // also reads.
+    expect(contracts.if).toBe(ci.jobs['pr-interaction-webkit'].if);
     expect(contracts['runs-on']).toBe('ubuntu-latest');
     expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
     expect(contracts.permissions).toEqual({
@@ -751,10 +753,34 @@ describe('pr-component-a11y-contracts routing', () => {
     }
   });
 
-  it('fails, never passes, when the scope step cannot list the changed files', () => {
+  it('runs every contract its budget fits when the scope is undecided', () => {
+    // A diff GitHub truncates leaves the scope undecided and lists no files:
+    // every file then counts as changed.
+    const every = contractStep('List every file when the scope is undecided');
+    expect(every.if).toBe(
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'",
+    );
+    expect(every.run).toContain('git ls-files > "$RUNNER_TEMP/every-file.txt"');
+    // The changed-spec list reads only the scope's own list: every file
+    // counted as changed would make every spec a changed spec.
+    expect(
+      contractStep('Find the changed browser accessibility specs').env
+        .FILES_PATH,
+    ).toBe('${{ steps.scope.outputs.changed_files_path }}');
+    for (const name of [
+      'Decide the touched components',
+      "Run the touched components' accessibility contracts",
+    ]) {
+      expect(contractStep(name).env.FILES_PATH, name).toBe(
+        '${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}',
+      );
+    }
+  });
+
+  it('fails, never passes, when a decided scope cannot list the changed files', () => {
     const guard = contractStep('Require the changed-file list');
     expect(guard.if).toBe(
-      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''",
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'",
     );
     expect(guard.run).toContain('exit 1');
     expect(guard['continue-on-error']).toBeUndefined();
@@ -833,7 +859,7 @@ describe('pr-component-a11y-contracts routing', () => {
     // Every changed path, not only the changed specs: a change in a
     // component folder owns that folder's specs.
     expect(runStep.env.FILES_PATH).toBe(
-      '${{ steps.scope.outputs.changed_files_path }}',
+      '${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}',
     );
     // A wide change still runs the touched components' own specs, then the
     // specs of the folders that render them (FR12).
@@ -926,6 +952,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-stories-'));
     try {
       const run = files => {
@@ -936,7 +963,7 @@ describe('the audit of changed stories no other audit covers', () => {
         execFileSync(
           'node',
           [
-            new URL('./touched-components.mjs', import.meta.url).pathname,
+            fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
             'scope',
             '--analysis',
             path.join(dir, 'analysis.json'),
@@ -971,6 +998,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-contracts-'));
     try {
       const owners = [
@@ -995,7 +1023,7 @@ describe('the audit of changed stories no other audit covers', () => {
       execFileSync(
         'node',
         [
-          new URL('./touched-components.mjs', import.meta.url).pathname,
+          fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
           'scope',
           '--analysis',
           path.join(dir, 'analysis.json'),

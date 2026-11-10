@@ -170,7 +170,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
@@ -267,7 +269,11 @@ guidance owns the process used to propose and test APIs.
   where it is written, and it never exports them or sets the attribute. Every
   other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
-  package's owner module through an internal path. StyleX merges styles one
+  package's owner module through an internal path. An owner module whose
+  attribute marks an element its package does not render may write its
+  selector once in an injected rule instead of `stylex.create`; Core may
+  re-export only that module's writer to Lab through an internal entry, and
+  the attribute name and selector stay private to the owner. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
   property it sets, its rest state and pointer states included, and a caller
   does not set those properties again on the same element. Outside the owner
@@ -277,7 +283,9 @@ guidance owns the process used to propose and test APIs.
   sit in its baseline, which only shrinks. Tests may name a private attribute,
   because they assert the DOM a component renders. A private attribute appears
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
-  promise, and may change in any release. The public data attributes are
+  promise, and may change in any release. A data attribute outside the
+  `data-astryx-*` namespace is public too, and is added only when a current
+  record names it (DEC-2). The public `data-astryx-*` attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -402,6 +410,33 @@ the system already names.
 
 Rejected: component-local names for shared concepts.
 
+### DEC-2 — A data attribute outside the private `data-astryx-*` namespace is public surface
+
+**Reference:** `architecture:public-component-api/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "New data attributes are public facing and shoudln't be used
+for internal only concerns without a clear spec that by passes this rule", and
+"main reason to be careful of data attributes is we generate them for themes".
+Theme compilation writes selectors on data attributes (the `data-astryx-*`
+scopes and attributes that mirror props, such as `data-size` and
+`data-variant`), so a data attribute a component renders can be read or
+targeted by a theme and becomes public surface. A component therefore adds a
+new data attribute only when a current record names it and states why; an
+internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
+attribute at all.
+
+For a per-instance dynamic style, the first choice is a StyleX dynamic style
+(`stylex.create` with a function): it sets a generated custom property inline
+on that instance (`--x-<property>`, or a hashed name under a pseudo-element or
+condition). That property is private by this rule: no theme value, record, or
+document names it, and it may change in any release. The owner said, on
+Avatar's initials: "We should make this the agent's first choice for these
+types of dynamic styles."
+
+Rejected: adding a data attribute for an internal concern without a record
+that names it.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -431,6 +466,10 @@ Rejected: component-local names for shared concepts.
 
 Known verification gaps:
 
+- INV23 gap: nothing checks data attributes outside `data-astryx-*` yet; the
+  lint and its verification row see only `data-astryx-*` names, and existing
+  attributes outside that namespace, such as ToastViewport's `data-toast-id`,
+  have no inventory.
 - INV2, INV3: shipped props that predate the behavior-prop rule keep their
   names until a minor renames them under INV9. This list is a partial
   inventory; known deviations include Tooltip and HoverCard `focusTrigger`,

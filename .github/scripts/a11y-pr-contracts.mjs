@@ -70,6 +70,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+
 export const EVIDENCE_DIR = 'pr-a11y-evidence';
 
 const MODES = new Set(['always', 'audit', 'release-only', 'scoped']);
@@ -420,10 +422,23 @@ const RESOLVE_SUFFIXES = [
   '/index.js',
 ];
 
-const componentFolderOf = file => {
+/**
+ * The component folder that holds a file, as `<package>/<Folder>`.
+ * @param {string} file
+ */
+export const componentFolderOf = file => {
   const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
   return match ? `${match[1]}/${match[2]}` : null;
 };
+
+/**
+ * Whether a file is source the import graph follows: code that can put
+ * something on a page, never a test, story, doc or type declaration.
+ * @param {string} file
+ */
+export function isRenderedSource(file) {
+  return SOURCE.test(file) && !NOT_RENDERED.test(file);
+}
 
 function sourceFiles(root, dir) {
   const out = [];
@@ -434,7 +449,7 @@ function sourceFiles(root, dir) {
     if (entry.isDirectory()) {
       if (entry.name !== 'node_modules' && entry.name !== 'dist')
         out.push(...sourceFiles(root, file));
-    } else if (SOURCE.test(entry.name) && !NOT_RENDERED.test(file)) {
+    } else if (isRenderedSource(file)) {
       out.push(file);
     }
   }
@@ -624,6 +639,88 @@ export function renderingFolders(importers, touched) {
 }
 
 /**
+ * The files each proof page loads through value imports, followed file by
+ * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
+ * The roots are the interaction specs and what their pages render: the
+ * Storybook stories, Storybook's preview, and each fixture a spec bundles
+ * (a quoted path in the spec that names a listed file). A unit test, doc,
+ * record or
+ * accessibility spec in a component folder puts nothing on a proof's page
+ * and selects no proof, unless a root loads it; this map finds that case
+ * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
+ * read, so a caller runs every proof instead. `read` reads a file; by
+ * default from `root`, and a sparse checkout passes one that falls back to
+ * the commit.
+ * @param {{root: string, listed: string[], isProof: (file: string) => boolean, read?: (file: string) => string}} options
+ * @returns {Map<string, Set<string>>} each loaded file, to the roots that load it
+ */
+export function proofImporters({
+  root,
+  listed,
+  isProof,
+  read = file => fs.readFileSync(path.join(root, file), 'utf8'),
+}) {
+  const known = new Set(listed);
+  const resolve = target => {
+    for (const suffix of RESOLVE_SUFFIXES)
+      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+    return null;
+  };
+  const targetOf = (file, specifier) => {
+    if (specifier.startsWith('.'))
+      return resolve(
+        path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
+      );
+    const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+    return match
+      ? resolve(`packages/${match[1]}/src/${match[2] ?? 'index'}`)
+      : null;
+  };
+  // A spec bundles a fixture by path (`new URL('./fixture.ts', …)`,
+  // `bundleOf('fixture.ts')`): every quoted path beside it that names a
+  // listed source file counts as an import.
+  const QUOTED_PATH = /['"`]((?:\.{1,2}\/)?[\w./-]+\.[cm]?[jt]sx?)['"`]/g;
+  const bundledBy = (file, text) =>
+    [...text.matchAll(QUOTED_PATH)]
+      .map(match =>
+        resolve(
+          path.posix.normalize(
+            `${path.posix.dirname(file)}/${match[1].replace(/^(?!\.)/, './')}`,
+          ),
+        ),
+      )
+      .filter(Boolean);
+  const imports = new Map();
+  const importsOf = file => {
+    if (!imports.has(file)) {
+      const text = read(file);
+      imports.set(file, [
+        ...valueImports(text)
+          .map(({specifier}) => targetOf(file, specifier))
+          .filter(Boolean),
+        ...(isProof(file) ? bundledBy(file, text) : []),
+      ]);
+    }
+    return imports.get(file);
+  };
+  const importers = new Map();
+  for (const proof of listed.filter(isProof)) {
+    const seen = new Set([proof]);
+    const queue = [proof];
+    while (queue.length > 0) {
+      for (const target of importsOf(queue.pop())) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        queue.push(target);
+        if (!importers.has(target)) importers.set(target, new Set());
+        importers.get(target).add(proof);
+      }
+    }
+  }
+  return importers;
+}
+
+/**
  * The `scoped` and `release-only` specs of the component folders that render a
  * touched folder, nearest first, then in path order, leaving out `planned`.
  * @param {{file: string, routing: {mode: string}}[]} specs
@@ -688,6 +785,35 @@ function median(values) {
   return sorted.length % 2
     ? sorted[middle]
     : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/** The longest one opt-in accessibility leg should take. */
+export const LEG_BUDGET_MS = 10 * 60 * 1000;
+
+/**
+ * The legs an opt-in run needs: enough that each leg's recorded time fits
+ * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
+ * least time (`splitByDuration`, as the other leg planners). The recorded
+ * times come from release legs that run four files at once on four cores; one
+ * file alone on a pull-request runner runs faster, so a leg sums them without
+ * the default check's margin.
+ * @param {string[]} files
+ * @param {Record<string, number>} seconds
+ * @param {number} maxLegs
+ */
+export function planLegs(files, seconds, maxLegs) {
+  const cost = costOf(files, seconds);
+  const sum = list => list.reduce((total, file) => total + cost(file), 0);
+  const count = Math.min(
+    Math.max(1, maxLegs),
+    Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
+  );
+  const shares = splitByDuration(files, count, cost);
+  return {
+    count,
+    shares,
+    longestMs: Math.max(...shares.map(share => sum(share) * 1000)),
+  };
 }
 
 /**
@@ -1036,6 +1162,17 @@ function main() {
   const ownedBy = (ownedByValue ?? '').split(',').filter(Boolean);
   const dependentsOfValue = flagValue(argv, '--dependents-of');
   const dependentsOf = (dependentsOfValue ?? '').split(',').filter(Boolean);
+  const countLegsValue = flagValue(argv, '--count-legs');
+  const legValue = flagValue(argv, '--leg');
+  const ofValue = flagValue(argv, '--of');
+  const shareOutFile = flagValue(argv, '--share-out');
+  const shareFile = flagValue(argv, '--share');
+  if (
+    (countLegsValue != null || shareFile != null) &&
+    changedOnlyFile != null
+  ) {
+    throw new Error('--count-legs and --share split the opt-in run only');
+  }
   if (
     (ownedByValue != null ||
       changedFilesFile != null ||
@@ -1058,6 +1195,11 @@ function main() {
     changedFilesFile,
     ownedByValue,
     dependentsOfValue,
+    countLegsValue,
+    legValue,
+    ofValue,
+    shareOutFile,
+    shareFile,
   ]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
@@ -1110,8 +1252,71 @@ function main() {
       workers: contractWorkers(),
     });
   })();
-  const selected = budgeted.run;
   const notRun = budgeted.notRun;
+  // The opt-in run splits into legs by recorded time. The count step plans
+  // them after the Storybook download, whose story index a changed
+  // multi-component folder's components resolve through, and before the
+  // Chromium install; each leg
+  // then runs only its share.
+  const scopeKnown = changedPaths != null;
+  // Every leg counts on its own runner. A leg that cannot tell this pull
+  // request's files would split another list than the other legs, so it
+  // plans itself as the only leg, with the whole selection, as the
+  // interaction legs do.
+  const scopeLost = countLegsValue != null && isPullRequest && !scopeKnown;
+  const legs =
+    countLegsValue != null
+      ? scopeLost
+        ? planLegs(
+            budgeted.run.map(({file}) => file),
+            {},
+            1,
+          )
+        : planLegs(
+            budgeted.run.map(({file}) => file),
+            readDurations(root, policySha),
+            Number(countLegsValue),
+          )
+      : null;
+  if (countLegsValue != null) {
+    const leg = scopeLost ? 1 : Number(legValue ?? 1);
+    if (scopeLost) {
+      console.log(
+        "::warning title=Accessibility scope unknown::This leg could not list the pull request's files, so it runs the whole selection as the only leg.",
+      );
+    }
+    const minutes = (legs.longestMs / 60000).toFixed(1);
+    console.log(
+      `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
+    );
+    if (legs.longestMs > LEG_BUDGET_MS) {
+      console.log(
+        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg. The selection needs more legs.`,
+      );
+    }
+    // The run step reads this leg's share from here, so it runs exactly
+    // what this count planned, never a selection of its own.
+    if (shareOutFile) {
+      const share = new Set(legs.shares[leg - 1] ?? []);
+      fs.writeFileSync(
+        shareOutFile,
+        `${JSON.stringify({scopeKnown, run: budgeted.run.filter(({file}) => share.has(file))})}\n`,
+      );
+    }
+    if (process.env.GITHUB_OUTPUT) {
+      fs.appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\n`,
+      );
+    }
+    return 0;
+  }
+  const legIndex = legValue != null ? Number(legValue) : 1;
+  // A leg runs the share its count step wrote. A missing or unreadable share
+  // fails the leg, so a planned file is never dropped.
+  const share =
+    shareFile != null ? JSON.parse(fs.readFileSync(shareFile, 'utf8')) : null;
+  const selected = share ? share.run : budgeted.run;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -1132,7 +1337,7 @@ function main() {
       {
         head: process.env.ASTRYX_HEAD_SHA ?? null,
         discovered: specs.length,
-        scopeKnown: changedPaths != null,
+        scopeKnown: share ? share.scopeKnown : scopeKnown,
         components,
         ownedBy,
         audit: plan && {component: audited, ...plan},
@@ -1144,7 +1349,9 @@ function main() {
     )}\n`,
   );
   console.log(
-    `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
+    shareFile != null
+      ? `PR accessibility specs, leg ${legIndex} of ${ofValue ?? '?'}: the ${selected.length} spec files of this leg's share.`
+      : `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
   );
   for (const {file, reason} of selected) console.log(`  ${file}  (${reason})`);
   for (const {file, reason} of notRun) {
@@ -1160,7 +1367,9 @@ function main() {
 
   let status = 0;
   // A component audit's own axe pass, held until its open state is ready.
-  if (plan) {
+  // It runs once, on the first leg; every leg keeps the audit's environment
+  // for the audit specs in its share.
+  if (plan && legIndex === 1) {
     const axe = spawnSync(process.execPath, auditArgs(plan), {
       cwd: root,
       stdio: 'inherit',
