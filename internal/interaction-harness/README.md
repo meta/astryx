@@ -226,7 +226,11 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`BusyWindowTooLateError`. A run that came short of `minProgressMs` by the
+deadline rejects with `FrameStarvationError` when no frame came for longer
+than `FRAME_STARVATION_MS` during the wait. Otherwise it rejects with
+`BusyRunShortError`. With no run at all, it rejects with "no animation
+started". With `pseudoElement` (`'::before'` or
 `'::after'`), only that pseudo-element's animations on `during` itself count,
 as `sampleCurve` reads them: a child's animation, such as a switch thumb's
 press, does not start the block. With `property`, only animations that set

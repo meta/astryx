@@ -61,6 +61,7 @@ import {
   animationStoryboard,
   castStoryboard,
   blockMainThread,
+  BusyRunShortError,
   BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
   BusyWindowTooLateError,
@@ -1989,6 +1990,101 @@ test.describe('frame evidence', () => {
     expect(left, message).not.toBeNull();
     // Seen at a look soon after it left, not at the wait's timeout.
     expect(Number(left?.[1])).toBeLessThan(5_000);
+  });
+
+  test("blockMainThread's deadline names why a run of its during came short: paused, first seen late, or a page starved of frames", async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<div id="box" style="width:80px;height:80px;background:#08f"></div>',
+    );
+    const box = page.locator('#box');
+    const fade = async () =>
+      box.evaluate(el => {
+        for (const run of el.getAnimations()) {
+          run.cancel();
+        }
+        return el.animate([{opacity: 1}, {opacity: 0.2}], {duration: 6000})
+          .playState;
+      });
+    // A paused run: frames keep coming, and its time stands still.
+    await fade();
+    await box.evaluate(el => {
+      const [run] = el.getAnimations();
+      run.pause();
+      run.currentTime = 100;
+    });
+    const paused = await blockMainThread(page, 50, {
+      during: box,
+      minProgressMs: 1000,
+      timeout: 600,
+    }).catch((error: unknown) => error as Error);
+    expect(paused).toBeInstanceOf(BusyRunShortError);
+    expect(String(paused)).toMatch(
+      /reached 100 of its minProgressMs 1000 ms by the deadline, first seen \d+ ms into the \d+ ms wait \(paused, rate 1\)\. Frames kept coming/,
+    );
+    // A run first seen late, with frames still dense: named with the time
+    // the page first saw it.
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.cancel();
+      }
+    });
+    const late = blockMainThread(page, 50, {
+      during: box,
+      minProgressMs: 1500,
+      timeout: 900,
+    }).catch((error: unknown) => error as Error);
+    await box.evaluate(el => {
+      setTimeout(() => {
+        el.animate([{opacity: 1}, {opacity: 0.2}], {duration: 6000});
+      }, 500);
+    });
+    const lateError = await late;
+    expect(lateError).toBeInstanceOf(BusyRunShortError);
+    expect(String(lateError)).toMatch(
+      /reached \d+ of its minProgressMs 1500 ms by the deadline, first seen \d+ ms into the \d+ ms wait \(running, rate 1\)/,
+    );
+    expect(
+      Number(/first seen (\d+) ms/.exec(String(lateError))?.[1]),
+    ).toBeGreaterThanOrEqual(400);
+    // A page whose main thread runs 400 ms tasks back to back draws a frame
+    // only between them: starved, by name.
+    await fade();
+    await page.evaluate(() => {
+      const w = window as unknown as {spin?: boolean};
+      w.spin = true;
+      const spin = () => {
+        if (w.spin !== true) {
+          return;
+        }
+        const from = performance.now();
+        while (performance.now() - from < 400) {
+          // Holds the main thread.
+        }
+        setTimeout(spin, 0);
+      };
+      setTimeout(spin, 0);
+    });
+    const starved = await blockMainThread(page, 50, {
+      during: box,
+      minProgressMs: 5000,
+      timeout: 1500,
+    }).catch((error: unknown) => error as Error);
+    await page.evaluate(() => {
+      (window as unknown as {spin?: boolean}).spin = false;
+    });
+    expect(starved).toBeInstanceOf(FrameStarvationError);
+    expect(String(starved)).toMatch(/blockMainThread: the page drew \d+/);
+    // No run at all keeps its own message.
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.cancel();
+      }
+    });
+    await expect(
+      blockMainThread(page, 50, {during: box, timeout: 500}),
+    ).rejects.toThrow(/no animation started/);
   });
 
   test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
