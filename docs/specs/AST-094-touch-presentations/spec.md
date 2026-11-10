@@ -1409,8 +1409,7 @@ Rejected: cancelling moves only after the pan begins.
 The shared scroll-edge pan holds a finger only once travel along its axis
 reaches a tap's 5 px wobble, so a tap's click survives in every component that
 uses it. The trade: a wobble toward the edge from 5 px until the pan begins at
-10 pt loses its click. Mobile Safari commits its native pan on a kept first
-move of 5 px and not on one of 4 px (iOS 26.2 simulator, measured Nov 9 2026).
+10 pt loses its click. The 5 px point is DEC-29's Mobile Safari reading.
 
 ### DEC-25 — A pager pages as UIKit measures it
 

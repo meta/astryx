@@ -46,6 +46,7 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
+import {TAP_WOBBLE} from './tapWobble';
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
@@ -100,18 +101,6 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
 }
 
 const ZERO: Point = {x: 0, y: 0};
-
-/**
- * A tap's wobble, px. A scroll-edge pan leaves moves inside it to the
- * browser, because WebKit ends a touch's click when one of its moves is
- * cancelled. Mobile Safari commits its native pan on a kept move this long,
- * so the hold starts at it.
- * @source measured: Mobile Safari, iOS 26.2 simulator (iPhone 17 Pro), HID
- *   swipes down a BottomSheet's list at its top, Nov 9 2026. A kept first
- *   move of 4 px, its later moves cancelled, commits no native pan (3 of 3).
- *   A kept first move of 5 px commits it (4 of 5).
- */
-const TAP_WOBBLE = 5;
 
 const DIRECTION_VECTORS: Partial<Record<PanDirection, Point>> = {
   left: {x: -1, y: 0},
