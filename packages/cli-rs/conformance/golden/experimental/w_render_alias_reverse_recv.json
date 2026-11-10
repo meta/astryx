@@ -1,0 +1,37 @@
+{
+ "id": "w_render_alias_reverse_recv",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "aliased.html",
+  "--out",
+  "recv/new/page.tsx"
+ ],
+ "fixture": "renderpages",
+ "stdout": "Restored recv/new/page.tsx\n\ninput:  aliased.html\nmode:   embedded\nexact:  true\noutput: recv/new/page.tsx\nfiles:  recv/new/page.tsx, recv/new/src/components/Card.tsx, recv/new/src/data/info.json, recv/new/local.tsx\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "renderpages/recv/new/local.tsx",
+   "status": "created",
+   "text": "export function Thing() { return <p>thing</p>; }\n"
+  },
+  {
+   "path": "renderpages/recv/new/page.tsx",
+   "status": "created",
+   "text": "import {Card} from '@/components/Card';\nimport {Thing} from './local';\nexport default function Page() {\n  return <main><h1>Aliased</h1><Card title=\"One\" /><Thing /></main>;\n}\n"
+  },
+  {
+   "path": "renderpages/recv/new/src/components/Card.tsx",
+   "status": "created",
+   "text": "import {Text} from '@astryxdesign/core';\nimport info from '~data/info.json';\nexport function Card({title}: {title: string}) {\n  return <section><Text>{title} {info.label}</Text></section>;\n}\n"
+  },
+  {
+   "path": "renderpages/recv/new/src/data/info.json",
+   "status": "created",
+   "text": "{\"label\": \"from json\"}\n"
+  }
+ ]
+}

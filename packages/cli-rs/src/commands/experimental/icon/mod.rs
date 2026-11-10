@@ -6,6 +6,8 @@ pub mod authoring;
 pub mod add;
 pub mod generated;
 pub mod library;
+pub mod looks;
+pub mod refresh;
 pub mod writer;
 pub mod ranking;
 
@@ -499,6 +501,32 @@ pub fn add_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
             let strs = |k: &str| -> Vec<String> {
                 data.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
             };
+            if kind == "icon.addVariants" {
+                let n = |k: &str| data.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
+                let missing = strs("missing");
+                let mut blocks = vec![text(&format!(
+                    "[ok] {}: {} icons gained it{}, read from {}.",
+                    st("variant"),
+                    n("added"),
+                    if n("already") > 0 { format!(", {} already had it", n("already")) } else { String::new() },
+                    st("from")
+                ))];
+                let files = strs("files");
+                if !files.is_empty() {
+                    blocks.push(list(&files));
+                }
+                if !missing.is_empty() {
+                    blocks.push(text(&format!(
+                        "{} icons have no {} export in {} and keep none: {}",
+                        missing.len(),
+                        st("variant"),
+                        st("from"),
+                        missing.join(", ")
+                    )));
+                }
+                out.emit(&blocks);
+                return Ok(());
+            }
             if kind == "icon.definitionMatches" {
                 let cli = cli_invocation(&inv.cwd);
                 let matches = data["matches"].as_array().cloned().unwrap_or_default();

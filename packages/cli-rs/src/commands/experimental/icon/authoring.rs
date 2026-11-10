@@ -303,13 +303,24 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
     let set_dir = within(name, &root, "icon set directory")?;
     let doc_file = within(&format!("{name}.doc.mjs"), &set_dir, "icon set descriptor")?;
     let data_file = within(&format!("{name}.icons.json"), &set_dir, "icon set data file")?;
-    if o.from.is_some() && doc_file.exists() && data_file.exists() {
-        // TEMP: refreshing an existing set from its library is not cloned yet.
-        return Err(ierr("experimental icon new-set --from over an existing set is not cloned yet", vec![], "ERR_UNKNOWN"));
+    if let Some(from) = o.from.as_deref().filter(|_| doc_file.exists() && data_file.exists()) {
+        let manifest_path = ih::project_path(&pkg.dir, &pkg.manifest_file);
+        return super::refresh::refresh_icon_set(&super::refresh::RefreshArgs {
+            name,
+            cwd,
+            dry_run: o.dry_run,
+            from,
+            exclude: &o.exclude,
+            looks: o.looks.as_ref(),
+            display_name: o.display_name.as_deref(),
+            description: o.description.as_deref(),
+            root_path: &root_path,
+            manifest_path: &manifest_path,
+        });
     }
     if doc_file.exists() && data_file.exists() && (o.looks.is_some() || o.display_name.as_deref().is_some_and(|s| !s.trim().is_empty()) || o.description.as_deref().is_some_and(|s| !s.trim().is_empty())) {
-        // TEMP: redeclaring an existing set is not cloned yet.
-        return Err(ierr("experimental icon new-set on an existing set is not cloned yet", vec![], "ERR_UNKNOWN"));
+        let manifest_path = ih::project_path(&pkg.dir, &pkg.manifest_file);
+        return super::writer::all_or_nothing(|| redeclare_icon_set(name, o, cwd, &root_path, &manifest_path));
     }
     for f in [&doc_file, &data_file] {
         if f.exists() {
@@ -464,9 +475,45 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
     let manifest_path = ih::project_path(&pkg.dir, &pkg.manifest_file);
     let mut root_receipt = (root_path.clone(), declared.is_none());
     if !o.dry_run {
+        let manifest_before = std::fs::read(&pkg.manifest_file).ok();
+        // Folders the writes create, deepest first, so a rollback removes them.
+        let mut made: Vec<PathBuf> = vec![];
+        for plan in &plans {
+            let mut d = plan.path.parent().map(|p| p.to_path_buf());
+            while let Some(dir) = d {
+                if dir.exists() || made.contains(&dir) {
+                    break;
+                }
+                made.push(dir.clone());
+                d = dir.parent().map(|p| p.to_path_buf());
+            }
+        }
+        made.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
         let rollback = ih::apply_writes(&plans).map_err(add_err)?;
         match iadd::patch_integration_root(&pkg.dir, ICON_SETS_ROOT_KEY, &root_path, false, true) {
-            Ok(r) => root_receipt = r,
+            Ok(r) => {
+                root_receipt = r;
+                if let Err(m) = verify_icon_set(&pkg.manifest_file, &pkg.dir, &pkg.owner, name) {
+                    let message = if root_receipt.1 {
+                        match &manifest_before {
+                            Some(b) => {
+                                let _ = std::fs::write(&pkg.manifest_file, b);
+                            }
+                            None => {
+                                let _ = std::fs::remove_file(&pkg.manifest_file);
+                            }
+                        }
+                        format!("Post-write verification failed: {m}")
+                    } else {
+                        m
+                    };
+                    rollback.run();
+                    for d in &made {
+                        let _ = std::fs::remove_dir(d);
+                    }
+                    return Err(ierr(format!("Failed to write icon-set contribution: {message}"), vec![], "ERR_WRITE_FAILED"));
+                }
+            }
             Err(e) => {
                 rollback.run();
                 return Err(match e {
@@ -626,13 +673,17 @@ fn definition_id(name: &str) -> String {
     out.to_lowercase()
 }
 
-/// `exactDefinitionMap(icons, {})`.
 fn exact_definition_map(icons: &[Value]) -> Map<String, Value> {
+    exact_definition_map_with(icons, &Map::new())
+}
+
+/// `exactDefinitionMap(icons, map)`.
+pub fn exact_definition_map_with(icons: &[Value], map: &Map<String, Value>) -> Map<String, Value> {
     let ids: Vec<&str> = icons.iter().filter_map(|i| i.get("id").and_then(|v| v.as_str())).collect();
-    let mut next = Map::new();
+    let mut next = map.clone();
     for d in crate::discovery::icon_definition_discovery::astryx_icon_definitions().definitions {
         let n = d.name().to_string();
-        if next.contains_key(&n) {
+        if next.get(&n).is_some_and(|v| v.as_str().is_some_and(|x| !x.is_empty())) {
             continue;
         }
         let id = definition_id(&n);
@@ -672,40 +723,7 @@ fn definition_suggestions(icons: &[Value], map: &Map<String, Value>) -> Vec<(Str
 
 /// `resolveDefaultLook` for a new set read from a library.
 fn resolve_default_look(name: &str, given: Option<&(Vec<String>, String, bool)>, module: &str, positions: &super::add::Positions) -> Result<Option<(Vec<String>, String, bool)>, IconError> {
-    let Some(given) = given else { return Ok(None) };
-    if positions.is_empty() {
-        return Ok(Some(given.clone()));
-    }
-    if given.2 {
-        let chosen = &given.1;
-        if !positions.iter().any(|p| p.contains(chosen)) {
-            let sorted: Vec<Vec<String>> = positions.iter().map(|p| super::add::js_sorted(p)).collect();
-            return Err(ierr(
-                format!("\"{chosen}\" is no look of {module}: its exports name their looks with {}. Name one of these words, so each icon's export draws that look.", super::add::described_looks(&sorted)),
-                super::add::style_words(positions).into_iter().map(|w| crate::cli::command::Suggestion::new(format!("--default-variant {w}"), format!("a look {module} names"))).collect(),
-                "ERR_INVALID_ARGUMENT",
-            ));
-        }
-        return Ok(Some(given.clone()));
-    }
-    let words: Vec<Option<String>> = super::library::preferred_look(positions, &[]).into_iter().map(Some).collect();
-    let look = super::add::drawn_word(positions, &words, &given.0);
-    match look {
-        Some(l) if given.0.contains(&l) => Ok(Some((given.0.clone(), l, given.2))),
-        other => {
-            let shown = other.unwrap_or_else(|| "<look>".into());
-            let mut all = vec![shown.clone()];
-            all.extend(given.0.iter().cloned());
-            Err(ierr(
-                format!("None of --variants ({}) is the look {module} is wrapped in by default (\"{shown}\"), and each icon's own export draws the default variant. List it in --variants, or name the default with --default-variant.", given.0.join(", ")),
-                vec![crate::cli::command::Suggestion::new(
-                    format!("astryx experimental icon new-set {name} --from {} --variants {}", super::add::shell_arg(module), all.join(",")),
-                    format!("declare {shown}, the look each icon draws, as the default"),
-                )],
-                "ERR_INVALID_OPTION",
-            ))
-        }
-    }
+    super::looks::resolve_default_look(name, given, None, 0, None, Some((module, positions))).map(|r| r.0)
 }
 
 /// `lookNotes(summary, count, from, looks, name)`.
@@ -736,4 +754,173 @@ fn look_notes(summary: &super::library::LookSummary, count: usize, from: &str, l
             )
         },
     ]
+}
+
+
+/// `describedDoc(source, describe)`.
+fn described_doc(source: &str, display_name: Option<&str>, description: Option<&str>) -> String {
+    let mut out = source.to_string();
+    for (field, value) in [("displayName", display_name), ("description", description)] {
+        let Some(v) = value.map(|v| crate::commands::gap_report::api::js_trim(v).to_string()).filter(|v| !v.is_empty()) else { continue };
+        let re = regress::Regex::with_flags(&format!(r#"^(\s*{field}:\s*)(['"`])(?:\\.|(?!\2).)*\2,?$"#), "mu").unwrap();
+        if let Some(m) = re.find(&out) {
+            let lead = out[m.group(1).unwrap()].to_string();
+            out = format!("{}{lead}{},{}", &out[..m.start()], quote_js(&v), &out[m.end()..]);
+        }
+    }
+    out
+}
+
+/// `redeclareIconSet(name, ...)`: new variants, default or description for
+/// an existing set, in place.
+fn redeclare_icon_set(name: &str, o: &NewSetOptions, cwd: &str, root_path: &str, manifest_path: &str) -> Result<Value, IconError> {
+    let local = super::writer::find_local_icon_set(cwd, Some(name))?;
+    let set = &local.set;
+    let package_dir = local.package_dir.clone();
+    let icons: Vec<Value> = set.data.get("icons").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let current = set.data.get("default").and_then(|d| d.get("variant")).and_then(|v| v.as_str()).map(String::from);
+    let has_adapter = set.data.get("adapter").is_some_and(|a| a.is_object());
+    let drawn = if o.looks.is_some() && !icons.is_empty() {
+        super::add::drawn_looks(set, &package_dir, &|module| {
+            let source = super::add::resolve_icon_source(module, &local).ok()?;
+            Some(super::add::module_naming(&source.file, has_adapter).1)
+        })
+    } else {
+        None
+    };
+    let (looks, _) = super::looks::resolve_default_look(name, o.looks.as_ref(), current.as_deref(), icons.len(), drawn.as_ref(), None)?;
+    let vstr = |v: &Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    if let Some((variants, default, _)) = &looks {
+        let dropped: Vec<String> = icons
+            .iter()
+            .flat_map(|i| {
+                i.get("variants").and_then(|v| v.as_array()).cloned().unwrap_or_default().into_iter().filter(|v| !variants.contains(&vstr(v, "variant"))).map(move |v| format!("{} ({})", vstr(i, "id"), vstr(&v, "variant")))
+            })
+            .collect();
+        if !dropped.is_empty() {
+            let mut keep: Vec<String> = variants.clone();
+            for i in &icons {
+                for v in i.get("variants").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+                    let n = vstr(&v, "variant");
+                    if !keep.contains(&n) {
+                        keep.push(n);
+                    }
+                }
+            }
+            return Err(ierr(
+                format!(
+                    "These icons still have a variant --variants leaves out: {}{}. Keep it in --variants.",
+                    dropped.iter().take(8).cloned().collect::<Vec<_>>().join(", "),
+                    if dropped.len() > 8 { ", …" } else { "" }
+                ),
+                vec![crate::cli::command::Suggestion::new(format!("--variants {}", keep.join(",")), "keep every variant an icon has")],
+                "ERR_INVALID_ARGUMENT",
+            ));
+        }
+        let as_extra: Vec<String> = icons
+            .iter()
+            .filter(|i| i.get("variants").and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|v| vstr(v, "variant") == *default)))
+            .map(|i| vstr(i, "id"))
+            .collect();
+        if !as_extra.is_empty() {
+            return Err(ierr(
+                format!(
+                    "\"{default}\" can't be the default variant: {} icons list it as another look ({}{}), and each icon's own export draws the default.",
+                    as_extra.len(),
+                    as_extra.iter().take(8).cloned().collect::<Vec<_>>().join(", "),
+                    if as_extra.len() > 8 { ", …" } else { "" }
+                ),
+                vec![],
+                "ERR_INVALID_ARGUMENT",
+            ));
+        }
+    }
+    let mut next = set.data.as_object().cloned().unwrap_or_default();
+    if let Some((variants, default, _)) = &looks {
+        next.insert("variants".into(), Value::Array(variants.iter().cloned().map(Value::String).collect()));
+        let mut d = Map::new();
+        d.insert("variant".into(), Value::String(default.clone()));
+        next.insert("default".into(), Value::Object(d));
+    }
+    let next = Value::Object(next);
+    let doc_file = np::join2(&set.dir, &format!("{}.doc.mjs", set.name));
+    let doc_before = std::fs::read_to_string(&doc_file).unwrap_or_default();
+    let doc_after = described_doc(&doc_before, o.display_name.as_deref(), o.description.as_deref());
+    let data_changed = icon_set_data_text(&next) != std::fs::read_to_string(&set.data_path).unwrap_or_default();
+    let mut files = vec![];
+    if data_changed {
+        files.push(np::relative(&package_dir, &set.data_path));
+    }
+    if doc_after != doc_before {
+        files.push(np::relative(&package_dir, &doc_file));
+    }
+    if !o.dry_run {
+        super::writer::all_or_nothing(|| {
+            if data_changed {
+                super::writer::write_icon_set_data(set, &next, &[])?;
+            }
+            if doc_after != doc_before {
+                super::writer::journal_file(&doc_file);
+                std::fs::write(&doc_file, &doc_after).map_err(|e| ierr(format!("Could not write {}: {e}", np::basename(&doc_file)), vec![], "ERR_WRITE_FAILED"))?;
+            }
+            Ok(())
+        })?;
+    }
+    let r = ih::receipt("icon-set", name, Some((root_path.to_string(), false)), manifest_path, &files, o.dry_run);
+    let mut d = r.get("data").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+    d.insert("icons".into(), Value::from(icons.len()));
+    d.insert("updated".into(), Value::Bool(true));
+    let before_variants: Vec<String> = set.data.get("variants").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+    let added: Vec<String> = looks.as_ref().map(|(v, def, _)| v.iter().filter(|x| *x != def && !before_variants.contains(x)).cloned().collect()).unwrap_or_default();
+    let from_for = |variant: &str| -> String {
+        match &drawn {
+            Some(dr) if dr.positions.iter().any(|p| p.iter().any(|w| w == variant)) => super::add::shell_arg(&dr.module),
+            _ => "<module>".into(),
+        }
+    };
+    let mut notes = vec![if files.is_empty() {
+        format!("Icon set \"{name}\" already declares this; nothing changed.")
+    } else {
+        format!("Updated icon set \"{name}\" in place; its icons, map and generated module are unchanged.")
+    }];
+    if !added.is_empty() {
+        notes.push(format!(
+            "Give each icon its {} look: {}, or one icon with `astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set {name}`.",
+            added.join(", "),
+            added.iter().map(|v| format!("`astryx experimental icon add --variant {v} --from {} --all --set {name}`", from_for(v))).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    d.insert("notes".into(), Value::Array(notes.into_iter().map(Value::String).collect()));
+    Ok(Value::Object(d))
+}
+
+pub fn id_words_pub(id: &str) -> Vec<String> {
+    id_words(id)
+}
+
+pub fn definition_suggestions_pub(icons: &[Value], map: &Map<String, Value>) -> Vec<(String, String, String)> {
+    definition_suggestions(icons, map)
+}
+
+pub fn described_doc_pub(source: &str, display_name: Option<&str>, description: Option<&str>) -> String {
+    described_doc(source, display_name, description)
+}
+
+pub fn definition_id_pub(name: &str) -> String {
+    definition_id(name)
+}
+
+
+/// The post-write check: the manifest declares the sets root, and discovery
+/// reads the new set from it.
+fn verify_icon_set(manifest_file: &Path, package_dir: &Path, owner: &str, name: &str) -> Result<(), String> {
+    let m = crate::commands::integration::manifest_load::load_manifest_labeled(manifest_file, "verify").map_err(|e| e.message)?;
+    let Some(declared) = m.get("experimental").and_then(|e| e.get("iconSets")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()) else {
+        return Err("experimental.iconSets root not visible after writing.".into());
+    };
+    let sets_root = within(declared, package_dir, "experimental.iconSets root").map_err(|e| e.message)?;
+    let mut record = crate::discovery::integrations::Record::new();
+    record.insert("name".into(), Value::String(owner.to_string()));
+    record.insert("iconSets".into(), Value::String(path_s(&sets_root)));
+    crate::discovery::contribution_inventory::assert_contribution_visible(&record, "icon-set", name, None)
 }

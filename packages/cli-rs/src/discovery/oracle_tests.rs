@@ -648,3 +648,46 @@ fn matches_js_set_config_string() {
     }
     assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
 }
+
+#[test]
+fn matches_js_package_manager_decisions() {
+    let file = std::env::var("PM_ORACLE").unwrap_or_else(|_| "/tmp/pm-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    for c in &cases {
+        let dir = c["dir"].as_str().unwrap();
+        let d = super::package_manager::decide_package_manager_in(dir);
+        let got = d
+            .as_ref()
+            .map(|d| serde_json::json!({"pm": d.pm, "ambiguous": d.ambiguous, "lockfiles": d.lockfiles.iter().map(|l| l.file).collect::<Vec<_>>()}))
+            .unwrap_or(Value::Null);
+        if got != c["decision"] {
+            failures.push(format!("{dir}: rust {got} js {}", c["decision"]));
+        }
+        // The template needs' text names the lockfiles in this order.
+        if let (Some(d), Some(note)) = (&d, c["notes"].get(0).and_then(|n| n.as_str())) {
+            if d.ambiguous {
+                let names: Vec<&str> = d.lockfiles.iter().map(|l| l.file).collect();
+                let want = format!("has {}, and nothing there says", names.join(" and "));
+                if !note.contains(&want) {
+                    failures.push(format!("{dir}: note {note:?} lacks {want:?}"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn matches_js_element_prop_origins() {
+    use super::module_origins as mo;
+    let file = std::env::var("ELEMPROPS_ORACLE").unwrap_or_else(|_| "/tmp/elemprops-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let f = o["file"].as_str().unwrap();
+    let ser = |v: Vec<Option<mo::Origin>>| Value::Array(v.into_iter().map(|o| o.map(|o| serde_json::json!({"file": o.file, "name": o.name})).unwrap_or(Value::Null)).collect());
+    let sources = ["@astryxdesign/core", "@astryxdesign/core/theme"];
+    let a = ser(mo::element_prop_origins(f, &sources, "Theme", "theme", Some(mo::Unwrap::DefinedThemeBase)));
+    assert_eq!(a, o["unwrapped"], "\n rust {a}\n js   {}", o["unwrapped"]);
+    let b = ser(mo::element_prop_origins(f, &sources, "Theme", "theme", None));
+    assert_eq!(b, o["plain"], "\n rust {b}\n js   {}", o["plain"]);
+}

@@ -1,156 +1,156 @@
 [
- {
-  "id": "postinstall",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "postinstall_--json",
-  "args": [
-   "postinstall",
-   "--json"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "postinstall_@empty",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "postinstall_--json_@empty",
-  "args": [
-   "postinstall",
-   "--json"
-  ],
-  "fixture": "empty",
-  "gen": true
- },
- {
-  "id": "postinstall_@large",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "postinstall_--json_@large",
-  "args": [
-   "postinstall",
-   "--json"
-  ],
-  "fixture": "large",
-  "gen": true
- },
- {
-  "id": "postinstall_@integration",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "postinstall_--json_@integration",
-  "args": [
-   "postinstall",
-   "--json"
-  ],
-  "fixture": "integration",
-  "gen": true
- },
- {
-  "id": "postinstall_@nocore",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "nocore",
-  "gen": true
- },
- {
-  "id": "postinstall_--json_@nocore",
-  "args": [
-   "postinstall",
-   "--json"
-  ],
-  "fixture": "nocore",
-  "gen": true
- },
- {
-  "id": "env-CI_postinstall",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "CI": "1"
+  {
+    "id": "postinstall",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--json",
+    "args": [
+      "postinstall",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "postinstall_@empty",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--json_@empty",
+    "args": [
+      "postinstall",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "postinstall_@large",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--json_@large",
+    "args": [
+      "postinstall",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "postinstall_@integration",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--json_@integration",
+    "args": [
+      "postinstall",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "postinstall_@nocore",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--json_@nocore",
+    "args": [
+      "postinstall",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "env-CI_postinstall",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-npm_config_user_agent_postinstall",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-INIT_CWD_postinstall",
+    "args": [
+      "postinstall"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "INIT_CWD": "/tmp/astryx-conformance/work/app"
+    }
+  },
+  {
+    "id": "postinstall_--help",
+    "args": [
+      "postinstall",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "postinstall_x",
+    "args": [
+      "postinstall",
+      "x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "postinstall_--bogus",
+    "args": [
+      "postinstall",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_postinstall",
+    "args": [
+      "help",
+      "postinstall"
+    ],
+    "fixture": "app",
+    "gen": true
   }
- },
- {
-  "id": "env-npm_config_user_agent_postinstall",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
-  }
- },
- {
-  "id": "env-INIT_CWD_postinstall",
-  "args": [
-   "postinstall"
-  ],
-  "fixture": "app",
-  "gen": true,
-  "env": {
-   "INIT_CWD": "/tmp/astryx-conformance/work/app"
-  }
- },
- {
-  "id": "postinstall_--help",
-  "args": [
-   "postinstall",
-   "--help"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "postinstall_x",
-  "args": [
-   "postinstall",
-   "x"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "postinstall_--bogus",
-  "args": [
-   "postinstall",
-   "--bogus"
-  ],
-  "fixture": "app",
-  "gen": true
- },
- {
-  "id": "help_postinstall",
-  "args": [
-   "help",
-   "postinstall"
-  ],
-  "fixture": "app",
-  "gen": true
- }
 ]

@@ -1,0 +1,14 @@
+{
+ "id": "u3_registry_path_traversal",
+ "args": [
+  "upgrade",
+  "--registry",
+  "--path",
+  "../elsewhere"
+ ],
+ "fixture": "upgrade-registry",
+ "stdout": "\nUpgrade\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

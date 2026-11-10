@@ -1,0 +1,930 @@
+[
+ {
+  "name": "read_undef",
+  "source": "const o = undefined; o.x;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'x')"
+  }
+ },
+ {
+  "name": "read_null",
+  "source": "const o = null; o.x;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of null (reading 'x')"
+  }
+ },
+ {
+  "name": "read_undef_prop",
+  "source": "const o = {}; o.a.b;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'b')"
+  }
+ },
+ {
+  "name": "read_undef_index",
+  "source": "const o = undefined; o[0];",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading '0')"
+  }
+ },
+ {
+  "name": "read_undef_computed",
+  "source": "const o = undefined; const k = 'z'; o[k];",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'z')"
+  }
+ },
+ {
+  "name": "set_undef",
+  "source": "const o = undefined; o.x = 1;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot set properties of undefined (setting 'x')"
+  }
+ },
+ {
+  "name": "set_null",
+  "source": "const o = null; o.x = 1;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot set properties of null (setting 'x')"
+  }
+ },
+ {
+  "name": "call_undef_member",
+  "source": "const o = {}; o.foo();",
+  "error": {
+   "name": "TypeError",
+   "message": "o.foo is not a function"
+  }
+ },
+ {
+  "name": "call_nonfn",
+  "source": "const f = 1; f();",
+  "error": {
+   "name": "TypeError",
+   "message": "f is not a function"
+  }
+ },
+ {
+  "name": "call_nested",
+  "source": "const o = {a: {}}; o.a.b();",
+  "error": {
+   "name": "TypeError",
+   "message": "o.a.b is not a function"
+  }
+ },
+ {
+  "name": "call_computed",
+  "source": "const o = {}; o['x-y']();",
+  "error": {
+   "name": "TypeError",
+   "message": "o.x-y is not a function"
+  }
+ },
+ {
+  "name": "new_nonctor",
+  "source": "const f = () => 1; new f();",
+  "error": {
+   "name": "TypeError",
+   "message": "f is not a constructor"
+  }
+ },
+ {
+  "name": "new_undef",
+  "source": "const o = {}; new o.X();",
+  "error": {
+   "name": "TypeError",
+   "message": "o.X is not a constructor"
+  }
+ },
+ {
+  "name": "iter_undef",
+  "source": "const x = undefined; for (const a of x) {}",
+  "error": {
+   "name": "TypeError",
+   "message": "x is not iterable"
+  }
+ },
+ {
+  "name": "iter_obj",
+  "source": "const x = {}; for (const a of x) {}",
+  "error": {
+   "name": "TypeError",
+   "message": "x is not iterable"
+  }
+ },
+ {
+  "name": "spread_undef",
+  "source": "const x = undefined; [...x];",
+  "error": {
+   "name": "TypeError",
+   "message": "x is not iterable"
+  }
+ },
+ {
+  "name": "spread_obj",
+  "source": "const x = {}; [...x];",
+  "error": {
+   "name": "TypeError",
+   "message": "x is not iterable"
+  }
+ },
+ {
+  "name": "destructure_undef",
+  "source": "const {a} = undefined;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'a' of 'undefined' as it is undefined."
+  }
+ },
+ {
+  "name": "destructure_null",
+  "source": "const {a} = null;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'a' of 'null' as it is null."
+  }
+ },
+ {
+  "name": "destructure_arr_undef",
+  "source": "const [a] = undefined;",
+  "error": {
+   "name": "TypeError",
+   "message": "undefined is not iterable"
+  }
+ },
+ {
+  "name": "keys_undef",
+  "source": "Object.keys(undefined);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert undefined or null to object"
+  }
+ },
+ {
+  "name": "entries_null",
+  "source": "Object.entries(null);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert undefined or null to object"
+  }
+ },
+ {
+  "name": "assign_undef",
+  "source": "Object.assign(undefined, {});",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert undefined or null to object"
+  }
+ },
+ {
+  "name": "const_assign",
+  "source": "const c = 1; c = 2;",
+  "error": {
+   "name": "TypeError",
+   "message": "Assignment to constant variable."
+  }
+ },
+ {
+  "name": "tdz",
+  "source": "x; let x = 1;",
+  "error": {
+   "name": "ReferenceError",
+   "message": "Cannot access 'x' before initialization"
+  }
+ },
+ {
+  "name": "undeclared",
+  "source": "notDefinedAnywhere;",
+  "error": {
+   "name": "ReferenceError",
+   "message": "notDefinedAnywhere is not defined"
+  }
+ },
+ {
+  "name": "json_circular",
+  "source": "const a = {}; a.self = a; JSON.stringify(a);",
+  "error": {
+   "name": "TypeError",
+   "message": "Converting circular structure to JSON\n    --> starting at object with constructor 'Object'\n    --- property 'self' closes the circle"
+  }
+ },
+ {
+  "name": "json_bigint",
+  "source": "JSON.stringify({a: 1n});",
+  "error": {
+   "name": "TypeError",
+   "message": "Do not know how to serialize a BigInt"
+  }
+ },
+ {
+  "name": "bigint_mix",
+  "source": "1n + 1;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot mix BigInt and other types, use explicit conversions"
+  }
+ },
+ {
+  "name": "bigint_from_float",
+  "source": "BigInt(1.5);",
+  "error": {
+   "name": "RangeError",
+   "message": "The number 1.5 cannot be converted to a BigInt because it is not an integer"
+  }
+ },
+ {
+  "name": "invalid_array_len",
+  "source": "new Array(-1);",
+  "error": {
+   "name": "RangeError",
+   "message": "Invalid array length"
+  }
+ },
+ {
+  "name": "to_fixed",
+  "source": "(1).toFixed(101);",
+  "error": {
+   "name": "RangeError",
+   "message": "toFixed() digits argument must be between 0 and 100"
+  }
+ },
+ {
+  "name": "repeat_neg",
+  "source": "'a'.repeat(-1);",
+  "error": {
+   "name": "RangeError",
+   "message": "Invalid count value: -1"
+  }
+ },
+ {
+  "name": "max_stack",
+  "source": "function r() { return r(); } r();",
+  "error": {
+   "name": "RangeError",
+   "message": "Maximum call stack size exceeded"
+  }
+ },
+ {
+  "name": "symbol_to_string",
+  "source": "const s = Symbol('q'); '' + s;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert a Symbol value to a string"
+  }
+ },
+ {
+  "name": "in_non_object",
+  "source": "'a' in 'str';",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot use 'in' operator to search for 'a' in str"
+  }
+ },
+ {
+  "name": "instanceof_non_callable",
+  "source": "({}) instanceof {};",
+  "error": {
+   "name": "TypeError",
+   "message": "Right-hand side of 'instanceof' is not callable"
+  }
+ },
+ {
+  "name": "class_call",
+  "source": "class A {} A();",
+  "error": {
+   "name": "TypeError",
+   "message": "Class constructor A cannot be invoked without 'new'"
+  }
+ },
+ {
+  "name": "super_missing",
+  "source": "class A extends Object { constructor() { this.x = 1; } } new A();",
+  "error": {
+   "name": "ReferenceError",
+   "message": "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+  }
+ },
+ {
+  "name": "frozen_set",
+  "source": "'use strict'; const o = Object.freeze({a: 1}); o.a = 2;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot assign to read only property 'a' of object '#<Object>'"
+  }
+ },
+ {
+  "name": "define_nonext",
+  "source": "Object.defineProperty(Object.preventExtensions({}), 'a', {value: 1});",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot define property a, object is not extensible"
+  }
+ },
+ {
+  "name": "reduce_empty",
+  "source": "[].reduce((a, b) => a);",
+  "error": {
+   "name": "TypeError",
+   "message": "Reduce of empty array with no initial value"
+  }
+ },
+ {
+  "name": "regex_invalid",
+  "source": "new RegExp('[');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /[/: Unterminated character class"
+  }
+ },
+ {
+  "name": "uri_malformed",
+  "source": "decodeURIComponent('%');",
+  "error": {
+   "name": "URIError",
+   "message": "URI malformed"
+  }
+ },
+ {
+  "name": "throw_string",
+  "source": "throw 'plain';",
+  "error": {
+   "name": "",
+   "message": "plain"
+  }
+ },
+ {
+  "name": "promise_reject",
+  "source": "await Promise.reject(new TypeError('custom'));",
+  "error": {
+   "name": "TypeError",
+   "message": "custom"
+  }
+ },
+ {
+  "name": "getter_undef_chain",
+  "source": "const t = {}; Object.keys(t.tokens);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert undefined or null to object"
+  }
+ },
+ {
+  "name": "map_nonfn",
+  "source": "[1].map(5);",
+  "error": {
+   "name": "TypeError",
+   "message": "number 5 is not a function"
+  }
+ },
+ {
+  "name": "proto_null",
+  "source": "Object.setPrototypeOf(1);",
+  "error": {
+   "name": "TypeError",
+   "message": "Object prototype may only be an Object or null: undefined"
+  }
+ },
+ {
+  "name": "date_invalid",
+  "source": "new Date(NaN).toISOString();",
+  "error": {
+   "name": "RangeError",
+   "message": "Invalid time value"
+  }
+ },
+ {
+  "name": "number_tostring_radix",
+  "source": "(10).toString(1);",
+  "error": {
+   "name": "RangeError",
+   "message": "toString() radix argument must be between 2 and 36"
+  }
+ },
+ {
+  "name": "normalize_bad",
+  "source": "'a'.normalize('x');",
+  "error": {
+   "name": "RangeError",
+   "message": "The normalization form should be one of NFC, NFD, NFKC, NFKD."
+  }
+ },
+ {
+  "name": "private_missing",
+  "source": "class A { #x; static g(o) { return o.#x; } } A.g({});",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read private member #x from an object whose class did not declare it"
+  }
+ },
+ {
+  "name": "optional_call",
+  "source": "const o = {}; o.a?.b();  o.c.d;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'd')"
+  }
+ },
+ {
+  "name": "array_destructure_nonit",
+  "source": "const [a] = {};",
+  "error": {
+   "name": "TypeError",
+   "message": "{} is not iterable"
+  }
+ },
+ {
+  "name": "weakmap_key",
+  "source": "new WeakMap().set(1, 1);",
+  "error": {
+   "name": "TypeError",
+   "message": "Invalid value used as weak map key"
+  }
+ },
+ {
+  "name": "c0",
+  "source": "const o = {}; const k = 'q'; o[k]();",
+  "error": {
+   "name": "TypeError",
+   "message": "o[k] is not a function"
+  }
+ },
+ {
+  "name": "c1",
+  "source": "const a = [1]; a[0]();",
+  "error": {
+   "name": "TypeError",
+   "message": "a[0] is not a function"
+  }
+ },
+ {
+  "name": "c2",
+  "source": "const a = {b() { return {}; }}; a.b().c();",
+  "error": {
+   "name": "TypeError",
+   "message": "a.b(...).c is not a function"
+  }
+ },
+ {
+  "name": "c3",
+  "source": "const f = 1; (0, f)();",
+  "error": {
+   "name": "TypeError",
+   "message": "(0 , f) is not a function"
+  }
+ },
+ {
+  "name": "c4",
+  "source": "const o = {}; new o.X.Y();",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'Y')"
+  }
+ },
+ {
+  "name": "c5",
+  "source": "const o = {a: {}}; o?.a.b();",
+  "error": {
+   "name": "TypeError",
+   "message": "o?.a.b is not a function"
+  }
+ },
+ {
+  "name": "c6",
+  "source": "class A { m() { this.x(); } } new A().m();",
+  "error": {
+   "name": "TypeError",
+   "message": "this.x is not a function"
+  }
+ },
+ {
+  "name": "c7",
+  "source": "const o = {}; o['a b']();",
+  "error": {
+   "name": "TypeError",
+   "message": "o.a b is not a function"
+  }
+ },
+ {
+  "name": "c8",
+  "source": "const s = Symbol('q'); const o = {}; o[s]();",
+  "error": {
+   "name": "TypeError",
+   "message": "o[s] is not a function"
+  }
+ },
+ {
+  "name": "c9",
+  "source": "const o = {}; o.a.b.c();",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'b')"
+  }
+ },
+ {
+  "name": "c10",
+  "source": "undefinedFn?.();",
+  "error": {
+   "name": "ReferenceError",
+   "message": "undefinedFn is not defined"
+  }
+ },
+ {
+  "name": "c11",
+  "source": "const x = 5; x.toFixed.call.y();",
+  "error": {
+   "name": "TypeError",
+   "message": "x.toFixed.call.y is not a function"
+  }
+ },
+ {
+  "name": "c12",
+  "source": "const a = [() => 1]; a[0].z();",
+  "error": {
+   "name": "TypeError",
+   "message": "a[0].z is not a function"
+  }
+ },
+ {
+  "name": "c13",
+  "source": "const g = () => ({}); g()();",
+  "error": {
+   "name": "TypeError",
+   "message": "g(...) is not a function"
+  }
+ },
+ {
+  "name": "c14",
+  "source": "const t = `x`; t();",
+  "error": {
+   "name": "TypeError",
+   "message": "t is not a function"
+  }
+ },
+ {
+  "name": "c15",
+  "source": "const o = {}; o[1 + 1]();",
+  "error": {
+   "name": "TypeError",
+   "message": "o[2] is not a function"
+  }
+ },
+ {
+  "name": "c16",
+  "source": "const o = {f: 1}; o.f`tpl`;",
+  "error": {
+   "name": "TypeError",
+   "message": "o.f is not a function"
+  }
+ },
+ {
+  "name": "c17",
+  "source": "const o = {}; for (const x of o.items) {}",
+  "error": {
+   "name": "TypeError",
+   "message": "o.items is not iterable"
+  }
+ },
+ {
+  "name": "c18",
+  "source": "const f = () => undefined; for (const x of f()) {}",
+  "error": {
+   "name": "TypeError",
+   "message": "f is not a function or its return value is not iterable"
+  }
+ },
+ {
+  "name": "c19",
+  "source": "const o = {}; const [a] = o.list;",
+  "error": {
+   "name": "TypeError",
+   "message": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))"
+  }
+ },
+ {
+  "name": "c20",
+  "source": "const o = {}; [...o.list];",
+  "error": {
+   "name": "TypeError",
+   "message": "o.list is not iterable"
+  }
+ },
+ {
+  "name": "c21",
+  "source": "const o = {}; Math.max(...o.list);",
+  "error": {
+   "name": "TypeError",
+   "message": "o.list is not iterable (cannot read property undefined)"
+  }
+ },
+ {
+  "name": "c22",
+  "source": "const o = {}; const {a} = o.b;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'a' of 'o.b' as it is undefined."
+  }
+ },
+ {
+  "name": "c23",
+  "source": "const {a: {b}} = {a: undefined};",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'b')"
+  }
+ },
+ {
+  "name": "c24",
+  "source": "function f({a}) {} f();",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'a' of 'undefined' as it is undefined."
+  }
+ },
+ {
+  "name": "c25",
+  "source": "const o = null; const {x, y} = o;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'x' of 'o' as it is null."
+  }
+ },
+ {
+  "name": "c26",
+  "source": "const {} = null;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure 'null' as it is null."
+  }
+ },
+ {
+  "name": "c27",
+  "source": "const [x] = null;",
+  "error": {
+   "name": "TypeError",
+   "message": "null is not iterable"
+  }
+ },
+ {
+  "name": "c28",
+  "source": "const arr = 5; for (const x of arr) {}",
+  "error": {
+   "name": "TypeError",
+   "message": "arr is not iterable"
+  }
+ },
+ {
+  "name": "c29",
+  "source": "new Map(5);",
+  "error": {
+   "name": "TypeError",
+   "message": "number 5 is not iterable (cannot read property Symbol(Symbol.iterator))"
+  }
+ },
+ {
+  "name": "c31",
+  "source": "Array.from(5).foo.bar;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'bar')"
+  }
+ },
+ {
+  "name": "c32",
+  "source": "Object.entries(undefined);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot convert undefined or null to object"
+  }
+ },
+ {
+  "name": "c33",
+  "source": "[1,2].forEach(undefined);",
+  "error": {
+   "name": "TypeError",
+   "message": "undefined is not a function"
+  }
+ },
+ {
+  "name": "c34",
+  "source": "[1].map({});",
+  "error": {
+   "name": "TypeError",
+   "message": "object is not a function"
+  }
+ },
+ {
+  "name": "c35",
+  "source": "[1].map('s');",
+  "error": {
+   "name": "TypeError",
+   "message": "string \"s\" is not a function"
+  }
+ },
+ {
+  "name": "c36",
+  "source": "[1].filter(null);",
+  "error": {
+   "name": "TypeError",
+   "message": "object null is not a function"
+  }
+ },
+ {
+  "name": "c37",
+  "source": "new Set().forEach(1);",
+  "error": {
+   "name": "TypeError",
+   "message": "number 1 is not a function"
+  }
+ },
+ {
+  "name": "c38",
+  "source": "'x'.replace(/x/, 3).foo.bar;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'bar')"
+  }
+ },
+ {
+  "name": "c39",
+  "source": "JSON.parse('{bad');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+  }
+ },
+ {
+  "name": "json_deep",
+  "source": "const a={x:{y:[1,{}]}}; a.x.y[1].back=a.x; JSON.stringify(a);",
+  "error": {
+   "name": "TypeError",
+   "message": "Converting circular structure to JSON\n    --> starting at object with constructor 'Object'\n    |     property 'y' -> object with constructor 'Array'\n    |     index 1 -> object with constructor 'Object'\n    --- property 'back' closes the circle"
+  }
+ },
+ {
+  "name": "json_arr",
+  "source": "const b=[]; b.push(b); JSON.stringify(b);",
+  "error": {
+   "name": "TypeError",
+   "message": "Converting circular structure to JSON\n    --> starting at object with constructor 'Array'\n    --- index 0 closes the circle"
+  }
+ },
+ {
+  "name": "json_class",
+  "source": "class K{}; const k=new K(); k.me=k; JSON.stringify({k});",
+  "error": {
+   "name": "TypeError",
+   "message": "Converting circular structure to JSON\n    --> starting at object with constructor 'K'\n    --- property 'me' closes the circle"
+  }
+ },
+ {
+  "name": "regex_group",
+  "source": "new RegExp('(');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /(/: Unterminated group"
+  }
+ },
+ {
+  "name": "regex_paren",
+  "source": "new RegExp(')');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /)/: Unmatched ')'"
+  }
+ },
+ {
+  "name": "regex_repeat",
+  "source": "new RegExp('a**');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /a**/: Nothing to repeat"
+  }
+ },
+ {
+  "name": "regex_range",
+  "source": "new RegExp('[z-a]');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /[z-a]/: Range out of order in character class"
+  }
+ },
+ {
+  "name": "regex_flags",
+  "source": "new RegExp('a', 'gg');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid flags supplied to RegExp constructor 'gg'"
+  }
+ },
+ {
+  "name": "regex_escape",
+  "source": "new RegExp('\\\\');",
+  "error": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: /\\/: \\ at end of pattern"
+  }
+ },
+ {
+  "name": "param_destructure",
+  "source": "function f({a}) {} f(null);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot destructure property 'a' of 'object null' as it is null."
+  }
+ },
+ {
+  "name": "nested_arr",
+  "source": "const [[a]] = [undefined];",
+  "error": {
+   "name": "TypeError",
+   "message": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))"
+  }
+ },
+ {
+  "name": "map_foreach",
+  "source": "new Map().forEach('x');",
+  "error": {
+   "name": "TypeError",
+   "message": "string \"x\" is not a function"
+  }
+ },
+ {
+  "name": "frozen_arr",
+  "source": "'use strict'; const a = Object.freeze([1]); a[0] = 2;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot assign to read only property '0' of object '[object Array]'"
+  }
+ },
+ {
+  "name": "nonext_add",
+  "source": "'use strict'; const o = Object.preventExtensions({}); o.z = 1;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot add property z, object is not extensible"
+  }
+ },
+ {
+  "name": "class_extends_null_call",
+  "source": "class A { static m() { return this.q(); } } A.m();",
+  "error": {
+   "name": "TypeError",
+   "message": "this.q is not a function"
+  }
+ },
+ {
+  "name": "super_prop",
+  "source": "class A { m() { return super.zz(); } } new A().m();",
+  "error": {
+   "name": "TypeError",
+   "message": "(intermediate value).zz is not a function"
+  }
+ },
+ {
+  "name": "getter_throw",
+  "source": "const o = { get x() { return this.nope.deep; } }; o.x;",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'deep')"
+  }
+ },
+ {
+  "name": "computed_member_call",
+  "source": "const o = {}; const k = 'a'; o[k].b();",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot read properties of undefined (reading 'b')"
+  }
+ },
+ {
+  "name": "private_in",
+  "source": "class A { #p; static t(o) { return #p in o; } } A.t(1);",
+  "error": {
+   "name": "TypeError",
+   "message": "Cannot use 'in' operator to search for '#p' in 1"
+  }
+ },
+ {
+  "name": "tdz_fn",
+  "source": "function f() { return y; } f(); let y = 1;",
+  "error": {
+   "name": "ReferenceError",
+   "message": "Cannot access 'y' before initialization"
+  }
+ },
+ {
+  "name": "tdz_class",
+  "source": "new C(); class C {}",
+  "error": {
+   "name": "ReferenceError",
+   "message": "Cannot access 'C' before initialization"
+  }
+ }
+]

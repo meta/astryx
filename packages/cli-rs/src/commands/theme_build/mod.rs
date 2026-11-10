@@ -7,6 +7,7 @@ pub mod nodepath;
 pub mod build_impl;
 pub mod coredocs;
 pub mod fmt;
+pub use build_impl::{check_up_to_date, validate_private_inputs};
 pub mod family;
 pub mod familybuild;
 pub mod fonts;

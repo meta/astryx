@@ -1,6 +1,6 @@
 // An app with an older published @astryxdesign/core, installed from its npm
-// tarball (cached under /tmp/astryx-conformance/npm-cache; downloaded once
-// through the proxy when missing).
+// tarball (cached under /tmp/astryx-conformance/npm-cache; downloaded once with
+// npm when missing, using the environment's proxy settings if any).
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -12,7 +12,6 @@ function tarball(version) {
   if (fs.existsSync(file)) return file;
   fs.mkdirSync(CACHE, {recursive: true});
   const r = spawnSync('npm', ['pack', `@astryxdesign/core@${version}`, '--silent', '--pack-destination', CACHE], {
-    env: {...process.env, https_proxy: process.env.https_proxy, http_proxy: process.env.http_proxy},
     encoding: 'utf8',
   });
   if (r.status !== 0 || !fs.existsSync(file)) throw new Error(`could not download @astryxdesign/core@${version}: ${r.stderr}`);

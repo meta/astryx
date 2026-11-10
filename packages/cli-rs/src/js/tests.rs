@@ -749,3 +749,45 @@ fn jiti_sync_unknown_extension_loads_as_js() {
     let e = import_module_jiti(&d.join("t3.ts"), &opts, &not_sync).unwrap_err();
     assert!(e.message.starts_with("Unknown file extension \".css\""), "{}", e.message);
 }
+
+/// Runtime errors read as V8 words them (recorded by
+/// testdata/runtime-oracle.mjs).
+#[test]
+fn runtime_errors_match_node() {
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cases: Vec<Value> = serde_json::from_str(&fs::read_to_string(crate_dir.join("src/js/testdata/runtime.json")).unwrap()).unwrap();
+    let d = tmp("runtime");
+    let mut bad = Vec::new();
+    for c in &cases {
+        let name = c["name"].as_str().unwrap();
+        let f = d.join(format!("{name}.mjs"));
+        fs::write(&f, format!("{}\nexport default 1;\n", c["source"].as_str().unwrap())).unwrap();
+        let got = match import_module(&f, &ImportOptions::default()) {
+            Ok(_) => Value::Null,
+            Err(e) => serde_json::json!({"name": e.name, "message": e.message}),
+        };
+        let want = c["error"].clone();
+        if got != want {
+            bad.push(format!("{name}: {}\n  got:  {got}\n  want: {want}", c["source"].as_str().unwrap()));
+        }
+    }
+    eprintln!("{}/{} match", cases.len() - bad.len(), cases.len());
+    assert!(bad.is_empty(), "{} differ:\n{}", bad.len(), bad.join("\n"));
+}
+
+#[test]
+#[ignore]
+fn parse_only_probe() {
+    let p = std::env::var("JS_PROBE").unwrap();
+    let text = fs::read_to_string(&p).unwrap();
+    let wrapped = format!("(function (exports, require, module, __filename, __dirname) {{{text}\n}})");
+    let mut ctx = boa_engine::Context::default();
+    let t = std::time::Instant::now();
+    let s = boa_engine::Script::parse(boa_engine::Source::from_bytes(wrapped.as_str()), None, &mut ctx).unwrap();
+    eprintln!("parse {:?}", t.elapsed());
+    if std::env::var("JS_COMPILE").is_ok() {
+        let t = std::time::Instant::now();
+        let _ = s.codeblock(&mut ctx).unwrap();
+        eprintln!("compile {:?}", t.elapsed());
+    }
+}

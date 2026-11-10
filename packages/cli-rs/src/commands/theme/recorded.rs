@@ -52,7 +52,12 @@ fn import_artifact(specifier: &str, cwd: &str) -> Result<Option<Namespace>, JsEr
     if !Path::new(&target).exists() {
         return Ok(None);
     }
-    crate::js::import_module(Path::new(&target), &ImportOptions { jsx: true, fresh: true }).map(Some)
+    let jiti = crate::js::JitiOptions {
+        force: true,
+        extensions: Some([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts"].iter().map(|e| e.to_string()).collect()),
+        ..Default::default()
+    };
+    crate::js::import_module_jiti(Path::new(&target), &ImportOptions { jsx: true, fresh: true }, &jiti).map(Some)
 }
 
 fn try_artifact(specifier: &str, cwd: &str) -> Result<Artifact, JsError> {

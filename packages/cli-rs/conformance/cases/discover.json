@@ -1012,7 +1012,7 @@
     "id": "argv_discover_-",
     "args": [
       "discover",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2087,7 +2087,7 @@
     "id": "discover_-",
     "args": [
       "discover",
-      "\u4e2d\u6587"
+      "中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2096,7 +2096,7 @@
     "id": "discover_-_--json",
     "args": [
       "discover",
-      "\u4e2d\u6587",
+      "中文",
       "--json"
     ],
     "fixture": "app",
@@ -3241,7 +3241,7 @@
     "id": "discover_AlertDialog-Delete",
     "args": [
       "discover",
-      "AlertDialog \u2014 Delete"
+      "AlertDialog — Delete"
     ],
     "fixture": "app",
     "gen": true
@@ -3250,7 +3250,7 @@
     "id": "discover_AlertDialog-Loading",
     "args": [
       "discover",
-      "AlertDialog \u2014 Loading"
+      "AlertDialog — Loading"
     ],
     "fixture": "app",
     "gen": true
@@ -3268,7 +3268,7 @@
     "id": "discover_AppShell-Content-Only",
     "args": [
       "discover",
-      "AppShell \u2014 Content Only"
+      "AppShell — Content Only"
     ],
     "fixture": "app",
     "gen": true
@@ -3277,7 +3277,7 @@
     "id": "discover_AppShell-Side-Nav-Only",
     "args": [
       "discover",
-      "AppShell \u2014 Side Nav Only"
+      "AppShell — Side Nav Only"
     ],
     "fixture": "app",
     "gen": true
@@ -3286,7 +3286,7 @@
     "id": "discover_AppShell-Top-Nav-Only",
     "args": [
       "discover",
-      "AppShell \u2014 Top Nav Only"
+      "AppShell — Top Nav Only"
     ],
     "fixture": "app",
     "gen": true
@@ -3295,7 +3295,7 @@
     "id": "discover_AppShell-Top-Nav-with-Side-Nav",
     "args": [
       "discover",
-      "AppShell \u2014 Top Nav with Side Nav"
+      "AppShell — Top Nav with Side Nav"
     ],
     "fixture": "app",
     "gen": true
@@ -3304,7 +3304,7 @@
     "id": "discover_AppShell-With-Banner",
     "args": [
       "discover",
-      "AppShell \u2014 With Banner"
+      "AppShell — With Banner"
     ],
     "fixture": "app",
     "gen": true
@@ -3313,7 +3313,7 @@
     "id": "discover_AspectRatio-16-9-Widescreen-Image",
     "args": [
       "discover",
-      "AspectRatio \u2014 16:9 Widescreen Image"
+      "AspectRatio — 16:9 Widescreen Image"
     ],
     "fixture": "app",
     "gen": true
@@ -3322,7 +3322,7 @@
     "id": "discover_AspectRatio-Circle-Image",
     "args": [
       "discover",
-      "AspectRatio \u2014 Circle Image"
+      "AspectRatio — Circle Image"
     ],
     "fixture": "app",
     "gen": true
@@ -3331,7 +3331,7 @@
     "id": "discover_AspectRatio-Image-Gallery",
     "args": [
       "discover",
-      "AspectRatio \u2014 Image Gallery"
+      "AspectRatio — Image Gallery"
     ],
     "fixture": "app",
     "gen": true
@@ -3340,7 +3340,7 @@
     "id": "discover_AspectRatio-Loading-Skeleton",
     "args": [
       "discover",
-      "AspectRatio \u2014 Loading Skeleton"
+      "AspectRatio — Loading Skeleton"
     ],
     "fixture": "app",
     "gen": true
@@ -3349,7 +3349,7 @@
     "id": "discover_AspectRatio-Square-Image",
     "args": [
       "discover",
-      "AspectRatio \u2014 Square Image"
+      "AspectRatio — Square Image"
     ],
     "fixture": "app",
     "gen": true
@@ -3358,7 +3358,7 @@
     "id": "discover_Avatar-Fallback-Chain",
     "args": [
       "discover",
-      "Avatar \u2014 Fallback Chain"
+      "Avatar — Fallback Chain"
     ],
     "fixture": "app",
     "gen": true
@@ -3367,7 +3367,7 @@
     "id": "discover_Avatar-Group",
     "args": [
       "discover",
-      "Avatar \u2014 Group"
+      "Avatar — Group"
     ],
     "fixture": "app",
     "gen": true
@@ -3376,7 +3376,7 @@
     "id": "discover_Avatar-Initials",
     "args": [
       "discover",
-      "Avatar \u2014 Initials"
+      "Avatar — Initials"
     ],
     "fixture": "app",
     "gen": true
@@ -3385,7 +3385,7 @@
     "id": "discover_Avatar-Interactive",
     "args": [
       "discover",
-      "Avatar \u2014 Interactive"
+      "Avatar — Interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -3394,7 +3394,7 @@
     "id": "discover_Avatar-Photo",
     "args": [
       "discover",
-      "Avatar \u2014 Photo"
+      "Avatar — Photo"
     ],
     "fixture": "app",
     "gen": true
@@ -3403,7 +3403,7 @@
     "id": "discover_Avatar-Status-Dot",
     "args": [
       "discover",
-      "Avatar \u2014 Status Dot"
+      "Avatar — Status Dot"
     ],
     "fixture": "app",
     "gen": true
@@ -3412,7 +3412,7 @@
     "id": "discover_Avatar-Tooltip",
     "args": [
       "discover",
-      "Avatar \u2014 Tooltip"
+      "Avatar — Tooltip"
     ],
     "fixture": "app",
     "gen": true
@@ -3421,7 +3421,7 @@
     "id": "discover_Avatar-User-Card",
     "args": [
       "discover",
-      "Avatar \u2014 User Card"
+      "Avatar — User Card"
     ],
     "fixture": "app",
     "gen": true
@@ -3439,7 +3439,7 @@
     "id": "discover_AvatarGroup-Interactive",
     "args": [
       "discover",
-      "AvatarGroup \u2014 Interactive"
+      "AvatarGroup — Interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -3448,7 +3448,7 @@
     "id": "discover_AvatarGroupOverflow-Custom-Text",
     "args": [
       "discover",
-      "AvatarGroupOverflow \u2014 Custom Text"
+      "AvatarGroupOverflow — Custom Text"
     ],
     "fixture": "app",
     "gen": true
@@ -3457,7 +3457,7 @@
     "id": "discover_AvatarGroupOverflow-Default-Count",
     "args": [
       "discover",
-      "AvatarGroupOverflow \u2014 Default Count"
+      "AvatarGroupOverflow — Default Count"
     ],
     "fixture": "app",
     "gen": true
@@ -3466,7 +3466,7 @@
     "id": "discover_AvatarStatusDot-Variants",
     "args": [
       "discover",
-      "AvatarStatusDot \u2014 Variants"
+      "AvatarStatusDot — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -3475,7 +3475,7 @@
     "id": "discover_Badge-Colors",
     "args": [
       "discover",
-      "Badge \u2014 Colors"
+      "Badge — Colors"
     ],
     "fixture": "app",
     "gen": true
@@ -3484,7 +3484,7 @@
     "id": "discover_Badge-Counts",
     "args": [
       "discover",
-      "Badge \u2014 Counts"
+      "Badge — Counts"
     ],
     "fixture": "app",
     "gen": true
@@ -3493,7 +3493,7 @@
     "id": "discover_Badge-Status",
     "args": [
       "discover",
-      "Badge \u2014 Status"
+      "Badge — Status"
     ],
     "fixture": "app",
     "gen": true
@@ -3502,7 +3502,7 @@
     "id": "discover_Badge-Variants",
     "args": [
       "discover",
-      "Badge \u2014 Variants"
+      "Badge — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -3511,7 +3511,7 @@
     "id": "discover_Banner-Action",
     "args": [
       "discover",
-      "Banner \u2014 Action"
+      "Banner — Action"
     ],
     "fixture": "app",
     "gen": true
@@ -3520,7 +3520,7 @@
     "id": "discover_Banner-Collapsible",
     "args": [
       "discover",
-      "Banner \u2014 Collapsible"
+      "Banner — Collapsible"
     ],
     "fixture": "app",
     "gen": true
@@ -3529,7 +3529,7 @@
     "id": "discover_Banner-Dismiss",
     "args": [
       "discover",
-      "Banner \u2014 Dismiss"
+      "Banner — Dismiss"
     ],
     "fixture": "app",
     "gen": true
@@ -3538,7 +3538,7 @@
     "id": "discover_Banner-Floating",
     "args": [
       "discover",
-      "Banner \u2014 Floating"
+      "Banner — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -3547,7 +3547,7 @@
     "id": "discover_Banner-Full-Width",
     "args": [
       "discover",
-      "Banner \u2014 Full Width"
+      "Banner — Full Width"
     ],
     "fixture": "app",
     "gen": true
@@ -3556,7 +3556,7 @@
     "id": "discover_Banner-Statuses",
     "args": [
       "discover",
-      "Banner \u2014 Statuses"
+      "Banner — Statuses"
     ],
     "fixture": "app",
     "gen": true
@@ -3574,7 +3574,7 @@
     "id": "discover_BaseTypeahead-Custom-Search-Bar",
     "args": [
       "discover",
-      "BaseTypeahead \u2014 Custom Search Bar"
+      "BaseTypeahead — Custom Search Bar"
     ],
     "fixture": "app",
     "gen": true
@@ -3610,7 +3610,7 @@
     "id": "discover_Blockquote-Showcase",
     "args": [
       "discover",
-      "Blockquote \u2014 Showcase"
+      "Blockquote — Showcase"
     ],
     "fixture": "app",
     "gen": true
@@ -3619,7 +3619,7 @@
     "id": "discover_Blockquote-Testimonials",
     "args": [
       "discover",
-      "Blockquote \u2014 Testimonials"
+      "Blockquote — Testimonials"
     ],
     "fixture": "app",
     "gen": true
@@ -3628,7 +3628,7 @@
     "id": "discover_Blockquote-With-Attribution",
     "args": [
       "discover",
-      "Blockquote \u2014 With Attribution"
+      "Blockquote — With Attribution"
     ],
     "fixture": "app",
     "gen": true
@@ -3646,7 +3646,7 @@
     "id": "discover_Bottom-Sheet-Height-variants",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 Height variants"
+      "Bottom Sheet — Height variants"
     ],
     "fixture": "app",
     "gen": true
@@ -3655,7 +3655,7 @@
     "id": "discover_Bottom-Sheet-Mobile-keyboard",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 Mobile keyboard"
+      "Bottom Sheet — Mobile keyboard"
     ],
     "fixture": "app",
     "gen": true
@@ -3664,7 +3664,7 @@
     "id": "discover_Bottom-Sheet-Multi-step-flow",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 Multi-step flow"
+      "Bottom Sheet — Multi-step flow"
     ],
     "fixture": "app",
     "gen": true
@@ -3673,7 +3673,7 @@
     "id": "discover_Bottom-Sheet-No-scrim",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 No scrim"
+      "Bottom Sheet — No scrim"
     ],
     "fixture": "app",
     "gen": true
@@ -3682,7 +3682,7 @@
     "id": "discover_Bottom-Sheet-Review-flow",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 Review flow"
+      "Bottom Sheet — Review flow"
     ],
     "fixture": "app",
     "gen": true
@@ -3691,7 +3691,7 @@
     "id": "discover_Bottom-Sheet-Snap-points",
     "args": [
       "discover",
-      "Bottom Sheet \u2014 Snap points"
+      "Bottom Sheet — Snap points"
     ],
     "fixture": "app",
     "gen": true
@@ -3700,7 +3700,7 @@
     "id": "discover_BreadcrumbItem-Basic",
     "args": [
       "discover",
-      "BreadcrumbItem \u2014 Basic"
+      "BreadcrumbItem — Basic"
     ],
     "fixture": "app",
     "gen": true
@@ -3709,7 +3709,7 @@
     "id": "discover_Breadcrumbs-Deep-Path",
     "args": [
       "discover",
-      "Breadcrumbs \u2014 Deep Path"
+      "Breadcrumbs — Deep Path"
     ],
     "fixture": "app",
     "gen": true
@@ -3718,7 +3718,7 @@
     "id": "discover_Breadcrumbs-Icons",
     "args": [
       "discover",
-      "Breadcrumbs \u2014 Icons"
+      "Breadcrumbs — Icons"
     ],
     "fixture": "app",
     "gen": true
@@ -3727,7 +3727,7 @@
     "id": "discover_Breadcrumbs-Menu-item",
     "args": [
       "discover",
-      "Breadcrumbs \u2014 Menu item"
+      "Breadcrumbs — Menu item"
     ],
     "fixture": "app",
     "gen": true
@@ -3736,7 +3736,7 @@
     "id": "discover_Breadcrumbs-Separators",
     "args": [
       "discover",
-      "Breadcrumbs \u2014 Separators"
+      "Breadcrumbs — Separators"
     ],
     "fixture": "app",
     "gen": true
@@ -3745,7 +3745,7 @@
     "id": "discover_Breadcrumbs-Variants",
     "args": [
       "discover",
-      "Breadcrumbs \u2014 Variants"
+      "Breadcrumbs — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -3763,7 +3763,7 @@
     "id": "discover_Button-End-Slot",
     "args": [
       "discover",
-      "Button \u2014 End Slot"
+      "Button — End Slot"
     ],
     "fixture": "app",
     "gen": true
@@ -3772,7 +3772,7 @@
     "id": "discover_Button-Floating",
     "args": [
       "discover",
-      "Button \u2014 Floating"
+      "Button — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -3781,7 +3781,7 @@
     "id": "discover_Button-Icon",
     "args": [
       "discover",
-      "Button \u2014 Icon"
+      "Button — Icon"
     ],
     "fixture": "app",
     "gen": true
@@ -3790,7 +3790,7 @@
     "id": "discover_Button-Sizes",
     "args": [
       "discover",
-      "Button \u2014 Sizes"
+      "Button — Sizes"
     ],
     "fixture": "app",
     "gen": true
@@ -3799,7 +3799,7 @@
     "id": "discover_Button-Variants",
     "args": [
       "discover",
-      "Button \u2014 Variants"
+      "Button — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -3808,7 +3808,7 @@
     "id": "discover_ButtonGroup-Basic",
     "args": [
       "discover",
-      "ButtonGroup \u2014 Basic"
+      "ButtonGroup — Basic"
     ],
     "fixture": "app",
     "gen": true
@@ -3817,7 +3817,7 @@
     "id": "discover_ButtonGroup-Floating",
     "args": [
       "discover",
-      "ButtonGroup \u2014 Floating"
+      "ButtonGroup — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -3826,7 +3826,7 @@
     "id": "discover_Calendar-Constraints",
     "args": [
       "discover",
-      "Calendar \u2014 Constraints"
+      "Calendar — Constraints"
     ],
     "fixture": "app",
     "gen": true

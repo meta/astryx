@@ -346,6 +346,12 @@ pub fn discover_all_unresolved(cli_root: &Path, cwd: &str) -> Vec<Template> {
 }
 
 pub fn discover_all_resolved(cli_root: &Path, cwd: &str) -> Vec<Template> {
+    // Read-only operations (search, build) ask for this more than once.
+    let key = format!("templates\0{}\0{cwd}", cli_root.display());
+    crate::discovery::listing_cache::once_per_listing(&key, || read_all_resolved(cli_root, cwd)).as_ref().clone()
+}
+
+fn read_all_resolved(cli_root: &Path, cwd: &str) -> Vec<Template> {
     let (v, errors) = all_sources(cli_root, cwd);
     let decl: Vec<TemplateError> = errors.into_iter().filter(|e| e.replacement_target.is_some()).collect();
     apply_replacements_with_errors(v, decl).0

@@ -44,3 +44,6 @@ opt-level = 3
 debug = false
 lto = "thin"
 codegen-units = 16
+
+[patch.crates-io]
+boa_engine = { path = "vendor/boa_engine" }

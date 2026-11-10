@@ -1,0 +1,16 @@
+{
+ "id": "fuzz_experimental_icon_add_SearchIcon_--from_-acme-icons@doctor-author_39420d",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "SearchIcon",
+  "--from",
+  "@acme/icons"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "",
+ "stderr": "Error: Integration manifest has no default export (it exports `notDefault`). Fix: export the manifest object as the default export: `export default {components: './components'}`, naming the roots the package has.\n",
+ "exit": 1,
+ "files": []
+}

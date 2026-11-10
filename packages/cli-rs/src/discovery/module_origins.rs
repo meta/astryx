@@ -64,6 +64,9 @@ struct Init {
     object: Option<Option<Vec<(String, Option<String>)>>>,
     /// `exportScalarType`'s reading of the init.
     scalar: Option<&'static str>,
+    /// The `extends` value of a `defineTheme({extends: X})` init
+    /// (`definedThemeBase`), without TS wrappers.
+    theme_base: Option<Shape>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +142,14 @@ struct Import {
     source: String,
     type_only: bool,
     specs: Vec<(String, ImpKind)>,
+    /// Locals of specifiers written `type X`.
+    type_specs: Vec<String>,
+}
+
+impl Import {
+    fn spec_type_only(&self, local: &str) -> bool {
+        self.type_specs.iter().any(|t| t == local)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -261,7 +272,31 @@ fn init_of(e: &Expression) -> Init {
         Expression::ObjectExpression(o) => Some(object_entries(o)),
         _ => None,
     };
-    Init { raw_ident, shape, kind: kind_of(e), object, scalar: scalar_of(e) }
+    let theme_base = match s {
+        Expression::CallExpression(c) if matches!(&c.callee, Expression::Identifier(i) if i.name == "defineTheme") => {
+            match c.arguments.first().and_then(|a| a.as_expression()) {
+                Some(Expression::ObjectExpression(o)) => o.properties.iter().find_map(|p| {
+                    let ObjectPropertyKind::ObjectProperty(p) = p else { return None };
+                    if p.computed || p.method || p.kind != PropertyKind::Init {
+                        return None;
+                    }
+                    let named = match &p.key {
+                        PropertyKey::StaticIdentifier(i) => i.name == "extends",
+                        PropertyKey::StringLiteral(l) => l.value.as_str() == Some("extends"),
+                        _ => false,
+                    };
+                    named.then(|| match strip(&p.value) {
+                        Expression::Identifier(i) => Shape::Ident(i.name.to_string()),
+                        Expression::StaticMemberExpression(_) | Expression::ComputedMemberExpression(_) | Expression::PrivateFieldExpression(_) => Shape::Member,
+                        _ => Shape::Other,
+                    })
+                }),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    Init { raw_ident, shape, kind: kind_of(e), object, scalar: scalar_of(e), theme_base }
 }
 
 fn var_decl(v: &VariableDeclaration) -> Decl {
@@ -471,7 +506,16 @@ fn summarize(text: &str) -> Result<Summary, String> {
                         ImportDeclarationSpecifier::ImportNamespaceSpecifier(x) => (x.local.name.to_string(), ImpKind::Namespace),
                     })
                     .collect();
-                s.imports.push(Import { source: jstr(d.source.value), type_only: d.import_kind.is_type(), specs });
+                let type_specs = d
+                    .specifiers
+                    .iter()
+                    .flatten()
+                    .filter_map(|sp| match sp {
+                        ImportDeclarationSpecifier::ImportSpecifier(x) if x.import_kind.is_type() => Some(x.local.name.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                s.imports.push(Import { source: jstr(d.source.value), type_only: d.import_kind.is_type(), specs, type_specs });
             }
             Statement::ExportDeclaration(d) => {
                 if let Declaration::TSImportEqualsDeclaration(ie) = &d.declaration {
@@ -925,25 +969,121 @@ pub fn export_value_kind(file: &str, export_name: &str) -> ValueKind {
     ValueKind::Unknown
 }
 
-/// `aliasedOrigin(origin)`: the binding an alias finally names.
-pub fn aliased_origin(origin: &Origin) -> Option<Origin> {
-    aliased_in(origin, &mut HashSet::new())
+/// The `unwrap` hooks callers pass to `aliasedOrigin`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unwrap {
+    /// Doctor's `definedThemeBase`: `defineTheme({extends: X})` is X.
+    DefinedThemeBase,
 }
 
-fn aliased_in(origin: &Origin, seen: &mut HashSet<String>) -> Option<Origin> {
+/// `aliasedOrigin(origin)`: the binding an alias finally names.
+pub fn aliased_origin(origin: &Origin) -> Option<Origin> {
+    aliased_in(origin, &mut HashSet::new(), None)
+}
+
+/// `aliasedOrigin(origin, seen, unwrap)`.
+pub fn aliased_origin_with(origin: &Origin, unwrap: Option<Unwrap>) -> Option<Origin> {
+    aliased_in(origin, &mut HashSet::new(), unwrap)
+}
+
+fn aliased_in(origin: &Origin, seen: &mut HashSet<String>, unwrap: Option<Unwrap>) -> Option<Origin> {
     if !seen.insert(format!("{}\0{}", origin.file, origin.name)) {
         return None;
     }
     let s = read(&origin.file).ok()?;
     let Some(x) = declarator_of(&s, &origin.name, false) else { return Some(origin.clone()) };
-    match x.init.as_ref().map(|i| &i.shape) {
-        Some(Shape::Member) => None,
-        Some(Shape::Ident(n)) => {
+    let Some(init) = x.init.as_ref() else { return Some(origin.clone()) };
+    let followed = match unwrap {
+        Some(Unwrap::DefinedThemeBase) => init.theme_base.as_ref(),
+        None => None,
+    };
+    match followed.unwrap_or(&init.shape) {
+        Shape::Member => None,
+        Shape::Ident(n) => {
             let next = binding_origin(&s, &origin.file, n, &mut HashSet::new(), false, true)?;
-            aliased_in(&next, seen)
+            aliased_in(&next, seen, unwrap)
         }
-        _ => Some(origin.clone()),
+        Shape::Other => {
+            if followed.is_some() {
+                None
+            } else {
+                Some(origin.clone())
+            }
+        }
     }
+}
+
+/// `elementPropOrigins(file, {sources, name, prop, unwrap})`: for each
+/// `<Name prop={x}>` element whose `Name` is imported by name from one of
+/// `sources`, the origin `x` finally names (None when unreadable).
+pub fn element_prop_origins(file: &str, sources: &[&str], name: &str, prop: &str, unwrap: Option<Unwrap>) -> Vec<Option<Origin>> {
+    use oxc::ast_visit::{walk, Visit};
+    let Ok(s) = read(file) else { return vec![] };
+    let mut locals: Vec<String> = Vec::new();
+    for imp in &s.imports {
+        if imp.type_only || !sources.contains(&imp.source.as_str()) {
+            continue;
+        }
+        for (local, kind) in &imp.specs {
+            if matches!(kind, ImpKind::Named(n) if n == name) && !imp.spec_type_only(local) {
+                locals.push(local.clone());
+            }
+        }
+    }
+    if locals.is_empty() {
+        return vec![];
+    }
+    struct V<'l> {
+        locals: &'l [String],
+        prop: &'l str,
+        found: Vec<Option<String>>,
+    }
+    impl<'a, 'l> Visit<'a> for V<'l> {
+        fn visit_jsx_opening_element(&mut self, el: &JSXOpeningElement<'a>) {
+            let tag = match &el.name {
+                JSXElementName::Identifier(i) => Some(i.name.to_string()),
+                JSXElementName::IdentifierReference(i) => Some(i.name.to_string()),
+                _ => None,
+            };
+            if tag.is_some_and(|t| self.locals.contains(&t)) {
+                let attr = el.attributes.iter().find_map(|a| match a {
+                    JSXAttributeItem::Attribute(a) => match &a.name {
+                        JSXAttributeName::Identifier(n) if n.name == self.prop => Some(a),
+                        _ => None,
+                    },
+                    _ => None,
+                });
+                if let Some(a) = attr {
+                    let value = match &a.value {
+                        Some(JSXAttributeValue::ExpressionContainer(c)) => match c.expression.as_expression().map(strip) {
+                            Some(Expression::Identifier(i)) => Some(i.name.to_string()),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    self.found.push(value);
+                }
+            }
+            walk::walk_jsx_opening_element(self, el);
+        }
+    }
+    let Some(text) = np::read_text(file) else { return vec![] };
+    let alloc = Allocator::default();
+    let opts = ParseOptions { preserve_parens: false, allow_return_outside_function: true, ..ParseOptions::default() };
+    let mut ret = Parser::new(&alloc, &text, SourceType::tsx()).with_options(opts).parse();
+    if ret.diagnostics.has_errors() {
+        ret = Parser::new(&alloc, &text, SourceType::ts()).with_options(opts).parse();
+    }
+    let mut v = V { locals: &locals, prop, found: vec![] };
+    v.visit_program(&ret.program);
+    v.found
+        .into_iter()
+        .map(|value| {
+            let n = value?;
+            let b = binding_origin(&s, file, &n, &mut HashSet::new(), false, true)?;
+            aliased_in(&b, &mut HashSet::new(), unwrap)
+        })
+        .collect()
 }
 
 /// `staticExportBindings(file, exportName)`: each key of an exported object

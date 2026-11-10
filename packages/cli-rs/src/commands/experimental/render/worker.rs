@@ -188,6 +188,9 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
             }
             let lower = raw.to_lowercase();
             if lower.ends_with(".json") && relative {
+                if let Some(f) = &aliased {
+                    add_alias(&mut p, &spec, PathBuf::from(f));
+                }
                 let f = np::resolve(&[&dir, &raw]);
                 if np::exists(&f) && !p.local_files.contains(&f) {
                     push_side(&mut p, &file, f);

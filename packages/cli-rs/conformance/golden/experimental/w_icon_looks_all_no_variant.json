@@ -1,0 +1,16 @@
+{
+ "id": "w_icon_looks_all_no_variant",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--from",
+  "./lib/looks.js",
+  "--all"
+ ],
+ "fixture": "iconlooks",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --all adds one variant for every icon: pass --variant with the variant, such as solid.\n",
+ "exit": 1,
+ "files": []
+}

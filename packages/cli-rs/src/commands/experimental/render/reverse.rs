@@ -196,9 +196,36 @@ fn css_imports(css: &str) -> Vec<String> {
     out
 }
 
-/// `reachableFiles(files)` over relative imports and asset refs: the set of
-/// reached paths, and the missing ones (sorted). Path aliases are refused.
-fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) {
+pub struct Reach {
+    pub path: String,
+    pub relative: bool,
+    pub aliased: Vec<String>,
+}
+
+/// `receivingAliases(dir)`.
+fn receiving_aliases(dir: &str) -> Vec<super::ts_paths::PathPattern> {
+    let mut d = dir.to_string();
+    while !np::exists(&d) && np::dirname(&d) != d {
+        d = np::dirname(&d);
+    }
+    loop {
+        if let Some(found) = super::ts_paths::read_paths_in(&d) {
+            return found;
+        }
+        if np::exists(&np::join2(&d, "package.json")) {
+            return vec![];
+        }
+        let up = np::dirname(&d);
+        if up == d {
+            return vec![];
+        }
+        d = up;
+    }
+}
+
+/// `reachableFiles(files, {aliases})`: the reached files, and the missing
+/// ones (sorted).
+fn reachable(files: &[(String, Vec<u8>, String)], aliases: &[super::ts_paths::PathPattern]) -> (Vec<Reach>, Vec<String>) {
     let has = |p: &str| files.iter().any(|f| f.0 == p);
     let resolve_in = |c: &str| -> Option<String> {
         if has(c) {
@@ -216,11 +243,35 @@ fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) 
         }
         None
     };
-    let mut reached: Vec<String> = vec![];
+    let by_suffix = |rest: &str| -> Option<(String, String)> {
+        let mut hits: Vec<(String, String)> = vec![];
+        for f in files {
+            let p = &f.0;
+            let mut tails = vec![rest.to_string()];
+            tails.extend(RESOLVE_EXTENSIONS.iter().map(|e| format!("{rest}{e}")));
+            tails.extend(RESOLVE_EXTENSIONS.iter().map(|e| format!("{rest}/index{e}")));
+            for t in tails {
+                if *p == t || p.ends_with(&format!("/{t}")) {
+                    hits.push((p.clone(), t));
+                    break;
+                }
+            }
+        }
+        if hits.len() == 1 { hits.pop() } else { None }
+    };
+    let mut reached: Vec<Reach> = vec![];
     let mut missing: Vec<String> = vec![];
     let mut queue: Vec<String> = vec![];
+    fn reach<'a>(reached: &'a mut Vec<Reach>, p: &str) -> (&'a mut Reach, bool) {
+        if let Some(i) = reached.iter().position(|r| r.path == p) {
+            return (&mut reached[i], false);
+        }
+        reached.push(Reach { path: p.to_string(), relative: false, aliased: vec![] });
+        let n = reached.len() - 1;
+        (&mut reached[n], true)
+    }
     if let Some(f) = files.first() {
-        reached.push(f.0.clone());
+        reach(&mut reached, &f.0).0.relative = true;
         queue.push(f.0.clone());
     }
     while !queue.is_empty() {
@@ -232,13 +283,13 @@ fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) 
         }
         let Some(entry) = files.iter().find(|f| f.0 == current) else { continue };
         let source = String::from_utf8_lossy(&entry.1).to_string();
+        let dir = posix_dirname(&current);
         let (imports, assets) = if is_module {
             scan_module(&source, &current)
         } else {
-            let dir = posix_dirname(&current);
             let imports = css_imports(&source)
                 .into_iter()
-                .filter(|r| !regress::Regex::with_flags(r"^([a-z]+:)?\/\/", "i").unwrap().find(r).is_some() && !r.starts_with('@') && !r.starts_with('~'))
+                .filter(|r| regress::Regex::with_flags(r"^([a-z]+:)?\/\/", "i").unwrap().find(r).is_none() && !r.starts_with('@') && !r.starts_with('~'))
                 .filter(|r| r.starts_with('.') || has(&posix_normalize(&format!("{dir}/{r}"))))
                 .map(|r| if r.starts_with('.') { r } else { format!("./{r}") })
                 .collect();
@@ -246,7 +297,6 @@ fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) 
             asset_refs_in(&source, &mut a);
             (imports, a)
         };
-        let dir = posix_dirname(&current);
         for r in assets {
             let joined = posix_normalize(&format!("{dir}/{r}"));
             if joined.starts_with("..") {
@@ -258,12 +308,10 @@ fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) 
                 }
                 continue;
             }
-            if !reached.contains(&joined) {
-                reached.push(joined);
-            }
+            reach(&mut reached, &joined).0.relative = true;
         }
         for spec in imports {
-            let bare = spec.split('?').next().unwrap_or("");
+            let bare = spec.split('?').next().unwrap_or("").to_string();
             if bare.starts_with("./") || bare.starts_with("../") {
                 let joined = posix_normalize(&format!("{dir}/{bare}"));
                 let target = if joined.starts_with("..") { None } else { resolve_in(&joined) };
@@ -274,11 +322,65 @@ fn reachable(files: &[(String, Vec<u8>, String)]) -> (Vec<String>, Vec<String>) 
                         }
                     }
                     Some(t) => {
-                        if !reached.contains(&t) {
-                            reached.push(t.clone());
+                        let (r, fresh) = reach(&mut reached, &t);
+                        r.relative = true;
+                        if fresh {
                             queue.push(t);
                         }
                     }
+                }
+                continue;
+            }
+            let Some(m) = super::ts_paths::match_path(aliases, &bare) else { continue };
+            let mut options: Vec<(String, (String, String), usize)> = vec![];
+            for target in &m.pattern.targets {
+                let named = target.replacen('*', &m.capture, 1);
+                let ext = np::extname(&named);
+                let star = target.find('*');
+                let cut = star.map(|st| target[..st].rfind('/').map(|i| i + 1).unwrap_or(0));
+                let rest_raw = match (star, cut) {
+                    (Some(_), Some(c)) => target[c..].replacen('*', &m.capture, 1),
+                    _ => {
+                        let b = np::basename(&named);
+                        b.strip_suffix(&ext).unwrap_or(&b).to_string()
+                    }
+                };
+                let rest = rest_raw.trim_start_matches('/').to_string();
+                let Some(hit) = (if rest.is_empty() { None } else { by_suffix(&rest) }) else { continue };
+                let abs = match (star, cut) {
+                    (Some(_), Some(c)) => format!("{}{}", &target[..c], hit.1),
+                    _ => {
+                        if !ext.is_empty() {
+                            named.clone()
+                        } else {
+                            format!("{named}{}", &hit.1[rest.len()..])
+                        }
+                    }
+                };
+                let target_folders: Vec<String> = match (star, cut) {
+                    (Some(_), Some(c)) => target[..c].split('/').filter(|x| !x.is_empty()).map(String::from).collect(),
+                    _ => np::dirname(&named).split('/').filter(|x| !x.is_empty()).map(String::from).collect(),
+                };
+                let sent_folders: Vec<String> = hit.0[..hit.0.len() - hit.1.len()].split('/').filter(|x| !x.is_empty()).map(String::from).collect();
+                let mut score = 0;
+                while score < sent_folders.len() && score < target_folders.len() && sent_folders[sent_folders.len() - 1 - score] == target_folders[target_folders.len() - 1 - score] {
+                    score += 1;
+                }
+                options.push((abs, hit, score));
+            }
+            let mut chosen: Option<(String, (String, String), usize)> = None;
+            for o in options {
+                if chosen.as_ref().is_none_or(|c| o.2 > c.2) {
+                    chosen = Some(o);
+                }
+            }
+            if let Some((abs, hit, _)) = chosen {
+                let (r, fresh) = reach(&mut reached, &hit.0);
+                if !r.aliased.contains(&abs) {
+                    r.aliased.push(abs);
+                }
+                if fresh {
+                    queue.push(hit.0.clone());
                 }
             }
         }
@@ -436,17 +538,17 @@ pub fn reverse_to_file(cwd: &str, input: &str, output: Option<&str>, overwrite: 
                 }
                 seen.push(k);
             }
-            // TEMP: path aliases in the receiving project are not cloned yet.
-            let (mut reached, missing) = reachable(&files);
+            let aliases = receiving_aliases(&np::dirname(&requested));
+            let (mut reached, missing) = reachable(&files, &aliases);
             for f in &files {
-                if reached.contains(&f.0) || !is_asset_path(&f.0) {
+                if reached.iter().any(|r| r.path == f.0) || !is_asset_path(&f.0) {
                     continue;
                 }
                 if is_asset_bytes(&f.1) {
-                    reached.push(f.0.clone());
+                    reached.push(Reach { path: f.0.clone(), relative: true, aliased: vec![] });
                 }
             }
-            let stray: Vec<String> = files.iter().filter(|f| !reached.contains(&f.0)).map(|f| f.0.clone()).collect();
+            let stray: Vec<String> = files.iter().filter(|f| !reached.iter().any(|r| r.path == f.0)).map(|f| f.0.clone()).collect();
             if !stray.is_empty() {
                 return Err(err(
                     format!(
@@ -483,15 +585,40 @@ pub fn reverse_to_file(cwd: &str, input: &str, output: Option<&str>, overwrite: 
             let target = np::join2(&anchor, &np::basename(&requested));
             let mut writes: Vec<(String, Vec<u8>)> = vec![];
             let mut outside: Vec<String> = vec![];
+            let mut aliased_outside: Vec<String> = vec![];
             for (i, f) in files.iter().enumerate() {
-                let file = if i == 0 { target.clone() } else { place_from(&f.0) };
-                if writes.iter().any(|w| w.0 == file) {
-                    continue;
+                let r = reached.iter().find(|r| r.path == f.0).unwrap();
+                let mut places: Vec<(String, bool)> = vec![];
+                if i == 0 {
+                    places.push((target.clone(), false));
+                } else if r.relative {
+                    places.push((place_from(&f.0), false));
                 }
-                if i > 0 && !within(&file) {
-                    outside.push(file.clone());
+                places.extend(r.aliased.iter().map(|a| (a.clone(), true)));
+                for (file, is_aliased) in places {
+                    if writes.iter().any(|w| w.0 == file) {
+                        continue;
+                    }
+                    if i > 0 && !within(&file) {
+                        if is_aliased {
+                            aliased_outside.push(file.clone());
+                        } else {
+                            outside.push(file.clone());
+                        }
+                    }
+                    writes.push((file, f.1.clone()));
                 }
-                writes.push((file, f.1.clone()));
+            }
+            if !aliased_outside.is_empty() {
+                return Err(err(
+                    format!(
+                        "{} imports {} through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.",
+                        shown(cwd, input),
+                        aliased_outside.iter().map(|f| shown(cwd, f)).collect::<Vec<_>>().join(", ")
+                    ),
+                    vec![],
+                    "ERR_PATH_TRAVERSAL",
+                ));
             }
             if !outside.is_empty() {
                 let top = if entry_dir == "." { String::new() } else { format!("{entry_dir}/") };
@@ -518,9 +645,7 @@ pub fn reverse_to_file(cwd: &str, input: &str, output: Option<&str>, overwrite: 
             let names: Vec<String> = writes.iter().map(|w| w.0.clone()).collect();
             refuse_runnable(&names, cwd, input)?;
             refuse_existing(&names)?;
-            for n in &names {
-                super::refuse_symlinks(n, cwd)?;
-            }
+            super::refuse_protected(&names, cwd)?;
             write_all(&writes, cwd)?;
             let mut m = Map::new();
             m.insert("input".into(), Value::String(shown(cwd, input)));
@@ -568,9 +693,7 @@ pub fn reverse_to_file(cwd: &str, input: &str, output: Option<&str>, overwrite: 
             let candidates = [np::dirname(&target), np::dirname(input), cwd.to_string()];
             let from = candidates.iter().find(|d| resolves_core(d)).cloned().unwrap_or_else(|| cwd.to_string());
             let rebuilt = super::rebuild::rebuild_page(&html, &from);
-            for n in [&target] {
-                super::refuse_symlinks(n, cwd)?;
-            }
+            super::refuse_protected(&[target.clone()], cwd)?;
             if let Some(parent) = std::path::Path::new(&target).parent() {
                 let _ = std::fs::create_dir_all(parent);
             }

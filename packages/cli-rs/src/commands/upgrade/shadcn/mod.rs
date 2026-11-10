@@ -10,3 +10,5 @@ pub mod ts_strip;
 mod dev_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod registry_tests;

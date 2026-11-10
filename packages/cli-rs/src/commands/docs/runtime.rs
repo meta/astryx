@@ -1119,7 +1119,7 @@ fn unit_problems(finder: &Finder, u: &Unit) -> Vec<crate::discovery::doc_compile
 }
 
 /// `docsLinkProblems(catalog, tree, {owner, references})`.
-fn docs_link_problems(built: &Built, catalog: &DocsCatalog, owner: &str, references: bool) -> Vec<String> {
+fn docs_link_problems(built: &Built, catalog: &DocsCatalog, owner: Option<&str>, references: bool) -> Vec<String> {
     let finder = Finder { tree: &built.tree, topics: &built.topics, data: &built.data };
     let units = units_of(catalog, &built.tree);
     let mut out = Vec::new();
@@ -1132,8 +1132,10 @@ fn docs_link_problems(built: &Built, catalog: &DocsCatalog, owner: &str, referen
         }
     };
     for e in catalog.entries() {
-        if e.package != owner && !e.extensions.iter().any(|x| x.package == owner) {
-            continue;
+        if let Some(owner) = owner {
+            if e.package != owner && !e.extensions.iter().any(|x| x.package == owner) {
+                continue;
+            }
         }
         let u = units.iter().find(|u| u.key == format!("topic:{}", e.name));
         let found = match u {
@@ -1144,9 +1146,14 @@ fn docs_link_problems(built: &Built, catalog: &DocsCatalog, owner: &str, referen
     }
     for n in &built.tree.nodes {
         let overlay = n.guide_overlay.as_ref();
-        let owned = n.provider == owner
-            || overlay.and_then(|o| o.replacement.as_ref()).map(|r| s(r, "package") == owner).unwrap_or(false)
-            || overlay.map(|o| o.extensions.iter().any(|x| s(x, "package") == owner)).unwrap_or(false);
+        let owned = match owner {
+            None => true,
+            Some(owner) => {
+                n.provider == owner
+                    || overlay.and_then(|o| o.replacement.as_ref()).map(|r| s(r, "package") == owner).unwrap_or(false)
+                    || overlay.map(|o| o.extensions.iter().any(|x| s(x, "package") == owner)).unwrap_or(false)
+            }
+        };
         if !owned {
             continue;
         }
@@ -1179,7 +1186,7 @@ pub fn package_docs_problems(integration: &Record, discovered: &DiscoveredDocs) 
         .filter(|d| d.severity == "error" && d.provider == name)
         .map(|d| ("error", format!("{}: {}", if d.source.is_empty() { name.clone() } else { d.source.clone() }, d.message)))
         .collect();
-    for m in docs_link_problems(&built, &catalog, &name, false) {
+    for m in docs_link_problems(&built, &catalog, Some(&name), false) {
         out.push(("warning", m));
     }
     out
@@ -1191,7 +1198,7 @@ pub fn package_reference_problems(integration: &Record, discovered: &DiscoveredD
     let name = integration.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
     let catalog = package_catalog(discovered);
     let built = built_for(&catalog, &package_cwd(integration));
-    docs_link_problems(&built, &catalog, &name, true)
+    docs_link_problems(&built, &catalog, Some(&name), true)
 }
 
 /// One doc that replaces or extends another, as a package's own check sees
@@ -1385,6 +1392,17 @@ pub fn package_component_link_problems(integration: &Record, discovered: &Discov
 mod package_tests {
     /// Prints what the package readers report for the docsint fixture, to
     /// compare with the JS readers (set ASTRYX_RS_DOCSINT to its folder).
+    /// Prints doctor's docs-tree report as JSON for the folder in
+    /// ASTRYX_RS_TREE_DIR, to compare with the JS check.
+    #[test]
+    fn doctor_tree_report_json() {
+        let Some(dir) = std::env::var_os("ASTRYX_RS_TREE_DIR") else { return };
+        let dir = dir.to_string_lossy().to_string();
+        std::env::set_current_dir(&dir).unwrap();
+        let (problems, (docs, sections, roots)) = super::doctor_tree_report(&dir).unwrap();
+        println!("TREEJSON {}", serde_json::json!({"problems": problems, "counts": [docs, sections, roots]}));
+    }
+
     #[test]
     fn package_readers_on_docsint() {
         let Some(dir) = std::env::var_os("ASTRYX_RS_DOCSINT") else { return };
@@ -1394,7 +1412,35 @@ mod package_tests {
         for i in &p.loaded_integrations {
             let d = crate::discovery::docs_discovery::discover_integration_docs(i);
             let targets: Vec<_> = super::package_doc_targets(i, &d).into_iter().map(|t| (t.topic, t.relationship, t.target, t.kind, t.owner, t.guide, t.guides_below.len(), t.unplaced)).collect();
+            println!("RS tree={:?}", super::doctor_tree_report(&dir));
             println!("RS c={:?}\nRS docs={:?}\nRS refs={:?}\nRS targets={:?}", super::package_component_link_problems(i, &d), super::package_docs_problems(i, &d), super::package_reference_problems(i, &d), targets);
         }
     }
+}
+
+/// What doctor's `docs-tree` check reads (`checkDocsTree`): the problems, in
+/// its order, and `(docs, sections, roots)` for its pass message.
+///
+/// The CLI's own docs are checked when the model is generated (their link
+/// problems, unadopted self-docs and typed edges are empty, or `doctor` in a
+/// plain project would warn), so only what integrations add or change is
+/// read here.
+pub fn doctor_tree_report(cwd: &str) -> Result<(Vec<String>, (usize, usize, usize)), String> {
+    let pm = crate::discovery::package_manager::doc_package_manager(Some(cwd));
+    crate::discovery::doc_compiler::links::set_doc_pm(&pm);
+    let variant = Variant::get(&pm);
+    let catalog = discover(cwd).unwrap_or_else(DocsCatalog::from_builtins);
+    let built = build(&variant, catalog.clone(), cwd);
+    let mut problems: Vec<String> = built
+        .tree
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == "error")
+        .map(|d| format!("{}: {}", if d.source.is_empty() { if d.provider.is_empty() { "docs tree".to_string() } else { d.provider.clone() } } else { d.source.clone() }, d.message))
+        .collect();
+    problems.extend(docs_link_problems(&built, &catalog, None, false));
+    problems.extend(docs_link_problems(&built, &catalog, None, true));
+    let nodes: Vec<_> = built.tree.nodes.iter().filter(|n| !built.tree.is_experimental(n)).collect();
+    let namespaces = nodes.iter().filter(|n| n.kind == "namespace").count();
+    Ok((problems, (nodes.len() - namespaces, namespaces, built.tree.roots().len())))
 }

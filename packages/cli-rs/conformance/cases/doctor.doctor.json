@@ -1596,5 +1596,107 @@
     "fixture": "doctor-ts",
     "cwd": "doctor-ts/kit",
     "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_theme_y2k_large",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_y2k_large_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_two_large",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ],
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_neutral_unwired",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ]
+    ],
+    "cwd": "doctor-themes/unwired"
+  },
+  {
+    "id": "w3_doctor_theme_neutral_app",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_use_large",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ],
+      [
+        "theme",
+        "add",
+        "y2k"
+      ],
+      [
+        "theme",
+        "use",
+        "neutral"
+      ]
+    ]
   }
 ]

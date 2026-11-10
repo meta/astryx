@@ -1,0 +1,275 @@
+[
+  {
+    "id": "u3_registry_dry",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_dry_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_apply",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--apply"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_apply_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_examples",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "src/components/astryx/examples",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_blocks",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "./src/components/astryx/blocks"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_pages_abs",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "/tmp/astryx-conformance/work/upgrade-registry/src/pages"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_missing",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "nope"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_traversal",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "../elsewhere"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_path_traversal_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--path",
+      "../elsewhere",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_registry_from_subfolder",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry",
+    "cwd": "upgrade-registry/src/components"
+  },
+  {
+    "id": "u3_registry_from_subfolder_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-registry",
+    "cwd": "upgrade-registry/src/components"
+  },
+  {
+    "id": "u3_run_up_to_date",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_up_to_date_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_up_to_date_apply_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_up_to_date_subfolder",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12"
+    ],
+    "fixture": "upgrade-registry",
+    "cwd": "upgrade-registry/src/components"
+  },
+  {
+    "id": "u3_run_codemods_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_codemods_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_codemod_single",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "does-not-exist",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_run_path_blocks_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--path",
+      "src/components/astryx/blocks",
+      "--json"
+    ],
+    "fixture": "upgrade-registry"
+  },
+  {
+    "id": "u3_one_registry",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry-one"
+  },
+  {
+    "id": "u3_one_registry_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-one"
+  },
+  {
+    "id": "u3_one_registry_web",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry-one",
+    "cwd": "upgrade-registry-one/web"
+  },
+  {
+    "id": "u3_one_run_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-one"
+  },
+  {
+    "id": "u3_nocore_registry",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry-nocore"
+  },
+  {
+    "id": "u3_nocore_registry_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-nocore"
+  },
+  {
+    "id": "u3_app_registry_none",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "u3_app_registry_none_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "app"
+  }
+]

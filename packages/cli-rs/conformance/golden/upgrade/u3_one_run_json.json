@@ -1,0 +1,14 @@
+{
+ "id": "u3_one_run_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.12",
+  "--json"
+ ],
+ "fixture": "upgrade-registry-one",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.status\",\n  \"data\": {\n    \"status\": \"up_to_date\",\n    \"from\": \"0.7.12\",\n    \"to\": \"0.7.12\",\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"registryCompositions\": {\n      \"applied\": false,\n      \"ok\": false,\n      \"found\": 1,\n      \"current\": 0,\n      \"wouldUpdate\": 0,\n      \"updated\": 0,\n      \"wouldMerge\": 0,\n      \"merged\": 0,\n      \"wouldRefreshReceipt\": 0,\n      \"receiptsRefreshed\": 0,\n      \"conflicts\": 0,\n      \"missing\": 0,\n      \"invalid\": 0,\n      \"failed\": 1,\n      \"items\": [\n        {\n          \"item\": \"example-button-basic\",\n          \"path\": \"examples/button/basic\",\n          \"action\": \"fetch-error\",\n          \"message\": \"Could not fetch https://astryx.atmeta.com/shadcn/examples/button/basic.json: fetch failed\",\n          \"files\": []\n        }\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

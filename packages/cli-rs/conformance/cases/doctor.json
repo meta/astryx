@@ -707,7 +707,7 @@
     "id": "argv_doctor_-",
     "args": [
       "doctor",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -1387,7 +1387,7 @@
     "args": [
       "doctor",
       "integration",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -1860,7 +1860,7 @@
       "doctor",
       "integration",
       "components",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2347,7 +2347,7 @@
       "doctor",
       "integration",
       "docs",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2834,7 +2834,7 @@
       "doctor",
       "integration",
       "templates",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -3321,7 +3321,7 @@
       "doctor",
       "integration",
       "validate",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

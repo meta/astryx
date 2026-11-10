@@ -618,7 +618,7 @@
     "id": "argv_hook_-",
     "args": [
       "hook",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

@@ -85,36 +85,12 @@ fn workspace_root(start: &str) -> String {
     nearest.unwrap_or_else(|| fsutil::normalize(start))
 }
 
-/// Lockfiles in one folder, as (pm, file).
-fn lockfiles_in(dir: &str) -> Vec<(&'static str, &'static str)> {
-    let all = [
-        ("pnpm", "pnpm-lock.yaml"),
-        ("yarn", "yarn.lock"),
-        ("bun", "bun.lock"),
-        ("bun", "bun.lockb"),
-        ("npm", "package-lock.json"),
-    ];
-    all.iter().copied().filter(|(_, f)| Path::new(&fsutil::join(dir, f)).exists()).collect()
-}
-
-/// `decidePackageManagerIn` (TEMP, simplified): (pm or None when ambiguous, lockfiles).
-// TEMP: replace with src/discovery package_manager::decide_package_manager_in when it lands.
-fn decide_in(dir: &str) -> Option<(Option<String>, Vec<&'static str>)> {
-    let locks = lockfiles_in(dir);
-    let declared = read_json(&fsutil::join(dir, "package.json"))
-        .and_then(|p| p.get("packageManager").and_then(|v| v.as_str()).map(|s| s.to_string()))
-        .and_then(|s| s.split('@').next().map(|x| x.to_string()))
-        .filter(|s| ["npm", "pnpm", "yarn", "bun"].contains(&s.as_str()));
-    if let Some(d) = declared {
-        return Some((Some(d), locks.iter().map(|l| l.1).collect()));
-    }
-    if locks.len() == 1 {
-        return Some((Some(locks[0].0.to_string()), vec![locks[0].1]));
-    }
-    if locks.len() > 1 {
-        return Some((None, locks.iter().map(|l| l.1).collect()));
-    }
-    None
+/// `decidePackageManagerIn(dir)`: (pm, or None when the lockfiles tie and
+/// nothing decides; the lockfiles in the order the JS lists them).
+fn decide_in(dir: &str) -> Option<(Option<String>, Vec<String>)> {
+    let d = crate::discovery::package_manager::decide_package_manager_in(dir)?;
+    let locks = d.lockfiles.iter().map(|l| l.file.to_string()).collect();
+    Some((if d.ambiguous { None } else { Some(d.pm.clone()) }, locks))
 }
 
 fn add_verb(pm: &str) -> &'static str {

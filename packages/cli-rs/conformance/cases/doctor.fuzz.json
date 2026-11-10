@@ -15,5 +15,56 @@
     ],
     "fixture": "doctor-author2",
     "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "fuzz_doctor@large_pre_a7cf84",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_doctor@large_pre_2deaf6",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_doctor_--built_nope.json@large_pre_b0fe31",
+    "args": [
+      "doctor",
+      "--built",
+      "nope.json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "gothic"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_doctor@docsbroken_e02742",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "docsbroken"
   }
 ]

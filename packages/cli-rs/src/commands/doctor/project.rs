@@ -210,6 +210,26 @@ pub fn load(cwd: &str) -> ProjectState {
         project_error: None,
         docs_catalog_issues,
         docs_catalog_error: None,
-        icon_sets: None,
+        icon_sets: Some(icon_sets_json(&p)),
     }
+}
+
+/// `project.iconSets()` as doctor reads it.
+fn icon_sets_json(p: &crate::discovery::project::Project) -> Value {
+    let configured = p.config.get("experimental").and_then(|e| e.get("iconSet"));
+    if !crate::discovery::paths::js_truthy(configured) {
+        return serde_json::json!({"sets": [], "withdrawn": [], "choice": {"status": "none", "reason": "astryx.config sets no experimental.iconSet."}});
+    }
+    let (sets, withdrawn, choice) = crate::discovery::icon_set_discovery::project_icon_sets(p);
+    let mut c = crate::json::Map::new();
+    c.insert("status".into(), Value::String(choice.status.into()));
+    c.insert("reason".into(), Value::String(choice.reason.clone()));
+    if let Some(conf) = &choice.configured {
+        c.insert("configured".into(), Value::String(conf.clone()));
+    }
+    serde_json::json!({
+        "sets": sets.iter().map(|s| serde_json::json!({"name": s.name, "package": s.package})).collect::<Vec<_>>(),
+        "withdrawn": withdrawn.iter().map(|w| serde_json::json!({"name": w.name, "package": w.package, "reason": w.reason})).collect::<Vec<_>>(),
+        "choice": Value::Object(c),
+    })
 }

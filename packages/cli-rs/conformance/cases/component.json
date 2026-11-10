@@ -952,7 +952,7 @@
     "id": "argv_component_-",
     "args": [
       "component",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

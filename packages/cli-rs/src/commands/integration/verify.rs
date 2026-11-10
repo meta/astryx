@@ -280,7 +280,7 @@ fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>, loa
     if let Err(e) = copy_packed(dir, &extract, &pack.files) {
         issues.push(issue("extract_failed", "error", e.to_string()));
     } else {
-        let packed_result = crate::commands::doctor::integration::validate::validate_installed(&name, &scratch.to_string_lossy());
+        let packed_result = crate::commands::doctor::integration::validate::validate_installed_with(&name, &scratch.to_string_lossy(), Some(true));
         for i in &packed_result.issues {
             let mut m = Map::new();
             m.insert("code".into(), Value::String(format!("packed_{}", i["code"].as_str().unwrap_or(""))));

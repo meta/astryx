@@ -23,6 +23,9 @@ const INLINE_LIMIT = 256 * 1024;
 // Folders whose contents are scratch, never part of a case's result: $TMPDIR,
 // and npm's own cache and logs (npm pack runs under some commands).
 const IGNORED = new Set(['tmp', 'home/.npm']);
+// jiti's transpile cache, which the JS CLI writes when it loads TS/ESM modules
+// through jiti: an artifact of the JS implementation, at any depth.
+const IGNORED_SUFFIX = 'node_modules/.cache/jiti';
 
 export const SHIM = path.join(BIN_DIR, 'fixedtime.so');
 
@@ -157,7 +160,7 @@ function diffUpper(upper, replace, rel = '', files = []) {
   }
   for (const e of entries) {
     const r = rel ? `${rel}/${e.name}` : e.name;
-    if (IGNORED.has(r)) continue;
+    if (IGNORED.has(r) || r === IGNORED_SUFFIX || r.endsWith(`/${IGNORED_SUFFIX}`)) continue;
     const abs = path.join(upper, r);
     const lower = path.join(FIXTURES, r);
     if (e.isCharacterDevice()) {

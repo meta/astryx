@@ -788,5 +788,351 @@
       "x"
     ],
     "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_looks_all_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_solid_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_bad_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "duotone",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_default_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "outline",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_no_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_variant_one",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeSolidIcon",
+      "--from",
+      "./lib/looks.js",
+      "--id",
+      "home",
+      "--variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_add_one_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "StarSolidIcon",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_exclude",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--exclude",
+      "HomeOutlineIcon,HomeSolidIcon"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_desc",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--description",
+      "Two-look test icons."
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_variants",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--variants",
+      "outline,solid,bold"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_default",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_plain",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_badlook",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "bold,thin"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_unknown_default",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,bold",
+      "--default-variant",
+      "bold"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_map_pairs",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close=x,star=star"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_list",
+    "args": [
+      "experimental",
+      "icon",
+      "list"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_default_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_dry",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--dry-run"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks2_refresh",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_refresh_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_refresh_exclude",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--exclude",
+      "StarOutlineIcon,StarSolidIcon"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_all_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_add_rocket",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "RocketOutlineIcon",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
   }
 ]

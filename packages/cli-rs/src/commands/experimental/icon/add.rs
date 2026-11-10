@@ -255,8 +255,10 @@ pub fn drawn_word(positions: &Positions, words: &[Option<String>], among: &[Stri
 }
 
 pub struct Drawn {
+    pub module: String,
     pub positions: Positions,
     pub words: Vec<Option<String>>,
+    pub icons: usize,
 }
 
 fn set_module(set: &DiscoveredIconSet) -> String {
@@ -328,9 +330,9 @@ pub fn drawn_looks(set: &DiscoveredIconSet, package_dir: &str, positions_of: &dy
                 best
             })
             .collect();
-        return Some(Drawn { positions, words });
+        return Some(Drawn { module: m.clone(), positions, words, icons: sources.len() });
     }
-    Some(Drawn { positions: vec![], words: vec![] })
+    Some(Drawn { module: by_module[0].0.clone(), positions: vec![], words: vec![], icons: by_module[0].1.len() })
 }
 
 fn default_variant(set: &DiscoveredIconSet) -> Option<String> {
@@ -740,23 +742,7 @@ pub fn icon_add(cwd: &str, export_name: Option<&str>, o: &AddOptions) -> Result<
         }
     }
     if o.all {
-        // TEMP: --all (every icon's variant from a library) is not cloned yet.
-        return wr::all_or_nothing(|| {
-            if o.variant.is_none_or(|v| v.is_empty()) {
-                return Err(ierr("--all adds one variant for every icon: pass --variant with the variant, such as solid.", vec![], "ERR_MISSING_ARGUMENT"));
-            }
-            if o.from.is_none_or(|f| f.trim().is_empty()) {
-                return Err(ierr("Pass --from with the module that exports the variant, such as @heroicons/react/24/solid.", vec![], "ERR_MISSING_ARGUMENT"));
-            }
-            let local = wr::find_local_icon_set(cwd, o.selector)?;
-            let source = resolve_icon_source(o.from.unwrap(), &local)?;
-            let (_, positions) = module_naming(&source.file, local.set.data.get("adapter").is_some_and(|a| a.is_object()));
-            let pd = local.package_dir.clone();
-            let sm = source.module.clone();
-            let drawn = drawn_looks(&local.set, &pd, &|m| if gen::same_icon_module(m, &sm) { Some(positions.clone()) } else { None });
-            check_variant_look(&local.set, o.variant.unwrap(), &source.module, &positions, drawn.as_ref())?;
-            Err(ierr("experimental icon add --all is not cloned yet", vec![], "ERR_UNKNOWN"))
-        });
+        return wr::all_or_nothing(|| add_variant_for_all(cwd, o));
     }
     wr::all_or_nothing(|| add_one(cwd, export_name, o, new_definition.as_deref()))
 }
@@ -978,6 +964,151 @@ fn add_one(cwd: &str, export_name: Option<&str>, o: &AddOptions, new_definition:
     }
     let mut out = Map::new();
     out.insert("type".into(), Value::String("icon.add".into()));
+    out.insert("data".into(), Value::Object(d));
+    Ok(Value::Object(out))
+}
+
+
+/// `addVariantForAll({cwd, from, selector, variant})`.
+fn add_variant_for_all(cwd: &str, o: &AddOptions) -> Result<Value, IconError> {
+    let Some(variant) = o.variant.filter(|v| !v.is_empty()) else {
+        return Err(ierr("--all adds one variant for every icon: pass --variant with the variant, such as solid.", vec![], "ERR_MISSING_ARGUMENT"));
+    };
+    let Some(from) = o.from.filter(|f| !f.trim().is_empty()) else {
+        return Err(ierr("Pass --from with the module that exports the variant, such as @heroicons/react/24/solid.", vec![], "ERR_MISSING_ARGUMENT"));
+    };
+    let local = wr::find_local_icon_set(cwd, o.selector)?;
+    let set = &local.set;
+    let package_dir = local.package_dir.clone();
+    let source = resolve_icon_source(from, &local)?;
+    let has_adapter = set.data.get("adapter").is_some_and(|a| a.is_object());
+    let mut positions: Positions = vec![];
+    let (found, summary) = super::library::library_icons(&source.file, has_adapter, &[], &mut |_| vec![variant.to_string()]);
+    if let Some(sm) = &summary {
+        positions = sm.positions.clone();
+    }
+    let sm = source.module.clone();
+    let pos = positions.clone();
+    let drawn = drawn_looks(set, &package_dir, &|m| if gen::same_icon_module(m, &sm) { Some(pos.clone()) } else { None });
+    check_variant_look(set, variant, &source.module, &positions, drawn.as_ref())?;
+    let generated = generated_module_path(set, &package_dir);
+    let origins = gen::generated_origins(&package_dir, &generated);
+    let variant_package = super::generated::icon_module_package(&source.module);
+    let by_id = |id: &str| found.iter().find(|f| f.id == id);
+    let by_look = |l: &str| found.iter().find(|f| f.looks.as_ref().is_some_and(|ls| ls.iter().any(|x| x == l)));
+    let by_lib_export = |e: &str| found.iter().find(|f| f.export == e);
+    let by_name = |n: &str| found.iter().find(|f| f.name == n);
+    let mut to_write: Vec<GeneratedIcon> = vec![];
+    let mut added: Vec<String> = vec![];
+    let mut already: Vec<String> = vec![];
+    let mut missing: Vec<String> = vec![];
+    let mut own: Vec<String> = vec![];
+    let mut icons: Vec<Value> = vec![];
+    for icon in icons_of(set) {
+        let ex = s(&icon, "export").to_string();
+        let iid = s(&icon, "id").to_string();
+        let origin = origins.iter().find(|(n, _, _)| *n == ex);
+        if let Some((_, om, _)) = origin {
+            if super::generated::icon_module_package(om) != variant_package {
+                icons.push(icon);
+                continue;
+            }
+        }
+        let library_source = origin.and_then(|(_, _, os)| if os != "default" { Some(os.clone()) } else { None });
+        // Maps keep the last entry for a key; library entries are unique.
+        let m = library_source
+            .as_deref()
+            .and_then(by_lib_export)
+            .or_else(|| library_source.as_deref().and_then(by_look))
+            .or_else(|| by_name(&ex))
+            .or_else(|| by_id(&iid));
+        let Some(m) = m else {
+            missing.push(iid);
+            icons.push(icon);
+            continue;
+        };
+        if m.adapt && !has_adapter {
+            missing.push(iid);
+            icons.push(icon);
+            continue;
+        }
+        if let Some(look) = &m.look {
+            if !look.iter().any(|w| w.as_deref() == Some(variant)) {
+                missing.push(iid);
+                icons.push(icon);
+                continue;
+            }
+        }
+        if Some(&m.export) == library_source.as_ref() && origin.is_some_and(|(_, om, _)| gen::same_icon_module(om, &source.module)) {
+            own.push(iid.clone());
+            missing.push(iid);
+            icons.push(icon);
+            continue;
+        }
+        let name = variant_export_name(&ex, variant);
+        let mut variants = icon.get("variants").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        if variants.iter().any(|v| s(v, "variant") == variant) {
+            already.push(iid);
+            icons.push(icon);
+            continue;
+        }
+        to_write.push(GeneratedIcon { name: name.clone(), from: source.module.clone(), source: m.export.clone(), adapt: m.adapt });
+        let mut vm = Map::new();
+        vm.insert("variant".into(), Value::String(variant.into()));
+        vm.insert("export".into(), Value::String(name));
+        variants.push(Value::Object(vm));
+        let mut ni = icon.as_object().cloned().unwrap_or_default();
+        ni.insert("variants".into(), Value::Array(variants));
+        added.push(iid);
+        icons.push(Value::Object(ni));
+    }
+    if added.is_empty() && already.is_empty() && !own.is_empty() && default_variant(set).is_none() {
+        let mut variants = vec![variant.to_string()];
+        variants.extend(declared_variants(set).into_iter().filter(|v| v != variant));
+        return Err(ierr(
+            format!("\"{}\" is the module the {} icons of \"{}\" come from: its exports are those icons in the look they draw now, so \"{variant}\" is that look and can't be a variant of them. \"{}\" declares no default variant; declare \"{variant}\" as the default first.", source.module, own.len(), set.name, set.name),
+            vec![Suggestion::new(
+                format!("astryx experimental icon new-set {} --variants {} --default-variant {variant}", set.name, variants.join(",")),
+                format!("declare {variant}, the look each icon draws, as the default"),
+            )],
+            "ERR_INVALID_ARGUMENT",
+        ));
+    }
+    if added.is_empty() && already.is_empty() {
+        return Err(ierr(
+            format!("\"{}\" exports no icon with the id of an icon in \"{}\". Pass the module that exports the {variant} variant under the same names.", source.module, set.name),
+            vec![],
+            "ERR_NOT_FOUND",
+        ));
+    }
+    let mut next = set.data.as_object().cloned().unwrap_or_default();
+    if set.data.get("generated").is_none_or(|g| g.is_null() || g.as_str() == Some("")) {
+        next.insert("generated".into(), Value::String(generated.clone()));
+    }
+    if set.data.get("themeMap").is_none_or(|g| g.is_null() || g.as_str() == Some("")) {
+        next.insert("themeMap".into(), Value::String(crate::discovery::icon_set_writer::THEME_MAP_NAME.into()));
+    }
+    next.insert("icons".into(), Value::Array(icons));
+    let next = Value::Object(next);
+    let mut files = gen::write_generated_icons(&package_dir, &generated, &next, &to_write, &[])?;
+    let generated_changed = !files.is_empty();
+    let data_changed = crate::json::stringify(&next, 0) != crate::json::stringify(&set.data, 0);
+    if data_changed {
+        wr::write_icon_set_data(set, &next, &[])?;
+        files.push(np::relative(&package_dir, &set.data_path));
+    }
+    let mut d = Map::new();
+    d.insert("set".into(), Value::String(set.name.clone()));
+    d.insert("package".into(), Value::String(set.package.clone()));
+    d.insert("variant".into(), Value::String(variant.into()));
+    d.insert("from".into(), Value::String(source.module.clone()));
+    d.insert("added".into(), Value::from(added.len()));
+    d.insert("already".into(), Value::from(already.len()));
+    d.insert("missing".into(), Value::Array(missing.into_iter().map(Value::String).collect()));
+    d.insert("files".into(), Value::Array(files.into_iter().map(Value::String).collect()));
+    d.insert("changed".into(), Value::Bool(data_changed || generated_changed));
+    let mut out = Map::new();
+    out.insert("type".into(), Value::String("icon.addVariants".into()));
     out.insert("data".into(), Value::Object(d));
     Ok(Value::Object(out))
 }

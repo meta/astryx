@@ -24,5 +24,14 @@
     ],
     "fixture": "doctor-ts",
     "cwd": "doctor-ts/kit"
+  },
+  {
+    "id": "fuzz_integration_pack_--check@iconfresh_208728",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "iconfresh"
   }
 ]

@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {ensureDirs, goldenPath, HERE_REPORT, loadCases, pool, runCase} from './lib.mjs';
-import {setup} from './setup.mjs';
+import {caseFixtureHash, fixtureHashes, setup} from './setup.mjs';
 
 const argv = process.argv.slice(2);
 const opt = name => {
@@ -49,6 +49,8 @@ if (argv.includes('--failed') && fs.existsSync(reportFile)) {
   const prev = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
   onlyFailed = new Set(prev.failures.map(f => `${f.command}/${f.id}`));
 }
+const hashes = fixtureHashes();
+const stale = {};
 const crashFile = path.join(path.dirname(goldenPath('x', 'x')), '..', 'JS_CRASHES.json');
 const crashes = new Set(fs.existsSync(crashFile) ? JSON.parse(fs.readFileSync(crashFile, 'utf8')) : []);
 const items = [];
@@ -66,8 +68,14 @@ for (const [command, cases] of Object.entries(all)) {
       missing++;
       continue;
     }
-    items.push({command, c, golden: JSON.parse(fs.readFileSync(g, 'utf8'))});
+    const golden = JSON.parse(fs.readFileSync(g, 'utf8'));
+    if (golden.fixtureHash !== caseFixtureHash(c, hashes)) stale[c.fixture ?? 'app'] = (stale[c.fixture ?? 'app'] ?? 0) + 1;
+    items.push({command, c, golden});
   }
+}
+const staleTotal = Object.values(stale).reduce((a, b) => a + b, 0);
+if (staleTotal) {
+  console.error(`WARNING: ${staleTotal} goldens were recorded on fixtures that changed since (${Object.entries(stale).map(([k, v]) => `${k}: ${v}`).join(', ')}). Re-record them: node record.mjs --stale`);
 }
 const bin = {cmd: [binPath], cliRoot: findCliRoot(binPath), timeoutMs: Number(opt('timeout') ?? 20000)};
 const started = Date.now();

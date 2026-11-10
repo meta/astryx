@@ -1,0 +1,18 @@
+{
+ "id": "w_icon_looks_new_second_badlook",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "second",
+  "--from",
+  "./lib/looks.js",
+  "--variants",
+  "bold,thin"
+ ],
+ "fixture": "iconlooks",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: None of --variants (bold, thin) is the look ./lib/looks.js is wrapped in by default (\"outline\"), and each icon's own export draws the default variant. List it in --variants, or name the default with --default-variant.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set second --from ./lib/looks.js --variants outline,bold,thin  (declare outline, the look each icon draws, as the default)\n",
+ "exit": 1,
+ "files": []
+}

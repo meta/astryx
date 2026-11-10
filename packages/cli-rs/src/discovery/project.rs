@@ -399,6 +399,11 @@ impl Project {
 
     /// `project.issues()`.
     pub fn issues(&self) -> Vec<ProjectIssue> {
+        // Read-only: list each folder and import each doc once.
+        super::listing_cache::with_listing_cache(|| self.issues_uncached())
+    }
+
+    fn issues_uncached(&self) -> Vec<ProjectIssue> {
         super::validate_contributions::register();
         crate::commands::template::integration::register();
         if !self.loaded_integrations.is_empty() {

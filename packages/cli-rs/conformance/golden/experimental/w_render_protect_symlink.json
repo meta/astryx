@@ -1,0 +1,15 @@
+{
+ "id": "w_render_protect_symlink",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "linkdir/x.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: linkdir/x.html is reached through a symbolic link (linkdir); nothing was written.\n",
+ "exit": 1,
+ "files": []
+}

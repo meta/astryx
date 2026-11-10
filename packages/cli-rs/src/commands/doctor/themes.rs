@@ -1,7 +1,4 @@
 //! The theme checks (port of `api/doctor/theme-checks.mjs`).
-//! TEMP: the generated-module checks and import wiring need theme discovery
-//! (src/discovery theme-discovery, theme-state) and the theme build check
-//! (theme-build lane); until those land, a managed record reports info.
 
 use super::env;
 use super::{Check, Status};
@@ -156,10 +153,13 @@ pub struct Wiring {
     pub unconfirmed: Vec<String>,
 }
 
-/// `themeImportWiring(cwd)`. TEMP: needs theme discovery and
-/// `elementPropOrigins` (discovery lane); finds nothing until then.
-pub fn theme_import_wiring(_cwd: &str) -> Wiring {
-    Wiring::default()
+/// `themeImportWiring(cwd)`.
+pub fn theme_import_wiring(cwd: &str) -> Wiring {
+    super::themes_app::theme_import_wiring(cwd)
+}
+
+pub fn app_package_names_theme_pub(cwd: &str) -> bool {
+    app_package_names_theme(cwd)
 }
 
 fn wired_list(wired: &[(String, String)]) -> String {
@@ -277,11 +277,13 @@ pub fn check_app_themes(cwd: &str) -> Vec<Check> {
         }
         return report;
     }
-    // TEMP: the managed-record checks (theme discovery, theme build).
-    unavailable("Could not regenerate the module until its owners, imports, and default are valid.", None)
+    match crate::commands::theme::state::read(cwd) {
+        Ok(st) if st.configured => super::themes_app::managed_checks(&st),
+        Ok(_) => unavailable("Could not regenerate the module until its owners, imports, and default are valid.", None),
+        Err(e) => unavailable("Skipped because the generated theme module could not be read.", Some(&e.0)),
+    }
 }
 
-/// TEMP: `discoverUnmigratedThemeCopies` (discovery theme-discovery).
-fn unmigrated_copy_check(_project_dir: &str) -> Option<Check> {
-    None
+fn unmigrated_copy_check(project_dir: &str) -> Option<Check> {
+    super::themes_app::unmigrated_copy_check(project_dir)
 }

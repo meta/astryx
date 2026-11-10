@@ -53,7 +53,8 @@ A golden, `golden/<command>/<id>.json`, holds `stdout`, `stderr`, `exit` and
 `files`: `[{path, status: created|changed|deleted, text | base64 | sha256+size | link}]`,
 sorted by path. Paths are relative to the work root (`home/...` is `$HOME`).
 Files under `tmp/` (`$TMPDIR`) and `home/.npm/` (npm's own cache and logs, from
-commands that run `npm pack`) are not compared.
+commands that run `npm pack`) are not compared, nor is `node_modules/.cache/jiti`
+at any depth (the JS CLI's transpile cache).
 
 ## Environment (identical for both binaries)
 
@@ -96,7 +97,7 @@ commands that run `npm pack`) are not compared.
   sweeps (every component, hook, template, docs topic and section, theme, theme
   target; many search/build/discover queries with typos and several words) and
   TTY/stdin cases.
-- `record.mjs [--command x] [--case id] [--missing] [--once] [--jobs n]`: records
+- `record.mjs [--command x] [--case id] [--missing] [--stale] [--once] [--jobs n]`: records
   goldens from the JS CLI, running each case twice. A case whose two runs differ
   runs three more times; the most complete output (the JS CLI sometimes cuts
   stderr short when it exits with a write pending) is kept, marked

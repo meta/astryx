@@ -642,10 +642,15 @@ pub struct Response {
     pub data: Value,
 }
 
-fn status_up_to_date(ui: &mut Ui, from: &str, to: &str, agent_docs: AgentDocsSummary) -> Response {
+/// `registryCompositions?.ok === false`
+fn registry_unresolved(reg: &Option<Value>) -> bool {
+    reg.as_ref().and_then(|r| r.get("ok")).and_then(|v| v.as_bool()) == Some(false)
+}
+
+fn status_up_to_date(ui: &mut Ui, from: &str, to: &str, agent_docs: AgentDocsSummary, unresolved: bool) -> Response {
     ui.log("[ok] Already up to date - no codemods to run.");
     ui.log("Use --force to run codemods anyway.");
-    ui.log("Done\n");
+    ui.log(if unresolved { "Finished with unresolved registry items\n" } else { "Done\n" });
     let mut m = o();
     m.insert("status".into(), vs("up_to_date"));
     m.insert("from".into(), vs(from));
@@ -654,12 +659,18 @@ fn status_up_to_date(ui: &mut Ui, from: &str, to: &str, agent_docs: AgentDocsSum
     Response { kind: "upgrade.status", data: Value::Object(m) }
 }
 
-fn status_no_codemods(ui: &mut Ui, from: &str, to: &str, agent_docs: AgentDocsSummary, cbc: Option<CliBehindCore>) -> Response {
+fn status_no_codemods(ui: &mut Ui, from: &str, to: &str, agent_docs: AgentDocsSummary, cbc: Option<CliBehindCore>, unresolved: bool) -> Response {
     match &cbc {
         Some(c) => log_cli_behind_core(ui, c, to),
         None => ui.log("[ok] No codemods available for this version range."),
     }
-    ui.log(if cbc.is_some() { "Upgrade incomplete\n" } else { "Done\n" });
+    ui.log(if unresolved {
+        "Finished with unresolved registry items\n"
+    } else if cbc.is_some() {
+        "Upgrade incomplete\n"
+    } else {
+        "Done\n"
+    });
     let mut m = o();
     m.insert("status".into(), vs("no_codemods"));
     m.insert("from".into(), vs(from));
@@ -740,16 +751,18 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     ui.log(&format!("From version: {}", current));
     ui.log(&format!("Installed target: {} ({})", target, installed.package_name));
     // reconcileCompositions: registry receipts under the source path.
-    let reconcile = |ui: &mut Ui| -> Result<Option<Value>, ApiError> {
+    let reconcile_w = |ui: &mut Ui| -> Result<Option<(Value, Vec<PathBuf>)>, ApiError> {
         if opts.codemod.is_some() {
             return Ok(None);
         }
-        super::registry_compositions::reconcile_for_run(ui, apply, &path_, cwd, origin, if installed.package_name == "@astryxdesign/core" { Some(target.as_str()) } else { None })
+        super::registry_compositions::reconcile_for_run_with_writes(ui, apply, &path_, cwd, origin, if installed.package_name == "@astryxdesign/core" { Some(target.as_str()) } else { None })
     };
+    let reconcile = |ui: &mut Ui| -> Result<Option<Value>, ApiError> { Ok(reconcile_w(ui)?.map(|x| x.0)) };
     if !opts.force && semver_gte(&current, &target) {
         let reg = reconcile(ui)?;
         let ad = agent_docs_for(ui, cwd, origin, &target, apply, cli_root);
-        let mut r = status_up_to_date(ui, &current, &target, ad);
+        let unresolved = registry_unresolved(&reg);
+        let mut r = status_up_to_date(ui, &current, &target, ad, unresolved);
         attach_registry(&mut r.data, reg);
         return Ok(r);
     }
@@ -915,7 +928,8 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     if manifests.is_empty() && !has_integration {
         let reg = reconcile(ui)?;
         let ad = agent_docs_for(ui, cwd, origin, &target, apply, cli_root);
-        let mut r = status_no_codemods(ui, &current, &target, ad, cbc);
+        let unresolved = registry_unresolved(&reg);
+        let mut r = status_no_codemods(ui, &current, &target, ad, cbc, unresolved);
         attach_registry(&mut r.data, reg);
         return Ok(r);
     }
@@ -945,8 +959,10 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     } else {
         None
     };
-    let reg = reconcile(ui)?;
-    let reg_written: Vec<PathBuf> = Vec::new();
+    let (reg, reg_written) = match reconcile_w(ui)? {
+        Some((v, w)) => (Some(v), w),
+        None => (None, Vec::new()),
+    };
     let mut changed_core: Vec<PathBuf> = core.as_ref().map(|c| c.changed_files.clone()).unwrap_or_default();
     changed_core.extend(integ.as_ref().map(|c| c.changed_files.clone()).unwrap_or_default());
     let merged_files_changed = changed_core.iter().collect::<HashSet<_>>().len();

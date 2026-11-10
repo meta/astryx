@@ -312,9 +312,20 @@ pub fn read_doc_meta(doc_path: &Path) -> DocMeta {
     }
 }
 
+/// `read_doc_meta` without the `scan` (left default): what grouping needs.
+fn read_group_meta(doc_path: &Path) -> DocMeta {
+    let Some(content) = read_text(doc_path) else { return DocMeta::default() };
+    DocMeta {
+        group: top_level_fields(&content, "group", false, false, true).into_iter().next(),
+        hidden_components: hidden_components(&content),
+        hidden: has_hidden_true(&content),
+        scan: DocScan::default(),
+    }
+}
+
 /// `isHiddenComponentDoc(docPath)`.
 pub fn is_hidden_component_doc(doc_path: &Path) -> bool {
-    read_doc_meta(doc_path).hidden
+    read_group_meta(doc_path).hidden
 }
 
 // ── Family docs ─────────────────────────────────────────────────────────
@@ -564,7 +575,7 @@ fn read_component_groups(core_dir: &Path) -> ComponentGroups {
             doc_file = dir_path.join(format!("XDS{}.doc.mjs", entry.name));
         }
         let doc_exists = path_exists(&doc_file);
-        let meta = if doc_exists { read_doc_meta(&doc_file) } else { DocMeta::default() };
+        let meta = if doc_exists { read_group_meta(&doc_file) } else { DocMeta::default() };
         if meta.hidden {
             continue;
         }
@@ -580,7 +591,7 @@ fn read_component_groups(core_dir: &Path) -> ComponentGroups {
             }
             let has_comp_doc = path_exists(&comp_doc);
             if has_comp_doc {
-                let cm = read_doc_meta(&comp_doc);
+                let cm = read_group_meta(&comp_doc);
                 if cm.group.is_some() {
                     group = cm.group;
                 }
@@ -612,7 +623,7 @@ fn read_component_groups(core_dir: &Path) -> ComponentGroups {
         if !doc_path.to_string_lossy().ends_with(".doc.mjs") {
             continue;
         }
-        let meta = read_doc_meta(&doc_path);
+        let meta = read_group_meta(&doc_path);
         if meta.hidden || meta.hidden_components.contains(name) {
             continue;
         }
@@ -790,7 +801,12 @@ pub fn find_component_source(core_dir: &Path, name: &str) -> Option<PathBuf> {
     }
 }
 
-fn export_keys_of(core_dir: &Path) -> Vec<String> {
+fn export_keys_of(core_dir: &Path) -> std::sync::Arc<Vec<String>> {
+    let key = format!("export-keys\0{}", core_dir.display());
+    crate::discovery::listing_cache::once_per_listing(&key, || read_export_keys(core_dir))
+}
+
+fn read_export_keys(core_dir: &Path) -> Vec<String> {
     let pkg = core_dir.join("package.json");
     let Some(text) = read_text(&pkg) else { return Vec::new() };
     let Ok(v) = serde_json::from_str::<Value>(&text) else { return Vec::new() };

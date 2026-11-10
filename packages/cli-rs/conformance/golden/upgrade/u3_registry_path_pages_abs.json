@@ -1,0 +1,14 @@
+{
+ "id": "u3_registry_path_pages_abs",
+ "args": [
+  "upgrade",
+  "--registry",
+  "--path",
+  "/tmp/astryx-conformance/work/upgrade-registry/src/pages"
+ ],
+ "fixture": "upgrade-registry",
+ "stdout": "\nUpgrade\n1 ShadCN composition receipt checked.\nRegistry upgrade finished with unresolved items\n\n",
+ "stderr": "0 conflict(s), 0 missing file(s), 0 invalid receipt(s), 1 failed item(s).\n  page-home: Could not fetch https://astryx.atmeta.com/shadcn/pages/home.json: fetch failed\n",
+ "exit": 1,
+ "files": []
+}

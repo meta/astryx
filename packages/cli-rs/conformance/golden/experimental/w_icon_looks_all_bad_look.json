@@ -1,0 +1,18 @@
+{
+ "id": "w_icon_looks_all_bad_look",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--variant",
+  "duotone",
+  "--from",
+  "./lib/looks.js",
+  "--all"
+ ],
+ "fixture": "iconlooks",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"duotone\" is no look of ./lib/looks.js: its exports name their looks with outline or solid. Name one of these words, so each icon's export draws that look.\n\n  --variant outline  (a look ./lib/looks.js names)\n  --variant solid  (a look ./lib/looks.js names)\n",
+ "exit": 1,
+ "files": []
+}

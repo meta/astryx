@@ -1405,3 +1405,58 @@ pub fn run(inv: &Invocation, out: &mut Out, files: &[String]) -> CmdResult {
     }
     Ok(())
 }
+
+/// `themeBuild(entry, {check: true}, {cwd, projectCore: true})`, silenced,
+/// for doctor: whether the built outputs are up to date with the source.
+pub fn check_up_to_date(entry: &str, cwd: &str, cli_root: &str) -> Result<bool, String> {
+    if crate::discovery::paths::find_project_core_dir(cwd).is_none() {
+        return Err("The project's Core isn't installed.".into());
+    }
+    let mut out = Out::new(true, std::path::PathBuf::from(cwd));
+    let mut log = Logger { out: &mut out, silent: true };
+    let opts = BuildOptions { out: None, check: true, icons_specifier: None };
+    let mut pve = false;
+    match theme_build_internal(entry, &opts, cwd, cli_root, &mut log, false, None, &mut pve, None) {
+        Ok(Some(r)) => Ok(r["data"]["upToDate"] == Value::Bool(true)),
+        Ok(None) => Ok(false),
+        Err(e) => Err(e.message),
+    }
+}
+
+/// `validateThemePrivateInputs(entry, {cwd})`, for doctor: private-var
+/// errors in every raw input of the theme's recorded `defineTheme` lineage.
+pub fn validate_private_inputs(entry: &str, cwd: &str, cli_root: &str) -> Result<Vec<String>, String> {
+    let file_path = nodepath::resolve(cwd, &[entry]);
+    if !Path::new(&file_path).exists() {
+        return Err(format!("File not found: {file_path}"));
+    }
+    with_live(|s| -> Result<Vec<String>, String> {
+        // The CLI's own Core.
+        let own = crate::discovery::paths::find_installed_package(cli_root, "@astryxdesign/core", usize::MAX)
+            .or_else(|| crate::discovery::paths::find_carried_core_dir(cwd, false));
+        let file = own.as_deref().and_then(|d| import_target(d, "./theme")).ok_or_else(|| {
+            let from = nodepath::join(&[cli_root, "api/theme/build/build.mjs"]);
+            format!("Cannot find package '@astryxdesign/core' imported from {from}")
+        })?;
+        let ns = s.import(Path::new(&file), &crate::js::ImportOptions::default()).map_err(|e| e.message)?;
+        let log_arr = s.new_array();
+        let log_obj = log_arr.as_object().map(|o| o.clone()).ok_or("loader setup failed")?;
+        let real = s.get(&ns, "defineTheme").as_object().map(|o| o.clone()).ok_or("loader setup failed")?;
+        let recorder = s.recorder(real, log_obj.clone());
+        let wrapper = s.spread_with(&ns, "defineTheme", recorder.into());
+        let id = s.register_virtual(wrapper)?;
+        let rec = FamilyLoad { virtual_id: id, log: log_obj, prepared: None };
+        let loaded = load_theme(s, &file_path, vec![], Some(id)).map_err(|m| format!("Failed to load theme from {file_path}: {m}\nMake sure all imports in the theme file are resolvable."))?;
+        let theme_js: JsValue = loaded.theme.clone().into();
+        let mut errors: Vec<String> = Vec::new();
+        for input in super::interception::lineage_of(s, &rec, &theme_js) {
+            let v = s.to_value(&input.into()).unwrap_or(Value::Null);
+            for e in super::validate::private_vars(&v) {
+                if !errors.contains(&e) {
+                    errors.push(e);
+                }
+            }
+        }
+        Ok(errors)
+    })
+}

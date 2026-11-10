@@ -83,3 +83,21 @@ fn dump_snippet() {
     let p = recast::parse(&mut ast, &src, Mode::Babel).unwrap();
     std::fs::write("/tmp/u3dump.json", serde_json::to_string(&recast::debug_json(&ast, p.file)).unwrap()).unwrap();
 }
+
+#[test]
+#[ignore]
+fn equivalence_matches_corpus() {
+    let Some(pairs) = corpus("eq_corpus.json") else { return };
+    let mut bad = 0;
+    for p in &pairs {
+        let (a, b, want) = (p["a"].as_str().unwrap(), p["b"].as_str().unwrap(), p["eq"].as_bool().unwrap());
+        if sources_equivalent(a, b) != want {
+            bad += 1;
+            if bad <= 5 {
+                eprintln!("== want {want}\n{}", first_diff(a, b));
+            }
+        }
+    }
+    eprintln!("equivalence mismatches: {bad} of {}", pairs.len());
+    assert_eq!(bad, 0);
+}

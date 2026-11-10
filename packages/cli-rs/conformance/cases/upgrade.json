@@ -1074,7 +1074,7 @@
     "id": "argv_upgrade_-",
     "args": [
       "upgrade",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -6285,15 +6285,5 @@
       "LANG": "zh_CN.UTF-8",
       "LC_ALL": "zh_CN.UTF-8"
     }
-  },
-  {
-    "id": "upgrade_--from_x",
-    "args": [
-      "upgrade",
-      "--from",
-      ""
-    ],
-    "fixture": "app",
-    "gen": true
   }
 ]

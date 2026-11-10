@@ -258,9 +258,11 @@ pub fn find_local_icon_set(cwd: &str, selector: Option<&str>) -> Result<LocalSet
     let declared = match super::api::find_local_manifest(&package_dir)? {
         None => None,
         Some(file) => {
-            let ns = crate::js::import_module(np::p(&file), &crate::js::ImportOptions { jsx: false, fresh: true })
-                .map_err(|e| ierr(e.message.clone(), vec![], "ERR_UNKNOWN"))?;
-            ns.get("default")
+            let manifest = crate::commands::integration::manifest_load::load_manifest_labeled(np::p(&file), "Integration manifest").map_err(|e| {
+                ierr(e.message.clone(), e.suggestions.iter().map(|(n, r)| Suggestion::new(n.clone(), r.clone())).collect(), e.code.as_deref().unwrap_or("ERR_UNKNOWN"))
+            })?;
+            Some(manifest)
+                .as_ref()
                 .and_then(|d| d.get("experimental"))
                 .and_then(|e| e.get("iconSets"))
                 .and_then(|v| v.as_str())

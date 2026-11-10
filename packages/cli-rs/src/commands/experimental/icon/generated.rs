@@ -365,3 +365,12 @@ pub fn same_icon_module(a: &str, b: &str) -> bool {
     };
     norm(a) == norm(b)
 }
+
+/// `iconModulePackage(specifier)`.
+pub fn icon_module_package(specifier: &str) -> String {
+    if specifier.starts_with('.') {
+        return ".".into();
+    }
+    let parts: Vec<&str> = specifier.split('/').collect();
+    if specifier.starts_with('@') { parts.iter().take(2).cloned().collect::<Vec<_>>().join("/") } else { parts[0].to_string() }
+}

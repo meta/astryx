@@ -151,6 +151,12 @@ fn project_uses_icon_sets(cwd: &str) -> bool {
 
 /// `validateInstalledIntegration(spec, cwd)`.
 pub fn validate_installed(spec: &str, cwd: &str) -> Resolved {
+    validate_installed_with(spec, cwd, None)
+}
+
+/// `validateInstalledIntegration(spec, cwd, {iconSets})`: `icon_sets`
+/// overrides whether the project's config turns icon sets on.
+pub fn validate_installed_with(spec: &str, cwd: &str, icon_sets: Option<bool>) -> Resolved {
     let invalid = spec.is_empty() || spec.starts_with('/') || spec.split('/').any(|s| s == ".." || s == ".");
     if invalid {
         return Resolved {
@@ -195,7 +201,7 @@ pub fn validate_installed(spec: &str, cwd: &str) -> Resolved {
         None | Some(Value::Null) => spec.to_string(),
         Some(v) => crate::cli::format::js_string(v),
     };
-    let icon_sets = project_uses_icon_sets(cwd);
+    let icon_sets = icon_sets.unwrap_or_else(|| project_uses_icon_sets(cwd));
     validate_at_package_dir(&package_dir, &name, pkg.get("version").cloned(), Opts { own: false, cwd: cwd.to_string(), icon_sets, scan: false })
 }
 
@@ -510,20 +516,35 @@ pub fn project_typescript(dirs: &[&str]) -> Option<String> {
 const TYPESCRIPT_FIX: &str = "On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.";
 
 fn prop_drift_report(cwd: &str, integration: &Value) -> Value {
-    let pd = integration.get("__packageDir").and_then(|v| v.as_str()).unwrap_or(cwd).to_string();
-    let _ts = project_typescript(&[cwd, &pd]);
-    let mut m = Map::new();
-    m.insert("status".into(), Value::String("skipped".into()));
-    m.insert(
-        "reason".into(),
-        Value::String(format!("TypeScript is not installed in this project, so documented props were not compared with the code. {TYPESCRIPT_FIX}")),
-    );
-    m.insert("components".into(), Value::from(0));
-    m.insert("typesCompared".into(), Value::from(0));
-    for k in ["findings", "unchecked", "typesNotCompared"] {
-        m.insert(k.into(), Value::Array(vec![]));
+    use crate::commands::doctor::ts::prop_compare::{compare_prop_docs, Component};
+    use crate::discovery::component_discovery as cd;
+    let rec = integration.as_object().cloned().unwrap_or_default();
+    let pd = rec.get("__packageDir").and_then(|v| v.as_str()).map(String::from);
+    let li = crate::discovery::validate_contributions::loaded_integration(&rec);
+    let mut components: Vec<Component> = cd::discover_valid_integration_components(&li, false)
+        .components
+        .into_iter()
+        .map(|r| Component { name: r.name.clone(), doc_path: r.doc_path.to_string_lossy().into_owned(), source_path: r.source_path.map(|p| p.to_string_lossy().into_owned()) })
+        .collect();
+    let mut recorded: Vec<String> = components.iter().map(|c| c.doc_path.clone()).collect();
+    if let Some(root) = rec.get("components").and_then(|v| v.as_str()) {
+        let mut left: Vec<Component> = Vec::new();
+        cd::for_each_integration_doc(std::path::Path::new(root), &mut |doc, stem| {
+            let d = doc.to_string_lossy().into_owned();
+            if recorded.contains(&d) {
+                return;
+            }
+            recorded.push(d.clone());
+            left.push(Component { name: stem.to_string(), doc_path: d, source_path: cd::integration_source_for_doc(doc).map(|p| p.to_string_lossy().into_owned()) });
+        });
+        components.extend(left);
     }
-    Value::Object(m)
+    let base = pd.clone().unwrap_or_else(|| cwd.to_string());
+    let mut dirs: Vec<&str> = vec![cwd];
+    if let Some(p) = &pd {
+        dirs.push(p);
+    }
+    compare_prop_docs(&components, &base, &dirs)
 }
 
 fn doc_types_report(cwd: &str, integration: &Value) -> Value {

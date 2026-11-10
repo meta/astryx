@@ -1,0 +1,12 @@
+{
+ "id": "u3_nocore_registry",
+ "args": [
+  "upgrade",
+  "--registry"
+ ],
+ "fixture": "upgrade-registry-nocore",
+ "stdout": "\nUpgrade\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

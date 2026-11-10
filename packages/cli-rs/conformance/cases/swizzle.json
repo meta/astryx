@@ -760,7 +760,7 @@
     "id": "argv_swizzle_-",
     "args": [
       "swizzle",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

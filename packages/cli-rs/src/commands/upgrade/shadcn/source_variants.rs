@@ -109,15 +109,15 @@ fn write_node(ast: &Ast, id: NodeId, out: &mut String) {
     write_obj(ast, &keys, out);
 }
 
-/// Where each comment sits among the nodes: its text, the deepest node that
-/// holds it, the last node that ends before it and the first that starts
-/// after it (by preorder index). Babel attaches comments by these positions.
+/// Where each comment sits among the nodes, the way Babel attaches it: the
+/// innermost node holding it, the outermost node inside that one ending at
+/// the previous token, and the outermost one starting at the next token.
 fn comment_signature(ast: &Ast, root: NodeId, lines_id: usize) -> Vec<String> {
-    let mut order: Vec<(NodeId, f64, f64)> = Vec::new();
-    fn walk(ast: &Ast, id: NodeId, order: &mut Vec<(NodeId, f64, f64)>) {
+    let mut order: Vec<(NodeId, usize, usize)> = Vec::new();
+    fn walk(ast: &Ast, id: NodeId, order: &mut Vec<(NodeId, usize, usize)>) {
         let n = ast.node(id);
         if let (Some(s), Some(e)) = (n.start, n.end) {
-            order.push((id, s, e));
+            order.push((id, s as usize, e as usize));
         }
         for c in ast.children(id) {
             walk(ast, c, order);
@@ -125,25 +125,43 @@ fn comment_signature(ast: &Ast, root: NodeId, lines_id: usize) -> Vec<String> {
     }
     walk(ast, root, &mut order);
     let src = &ast.sources[lines_id];
+    let spans = &ast.comment_spans[lines_id];
+    let is_space = |c: u16| matches!(c, 0x09 | 0x0a | 0x0b | 0x0c | 0x0d | 0x20 | 0xa0 | 0xfeff | 0x1680 | 0x2000..=0x200a | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000);
     let mut out = Vec::new();
-    for &(cs, ce) in ast.comment_spans[lines_id].iter() {
-        let (cs, ce) = (cs as f64, ce as f64);
-        let text = String::from_utf16_lossy(&src[cs as usize..ce as usize]);
-        let mut holder = 0usize;
-        let mut before: isize = -1;
-        let mut after: isize = -1;
-        for (i, &(_, s, e)) in order.iter().enumerate() {
-            if s <= cs && e >= ce {
-                holder = i;
-            }
-            if e <= cs {
-                before = i as isize;
-            }
-            if after < 0 && s >= ce {
-                after = i as isize;
+    for &(cs, ce) in spans.iter() {
+        let text = String::from_utf16_lossy(&src[cs..ce]);
+        let mut ws_start = cs;
+        loop {
+            if ws_start > 0 && is_space(src[ws_start - 1]) {
+                ws_start -= 1;
+            } else if let Some(&(s, _)) = spans.iter().find(|&&(_, e)| e == ws_start && ws_start > 0) {
+                ws_start = s;
+            } else {
+                break;
             }
         }
-        out.push(format!("{text}\u{0}{holder}\u{0}{before}\u{0}{after}"));
+        let mut ws_end = ce;
+        loop {
+            if ws_end < src.len() && is_space(src[ws_end]) {
+                ws_end += 1;
+            } else if let Some(&(_, e)) = spans.iter().find(|&&(s, _)| s == ws_end) {
+                ws_end = e;
+            } else {
+                break;
+            }
+        }
+        let mut holder = 0usize;
+        for (i, &(_, s, e)) in order.iter().enumerate() {
+            if s <= ws_start && e >= ws_end {
+                holder = i;
+            }
+        }
+        let (hs, he) = order.get(holder).map(|o| (o.1, o.2)).unwrap_or((0, usize::MAX));
+        let inside = |i: usize, s: usize, e: usize| i != holder && s >= hs && e <= he;
+        let leading = order.iter().enumerate().position(|(i, &(_, s, e))| inside(i, s, e) && e == ws_start).map(|x| x as isize).unwrap_or(-1);
+        let trailing = order.iter().enumerate().position(|(i, &(_, s, e))| inside(i, s, e) && s == ws_end).map(|x| x as isize).unwrap_or(-1);
+        let comma = ws_start > 0 && src[ws_start - 1] == b',' as u16;
+        out.push(format!("{text}\u{0}{holder}\u{0}{leading}\u{0}{trailing}\u{0}{comma}"));
     }
     out
 }

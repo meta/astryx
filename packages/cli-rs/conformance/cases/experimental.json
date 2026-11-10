@@ -444,7 +444,7 @@
     "id": "argv_experimental_-",
     "args": [
       "experimental",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -1523,7 +1523,7 @@
     "args": [
       "experimental",
       "icon",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -3550,7 +3550,7 @@
       "experimental",
       "icon",
       "add",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -5154,7 +5154,7 @@
       "experimental",
       "icon",
       "map",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -6494,7 +6494,7 @@
       "experimental",
       "icon",
       "new-definition",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -6506,7 +6506,7 @@
       "icon",
       "new-definition",
       "useClipboard",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -8348,7 +8348,7 @@
       "experimental",
       "icon",
       "new-set",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -8360,7 +8360,7 @@
       "icon",
       "new-set",
       "useClipboard",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -9710,7 +9710,7 @@
       "experimental",
       "icon",
       "use",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -9722,7 +9722,7 @@
       "icon",
       "use",
       "lucide",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -10611,7 +10611,7 @@
     "args": [
       "experimental",
       "render",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

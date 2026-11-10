@@ -769,7 +769,7 @@ for (const v of OLD_CORES) {
   addOld('component', ['component', 'Button'], {fixture, cwd: `${fixture}/src`, tag: 'in-src'});
 }
 for (const [command, list] of oldcore) {
-  fs.writeFileSync(path.join(CASES_DIR, `${command}.oldcore.json`), `${JSON.stringify(list, null, 1)}\n`);
+  fs.writeFileSync(path.join(CASES_DIR, `${command}.oldcore.json`), `${JSON.stringify(list, null, 2)}\n`);
 }
 console.log(`oldcore        ${[...oldcore.values()].reduce((n, l) => n + l.length, 0)} (cases/<command>.oldcore.json)`);
 
@@ -787,7 +787,7 @@ for (const [command, list] of [...byCommand].sort()) {
     if (stray.length) {
       const prev = fs.existsSync(manualFile) ? JSON.parse(fs.readFileSync(manualFile, 'utf8')) : [];
       const ids = new Set(prev.map(c => c.id));
-      fs.writeFileSync(manualFile, `${JSON.stringify([...prev, ...stray.filter(c => !ids.has(c.id))], null, 1)}\n`);
+      fs.writeFileSync(manualFile, `${JSON.stringify([...prev, ...stray.filter(c => !ids.has(c.id))], null, 2)}\n`);
     }
   }
   const taken = new Set();
@@ -797,7 +797,7 @@ for (const [command, list] of [...byCommand].sort()) {
     }
   }
   const mine = list.filter(c => !taken.has(c.id));
-  fs.writeFileSync(file, `${JSON.stringify(mine, null, 1)}\n`);
+  fs.writeFileSync(file, `${JSON.stringify(mine, null, 2)}\n`);
   total += mine.length + taken.size;
   console.log(`${command.padEnd(14)} ${mine.length} generated, ${taken.size} hand-written`);
 }

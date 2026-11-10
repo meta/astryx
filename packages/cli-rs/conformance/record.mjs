@@ -5,7 +5,10 @@
 // the most complete output is kept, written with "nondeterministic": true and
 // listed in golden/NONDETERMINISTIC.json.
 //
-// Usage: node record.mjs [--command a,b] [--case id] [--jobs n] [--missing] [--once] [--prune]
+// Usage: node record.mjs [--command a,b] [--case id] [--jobs n] [--missing] [--stale] [--once] [--prune]
+//
+// --stale records the cases whose golden was recorded on fixtures that have
+// changed since (each golden stores its fixture's content hash), and missing ones.
 //
 // --prune drops goldens whose case is gone (always on for an unfiltered run).
 
@@ -13,7 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {REPO} from './setup.mjs';
+import {REPO, caseFixtureHash, fixtureHashes} from './setup.mjs';
 import {comparable, ensureDirs, GOLDEN_DIR, goldenPath, jsBin, loadCases, pool, runCase, sameResult} from './lib.mjs';
 import {setup} from './setup.mjs';
 
@@ -34,9 +37,19 @@ const all = loadCases({command: opt('command'), caseId: opt('case')});
 // Node segfault): there is no behavior to match, so they get no golden.
 const crashFile = path.join(GOLDEN_DIR, 'JS_CRASHES.json');
 const crashes = new Set(fs.existsSync(crashFile) ? JSON.parse(fs.readFileSync(crashFile, 'utf8')) : []);
+const hashes = fixtureHashes();
+const staleOnly = argv.includes('--stale');
+/** Whether a case's golden was recorded on fixtures that have changed since. */
+function isStale(command, c) {
+  const file = goldenPath(command, c.id);
+  if (!fs.existsSync(file)) return false;
+  const g = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return g.fixtureHash !== caseFixtureHash(c, hashes);
+}
 const items = [];
 for (const [command, cases] of Object.entries(all)) {
   for (const c of cases) {
+    if (staleOnly && !isStale(command, c) && fs.existsSync(goldenPath(command, c.id))) continue;
     if (missingOnly && (fs.existsSync(goldenPath(command, c.id)) || crashes.has(`${command}/${c.id}`))) continue;
     items.push({command, c});
   }
@@ -86,7 +99,7 @@ await pool(
       return;
     }
     crashes.delete(`${command}/${c.id}`);
-    const golden = {id: c.id, args: c.args, fixture: c.fixture ?? 'app', ...comparable(a)};
+    const golden = {id: c.id, args: c.args, fixture: c.fixture ?? 'app', fixtureHash: caseFixtureHash(c, hashes), ...comparable(a)};
     if (nondeterministic) golden.nondeterministic = true;
     fs.mkdirSync(path.dirname(file), {recursive: true});
     fs.writeFileSync(file, `${JSON.stringify(golden, null, 1)}\n`);

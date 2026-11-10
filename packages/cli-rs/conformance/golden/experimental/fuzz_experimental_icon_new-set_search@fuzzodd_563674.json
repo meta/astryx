@@ -1,0 +1,15 @@
+{
+ "id": "fuzz_experimental_icon_new-set_search@fuzzodd_563674",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "search"
+ ],
+ "fixture": "fuzzodd",
+ "fixtureHash": "d9eac646ed127806+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Failed to write icon-set contribution: Post-write verification failed: Icon set \"search\" in spaced ü data file is invalid: module: module must be a package import specifier, never a relative or absolute path\n",
+ "exit": 1,
+ "files": []
+}

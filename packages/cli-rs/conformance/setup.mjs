@@ -290,6 +290,43 @@ export function fixtureList() {
   };
 }
 
+/** A hash of each fixture folder's content (paths, file bytes, link targets). */
+function fixtureContentHashes(root) {
+  const out = {};
+  for (const name of fs.readdirSync(root).sort()) {
+    if (name.startsWith('.')) continue;
+    const h = createHash('sha256');
+    const walk = rel => {
+      for (const e of fs.readdirSync(path.join(root, name, rel), {withFileTypes: true}).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        const abs = path.join(root, name, r);
+        if (e.isDirectory()) {
+          h.update(`d ${r}\0`);
+          walk(r);
+        } else if (e.isSymbolicLink()) h.update(`l ${r} ${fs.readlinkSync(abs)}\0`);
+        else {
+          h.update(`f ${r}\0`);
+          h.update(fs.readFileSync(abs));
+        }
+      }
+    };
+    walk('');
+    out[name] = h.digest('hex').slice(0, 16);
+  }
+  return out;
+}
+
+/** Content hash of each fixture, from the built fixtures folder. */
+export function fixtureHashes() {
+  return JSON.parse(fs.readFileSync(path.join(FIXTURES, '.hashes.json'), 'utf8'));
+}
+
+/** The hash a case's golden depends on: its fixture plus the shared inputs. */
+export function caseFixtureHash(c, hashes = fixtureHashes()) {
+  const names = [...new Set([c.fixture ?? 'app', 'inputs', ...(c.extraFixtures ?? [])])];
+  return names.map(n => hashes[n] ?? 'missing').join('+');
+}
+
 export async function setup({force = false} = {}) {
   if (!force && fs.existsSync(path.join(FIXTURES, '.complete'))) return false;
   // Build beside the final folder, then rename it in: lanes share the box.
@@ -315,6 +352,7 @@ export async function setup({force = false} = {}) {
   writeJson(path.join(inputs, 'palette.config.json'), JSON.parse(fs.readFileSync(path.join(PKG('themes/neutral'), 'palette.config.json'), 'utf8')));
   writeFile(path.join(inputs, 'not-json.json'), 'nope{');
   writeFile(path.join(inputs, 'page.tsx'), "import {Button} from '@astryxdesign/core';\n\nexport default function Page() {\n  return <Button label=\"Go\" />;\n}\n");
+  writeJson(path.join(tmp, '.hashes.json'), fixtureContentHashes(tmp));
   writeFile(path.join(tmp, '.complete'), '');
   try {
     fs.renameSync(tmp, FIXTURES);

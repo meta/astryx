@@ -278,7 +278,7 @@ fn render_to_file(cwd: &str, input: &str, output: &str, title: Option<&str>) -> 
     };
     let msg = worker::run_worker(input, &root, served.as_ref(), 60_000).map_err(as_err)?;
     let rendered = page::render_page(input, title, &crate::cli::env::cli_version(), served.as_ref(), msg).map_err(as_err)?;
-    refuse_symlinks(output, cwd)?;
+    refuse_protected(&[output.to_string()], cwd)?;
     if let Ok(m) = std::fs::metadata(output) {
         if m.is_file() {
             let head: String = std::fs::read(output).map(|b| String::from_utf8_lossy(&b[..b.len().min(4096 * 4)]).chars().take(4096).collect()).unwrap_or_default();
@@ -326,6 +326,49 @@ fn render_to_file(cwd: &str, input: &str, output: &str, title: Option<&str>) -> 
 
 fn leak(s: &str) -> &'static str {
     Box::leak(s.to_string().into_boxed_str())
+}
+
+/// `refuseProtected(files, cwd)`.
+pub(crate) fn refuse_protected(files: &[String], cwd: &str) -> Result<(), RenderError> {
+    for f in files {
+        refuse_symlinks(f, cwd)?;
+    }
+    let existing: Vec<&String> = files.iter().filter(|f| np::exists(f)).collect();
+    if existing.is_empty() {
+        return Ok(());
+    }
+    let resolver = crate::discovery::file_protection::FileProtectionResolver::new(cwd, &[]).map_err(|e| {
+        err(
+            format!("Could not read this project's file protection ({}), so no existing file is replaced; nothing was written.", e.message),
+            vec![],
+            "ERR_FILE_EXISTS",
+        )
+    })?;
+    let mut blocked = vec![];
+    for f in existing {
+        let classes = resolver.classify(f).map_err(|e| {
+            err(
+                format!("Could not read this project's file protection ({}), so no existing file is replaced; nothing was written.", e.message),
+                vec![],
+                "ERR_FILE_EXISTS",
+            )
+        })?;
+        if let Some(p) = classes.first() {
+            blocked.push(format!("{} ({})", shown(cwd, f), p.declaration));
+        }
+    }
+    if !blocked.is_empty() {
+        return Err(err(
+            format!(
+                "{} {} protected, so never replaced, even with --overwrite; nothing was written. Choose another --out.",
+                blocked.join(", "),
+                if blocked.len() == 1 { "is" } else { "are" }
+            ),
+            vec![],
+            "ERR_FILE_EXISTS",
+        ));
+    }
+    Ok(())
 }
 
 /// The symbolic-link half of `refuseProtected([output], cwd)`.

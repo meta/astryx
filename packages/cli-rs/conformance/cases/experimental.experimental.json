@@ -700,5 +700,151 @@
       "x.test.tsx"
     ],
     "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_forward",
+    "args": [
+      "experimental",
+      "render",
+      "alias/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_broken",
+    "args": [
+      "experimental",
+      "render",
+      "alias/broken.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_default",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv_existing",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_generated",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "gen.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_ignored",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "ignored.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_vendored",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "vendor/v.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_replace_own",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "mine.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_symlink",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "linkdir/x.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_reverse_generated",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "vendor/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_reverse_symlink",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "linkdir/new/page.tsx"
+    ],
+    "fixture": "renderpages"
   }
 ]

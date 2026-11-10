@@ -7,6 +7,11 @@ pub mod type_text;
 pub mod type_match;
 pub mod package_tsconfig;
 pub mod unresolved;
+pub mod prop_drift;
+pub mod prop_types;
+pub mod prop_origin;
+pub mod prop_read;
+pub mod prop_compare;
 
 use boa_engine::object::builtins::JsArray;
 use boa_engine::object::ObjectInitializer;

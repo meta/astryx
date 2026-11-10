@@ -50,7 +50,7 @@ fn lower_and_link(
     provider_id: &str,
     path: &str,
     extensions: &[(String, String)],
-    resolver: &runtime::LinkResolver,
+    resolver: &runtime::Built,
 ) -> Option<Linked> {
     let base = TopicSource { provider_id: provider_id.to_string(), doc: load_doc(path)?, overlay: None };
     let exts: Vec<TopicSource> = extensions
@@ -234,8 +234,8 @@ pub fn project_docs(cwd: &str, pm: &str, force: bool) -> Option<Vec<Value>> {
     };
     crate::discovery::doc_compiler::links::set_doc_pm(pm);
     let variant = crate::commands::docs::model::Variant::get(pm);
-    let resolver = runtime::link_resolver(cwd);
     let built = runtime::build(&variant, catalog.clone(), cwd);
+    let resolver = &built;
     let tree = &built.tree;
     let hidden: HashSet<String> = own_docs_hidden().into_iter().collect();
     let node_content: HashMap<String, Value> =
@@ -253,7 +253,7 @@ pub fn project_docs(cwd: &str, pm: &str, force: bool) -> Option<Vec<Value>> {
             .iter()
             .map(|x| (x.provider_id.clone().unwrap_or_else(|| x.package.clone()), x.path.clone()))
             .collect();
-        let linked = lower_and_link(&e.name, &pid, &e.path, &exts, &resolver);
+        let linked = lower_and_link(&e.name, &pid, &e.path, &exts, resolver);
         if linked.as_ref().is_some_and(|l| is_experimental(&l.doc)) {
             continue;
         }
@@ -325,7 +325,7 @@ pub fn project_docs(cwd: &str, pm: &str, force: bool) -> Option<Vec<Value>> {
                 .iter()
                 .map(|x| (x.get("providerId").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(|| s(x, "package")), s(x, "path")))
                 .collect();
-            let linked = lower_and_link(&node.route, &pid, &file, &exts, &resolver);
+            let linked = lower_and_link(&node.route, &pid, &file, &exts, resolver);
             let mut packages: Vec<(String, String)> = vec![(norm(&pid), package.clone())];
             for x in &overlay.extensions {
                 let xp = x.get("providerId").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(|| s(x, "package"));

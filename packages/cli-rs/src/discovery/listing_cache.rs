@@ -46,6 +46,7 @@ impl Listing {
 struct Cache {
     listings: HashMap<Vec<u8>, Option<Arc<Listing>>>,
     exists: HashMap<Vec<u8>, bool>,
+    memos: HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 fn key(p: &Path) -> Vec<u8> {
@@ -157,6 +158,20 @@ pub fn exists(target: &Path) -> bool {
     }
     let v = target.exists();
     shared.lock().unwrap().exists.insert(k, v);
+    v
+}
+
+/// `oncePerListing(key, compute)`: `compute()` once per operation, under
+/// `key`; outside an operation it computes each time.
+pub fn once_per_listing<T: Send + Sync + 'static>(key: &str, compute: impl FnOnce() -> T) -> Arc<T> {
+    let Some(shared) = current() else { return Arc::new(compute()) };
+    if let Some(hit) = shared.lock().unwrap().memos.get(key) {
+        if let Ok(v) = hit.clone().downcast::<T>() {
+            return v;
+        }
+    }
+    let v = Arc::new(compute());
+    shared.lock().unwrap().memos.insert(key.to_string(), v.clone());
     v
 }
 

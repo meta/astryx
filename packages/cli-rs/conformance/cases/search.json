@@ -1181,7 +1181,7 @@
     "id": "argv_search_-",
     "args": [
       "search",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -1191,7 +1191,7 @@
     "args": [
       "search",
       "table",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2688,7 +2688,7 @@
     "id": "search_-",
     "args": [
       "search",
-      "\u4e2d\u6587"
+      "中文"
     ],
     "fixture": "app",
     "gen": true
@@ -2697,7 +2697,7 @@
     "id": "search_-_--json",
     "args": [
       "search",
-      "\u4e2d\u6587",
+      "中文",
       "--json"
     ],
     "fixture": "app",
@@ -2707,7 +2707,7 @@
     "id": "search_-_--limit_3",
     "args": [
       "search",
-      "\u4e2d\u6587",
+      "中文",
       "--limit",
       "3"
     ],
@@ -5747,7 +5747,7 @@
     "id": "search_AlertDialog-Delete",
     "args": [
       "search",
-      "AlertDialog \u2014 Delete"
+      "AlertDialog — Delete"
     ],
     "fixture": "app",
     "gen": true
@@ -5756,7 +5756,7 @@
     "id": "typo_search_alrtdialog-delete",
     "args": [
       "search",
-      "alrtdialog \u2014 delete"
+      "alrtdialog — delete"
     ],
     "fixture": "app",
     "gen": true
@@ -5765,7 +5765,7 @@
     "id": "search_AlertDialog-Loading",
     "args": [
       "search",
-      "AlertDialog \u2014 Loading"
+      "AlertDialog — Loading"
     ],
     "fixture": "app",
     "gen": true
@@ -5774,7 +5774,7 @@
     "id": "typo_search_alrtdialog-loading",
     "args": [
       "search",
-      "alrtdialog \u2014 loading"
+      "alrtdialog — loading"
     ],
     "fixture": "app",
     "gen": true
@@ -5801,7 +5801,7 @@
     "id": "search_AppShell-Content-Only",
     "args": [
       "search",
-      "AppShell \u2014 Content Only"
+      "AppShell — Content Only"
     ],
     "fixture": "app",
     "gen": true
@@ -5810,7 +5810,7 @@
     "id": "typo_search_apshell-content-only",
     "args": [
       "search",
-      "apshell \u2014 content only"
+      "apshell — content only"
     ],
     "fixture": "app",
     "gen": true
@@ -5819,7 +5819,7 @@
     "id": "search_AppShell-Side-Nav-Only",
     "args": [
       "search",
-      "AppShell \u2014 Side Nav Only"
+      "AppShell — Side Nav Only"
     ],
     "fixture": "app",
     "gen": true
@@ -5828,7 +5828,7 @@
     "id": "typo_search_apshell-side-nav-only",
     "args": [
       "search",
-      "apshell \u2014 side nav only"
+      "apshell — side nav only"
     ],
     "fixture": "app",
     "gen": true
@@ -5837,7 +5837,7 @@
     "id": "search_AppShell-Top-Nav-Only",
     "args": [
       "search",
-      "AppShell \u2014 Top Nav Only"
+      "AppShell — Top Nav Only"
     ],
     "fixture": "app",
     "gen": true
@@ -5846,7 +5846,7 @@
     "id": "typo_search_apshell-top-nav-only",
     "args": [
       "search",
-      "apshell \u2014 top nav only"
+      "apshell — top nav only"
     ],
     "fixture": "app",
     "gen": true
@@ -5855,7 +5855,7 @@
     "id": "search_AppShell-Top-Nav-with-Side-Nav",
     "args": [
       "search",
-      "AppShell \u2014 Top Nav with Side Nav"
+      "AppShell — Top Nav with Side Nav"
     ],
     "fixture": "app",
     "gen": true
@@ -5864,7 +5864,7 @@
     "id": "typo_search_apshell-top-nav-with-side-nav",
     "args": [
       "search",
-      "apshell \u2014 top nav with side nav"
+      "apshell — top nav with side nav"
     ],
     "fixture": "app",
     "gen": true
@@ -5873,7 +5873,7 @@
     "id": "search_AppShell-With-Banner",
     "args": [
       "search",
-      "AppShell \u2014 With Banner"
+      "AppShell — With Banner"
     ],
     "fixture": "app",
     "gen": true
@@ -5882,7 +5882,7 @@
     "id": "typo_search_apshell-with-banner",
     "args": [
       "search",
-      "apshell \u2014 with banner"
+      "apshell — with banner"
     ],
     "fixture": "app",
     "gen": true
@@ -5891,7 +5891,7 @@
     "id": "search_AspectRatio-16-9-Widescreen-Image",
     "args": [
       "search",
-      "AspectRatio \u2014 16:9 Widescreen Image"
+      "AspectRatio — 16:9 Widescreen Image"
     ],
     "fixture": "app",
     "gen": true
@@ -5900,7 +5900,7 @@
     "id": "typo_search_asectratio-16-9-widescreen-image",
     "args": [
       "search",
-      "asectratio \u2014 16:9 widescreen image"
+      "asectratio — 16:9 widescreen image"
     ],
     "fixture": "app",
     "gen": true
@@ -5909,7 +5909,7 @@
     "id": "search_AspectRatio-Circle-Image",
     "args": [
       "search",
-      "AspectRatio \u2014 Circle Image"
+      "AspectRatio — Circle Image"
     ],
     "fixture": "app",
     "gen": true
@@ -5918,7 +5918,7 @@
     "id": "typo_search_asectratio-circle-image",
     "args": [
       "search",
-      "asectratio \u2014 circle image"
+      "asectratio — circle image"
     ],
     "fixture": "app",
     "gen": true
@@ -5927,7 +5927,7 @@
     "id": "search_AspectRatio-Image-Gallery",
     "args": [
       "search",
-      "AspectRatio \u2014 Image Gallery"
+      "AspectRatio — Image Gallery"
     ],
     "fixture": "app",
     "gen": true
@@ -5936,7 +5936,7 @@
     "id": "typo_search_asectratio-image-gallery",
     "args": [
       "search",
-      "asectratio \u2014 image gallery"
+      "asectratio — image gallery"
     ],
     "fixture": "app",
     "gen": true
@@ -5945,7 +5945,7 @@
     "id": "search_AspectRatio-Loading-Skeleton",
     "args": [
       "search",
-      "AspectRatio \u2014 Loading Skeleton"
+      "AspectRatio — Loading Skeleton"
     ],
     "fixture": "app",
     "gen": true
@@ -5954,7 +5954,7 @@
     "id": "typo_search_asectratio-loading-skeleton",
     "args": [
       "search",
-      "asectratio \u2014 loading skeleton"
+      "asectratio — loading skeleton"
     ],
     "fixture": "app",
     "gen": true
@@ -5963,7 +5963,7 @@
     "id": "search_AspectRatio-Square-Image",
     "args": [
       "search",
-      "AspectRatio \u2014 Square Image"
+      "AspectRatio — Square Image"
     ],
     "fixture": "app",
     "gen": true
@@ -5972,7 +5972,7 @@
     "id": "typo_search_asectratio-square-image",
     "args": [
       "search",
-      "asectratio \u2014 square image"
+      "asectratio — square image"
     ],
     "fixture": "app",
     "gen": true
@@ -5981,7 +5981,7 @@
     "id": "search_Avatar-Fallback-Chain",
     "args": [
       "search",
-      "Avatar \u2014 Fallback Chain"
+      "Avatar — Fallback Chain"
     ],
     "fixture": "app",
     "gen": true
@@ -5990,7 +5990,7 @@
     "id": "typo_search_avtar-fallback-chain",
     "args": [
       "search",
-      "avtar \u2014 fallback chain"
+      "avtar — fallback chain"
     ],
     "fixture": "app",
     "gen": true
@@ -5999,7 +5999,7 @@
     "id": "search_Avatar-Group",
     "args": [
       "search",
-      "Avatar \u2014 Group"
+      "Avatar — Group"
     ],
     "fixture": "app",
     "gen": true
@@ -6008,7 +6008,7 @@
     "id": "typo_search_avtar-group",
     "args": [
       "search",
-      "avtar \u2014 group"
+      "avtar — group"
     ],
     "fixture": "app",
     "gen": true
@@ -6017,7 +6017,7 @@
     "id": "search_Avatar-Initials",
     "args": [
       "search",
-      "Avatar \u2014 Initials"
+      "Avatar — Initials"
     ],
     "fixture": "app",
     "gen": true
@@ -6026,7 +6026,7 @@
     "id": "typo_search_avtar-initials",
     "args": [
       "search",
-      "avtar \u2014 initials"
+      "avtar — initials"
     ],
     "fixture": "app",
     "gen": true
@@ -6035,7 +6035,7 @@
     "id": "search_Avatar-Interactive",
     "args": [
       "search",
-      "Avatar \u2014 Interactive"
+      "Avatar — Interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -6044,7 +6044,7 @@
     "id": "typo_search_avtar-interactive",
     "args": [
       "search",
-      "avtar \u2014 interactive"
+      "avtar — interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -6053,7 +6053,7 @@
     "id": "search_Avatar-Photo",
     "args": [
       "search",
-      "Avatar \u2014 Photo"
+      "Avatar — Photo"
     ],
     "fixture": "app",
     "gen": true
@@ -6062,7 +6062,7 @@
     "id": "typo_search_avtar-photo",
     "args": [
       "search",
-      "avtar \u2014 photo"
+      "avtar — photo"
     ],
     "fixture": "app",
     "gen": true
@@ -6071,7 +6071,7 @@
     "id": "search_Avatar-Status-Dot",
     "args": [
       "search",
-      "Avatar \u2014 Status Dot"
+      "Avatar — Status Dot"
     ],
     "fixture": "app",
     "gen": true
@@ -6080,7 +6080,7 @@
     "id": "typo_search_avtar-status-dot",
     "args": [
       "search",
-      "avtar \u2014 status dot"
+      "avtar — status dot"
     ],
     "fixture": "app",
     "gen": true
@@ -6089,7 +6089,7 @@
     "id": "search_Avatar-Tooltip",
     "args": [
       "search",
-      "Avatar \u2014 Tooltip"
+      "Avatar — Tooltip"
     ],
     "fixture": "app",
     "gen": true
@@ -6098,7 +6098,7 @@
     "id": "typo_search_avtar-tooltip",
     "args": [
       "search",
-      "avtar \u2014 tooltip"
+      "avtar — tooltip"
     ],
     "fixture": "app",
     "gen": true
@@ -6107,7 +6107,7 @@
     "id": "search_Avatar-User-Card",
     "args": [
       "search",
-      "Avatar \u2014 User Card"
+      "Avatar — User Card"
     ],
     "fixture": "app",
     "gen": true
@@ -6116,7 +6116,7 @@
     "id": "typo_search_avtar-user-card",
     "args": [
       "search",
-      "avtar \u2014 user card"
+      "avtar — user card"
     ],
     "fixture": "app",
     "gen": true
@@ -6143,7 +6143,7 @@
     "id": "search_AvatarGroup-Interactive",
     "args": [
       "search",
-      "AvatarGroup \u2014 Interactive"
+      "AvatarGroup — Interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -6152,7 +6152,7 @@
     "id": "typo_search_avtargroup-interactive",
     "args": [
       "search",
-      "avtargroup \u2014 interactive"
+      "avtargroup — interactive"
     ],
     "fixture": "app",
     "gen": true
@@ -6161,7 +6161,7 @@
     "id": "search_AvatarGroupOverflow-Custom-Text",
     "args": [
       "search",
-      "AvatarGroupOverflow \u2014 Custom Text"
+      "AvatarGroupOverflow — Custom Text"
     ],
     "fixture": "app",
     "gen": true
@@ -6170,7 +6170,7 @@
     "id": "typo_search_avtargroupoverflow-custom-text",
     "args": [
       "search",
-      "avtargroupoverflow \u2014 custom text"
+      "avtargroupoverflow — custom text"
     ],
     "fixture": "app",
     "gen": true
@@ -6179,7 +6179,7 @@
     "id": "search_AvatarGroupOverflow-Default-Count",
     "args": [
       "search",
-      "AvatarGroupOverflow \u2014 Default Count"
+      "AvatarGroupOverflow — Default Count"
     ],
     "fixture": "app",
     "gen": true
@@ -6188,7 +6188,7 @@
     "id": "typo_search_avtargroupoverflow-default-count",
     "args": [
       "search",
-      "avtargroupoverflow \u2014 default count"
+      "avtargroupoverflow — default count"
     ],
     "fixture": "app",
     "gen": true
@@ -6197,7 +6197,7 @@
     "id": "search_AvatarStatusDot-Variants",
     "args": [
       "search",
-      "AvatarStatusDot \u2014 Variants"
+      "AvatarStatusDot — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6206,7 +6206,7 @@
     "id": "typo_search_avtarstatusdot-variants",
     "args": [
       "search",
-      "avtarstatusdot \u2014 variants"
+      "avtarstatusdot — variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6215,7 +6215,7 @@
     "id": "search_Badge-Colors",
     "args": [
       "search",
-      "Badge \u2014 Colors"
+      "Badge — Colors"
     ],
     "fixture": "app",
     "gen": true
@@ -6224,7 +6224,7 @@
     "id": "typo_search_bage-colors",
     "args": [
       "search",
-      "bage \u2014 colors"
+      "bage — colors"
     ],
     "fixture": "app",
     "gen": true
@@ -6233,7 +6233,7 @@
     "id": "search_Badge-Counts",
     "args": [
       "search",
-      "Badge \u2014 Counts"
+      "Badge — Counts"
     ],
     "fixture": "app",
     "gen": true
@@ -6242,7 +6242,7 @@
     "id": "typo_search_bage-counts",
     "args": [
       "search",
-      "bage \u2014 counts"
+      "bage — counts"
     ],
     "fixture": "app",
     "gen": true
@@ -6251,7 +6251,7 @@
     "id": "search_Badge-Status",
     "args": [
       "search",
-      "Badge \u2014 Status"
+      "Badge — Status"
     ],
     "fixture": "app",
     "gen": true
@@ -6260,7 +6260,7 @@
     "id": "typo_search_bage-status",
     "args": [
       "search",
-      "bage \u2014 status"
+      "bage — status"
     ],
     "fixture": "app",
     "gen": true
@@ -6269,7 +6269,7 @@
     "id": "search_Badge-Variants",
     "args": [
       "search",
-      "Badge \u2014 Variants"
+      "Badge — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6278,7 +6278,7 @@
     "id": "typo_search_bage-variants",
     "args": [
       "search",
-      "bage \u2014 variants"
+      "bage — variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6287,7 +6287,7 @@
     "id": "search_Banner-Action",
     "args": [
       "search",
-      "Banner \u2014 Action"
+      "Banner — Action"
     ],
     "fixture": "app",
     "gen": true
@@ -6296,7 +6296,7 @@
     "id": "typo_search_baner-action",
     "args": [
       "search",
-      "baner \u2014 action"
+      "baner — action"
     ],
     "fixture": "app",
     "gen": true
@@ -6305,7 +6305,7 @@
     "id": "search_Banner-Collapsible",
     "args": [
       "search",
-      "Banner \u2014 Collapsible"
+      "Banner — Collapsible"
     ],
     "fixture": "app",
     "gen": true
@@ -6314,7 +6314,7 @@
     "id": "typo_search_baner-collapsible",
     "args": [
       "search",
-      "baner \u2014 collapsible"
+      "baner — collapsible"
     ],
     "fixture": "app",
     "gen": true
@@ -6323,7 +6323,7 @@
     "id": "search_Banner-Dismiss",
     "args": [
       "search",
-      "Banner \u2014 Dismiss"
+      "Banner — Dismiss"
     ],
     "fixture": "app",
     "gen": true
@@ -6332,7 +6332,7 @@
     "id": "typo_search_baner-dismiss",
     "args": [
       "search",
-      "baner \u2014 dismiss"
+      "baner — dismiss"
     ],
     "fixture": "app",
     "gen": true
@@ -6341,7 +6341,7 @@
     "id": "search_Banner-Floating",
     "args": [
       "search",
-      "Banner \u2014 Floating"
+      "Banner — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6350,7 +6350,7 @@
     "id": "typo_search_baner-floating",
     "args": [
       "search",
-      "baner \u2014 floating"
+      "baner — floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6359,7 +6359,7 @@
     "id": "search_Banner-Full-Width",
     "args": [
       "search",
-      "Banner \u2014 Full Width"
+      "Banner — Full Width"
     ],
     "fixture": "app",
     "gen": true
@@ -6368,7 +6368,7 @@
     "id": "typo_search_baner-full-width",
     "args": [
       "search",
-      "baner \u2014 full width"
+      "baner — full width"
     ],
     "fixture": "app",
     "gen": true
@@ -6377,7 +6377,7 @@
     "id": "search_Banner-Statuses",
     "args": [
       "search",
-      "Banner \u2014 Statuses"
+      "Banner — Statuses"
     ],
     "fixture": "app",
     "gen": true
@@ -6386,7 +6386,7 @@
     "id": "typo_search_baner-statuses",
     "args": [
       "search",
-      "baner \u2014 statuses"
+      "baner — statuses"
     ],
     "fixture": "app",
     "gen": true
@@ -6413,7 +6413,7 @@
     "id": "search_BaseTypeahead-Custom-Search-Bar",
     "args": [
       "search",
-      "BaseTypeahead \u2014 Custom Search Bar"
+      "BaseTypeahead — Custom Search Bar"
     ],
     "fixture": "app",
     "gen": true
@@ -6422,7 +6422,7 @@
     "id": "typo_search_baetypeahead-custom-search-bar",
     "args": [
       "search",
-      "baetypeahead \u2014 custom search bar"
+      "baetypeahead — custom search bar"
     ],
     "fixture": "app",
     "gen": true
@@ -6485,7 +6485,7 @@
     "id": "search_Blockquote-Showcase",
     "args": [
       "search",
-      "Blockquote \u2014 Showcase"
+      "Blockquote — Showcase"
     ],
     "fixture": "app",
     "gen": true
@@ -6494,7 +6494,7 @@
     "id": "typo_search_blckquote-showcase",
     "args": [
       "search",
-      "blckquote \u2014 showcase"
+      "blckquote — showcase"
     ],
     "fixture": "app",
     "gen": true
@@ -6503,7 +6503,7 @@
     "id": "search_Blockquote-Testimonials",
     "args": [
       "search",
-      "Blockquote \u2014 Testimonials"
+      "Blockquote — Testimonials"
     ],
     "fixture": "app",
     "gen": true
@@ -6512,7 +6512,7 @@
     "id": "typo_search_blckquote-testimonials",
     "args": [
       "search",
-      "blckquote \u2014 testimonials"
+      "blckquote — testimonials"
     ],
     "fixture": "app",
     "gen": true
@@ -6521,7 +6521,7 @@
     "id": "search_Blockquote-With-Attribution",
     "args": [
       "search",
-      "Blockquote \u2014 With Attribution"
+      "Blockquote — With Attribution"
     ],
     "fixture": "app",
     "gen": true
@@ -6530,7 +6530,7 @@
     "id": "typo_search_blckquote-with-attribution",
     "args": [
       "search",
-      "blckquote \u2014 with attribution"
+      "blckquote — with attribution"
     ],
     "fixture": "app",
     "gen": true
@@ -6557,7 +6557,7 @@
     "id": "search_Bottom-Sheet-Height-variants",
     "args": [
       "search",
-      "Bottom Sheet \u2014 Height variants"
+      "Bottom Sheet — Height variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6566,7 +6566,7 @@
     "id": "typo_search_botom-sheet-height-variants",
     "args": [
       "search",
-      "botom sheet \u2014 height variants"
+      "botom sheet — height variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6575,7 +6575,7 @@
     "id": "search_Bottom-Sheet-Mobile-keyboard",
     "args": [
       "search",
-      "Bottom Sheet \u2014 Mobile keyboard"
+      "Bottom Sheet — Mobile keyboard"
     ],
     "fixture": "app",
     "gen": true
@@ -6584,7 +6584,7 @@
     "id": "typo_search_botom-sheet-mobile-keyboard",
     "args": [
       "search",
-      "botom sheet \u2014 mobile keyboard"
+      "botom sheet — mobile keyboard"
     ],
     "fixture": "app",
     "gen": true
@@ -6593,7 +6593,7 @@
     "id": "search_Bottom-Sheet-Multi-step-flow",
     "args": [
       "search",
-      "Bottom Sheet \u2014 Multi-step flow"
+      "Bottom Sheet — Multi-step flow"
     ],
     "fixture": "app",
     "gen": true
@@ -6602,7 +6602,7 @@
     "id": "typo_search_botom-sheet-multi-step-flow",
     "args": [
       "search",
-      "botom sheet \u2014 multi-step flow"
+      "botom sheet — multi-step flow"
     ],
     "fixture": "app",
     "gen": true
@@ -6611,7 +6611,7 @@
     "id": "search_Bottom-Sheet-No-scrim",
     "args": [
       "search",
-      "Bottom Sheet \u2014 No scrim"
+      "Bottom Sheet — No scrim"
     ],
     "fixture": "app",
     "gen": true
@@ -6620,7 +6620,7 @@
     "id": "typo_search_botom-sheet-no-scrim",
     "args": [
       "search",
-      "botom sheet \u2014 no scrim"
+      "botom sheet — no scrim"
     ],
     "fixture": "app",
     "gen": true
@@ -6629,7 +6629,7 @@
     "id": "search_Bottom-Sheet-Review-flow",
     "args": [
       "search",
-      "Bottom Sheet \u2014 Review flow"
+      "Bottom Sheet — Review flow"
     ],
     "fixture": "app",
     "gen": true
@@ -6638,7 +6638,7 @@
     "id": "typo_search_botom-sheet-review-flow",
     "args": [
       "search",
-      "botom sheet \u2014 review flow"
+      "botom sheet — review flow"
     ],
     "fixture": "app",
     "gen": true
@@ -6647,7 +6647,7 @@
     "id": "search_Bottom-Sheet-Snap-points",
     "args": [
       "search",
-      "Bottom Sheet \u2014 Snap points"
+      "Bottom Sheet — Snap points"
     ],
     "fixture": "app",
     "gen": true
@@ -6656,7 +6656,7 @@
     "id": "typo_search_botom-sheet-snap-points",
     "args": [
       "search",
-      "botom sheet \u2014 snap points"
+      "botom sheet — snap points"
     ],
     "fixture": "app",
     "gen": true
@@ -6665,7 +6665,7 @@
     "id": "search_BreadcrumbItem-Basic",
     "args": [
       "search",
-      "BreadcrumbItem \u2014 Basic"
+      "BreadcrumbItem — Basic"
     ],
     "fixture": "app",
     "gen": true
@@ -6674,7 +6674,7 @@
     "id": "typo_search_bradcrumbitem-basic",
     "args": [
       "search",
-      "bradcrumbitem \u2014 basic"
+      "bradcrumbitem — basic"
     ],
     "fixture": "app",
     "gen": true
@@ -6683,7 +6683,7 @@
     "id": "search_Breadcrumbs-Deep-Path",
     "args": [
       "search",
-      "Breadcrumbs \u2014 Deep Path"
+      "Breadcrumbs — Deep Path"
     ],
     "fixture": "app",
     "gen": true
@@ -6692,7 +6692,7 @@
     "id": "typo_search_bradcrumbs-deep-path",
     "args": [
       "search",
-      "bradcrumbs \u2014 deep path"
+      "bradcrumbs — deep path"
     ],
     "fixture": "app",
     "gen": true
@@ -6701,7 +6701,7 @@
     "id": "search_Breadcrumbs-Icons",
     "args": [
       "search",
-      "Breadcrumbs \u2014 Icons"
+      "Breadcrumbs — Icons"
     ],
     "fixture": "app",
     "gen": true
@@ -6710,7 +6710,7 @@
     "id": "typo_search_bradcrumbs-icons",
     "args": [
       "search",
-      "bradcrumbs \u2014 icons"
+      "bradcrumbs — icons"
     ],
     "fixture": "app",
     "gen": true
@@ -6719,7 +6719,7 @@
     "id": "search_Breadcrumbs-Menu-item",
     "args": [
       "search",
-      "Breadcrumbs \u2014 Menu item"
+      "Breadcrumbs — Menu item"
     ],
     "fixture": "app",
     "gen": true
@@ -6728,7 +6728,7 @@
     "id": "typo_search_bradcrumbs-menu-item",
     "args": [
       "search",
-      "bradcrumbs \u2014 menu item"
+      "bradcrumbs — menu item"
     ],
     "fixture": "app",
     "gen": true
@@ -6737,7 +6737,7 @@
     "id": "search_Breadcrumbs-Separators",
     "args": [
       "search",
-      "Breadcrumbs \u2014 Separators"
+      "Breadcrumbs — Separators"
     ],
     "fixture": "app",
     "gen": true
@@ -6746,7 +6746,7 @@
     "id": "typo_search_bradcrumbs-separators",
     "args": [
       "search",
-      "bradcrumbs \u2014 separators"
+      "bradcrumbs — separators"
     ],
     "fixture": "app",
     "gen": true
@@ -6755,7 +6755,7 @@
     "id": "search_Breadcrumbs-Variants",
     "args": [
       "search",
-      "Breadcrumbs \u2014 Variants"
+      "Breadcrumbs — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6764,7 +6764,7 @@
     "id": "typo_search_bradcrumbs-variants",
     "args": [
       "search",
-      "bradcrumbs \u2014 variants"
+      "bradcrumbs — variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6791,7 +6791,7 @@
     "id": "search_Button-End-Slot",
     "args": [
       "search",
-      "Button \u2014 End Slot"
+      "Button — End Slot"
     ],
     "fixture": "app",
     "gen": true
@@ -6800,7 +6800,7 @@
     "id": "typo_search_buton-end-slot",
     "args": [
       "search",
-      "buton \u2014 end slot"
+      "buton — end slot"
     ],
     "fixture": "app",
     "gen": true
@@ -6809,7 +6809,7 @@
     "id": "search_Button-Floating",
     "args": [
       "search",
-      "Button \u2014 Floating"
+      "Button — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6818,7 +6818,7 @@
     "id": "typo_search_buton-floating",
     "args": [
       "search",
-      "buton \u2014 floating"
+      "buton — floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6827,7 +6827,7 @@
     "id": "search_Button-Icon",
     "args": [
       "search",
-      "Button \u2014 Icon"
+      "Button — Icon"
     ],
     "fixture": "app",
     "gen": true
@@ -6836,7 +6836,7 @@
     "id": "typo_search_buton-icon",
     "args": [
       "search",
-      "buton \u2014 icon"
+      "buton — icon"
     ],
     "fixture": "app",
     "gen": true
@@ -6845,7 +6845,7 @@
     "id": "search_Button-Sizes",
     "args": [
       "search",
-      "Button \u2014 Sizes"
+      "Button — Sizes"
     ],
     "fixture": "app",
     "gen": true
@@ -6854,7 +6854,7 @@
     "id": "typo_search_buton-sizes",
     "args": [
       "search",
-      "buton \u2014 sizes"
+      "buton — sizes"
     ],
     "fixture": "app",
     "gen": true
@@ -6863,7 +6863,7 @@
     "id": "search_Button-Variants",
     "args": [
       "search",
-      "Button \u2014 Variants"
+      "Button — Variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6872,7 +6872,7 @@
     "id": "typo_search_buton-variants",
     "args": [
       "search",
-      "buton \u2014 variants"
+      "buton — variants"
     ],
     "fixture": "app",
     "gen": true
@@ -6881,7 +6881,7 @@
     "id": "search_ButtonGroup-Basic",
     "args": [
       "search",
-      "ButtonGroup \u2014 Basic"
+      "ButtonGroup — Basic"
     ],
     "fixture": "app",
     "gen": true
@@ -6890,7 +6890,7 @@
     "id": "typo_search_butongroup-basic",
     "args": [
       "search",
-      "butongroup \u2014 basic"
+      "butongroup — basic"
     ],
     "fixture": "app",
     "gen": true
@@ -6899,7 +6899,7 @@
     "id": "search_ButtonGroup-Floating",
     "args": [
       "search",
-      "ButtonGroup \u2014 Floating"
+      "ButtonGroup — Floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6908,7 +6908,7 @@
     "id": "typo_search_butongroup-floating",
     "args": [
       "search",
-      "butongroup \u2014 floating"
+      "butongroup — floating"
     ],
     "fixture": "app",
     "gen": true
@@ -6917,7 +6917,7 @@
     "id": "search_Calendar-Constraints",
     "args": [
       "search",
-      "Calendar \u2014 Constraints"
+      "Calendar — Constraints"
     ],
     "fixture": "app",
     "gen": true
@@ -6926,7 +6926,7 @@
     "id": "typo_search_caendar-constraints",
     "args": [
       "search",
-      "caendar \u2014 constraints"
+      "caendar — constraints"
     ],
     "fixture": "app",
     "gen": true

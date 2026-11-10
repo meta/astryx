@@ -61,66 +61,13 @@ pub fn parse_loose(file: &str, text: &str) -> Rc<ModuleInfo> {
 }
 
 pub fn resolve_local_module(specifier: &str, from_file: &str) -> Option<String> {
-    if !specifier.starts_with('.') {
-        return None;
-    }
-    let base = p::resolve(&[&p::dirname(from_file), specifier]);
-    let mut candidates = vec![base.clone()];
-    for e in MODULE_EXTENSIONS {
-        candidates.push(format!("{base}{e}"));
-    }
-    for e in MODULE_EXTENSIONS {
-        candidates.push(p::join2(&base, &format!("index{e}")));
-    }
-    candidates.into_iter().find(|c| p::is_file(c))
+    crate::discovery::module_origins::resolve_local_module(specifier, from_file)
 }
 
 fn resolve_module_or_package(specifier: &str, from_file: &str) -> Option<String> {
-    if !specifier.starts_with('.') {
-        return resolve_package_module(specifier, from_file);
-    }
-    resolve_local_module(specifier, from_file)
+    crate::discovery::module_origins::resolve_module_or_package(specifier, from_file)
 }
 
-fn resolve_package_module(specifier: &str, from_file: &str) -> Option<String> {
-    if specifier.starts_with("node:") || specifier.starts_with('/') {
-        return None;
-    }
-    let parts: Vec<&str> = specifier.split('/').collect();
-    let count = if specifier.starts_with('@') { 2 } else { 1 };
-    let name = parts[..count.min(parts.len())].join("/");
-    let rest = if parts.len() > count { parts[count..].join("/") } else { String::new() };
-    let package_dir = find_node_modules_package(&p::dirname(from_file), &name)?.0;
-    let pkg = read_json(&p::join2(&package_dir, "package.json"))?;
-    if pkg.get("exports").is_some() {
-        let sub = if rest.is_empty() { ".".to_string() } else { format!("./{rest}") };
-        return inspect_package_export(&pkg, &package_dir, &sub).target;
-    }
-    let entry = if !rest.is_empty() {
-        rest
-    } else {
-        pkg.get("module")
-            .and_then(js_truthy_str)
-            .or_else(|| pkg.get("main").and_then(js_truthy_str))
-            .unwrap_or_else(|| "index".into())
-    };
-    let base = p::join2(&package_dir, &entry);
-    let mut candidates = vec![base.clone()];
-    for e in MODULE_EXTENSIONS {
-        candidates.push(format!("{base}{e}"));
-    }
-    for e in MODULE_EXTENSIONS {
-        candidates.push(p::join2(&base, &format!("index{e}")));
-    }
-    candidates.into_iter().find(|c| p::is_file(c))
-}
-
-fn js_truthy_str(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) if !s.is_empty() => Some(s.clone()),
-        _ => None,
-    }
-}
 
 pub fn read_json(file: &str) -> Option<Value> {
     serde_json::from_str(&p::read_to_string(file)?).ok()
@@ -368,120 +315,7 @@ pub fn export_origin(file: &str, export_name: &str, seen: &mut HashSet<String>, 
     None
 }
 
-// ---- package-exports ----
-
-const CONDITION_ORDER: &[&str] = &["import", "default", "browser", "node", "require"];
-
-pub fn is_record(v: &Value) -> bool {
-    v.is_object()
-}
-
-fn target_string(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) => Some(s.clone()),
-        Value::Array(items) => items.iter().find_map(|i| target_string(i).filter(|s| !s.is_empty())),
-        Value::Object(m) => {
-            let mut keys: Vec<&str> = CONDITION_ORDER.iter().copied().filter(|k| m.contains_key(*k)).collect();
-            for k in m.keys() {
-                if k != "types" && !CONDITION_ORDER.contains(&k.as_str()) {
-                    keys.push(k);
-                }
-            }
-            for k in keys {
-                if let Some(s) = target_string(&m[k]) {
-                    if !s.is_empty() {
-                        return Some(s);
-                    }
-                }
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-/// UTF-16 length, as JS `.length`.
-fn jlen(s: &str) -> usize {
-    s.encode_utf16().count()
-}
-
-fn subpath_value<'v>(map: &'v crate::json::Map<String, Value>, subpath: &str) -> Option<(&'v Value, String)> {
-    if let Some(v) = map.get(subpath) {
-        return Some((v, String::new()));
-    }
-    let mut patterns: Vec<&String> = map.keys().filter(|k| k.starts_with("./") && k.split('*').count() == 2).collect();
-    patterns.sort_by(|a, b| jlen(b).cmp(&jlen(a)));
-    for pat in patterns {
-        let star = pat.find('*').unwrap();
-        let (prefix, suffix) = (&pat[..star], &pat[star + 1..]);
-        if subpath.len() >= prefix.len() + suffix.len() && subpath.starts_with(prefix) && subpath.ends_with(suffix) {
-            return Some((&map[pat.as_str()], subpath[prefix.len()..subpath.len() - suffix.len()].to_string()));
-        }
-    }
-    None
-}
-
-struct ExportValue {
-    has_map: bool,
-    exported: bool,
-    target: Option<String>,
-}
-
-fn export_value(exports: Option<&Value>, subpath: &str) -> ExportValue {
-    let Some(ex) = exports else { return ExportValue { has_map: false, exported: true, target: None } };
-    let Value::Object(map) = ex else {
-        return ExportValue {
-            has_map: true,
-            exported: subpath == "." && !ex.is_null(),
-            target: if subpath == "." { target_string(ex) } else { None },
-        };
-    };
-    if !map.keys().any(|k| k.starts_with('.')) {
-        return ExportValue { has_map: true, exported: subpath == ".", target: if subpath == "." { target_string(ex) } else { None } };
-    }
-    match subpath_value(map, subpath) {
-        Some((v, wild)) if !v.is_null() => {
-            let t = target_string(v);
-            ExportValue { has_map: true, exported: t.is_some(), target: t.map(|t| t.replace('*', &wild)) }
-        }
-        _ => ExportValue { has_map: true, exported: false, target: None },
-    }
-}
-
-fn resolve_target(package_dir: &str, target: &str) -> Option<String> {
-    if !target.starts_with("./") {
-        return None;
-    }
-    let resolved = p::resolve(&[package_dir, target]);
-    let root = p::resolve1(package_dir);
-    if resolved != root && !resolved.starts_with(&format!("{root}/")) {
-        return None;
-    }
-    if p::is_file(&resolved) {
-        Some(resolved)
-    } else {
-        None
-    }
-}
-
-fn resolve_legacy(package_dir: &str, subpath: &str) -> Option<String> {
-    if !subpath.starts_with("./") {
-        return None;
-    }
-    let base = p::resolve(&[package_dir, &subpath[2..]]);
-    let root = p::resolve1(package_dir);
-    if base != root && !base.starts_with(&format!("{root}/")) {
-        return None;
-    }
-    let mut c = vec![base.clone()];
-    for e in MODULE_EXTENSIONS {
-        c.push(format!("{base}{e}"));
-    }
-    for e in MODULE_EXTENSIONS {
-        c.push(p::join2(&base, &format!("index{e}")));
-    }
-    c.into_iter().find(|x| p::is_file(x))
-}
+// ---- package-exports (discovery) ----
 
 pub struct PackageExport {
     pub exported: bool,
@@ -489,37 +323,19 @@ pub struct PackageExport {
 }
 
 pub fn inspect_package_export(pkg: &Value, package_dir: &str, subpath: &str) -> PackageExport {
-    let sel = export_value(pkg.get("exports"), subpath);
-    let target = if sel.has_map {
-        sel.target.as_deref().filter(|t| !t.is_empty()).and_then(|t| resolve_target(package_dir, t))
-    } else {
-        resolve_legacy(package_dir, subpath)
-    };
-    PackageExport { exported: sel.exported, target }
+    let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let r = crate::discovery::package_exports::inspect_package_export(name, pkg.get("exports"), std::path::Path::new(package_dir), subpath);
+    PackageExport { exported: r.exported, target: r.target.map(|t| t.to_string_lossy().into_owned()) }
 }
 
 pub fn source_export_target(pkg: &Value, package_dir: &str, subpath: &str) -> Option<String> {
-    let ex = pkg.get("exports")?;
-    if ex.is_null() {
-        return None;
-    }
-    let (value, wild) = match ex {
-        Value::Object(map) if map.keys().any(|k| k.starts_with('.')) => {
-            let (v, w) = subpath_value(map, subpath)?;
-            if v.is_null() {
-                return None;
-            }
-            (v.clone(), w)
-        }
-        _ => {
-            if subpath != "." {
-                return None;
-            }
-            (ex.clone(), String::new())
-        }
-    };
-    let src = value.as_object()?.get("source")?.as_str()?;
-    resolve_target(package_dir, &src.replace('*', &wild))
+    crate::discovery::package_exports::source_export_target(pkg.get("exports"), std::path::Path::new(package_dir), subpath)
+        .map(|t| t.to_string_lossy().into_owned())
+}
+
+/// UTF-16 length, as JS `.length`.
+fn jlen(s: &str) -> usize {
+    s.encode_utf16().count()
 }
 
 // ---- exports-subpaths ----
@@ -614,9 +430,6 @@ pub fn find_package_root(start: &str) -> Option<String> {
     folders_up(start).into_iter().find(|d| p::exists(&p::join2(d, "package.json")))
 }
 
-fn is_core_source(dir: &str) -> bool {
-    read_json(&p::join2(dir, "package.json")).and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|n| n == "@astryxdesign/core")).unwrap_or(false)
-}
 
 /// `findProjectCoreDir`.
 pub fn find_project_core_dir(start: &str) -> Option<String> {

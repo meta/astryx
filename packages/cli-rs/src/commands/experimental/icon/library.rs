@@ -29,7 +29,7 @@ fn cmp(a: &str, b: &str) -> std::cmp::Ordering {
     crate::discovery::jsort::cmp_utf16(a, b)
 }
 
-fn collect_library_icons(file: &str, adapter: bool, exclude: &[String]) -> Vec<LibraryIcon> {
+pub fn collect_library_icons(file: &str, adapter: bool, exclude: &[String]) -> Vec<LibraryIcon> {
     let candidates = icon_candidates(file, adapter, exclude);
     // origin key -> (names, adapt, scalar), in first-seen order
     let mut by_origin: Vec<(String, String, Vec<String>, bool, Option<&'static str>)> = vec![];
@@ -129,7 +129,7 @@ pub fn preferred_look(positions: &Positions, prefer: &[String]) -> Vec<String> {
 }
 
 /// `libraryLooks(all, prefer)`.
-fn library_looks(all: Vec<LibraryIcon>, prefer: &[String]) -> (Vec<LibraryIcon>, Positions, Vec<String>) {
+pub fn library_looks(all: Vec<LibraryIcon>, prefer: &[String]) -> (Vec<LibraryIcon>, Positions, Vec<String>) {
     let ids: Vec<String> = all.iter().map(|i| i.id.clone()).collect();
     let positions = look_positions(&ids);
     if positions.is_empty() {

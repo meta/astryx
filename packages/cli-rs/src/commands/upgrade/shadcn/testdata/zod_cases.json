@@ -1,0 +1,924 @@
+{
+ "receipts": [
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "ok": true
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "ok": true
+  },
+  {
+   "input": 5,
+   "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"object\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received number\"\n  }\n]"
+  },
+  {
+   "input": null,
+   "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"object\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received null\"\n  }\n]"
+  },
+  {
+   "input": {},
+   "error": "[\n  {\n    \"code\": \"invalid_union\",\n    \"errors\": [],\n    \"note\": \"No matching discriminator\",\n    \"discriminator\": \"schemaVersion\",\n    \"options\": [\n      1,\n      2\n    ],\n    \"path\": [\n      \"schemaVersion\"\n    ],\n    \"message\": \"Invalid discriminator value. Expected '1' | '2'\"\n  }\n]"
+  },
+  {
+   "input": [],
+   "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"object\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received array\"\n  }\n]"
+  },
+  {
+   "input": "x",
+   "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"object\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received string\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 3,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"invalid_union\",\n    \"errors\": [],\n    \"note\": \"No matching discriminator\",\n    \"discriminator\": \"schemaVersion\",\n    \"options\": [\n      1,\n      2\n    ],\n    \"path\": [\n      \"schemaVersion\"\n    ],\n    \"message\": \"Invalid discriminator value. Expected '1' | '2'\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": "1",
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"invalid_union\",\n    \"errors\": [],\n    \"note\": \"No matching discriminator\",\n    \"discriminator\": \"schemaVersion\",\n    \"options\": [\n      1,\n      2\n    ],\n    \"path\": [\n      \"schemaVersion\"\n    ],\n    \"message\": \"Invalid discriminator value. Expected '1' | '2'\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "A B",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "x"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*$/\",\n    \"path\": [\n      \"item\",\n      \"name\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-z0-9]+(?:-[a-z0-9]+)*$/\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"showcase\",\n      \"example\",\n      \"block\",\n      \"page\"\n    ],\n    \"path\": [\n      \"item\",\n      \"kind\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"showcase\\\"|\\\"example\\\"|\\\"block\\\"|\\\"page\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ],
+    "extra": 1,
+    "zz": 2
+   },
+   "error": "[\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"extra\",\n      \"zz\"\n    ],\n    \"path\": [],\n    \"message\": \"Unrecognized keys: \\\"extra\\\", \\\"zz\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"variants\"\n    ],\n    \"path\": [\n      \"files\",\n      0\n    ],\n    \"message\": \"Unrecognized key: \\\"variants\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../..",
+      "registryTarget": "/abs",
+      "registryPath": "a//b",
+      "sha256": "zz",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must point to one adjacent source file\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be relative\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryPath\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-f0-9]{64}$/\",\n    \"path\": [\n      \"files\",\n      0,\n      \"sha256\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-f0-9]{64}$/\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     },
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file id values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryPath values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file target values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryTarget values must be unique\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": []
+   },
+   "error": "[\n  {\n    \"origin\": \"array\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"Too small: expected array to have >=1 items\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "x",
+     "version": "1"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"@astryxdesign/cli\"\n    ],\n    \"path\": [\n      \"source\",\n      \"package\"\n    ],\n    \"message\": \"Invalid input: expected \\\"@astryxdesign/cli\\\"\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^(?:canary|\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-[0-9A-Za-z.-]+)?(?:\\\\+[0-9A-Za-z.-]+)?)$/\",\n    \"path\": [\n      \"source\",\n      \"version\"\n    ],\n    \"message\": \"must be canary or an exact semantic version\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": "x",
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": 1,
+      "variants": [
+       {
+        "format": "ts",
+        "target": "../B.jsx",
+        "registryTarget": "b\\c",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "content": "",
+        "more": 1
+       }
+      ]
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"item\",\n      \"aliases\"\n    ],\n    \"message\": \"Invalid input: expected array, received string\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      0,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"javascript\"\n    ],\n    \"path\": [\n      \"files\",\n      0,\n      \"variants\",\n      0,\n      \"format\"\n    ],\n    \"message\": \"Invalid input: expected \\\"javascript\\\"\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"variants\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must use forward slashes\"\n  },\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"more\"\n    ],\n    \"path\": [\n      \"files\",\n      0,\n      \"variants\",\n      0\n    ],\n    \"message\": \"Unrecognized key: \\\"more\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": [
+       {
+        "format": "javascript",
+        "target": "../A.jsx",
+        "registryTarget": "components/A.jsx",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "content": ""
+       },
+       {
+        "format": "javascript",
+        "target": "../A.jsx",
+        "registryTarget": "components/A.jsx",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "content": ""
+       }
+      ]
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file variant formats must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file target values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryTarget values must be unique\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "source": {
+     "package": "@astryxdesign/cli"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"item\"\n    ],\n    \"message\": \"Invalid input: expected object, received undefined\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"source\",\n      \"version\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "",
+      "registryPath": "a/../b",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryPath\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": 5,
+      "target": "../.",
+      "registryTarget": "a\\b/./c",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      0,\n      \"id\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must point to one adjacent source file\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must use forward slashes\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": 5,
+    "source": [],
+    "files": "x"
+   },
+   "error": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"item\"\n    ],\n    \"message\": \"Invalid input: expected object, received number\"\n  },\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"source\"\n    ],\n    \"message\": \"Invalid input: expected object, received array\"\n  },\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"Invalid input: expected array, received string\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a",
+     "path": "A",
+     "aliases": [
+      "b/c",
+      "X",
+      3
+     ],
+     "kind": "page",
+     "z": 1
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\\\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/\",\n    \"path\": [\n      \"item\",\n      \"path\"\n    ],\n    \"message\": \"must be a lowercase registry path\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\\\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/\",\n    \"path\": [\n      \"item\",\n      \"aliases\",\n      1\n    ],\n    \"message\": \"must be a lowercase registry path\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"item\",\n      \"aliases\",\n      2\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  },\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"z\"\n    ],\n    \"path\": [\n      \"item\"\n    ],\n    \"message\": \"Unrecognized key: \\\"z\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     5
+    ]
+   },
+   "error": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      0\n    ],\n    \"message\": \"Invalid input: expected object, received number\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     },
+     {
+      "id": "primary",
+      "target": "../B",
+      "registryTarget": "b",
+      "registryPath": "b",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file id values must be unique\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "X",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     },
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*$/\",\n    \"path\": [\n      \"item\",\n      \"name\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-z0-9]+(?:-[a-z0-9]+)*$/\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file id values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryPath values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file target values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryTarget values must be unique\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "q"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     },
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"showcase\",\n      \"example\",\n      \"block\",\n      \"page\"\n    ],\n    \"path\": [\n      \"item\",\n      \"kind\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"showcase\\\"|\\\"example\\\"|\\\"block\\\"|\\\"page\\\"\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 1,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     },
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\",\n      1,\n      \"registryTarget\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      1,\n      \"registryTarget\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file id values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryPath values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file target values must be unique\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"receipt file registryTarget values must be unique\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.6.0\n<<<<<<< injected"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^(?:canary|\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-[0-9A-Za-z.-]+)?(?:\\\\+[0-9A-Za-z.-]+)?)$/\",\n    \"path\": [\n      \"source\",\n      \"version\"\n    ],\n    \"message\": \"must be canary or an exact semantic version\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "1.2.3-rc.1+build.5"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "ok": true
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "canary"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "ok": true
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "1.2.3+a+b"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^(?:canary|\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-[0-9A-Za-z.-]+)?(?:\\\\+[0-9A-Za-z.-]+)?)$/\",\n    \"path\": [\n      \"source\",\n      \"version\"\n    ],\n    \"message\": \"must be canary or an exact semantic version\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "01.2.3-"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^(?:canary|\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-[0-9A-Za-z.-]+)?(?:\\\\+[0-9A-Za-z.-]+)?)$/\",\n    \"path\": [\n      \"source\",\n      \"version\"\n    ],\n    \"message\": \"must be canary or an exact semantic version\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "a-b",
+     "path": "examples/a",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "primary",
+      "target": "../a\\b",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^\\\\.\\\\.\\\\/[^/\\\\\\\\]+$/\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must point to one adjacent source file\"\n  }\n]"
+  },
+  {
+   "input": {
+    "schemaVersion": 2,
+    "item": {
+     "name": "-a",
+     "path": "a//b",
+     "aliases": [],
+     "kind": "example"
+    },
+    "source": {
+     "package": "@astryxdesign/cli",
+     "version": "0.5.0"
+    },
+    "files": [
+     {
+      "id": "a--b",
+      "target": "../A.tsx",
+      "registryTarget": "components/A.tsx",
+      "registryPath": "registry/a/A.tsx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "content": "x",
+      "variants": []
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*$/\",\n    \"path\": [\n      \"item\",\n      \"name\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-z0-9]+(?:-[a-z0-9]+)*$/\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\\\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/\",\n    \"path\": [\n      \"item\",\n      \"path\"\n    ],\n    \"message\": \"must be a lowercase registry path\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*$/\",\n    \"path\": [\n      \"files\",\n      0,\n      \"id\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-z0-9]+(?:-[a-z0-9]+)*$/\"\n  }\n]"
+  }
+ ],
+ "items": [
+  {
+   "input": 5,
+   "error": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received number\"\n  }\n]"
+  },
+  {
+   "input": {},
+   "error": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"name\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"registry:block\",\n      \"registry:page\"\n    ],\n    \"path\": [\n      \"type\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"registry:block\\\"|\\\"registry:page\\\"\"\n  },\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"Invalid input: expected array, received undefined\"\n  }\n]"
+  },
+  {
+   "input": [],
+   "error": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received array\"\n  }\n]"
+  },
+  {
+   "input": {
+    "name": "X",
+    "type": "registry:ui",
+    "files": []
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^[a-z0-9]+(?:-[a-z0-9]+)*$/\",\n    \"path\": [\n      \"name\"\n    ],\n    \"message\": \"Invalid string: must match pattern /^[a-z0-9]+(?:-[a-z0-9]+)*$/\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"registry:block\",\n      \"registry:page\"\n    ],\n    \"path\": [\n      \"type\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"registry:block\\\"|\\\"registry:page\\\"\"\n  },\n  {\n    \"origin\": \"array\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\"\n    ],\n    \"message\": \"Too small: expected array to have >=1 items\"\n  }\n]"
+  },
+  {
+   "input": {
+    "name": "x",
+    "type": "registry:block",
+    "files": [
+     {
+      "path": "",
+      "type": "",
+      "target": "/a",
+      "content": 3,
+      "extra": 1
+     },
+     5
+    ]
+   },
+   "error": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\",\n      0,\n      \"path\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"path\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"files\",\n      0,\n      \"type\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must be relative\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must be a normalized registry path\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      0,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  },\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      1\n    ],\n    \"message\": \"Invalid input: expected object, received number\"\n  }\n]"
+  },
+  {
+   "input": {
+    "name": "x",
+    "type": "registry:block",
+    "files": [
+     {
+      "path": "a",
+      "type": "t",
+      "content": "c"
+     }
+    ],
+    "more": 1
+   },
+   "ok": true
+  },
+  {
+   "input": {
+    "name": "x",
+    "type": "registry:page",
+    "files": [
+     {
+      "path": "a",
+      "type": "t",
+      "target": null,
+      "content": "c"
+     }
+    ]
+   },
+   "error": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  }\n]"
+  }
+ ]
+}

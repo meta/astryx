@@ -1039,7 +1039,7 @@
     "id": "argv_template_-",
     "args": [
       "template",
-      "\u00fc\u4e2d\u6587"
+      "ü中文"
     ],
     "fixture": "app",
     "gen": true

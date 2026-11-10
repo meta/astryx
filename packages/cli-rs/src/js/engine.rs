@@ -35,6 +35,8 @@ thread_local! {
     static LOADED: RefCell<Option<Vec<PathBuf>>> = const { RefCell::new(None) };
     static VIRTUAL_IDS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static GENERATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Whether the timer globals were installed (nothing to wait on before).
+    static TIMERS_LOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Resolution failure message -> the specifier that failed.
     static MISSING: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     /// The code `process.exit` was called with, until the caller reads it.
@@ -969,10 +971,26 @@ impl ModuleLoader for Loader {
     }
 }
 
-const BOOTSTRAP: &str = r#"
-import {URL, URLSearchParams} from 'node:url';
-globalThis.URL = URL;
-globalThis.URLSearchParams = URLSearchParams;
+const BOOTSTRAP: &str = r#"(() => {
+// Globals that cost real work install on first use: the URL classes load
+// the `node:url` shim, console and util.inspect load inspect.js.
+const lazy = (name, load) => Object.defineProperty(globalThis, name, {
+  configurable: true,
+  enumerable: false,
+  get() { load(); return globalThis[name]; },
+  set(v) { Object.defineProperty(globalThis, name, {value: v, writable: true, configurable: true, enumerable: false}); },
+});
+const settle = (name, value) => Object.defineProperty(globalThis, name, {value, writable: true, configurable: true, enumerable: false});
+const loadUrl = () => { const ns = __astryx_host.builtinNamespace('url'); settle('URL', ns.URL); settle('URLSearchParams', ns.URLSearchParams); };
+lazy('URL', loadUrl);
+lazy('URLSearchParams', loadUrl);
+const loadInspect = () => {
+  for (const n of ['console', '__astryx_inspect', '__astryx_format']) settle(n, undefined);
+  __astryx_host.loadInspect();
+};
+lazy('console', loadInspect);
+lazy('__astryx_inspect', loadInspect);
+lazy('__astryx_format', loadInspect);
 globalThis.global = globalThis;
 process.nextTick = (fn, ...args) => { Promise.resolve().then(() => fn(...args)); };
 process.memoryUsage = () => ({rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0});
@@ -990,6 +1008,17 @@ Object.defineProperty(globalThis, '__astryx_pow', {
   value: (a, b) => (typeof a === 'bigint' || typeof b === 'bigint') ? a ** b : nodePow(+a, +b),
   writable: false, enumerable: false, configurable: false,
 });
+const group = name => () => __astryx_host.loadGlobals(name);
+for (const n of ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'queueMicrotask', '__astryx_timers']) lazy(n, group('timers'));
+for (const n of ['AbortSignal', 'AbortController']) lazy(n, group('abort'));
+for (const n of ['TextEncoder', 'TextDecoder']) lazy(n, group('text'));
+for (const n of ['MessagePort', 'MessageChannel']) lazy(n, group('message'));
+for (const n of ['structuredClone', '__astryx_revive']) lazy(n, group('clone'));
+})();
+"#;
+
+/// Globals installed on first use (see BOOTSTRAP).
+const GLOBALS_TIMERS: &str = r#"(() => {
 const timers = new Map();
 let nextId = 1;
 class Timeout {
@@ -1017,6 +1046,7 @@ globalThis.clearTimeout = clearTimer;
 globalThis.clearInterval = clearTimer;
 globalThis.clearImmediate = clearTimer;
 globalThis.queueMicrotask = fn => { Promise.resolve().then(fn); };
+__astryx_host.timersLoaded();
 globalThis.__astryx_timers = {
   next() { let min = -1; for (const t of timers.values()) if (min < 0 || t.due < min) min = t.due; return min; },
   fire() {
@@ -1029,6 +1059,9 @@ globalThis.__astryx_timers = {
     }
   },
 };
+})();
+"#;
+const GLOBALS_ABORT: &str = r#"(() => {
 class AbortSignal {
   constructor() { this.aborted = false; this.reason = undefined; this.onabort = null; this._listeners = []; }
   addEventListener(type, fn) { if (type === 'abort') this._listeners.push(fn); }
@@ -1052,6 +1085,9 @@ class AbortController {
 }
 globalThis.AbortSignal = AbortSignal;
 globalThis.AbortController = AbortController;
+})();
+"#;
+const GLOBALS_TEXT: &str = r#"(() => {
 class TextEncoder {
   get encoding() { return 'utf-8'; }
   encode(input = '') {
@@ -1115,6 +1151,9 @@ class TextDecoder {
 }
 globalThis.TextEncoder = TextEncoder;
 globalThis.TextDecoder = TextDecoder;
+})();
+"#;
+const GLOBALS_MESSAGE: &str = r#"(() => {
 class MessagePort {
   constructor() { this.onmessage = null; this._other = null; this._listeners = []; this._closed = false; }
   postMessage(data) {
@@ -1139,6 +1178,9 @@ class MessageChannel {
 }
 globalThis.MessagePort = MessagePort;
 globalThis.MessageChannel = MessageChannel;
+})();
+"#;
+const GLOBALS_CLONE: &str = r#"(() => {
 globalThis.structuredClone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
 globalThis.__astryx_revive = text => JSON.parse(text, (k, v) => {
   if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.__js === 'string') {
@@ -1147,7 +1189,9 @@ globalThis.__astryx_revive = text => JSON.parse(text, (k, v) => {
   }
   return v;
 });
+})();
 "#;
+
 
 pub(super) enum Settled {
     Fulfilled(JsValue),
@@ -1165,6 +1209,12 @@ pub struct Engine {
 
 impl Engine {
     fn new() -> Self {
+        let t0 = std::time::Instant::now();
+        let mark = |what: &str| {
+            if std::env::var_os("ASTRYX_JS_TRACE").is_some() {
+                eprintln!("[js] engine {what}: {:.2}ms", t0.elapsed().as_secs_f64() * 1000.0);
+            }
+        };
         let loader = Rc::new(Loader::default());
         LOADER.with(|l| *l.borrow_mut() = Some(loader.clone()));
         let mut ctx = Context::builder().module_loader(loader.clone()).build().expect("context");
@@ -1172,7 +1222,9 @@ impl Engine {
         // literals need a deep value stack.
         ctx.runtime_limits_mut().set_stack_size_limit(1 << 24);
         ctx.runtime_limits_mut().set_recursion_limit(10_000);
+        mark("context");
         install_host(&mut ctx);
+        mark("host");
         install_locale_compare(&mut ctx);
         install_json_parse(&mut ctx);
         install_math_fn(&mut ctx, "pow", |a| super::jsmath::pow(arg(a, 0), arg(a, 1)));
@@ -1193,24 +1245,18 @@ impl Engine {
                 install_math_fn(&mut ctx, name, *f);
             }
         });
+        mark("math");
         let conv = Converter::new(&mut ctx).expect("converter");
+        mark("converter");
         let mut engine = Self { ctx, loader, conv, namespaces: HashMap::new() };
         engine.bootstrap();
+        mark("bootstrap");
         engine
     }
 
     /// Node globals that builtin shims provide (`URL`, `URLSearchParams`).
     fn bootstrap(&mut self) {
-        self.ctx
-            .eval(Source::from_bytes(include_str!("inspect.js")))
-            .expect("inspect.js runs");
-        let src = BOOTSTRAP;
-        let path = PathBuf::from("/node:bootstrap");
-        let module = Module::parse(Source::from_bytes(src).with_path(&path), None, &mut self.ctx)
-            .expect("bootstrap parses");
-        let promise = module.load_link_evaluate(&mut self.ctx);
-        let _ = self.ctx.run_jobs();
-        debug_assert!(matches!(promise.state(), PromiseState::Fulfilled(_)));
+        self.ctx.eval(Source::from_bytes(BOOTSTRAP)).expect("bootstrap runs");
     }
 
     /// Load and evaluate a module (cached unless `fresh`).
@@ -1394,6 +1440,9 @@ impl Engine {
     }
 
     fn timers_call(&mut self, name: &str) -> Option<JsValue> {
+        if !TIMERS_LOADED.with(|t| t.get()) {
+            return None;
+        }
         let timers = self.ctx.global_object().get(js_string!("__astryx_timers"), &mut self.ctx).ok()?;
         let timers = timers.as_object()?;
         let f = timers.get(JsString::from(name), &mut self.ctx).ok()?;
@@ -1792,6 +1841,47 @@ fn install_host(ctx: &mut Context) {
         .function(
             NativeFunction::from_fn_ptr(|_, _, _| Ok(now_ms().into())),
             js_string!("now"),
+            0,
+        )
+        .function(
+            NativeFunction::from_fn_ptr(|_, args, ctx| {
+                let name = arg_string(args, 0, ctx)?;
+                let m = loader().builtin(&name, ctx)?;
+                evaluate_now(&m, ctx)?;
+                Ok(m.namespace(ctx).into())
+            }),
+            js_string!("builtinNamespace"),
+            1,
+        )
+        .function(
+            NativeFunction::from_fn_ptr(|_, _, ctx| {
+                ctx.eval(Source::from_bytes(include_str!("inspect.js")))?;
+                Ok(JsValue::undefined())
+            }),
+            js_string!("loadInspect"),
+            0,
+        )
+        .function(
+            NativeFunction::from_fn_ptr(|_, args, ctx| {
+                let src = match arg_string(args, 0, ctx)?.as_str() {
+                    "timers" => GLOBALS_TIMERS,
+                    "abort" => GLOBALS_ABORT,
+                    "text" => GLOBALS_TEXT,
+                    "message" => GLOBALS_MESSAGE,
+                    _ => GLOBALS_CLONE,
+                };
+                ctx.eval(Source::from_bytes(src))?;
+                Ok(JsValue::undefined())
+            }),
+            js_string!("loadGlobals"),
+            1,
+        )
+        .function(
+            NativeFunction::from_fn_ptr(|_, _, _| {
+                TIMERS_LOADED.with(|t| t.set(true));
+                Ok(JsValue::undefined())
+            }),
+            js_string!("timersLoaded"),
             0,
         )
         .function(
