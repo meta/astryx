@@ -86,6 +86,26 @@ describe('firstStrongDirection', () => {
     expect(firstStrongDirection('\u{1EE01}')).toBe('rtl');
   });
 
+  it('passes over the weak characters inside the right-to-left planes', () => {
+    // The two supplementary ranges in STRONG_RTL are drawn around whole
+    // planes, so they sweep up each script's digits and punctuation as well
+    // as its letters. Every answer here was taken from the browser's own
+    // implementation of the algorithm, which `dir="auto"` runs.
+    expect(firstStrongDirection('\u{10D30}\u{10D31} Annual')).toBe('ltr'); // Hanifi Rohingya digits, AN
+    expect(firstStrongDirection('\u{10D40}\u{10D41} Annual')).toBe('ltr'); // Garay digits, AN
+    expect(firstStrongDirection('\u{10ED0}\u{10ED1} Annual')).toBe('ltr'); // Yezidi digits, AN
+    expect(firstStrongDirection('\u{1091F} Annual')).toBe('ltr'); // Phoenician word separator, ON
+    expect(firstStrongDirection('\u{10B39} Annual')).toBe('ltr'); // Avestan punctuation, ON
+    expect(firstStrongDirection('\u{10D6E} Annual')).toBe('ltr'); // Garay hyphen, ON
+    expect(firstStrongDirection('\u{1EEF0} Annual')).toBe('ltr'); // Arabic maths operator, ON
+    expect(firstStrongDirection('\u{10D30}')).toBeNull();
+
+    // Their letters, in the same blocks, stay strong.
+    expect(firstStrongDirection('\u{10D00} Annual')).toBe('rtl'); // Hanifi Rohingya letter
+    expect(firstStrongDirection('\u{10900} Annual')).toBe('rtl'); // Phoenician letter
+    expect(firstStrongDirection('\u{10B00} Annual')).toBe('rtl'); // Avestan letter
+  });
+
   it('reads right-to-left digits that are Bidi_Class R as strong', () => {
     expect(firstStrongDirection('\u07c0\u07c1\u07c2')).toBe('rtl');
     expect(firstStrongDirection('\u{1E950}\u{1E951}')).toBe('rtl');

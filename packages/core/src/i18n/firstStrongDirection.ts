@@ -33,19 +33,27 @@ const STRONG_RTL = new RegExp(
 );
 
 /**
- * The weak number characters of the right-to-left scripts: Bidi_Class `AN`,
- * `EN` or `ET`, so the scan skips them. The Arabic digits, the number signs
- * before them, the currency and per-cent marks beside them, and the Rumi
- * numerals, which sit inside the strong range above and would otherwise read
- * as strong.
+ * The characters the scan passes over inside the right-to-left scripts:
+ * Bidi_Class `AN`, `EN`, `ET` and `ON`, none of which decides a direction.
  *
- * The Indic Siyaq and Ottoman Siyaq numerals look like company for Rumi and
- * are not: they are Bidi_Class `AL`, so they stay strong and keep the
- * direction they take from the range above. NKo and Adlam digits are `R`,
- * and are not here either.
+ * The first group is the Arabic script's own: its digits, the number signs
+ * before them, and the currency and per-cent marks beside them.
+ *
+ * The rest sit inside the two supplementary ranges above, which are drawn
+ * around whole planes and so sweep up every digit and mark those scripts
+ * carry as well as their letters: the Phoenician word separator, Avestan
+ * punctuation, the Hanifi Rohingya, Garay, Yezidi and Rumi digits, a Garay
+ * mark, and the Arabic mathematical operators. Each one is verified against
+ * the browser's own implementation of the algorithm in
+ * firstStrongDirection.test.ts.
+ *
+ * Membership here is about Bidi_Class, never about looking like a number.
+ * The Indic Siyaq and Ottoman Siyaq numerals sit beside Rumi and are
+ * Bidi_Class `AL`, so they stay strong; NKo and Adlam digits are `R`, so
+ * they do too.
  */
-const WEAK_RTL_NUMBER =
-  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{10E60}-\u{10E7F}]/u;
+const WEAK_RTL_CHARACTER =
+  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{1091F}\u{10B39}-\u{10B3F}\u{10D30}-\u{10D39}\u{10D40}-\u{10D49}\u{10D6E}\u{10E60}-\u{10E7E}\u{10ED0}-\u{10ED8}\u{1EEF0}\u{1EEF1}]/u;
 
 /**
  * Bidi_Class `L`: every other letter, the letter numbers (`\p{Letter}` does
@@ -78,7 +86,7 @@ export function hasStrongRightToLeft(text: string): boolean {
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
   for (const character of text) {
-    if (COMBINING_MARK.test(character) || WEAK_RTL_NUMBER.test(character)) {
+    if (COMBINING_MARK.test(character) || WEAK_RTL_CHARACTER.test(character)) {
       continue;
     }
     if (STRONG_RTL.test(character)) {

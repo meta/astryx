@@ -2022,6 +2022,66 @@ for (const direction of ['ltr', 'rtl'] as const) {
 
   // A cell orders with its table, and its text reads its own way, so a
   // Hebrew cell starts at its own start edge in an English document.
+  // A table cell's paragraph is classified by the same first-strong rule, and
+  // its direction is stored, so a leading combining mark or a letter number
+  // has to be read the way the algorithm reads it on both paths into the
+  // document: the import below, and the editing path the second half drives.
+  test(`a cell reads past a combining mark and reads a letter number (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    // U+05B0 is a Hebrew point: Script=Hebrew, but Bidi_Class NSM, so it
+    // takes its base character's side and decides nothing on its own.
+    // U+2160 is ROMAN NUMERAL ONE: Bidi_Class L, General_Category Nl, which
+    // `\p{Letter}` does not cover.
+    await page
+      .locator('textarea')
+      .fill(
+        '| A | B |\n| --- | --- |\n| \u05b0Annual report | \u2160\u05e9\u05dc\u05d5\u05dd |\n| \u05b0 | \u2160 |\n',
+      );
+    await expect(page.locator('table:visible')).toHaveCount(2);
+    const read = async (): Promise<Array<string | null>> =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('[data-lexical-editor]')].flatMap(
+          editor =>
+            [...editor.querySelectorAll('tr')]
+              // Each surface has its own header row to skip.
+              .slice(1)
+              .flatMap(row => [...row.querySelectorAll('th, td')])
+              .map(cell => {
+                const prose = cell.querySelector('p') ?? cell;
+                return getComputedStyle(prose).direction;
+              }),
+        ),
+      );
+    const imported = await read();
+    // Two surfaces, four body cells each.
+    expect(imported).toHaveLength(8);
+    for (let index = 0; index < imported.length; index += 4) {
+      // A point before English reads left-to-right, not right-to-left.
+      expect(imported[index]).toBe('ltr');
+      // A Roman numeral before Hebrew is the first strong character.
+      expect(imported[index + 1]).toBe('ltr');
+      // A point alone carries no direction, so the document decides.
+      expect(imported[index + 2]).toBe(direction);
+      // A Roman numeral alone is strong on its own.
+      expect(imported[index + 3]).toBe('ltr');
+    }
+
+    // The editing path: retype that cell's text and it classifies the same.
+    // The cell's own text is the click target; the cell box around it is not
+    // reliably hit-testable while the table lays out.
+    await page.getByText('\u05b0Annual report', {exact: true}).first().click();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('\u05b0Annual report');
+    await expect.poll(async () => (await read())[0]).toBe('ltr');
+  });
+
   // FR6 verification: a nested list holding items that read both ways, and a
   // neutral item among them.
   test(`a nested list reads each item its own way and keeps a neutral one on the document (${direction})`, async ({
