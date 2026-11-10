@@ -13,8 +13,11 @@ const PRODUCTS = ['Notebook', 'Pen set', 'Desk lamp', 'Throw blanket', 'Headphon
 
 /** @param {import('playwright-core').Page} page */
 export default function steps(page) {
-  // A native select and a custom select both expose role=combobox.
-  const category = page.getByRole('combobox', {name: /^\s*Category/});
+  // A select is a combobox, native or custom, or a button that opens a listbox.
+  const category = page
+    .getByRole('combobox', {name: /^\s*Category/})
+    .or(page.getByRole('button', {name: /^\s*Category/}).and(page.locator('[aria-haspopup="listbox"]')))
+    .first();
   const search = page
     .getByRole('textbox', {name: /^\s*Search/})
     .or(page.getByRole('searchbox', {name: /^\s*Search/}));

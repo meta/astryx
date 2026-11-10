@@ -17,11 +17,23 @@ export default function steps(page) {
   const menuButton = page.getByRole('button', {name: 'Open menu', exact: true});
   const homeIsCurrent = async () =>
     (await link('Home').filter({visible: true}).getAttribute('aria-current')) === 'page';
+  // A closed drawer can sit off screen or be inert instead of hidden, so a link counts only when a person can reach it.
+  const onScreen = name =>
+    link(name).evaluateAll(links =>
+      links.some(element => {
+        const box = element.getBoundingClientRect();
+        const inView = box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight;
+        return inView && element.checkVisibility({visibilityProperty: true}) && !element.closest('[inert]');
+      }),
+    );
   const allLinksShown = async where => {
-    for (const name of LINKS) await one(link(name), `${name} link ${where}`);
+    for (const name of LINKS) {
+      await one(link(name), `${name} link ${where}`);
+      await eventually(() => onScreen(name), `${name} link is off screen ${where}`);
+    }
   };
   const allLinksHidden = async where => {
-    for (const name of LINKS) await hidden(link(name), `${name} link ${where}`);
+    for (const name of LINKS) await eventually(async () => !(await onScreen(name)), `${name} link is still shown ${where}`);
   };
   const openMenu = async () => {
     await one(menuButton, 'Open menu button');
@@ -41,6 +53,14 @@ export default function steps(page) {
         const current = await link(name).filter({visible: true}).getAttribute('aria-current');
         assert(current === null || current === 'false', `the ${name} link has aria-current="${current}"`);
       }
+    }],
+    ['the layout switches at 768 pixels', async () => {
+      await page.setViewportSize({width: 800, height: 800});
+      await allLinksShown('at 800px');
+      await hidden(menuButton, 'Open menu button at 800px');
+      await page.setViewportSize({width: 740, height: 800});
+      await one(menuButton, 'Open menu button at 740px');
+      await allLinksHidden('at 740px before opening the menu');
     }],
     ['narrow: links hide behind the menu button', async () => {
       await page.setViewportSize({width: 390, height: 844});

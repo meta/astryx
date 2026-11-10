@@ -21,7 +21,6 @@ export default function steps(page) {
       const target = owner ? document.getElementById(owner) : active;
       return target?.getAttribute('role') === 'menuitem' ? target.textContent.trim() : null;
     });
-  /** True when a's button comes before b's in the page. */
   const before = (a, b) =>
     page.evaluate(([first, second]) => Boolean(first && second && first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING), [a, b]);
   return [

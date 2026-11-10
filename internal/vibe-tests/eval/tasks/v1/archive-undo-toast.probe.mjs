@@ -15,8 +15,10 @@ const NOTICE = 'Message archived';
 /** @param {import('playwright-core').Page} page */
 export default function steps(page) {
   const archive = title => page.getByRole('button', {name: `Archive ${title}`, exact: true});
-  const title = text => page.getByText(text, {exact: true}).filter({visible: true});
-  const notice = page.getByText(NOTICE, {exact: true}).filter({visible: true});
+  // A button can repeat the title in screen-reader-only text, so titles come from outside buttons.
+  const title = text =>
+    page.getByText(text, {exact: true}).filter({visible: true}).and(page.locator(':not(button *)'));
+  const notice = page.getByText(new RegExp(NOTICE)).filter({visible: true});
   const undo = page.getByRole('button', {name: 'Undo', exact: true});
   /** True when an element with live-region semantics contains the text. */
   const announced = () =>
@@ -24,9 +26,9 @@ export default function steps(page) {
       const isLive = element => {
         const role = element.getAttribute('role');
         const live = element.getAttribute('aria-live');
-        return ['status', 'alert', 'log'].includes(role ?? '') || (live !== null && live !== 'off');
+        return ['status', 'alert', 'log'].includes(role ?? '') || (live !== null && live !== 'off') || element.localName === 'output';
       };
-      return [...document.querySelectorAll('[role], [aria-live]')].some(
+      return [...document.querySelectorAll('[role], [aria-live], output')].some(
         element => isLive(element) && (element.textContent ?? '').includes(text),
       );
     }, NOTICE);
@@ -42,7 +44,7 @@ export default function steps(page) {
   return [
     ['three messages with archive buttons', async () => {
       for (const text of TITLES) {
-        await one(title(text), `"${text}" title`);
+        await shown(title(text), `"${text}" title`);
         await one(archive(text), `Archive ${text} button`);
       }
     }],

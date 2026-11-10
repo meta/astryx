@@ -16,8 +16,7 @@ export default function steps(page) {
   /** The option the combobox highlights, by aria-activedescendant, focus, or aria-selected. */
   const highlighted = () =>
     page.evaluate(() => {
-      const box = document.querySelector('[role="combobox"]');
-      const id = box?.getAttribute('aria-activedescendant');
+      const id = document.activeElement?.getAttribute('aria-activedescendant');
       const byId = id ? document.getElementById(id) : null;
       const focused = document.activeElement?.getAttribute('role') === 'option' ? document.activeElement : null;
       const selected = [...document.querySelectorAll('[role="option"][aria-selected="true"]')].find(o => o.checkVisibility());
@@ -30,7 +29,7 @@ export default function steps(page) {
     }],
     ['typing filters the options, ignoring case', async () => {
       await combobox.click();
-      await combobox.pressSequentially('AN', {delay: 50});
+      await page.keyboard.type('AN', {delay: 50});
       await eventually(async () => (await options().count()) === 2, async () => `expected 2 options for "AN", found ${await options().count()}`);
       const names = await options().allInnerTexts();
       assert(names.some(n => n.includes('Alan Turing')) && names.some(n => n.includes('Radia Perlman')), `wrong options: ${names.join(', ')}`);
@@ -40,8 +39,10 @@ export default function steps(page) {
       await hidden(page.getByRole('option'), 'options after Escape');
     }],
     ['ArrowDown and Enter pick Radia Perlman', async () => {
-      await combobox.fill('');
-      await combobox.pressSequentially('an', {delay: 50});
+      await combobox.click();
+      await page.keyboard.press('ControlOrMeta+A');
+      await page.keyboard.press('Backspace');
+      await page.keyboard.type('an', {delay: 50});
       await eventually(async () => (await options().count()) === 2, 'the options did not come back for "an"');
       for (let tries = 0; tries < 3 && !(await highlighted())?.includes('Radia Perlman'); tries++) {
         await press(page, 'ArrowDown');

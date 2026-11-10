@@ -51,6 +51,13 @@ export default function steps(page) {
       await shown(page.getByText('Atlas', {exact: true}), 'Atlas in the project list');
       await eventually(() => isFocusedWithin(opener), 'focus did not return to New project');
     }],
+    ['Cancel closes without adding', async () => {
+      await open();
+      await name.fill('Cosmos');
+      await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+      await hidden(dialog, 'dialog after Cancel');
+      await hidden(page.getByText('Cosmos', {exact: true}), 'Cosmos');
+    }],
     ['Escape closes without adding', async () => {
       await open();
       await name.fill('Borealis');
