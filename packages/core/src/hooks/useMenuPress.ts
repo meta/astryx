@@ -370,9 +370,9 @@ export type MenuSurfacePressReturn = Omit<
 /**
  * The press model for a menu that never presses a trigger: a sub-menu, a
  * context menu, a Selector's list or a sheet's action list. It is the menu
- * half alone, so the trigger half's long-press detectors and scroll probe
- * (menuTriggerPress.ts) stay out of its bundle. Not exported from the hooks
- * entry point.
+ * half alone, so the trigger half's long-press detectors (menuTriggerPress.ts)
+ * and its scroll probe (menuScrollView.ts) stay out of its bundle. Not
+ * exported from the hooks entry point.
  *
  * @internal
  */
@@ -661,7 +661,26 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
           }
           return;
         }
+        case 'withdraw': {
+          // The window's blur withdrew a finger's gesture. It stays tracked to
+          // its release, but nothing drives the menu any more (the hold, the
+          // autoscroll, the page lock). A row a finger lit clears.
+          longPressApiRef.current?.cancel();
+          stopAutoscroll();
+          touchMovePreventerRef.current?.();
+          touchMovePreventerRef.current = null;
+          if (effect.clear === true) {
+            highlight(null);
+          }
+          return;
+        }
         case 'settle': {
+          // A finger's lit row clears on a cancel, on every surface. The
+          // machine sets `clear` only for a finger or pen, so a mouse keeps its
+          // highlight.
+          if (effect.clear === true) {
+            highlight(null);
+          }
           endGesture();
           if (effect.stray) {
             armClickGuard(doc, {
@@ -676,7 +695,7 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
         }
       }
     },
-    [activate, endGesture, getDocument, highlight],
+    [activate, endGesture, getDocument, highlight, stopAutoscroll],
   );
 
   const step = useCallback(
@@ -824,6 +843,12 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
         stepRef.current({type: 'cancel'});
       };
       const onOtherPointerDown = (event: PointerEvent) => {
+        // Any press ends a withdrawn gesture: its finger lifted where the
+        // page could not see it, and the new press's click must act.
+        if (gestureRef.current.phase === 'withdrawn') {
+          stepRef.current({type: 'cancel'});
+          return;
+        }
         // A second pointer ends the gesture: two fingers are a pinch or a
         // scroll, never a pick.
         if (event.pointerId !== pointerIdRef.current) {
@@ -832,7 +857,12 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
         }
       };
       const onBlur = () => {
-        stepRef.current({type: 'cancel'});
+        // A finger's or pen's gesture is withdrawn, not ended. The browser can
+        // keep the touch alive past the blur, so the gesture stays tracked on
+        // these listeners until its release. That release acts on nothing, and
+        // its click is swallowed. A mouse press ends as a cancel and keeps its
+        // click.
+        stepRef.current({type: 'withdraw'});
       };
 
       doc.addEventListener('pointermove', onMove, true);
