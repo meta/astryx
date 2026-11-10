@@ -208,8 +208,12 @@ async function lastInput(
 
 const touchStartedAt = async (page: Page) => lastInput(page, 'touchstart');
 
+/** The trigger's own visual: the press feedback grows it, not the trigger. */
+const visualOf = (trigger: Locator) => trigger.locator(':scope > div').first();
+
+/** The press feedback's presented scale, read on the trigger's visual. */
 const presentedScale = async (trigger: Locator) =>
-  trigger.evaluate(element => {
+  visualOf(trigger).evaluate(element => {
     const scale = getComputedStyle(element).scale;
     return scale === 'none' ? 1 : Number.parseFloat(scale);
   });
@@ -423,7 +427,9 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   const shown = await menuShownAt(page);
   const decided = await menuShownTimerAt(page);
   expect(scales).toEqual([1, 1, 1]);
-  expect(await trigger.evaluate(el => el.getAnimations().length)).toBe(0);
+  expect(
+    await visualOf(trigger).evaluate(el => el.getAnimations().length),
+  ).toBe(0);
   expect(shown, 'the menu never showed').not.toBeNull();
   expect(
     decided,
@@ -840,9 +846,13 @@ test('an early lift opens nothing, and the card springs back to its size', async
   expect(await menuShownAt(page)).toBeNull();
   // The return spring settles within ~1.2 s; then the scale is gone.
   await expect
-    .poll(async () => trigger.evaluate(el => (el as HTMLElement).style.scale), {
-      timeout: 3000,
-    })
+    .poll(
+      async () =>
+        visualOf(trigger).evaluate(el => (el as HTMLElement).style.scale),
+      {
+        timeout: 3000,
+      },
+    )
     .toBe('');
   expect(await presentedScale(trigger)).toBe(1);
 });
@@ -918,7 +928,9 @@ test('a touch that reaches the page late grows from the first frame at its onset
     };
     (window as unknown as {__lateTouch: typeof record}).__lateTouch = record;
     const sample = (t: number) => {
-      const scale = getComputedStyle(trigger as HTMLElement).scale;
+      const scale = getComputedStyle(
+        trigger?.firstElementChild as HTMLElement,
+      ).scale;
       record.frames.push({
         t,
         scale: scale === 'none' ? 1 : Number.parseFloat(scale),
@@ -993,13 +1005,13 @@ test('the press feedback plays its computed curve on the compositor, frame by fr
   const {driver, trigger, center} = await openTouchStory(page);
   const played = playedCurve();
   const playing = driver.play(hold(center, commitMs + 300));
-  await waitForAnimation(trigger, {minProgressMs: 16});
-  await holdAnimations(page, trigger, {
-    judges: {target: trigger, property: 'scale'},
+  await waitForAnimation(visualOf(trigger), {minProgressMs: 16});
+  await holdAnimations(page, visualOf(trigger), {
+    judges: {target: visualOf(trigger), property: 'scale'},
   });
   // Seek the held curve (its time 0 is the onset after the touch) to every
   // 60 Hz frame and read the presented scale.
-  const samples = await trigger.evaluate((element, times) => {
+  const samples = await visualOf(trigger).evaluate((element, times) => {
     const held =
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? [];
     return times.map(t => {
@@ -1073,15 +1085,18 @@ test('the press feedback keeps advancing every frame while the main thread is bl
   // resolves; it stays inside the viewport at its largest.
   await trigger.evaluate(el => {
     const host = el as HTMLElement;
-    (host.firstElementChild as HTMLElement).style.width = '340px';
+    (host.firstElementChild?.firstElementChild as HTMLElement).style.width =
+      '340px';
   });
   const played = playedCurve();
-  await markElement(trigger, {mode: 'outline'});
+  await markElement(visualOf(trigger), {mode: 'outline'});
   const cast = await startScreencast(page);
   const playing = driver.play(hold(center, 1100));
   // The lift spring moves the card for about 200 ms, so the block covers
   // its moving part.
-  const [feedback] = await waitForAnimation(trigger, {minProgressMs: 16});
+  const [feedback] = await waitForAnimation(visualOf(trigger), {
+    minProgressMs: 16,
+  });
   const block = await blockMainThread(page, 150);
   await playing;
   await page.waitForTimeout(100);
@@ -1348,7 +1363,7 @@ test(
     // held feedback is photographed, and the finger stays down meanwhile.
     await installTimerGate(page);
     const playing = driver.play(hold(center, 8000));
-    await waitForAnimation(trigger, {minProgressMs: 16});
+    await waitForAnimation(visualOf(trigger), {minProgressMs: 16});
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'contextmenu-press-feedback',
@@ -1359,7 +1374,7 @@ test(
         height: box.height + 48,
       },
       scope: trigger,
-      judges: {target: trigger, property: 'scale'},
+      judges: {target: visualOf(trigger), property: 'scale'},
       // t counts from the visible ramp's start, the onset after the touch.
       times: timeline(menuDisplayMs - feedbackOnsetMs, 1000 / 30),
       measure: async () => ({

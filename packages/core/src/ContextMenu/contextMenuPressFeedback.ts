@@ -54,9 +54,8 @@ export interface ContextMenuPressFeedback {
    */
   end(time: number): void;
   /**
-   * The menu showed: the feedback stops where it is. The menu's cursor anchor
-   * sits inside the trigger, and anchor positioning follows its transformed
-   * box. So a trigger that still grows would carry the open menu with it.
+   * The menu showed: the feedback stops where it is and holds until the menu
+   * closes.
    */
   hold(): void;
 }
@@ -116,8 +115,10 @@ function pressMarkOwnerOf(marked: Element): Element | null {
 
 /**
  * The press feedback of a ContextMenu trigger. `isShown` is read at each
- * press: false for an inline trigger. It follows the element behind
- * `triggerRef`, so a replaced trigger (`triggerAs`) is followed too. The
+ * press: false for an inline trigger. It follows the press mark on the
+ * element behind `triggerRef`, so a replaced trigger (`triggerAs`) is
+ * followed too. It grows the element behind `visualRef`, the trigger's own
+ * visual, so a layer anchored in the trigger never takes the scale. The
  * `isFollowed` ref says whether ContextMenu's recognizer follows a finger or
  * a pen now: the growth starts only then. The `landedAt` ref gives the time
  * that finger landed, so the growth starts at its onset. The `followsFinger`
@@ -125,6 +126,7 @@ function pressMarkOwnerOf(marked: Element): Element | null {
  */
 export function useContextMenuPressFeedback(
   triggerRef: RefObject<HTMLElement | null>,
+  visualRef: RefObject<HTMLElement | null>,
   isShown: boolean,
   isFollowed: RefObject<() => boolean> = ALWAYS_FOLLOWED,
   landedAt: RefObject<() => number | null> = NO_LANDING,
@@ -135,7 +137,7 @@ export function useContextMenuPressFeedback(
   const animatorRef = useRef<Animator | null>(null);
   const isShownRef = useRef(isShown);
   isShownRef.current = isShown;
-  // Whether the trigger carries a scale of ours (to put back and clear).
+  // Whether the visual carries a scale of ours (to put back and clear).
   const isGrownRef = useRef(false);
   // The menu the press opened is up: the growth holds until it closes.
   const isHeldRef = useRef(false);
@@ -150,11 +152,11 @@ export function useContextMenuPressFeedback(
     stopOnsetRef.current = null;
   }, []);
 
-  // The compositor animator lives with the trigger it follows. A replaced
-  // trigger, or a feedback that goes while the trigger stays, takes the
+  // The compositor animator lives with the visual it grows. A replaced
+  // visual, or a feedback that goes while the visual stays, takes the
   // animation and the scale of ours with it.
   useAttachment(
-    triggerRef,
+    visualRef,
     element => () => {
       animatorRef.current?.dispose();
       animatorRef.current = null;
@@ -167,15 +169,15 @@ export function useContextMenuPressFeedback(
   );
 
   const animatorFor = useCallback((): Animator | null => {
-    const element = triggerRef.current;
+    const element = visualRef.current;
     if (element == null) {
       return null;
     }
     animatorRef.current ??= createMotionEngine(element);
     return animatorRef.current;
-  }, [triggerRef]);
+  }, [visualRef]);
 
-  // Back at 1: drop the inline scale, which would otherwise leave the trigger
+  // Back at 1: drop the inline scale, which would otherwise leave the visual
   // a stacking context and a containing block for fixed descendants.
   const settleBack = useCallback((finished: Promise<boolean>) => {
     void finished.then(isDone => {
