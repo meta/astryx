@@ -1648,6 +1648,7 @@ describe('linkUtils', () => {
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
+      expect(sanitizeUrl('tel:911')).toBe('tel:911');
     });
 
     it('rejects javascript: and other unsafe schemes as about:blank', () => {
@@ -1669,6 +1670,7 @@ describe('linkUtils', () => {
       expect(validateUrl('mailto:a@b.com')).toBe(true);
       expect(validateUrl('example.com:8080')).toBe(true);
       expect(validateUrl('localhost:3000')).toBe(true);
+      expect(validateUrl('tel:911')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
