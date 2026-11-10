@@ -8,8 +8,9 @@
  *   before Toast loads shows once it loads, and that the app stays mounted.
  *   A waiting toast that is removed reports onHide once and never shows. A
  *   waiting namesake follows the uniqueID rules and reports no onHide.
- * @position Unit tests for Layer/toastHost.tsx. Each test reloads the
- *   modules, so Toast's registration is fresh in each one.
+ * @position Unit tests for Layer/toastHost.tsx. Each test forgets the
+ *   registered viewport and reloads the modules, so Toast's registration is
+ *   fresh in each one.
  */
 
 import {act, render, screen} from '@testing-library/react';
@@ -33,7 +34,11 @@ async function loadViewport() {
   await viewportLoad;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // The registered viewport is shared across module loads (spec:AST-110
+  // FR3), so each test forgets it before it reloads the modules.
+  const {__resetToastHostForTest} = await import('./toastHost');
+  __resetToastHostForTest();
   vi.resetModules();
 });
 

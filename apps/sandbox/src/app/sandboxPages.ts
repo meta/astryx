@@ -276,6 +276,12 @@ export const categories: SandboxCategory[] = [
           'Compare complete Markdown rendering with bursty streaming performance and animation',
       },
       {
+        name: 'Animated Layout Perf',
+        href: '/pages/animated-layout-perf/',
+        description:
+          'Expand and collapse an item in the middle of a long list through useAnimatedLayout and measure the walk',
+      },
+      {
         name: 'DiffViewer Perf',
         href: '/pages/diffviewer-perf/',
         description:
