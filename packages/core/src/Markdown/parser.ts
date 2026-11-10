@@ -48,7 +48,7 @@ import {
 // The decoder Markdown renders with, public from the parser subpath
 // (spec:AST-061 DEC-5).
 export {decodeMarkdownCharacterReferences} from './characterReferences';
-import {isSafeMarkdownParserUrl, parsedMarkdownDestination} from './url';
+import {isSafeMarkdownParserUrl, normalizedMarkdownDestination} from './url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -871,7 +871,9 @@ function matchLinkDefinition(
   }
   return {
     label,
-    destination: parsedMarkdownDestination(decodeLinkDestination(destination)),
+    destination: normalizedMarkdownDestination(
+      decodeLinkDestination(destination),
+    ),
     hasTitle: match[4] != null,
   };
 }
@@ -2519,7 +2521,7 @@ function parseInlineImpl(
             ? -1
             : (angleClose ?? inlineIndex.closingParen(altClose + 1));
         if (srcClose !== -1) {
-          const src = parsedMarkdownDestination(
+          const src = normalizedMarkdownDestination(
             decodeLinkDestination(
               inlineDestination(text.slice(altClose + 2, srcClose)),
             ),
@@ -2577,7 +2579,7 @@ function parseInlineImpl(
             ? -1
             : (angleClose ?? inlineIndex.closingParen(textClose + 1));
         if (urlClose !== -1) {
-          const href = parsedMarkdownDestination(
+          const href = normalizedMarkdownDestination(
             decodeLinkDestination(
               inlineDestination(text.slice(textClose + 2, urlClose)),
             ),
@@ -2855,7 +2857,7 @@ function scanAutolinksInText(text: string): AutolinkMatch[] {
       matches.push({
         start: m.index,
         end: m.index + m[0].length,
-        href: url,
+        href: normalizedMarkdownDestination(url),
         display: url,
       });
     }
@@ -3859,7 +3861,7 @@ function parseMarkdownImpl(
     // literal text, the same rule the inline image path applies.
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
     const imageSrc = imageMatch
-      ? parsedMarkdownDestination(
+      ? normalizedMarkdownDestination(
           decodeLinkDestination(inlineDestination(imageMatch[2])),
         )
       : '';

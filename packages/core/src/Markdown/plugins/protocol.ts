@@ -9,7 +9,7 @@
 
 import type React from 'react';
 import {devError, warnOnce} from '../../utils/devWarning';
-import {isSafeMarkdownParserUrl} from '../url';
+import {isSafeMarkdownParserUrl, normalizedMarkdownDestination} from '../url';
 import type {
   MarkdownAstDataValue,
   MarkdownAstExtensionNode,
@@ -803,6 +803,58 @@ function collectCodeInternalProperties(
   };
   visit(root);
   return properties;
+}
+
+/**
+ * The same tree with every link and image URL in the normalized form the
+ * parser stores, so the renderer can use each URL as it is. Only nodes on a
+ * path to a changed URL are copied; the input is not changed.
+ */
+type TreeValue = object | string | number | boolean | null | undefined;
+
+function normalizeAstDestinations<T>(root: T): T {
+  const visit = (value: TreeValue): TreeValue => {
+    if (Array.isArray(value)) {
+      let changed = false;
+      const next = (value as TreeValue[]).map((item): TreeValue => {
+        const result = visit(item);
+        if (result !== item) {
+          changed = true;
+        }
+        return result;
+      });
+      return changed ? next : value;
+    }
+    if (value == null || typeof value !== 'object') {
+      return value;
+    }
+    const node = value as Record<string, unknown>;
+    let copy: Record<string, unknown> | null = null;
+    if (
+      (node.type === 'link' || node.type === 'image') &&
+      typeof node.url === 'string'
+    ) {
+      const url = normalizedMarkdownDestination(node.url);
+      if (url !== node.url) {
+        copy = copyNode(node);
+        copy.url = url;
+      }
+    }
+    if (Array.isArray(node.children)) {
+      const children = visit(node.children as TreeValue[]);
+      if (children !== node.children) {
+        copy ??= copyNode(node);
+        copy.children = children;
+      }
+    }
+    return copy ?? value;
+  };
+  return visit(root as TreeValue) as T;
+}
+
+/** A shallow copy that keeps every own property, symbol keys included. */
+function copyNode(node: Record<string, unknown>): Record<string, unknown> {
+  return Object.defineProperties({}, Object.getOwnPropertyDescriptors(node));
 }
 
 function restoreCodeInternalProperties(
@@ -1691,7 +1743,7 @@ export function applyMarkdownTransforms<Node extends MarkdownExtensionNode>(
       }
       priorTransformChangedTree = true;
       document = freezeAst(
-        restoreCodeInternalProperties(document, next),
+        restoreCodeInternalProperties(document, normalizeAstDestinations(next)),
       ) as MarkdownAstRoot<Node>;
     } catch (error) {
       reportMarkdownPluginFailure(prepared.pluginName, 'transform', error);

@@ -27,13 +27,13 @@ export function isSafeMarkdownParserUrl(url: string): boolean {
 }
 
 /**
- * The destination the parser stores: an empty string when nothing remains
- * after the shared rule removes control characters and outer whitespace, so a
- * blank destination renders like an empty one; otherwise the destination as
- * written.
+ * The destination a link or image node stores: the shared rule's normalized
+ * form (control characters and outer whitespace removed), so a blank
+ * destination is empty and the renderer can use the URL as it is. A blocked
+ * destination is returned unchanged for the safety check to reject.
  */
-export function parsedMarkdownDestination(url: string): string {
-  return sanitizeUrl(url) === '' ? '' : url;
+export function normalizedMarkdownDestination(url: string): string {
+  return sanitizeUrl(url) ?? url;
 }
 
 /**
