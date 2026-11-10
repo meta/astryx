@@ -68,7 +68,7 @@ function getFallbackContext(): ToastContextValue {
   if (typeof document === 'undefined') {
     throw new Error(
       'useToast: Cannot create fallback viewport during SSR. ' +
-        'Wrap your app with <LayerProvider> or <AppShell>.',
+        'Wrap your app with <LayerProvider>.',
     );
   }
 
@@ -76,7 +76,7 @@ function getFallbackContext(): ToastContextValue {
     'toast-fallback-viewport',
     'useToast',
     'No LayerProvider found. Using fallback viewport. ' +
-      'Wrap your app with <LayerProvider> or <AppShell> for full control.',
+      'Wrap your app with <LayerProvider> for full control.',
   );
 
   const container = document.createElement('div');

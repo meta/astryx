@@ -28,6 +28,7 @@ import {
   blockMainThread,
   BusyWindowTooLateError,
   BusyFrameUnjudgedError,
+  BusyPredictionError,
   busyWindowProof,
   type BusyProof,
   type UnjudgedFrame,
@@ -59,6 +60,7 @@ import {
   timeline,
   touchDriver,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   waitForRest,
@@ -1047,7 +1049,10 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await markElement(photo, {mode: 'outline'});
   // A compositor-only control animation in the same window: what the
   // compositor presented while the main thread spun, on this machine.
-  await startBusyControl(page);
+  const busyControl = await startBusyControl(page);
+  // A second control half a leg ahead reads the frames near the first one's
+  // turns. So every frame has a time of its own, and the proof predicts.
+  const aheadControl = await startBusyControl(page, {ahead: true});
   const at = {x: 201, y: before.stage.y + before.stage.height / 2};
   // The same zoom at the default tempo, to compare the slowed one with.
   await driver.play(doubleTap(at));
@@ -1084,9 +1089,13 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const ahead = await trackControl(page, castFrames, {ahead: true});
   // The run's frames and storyboard, kept whatever the proof concludes.
   const record = async (
-    result: {proof: BusyProof} | {unjudged: ReadonlyArray<UnjudgedFrame>},
+    result:
+      | {proof: BusyProof}
+      | {unjudged: ReadonlyArray<UnjudgedFrame>}
+      | {error: string},
     judged: {from: number; to: number},
   ) => {
     await writeEvidence(
@@ -1095,6 +1104,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
         [`${testInfo.project.name}.json`]: JSON.stringify(
           {
             block,
+            controlStarts: [busyControl.start, aheadControl.start],
             ...result,
             frames: tracked.map(f => ({
               t: +(f.t - block.from).toFixed(1),
@@ -1102,6 +1112,10 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
               h: f.box?.height ?? null,
             })),
             control: control.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+            ahead: ahead.map(f => ({
               t: +(f.t - block.from).toFixed(1),
               x: f.box?.x ?? null,
             })),
@@ -1123,21 +1137,29 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
     });
     await film.write(testInfo, {block, judged});
   };
-  // Every frame the control moves on is judged by the edge's own step. A
-  // frame the cast's 1 px step cannot show the edge's move on is too little
-  // to judge, and fails by name (`BusyFrameUnjudgedError`). That run keeps its
-  // frames and storyboard too.
+  // Every frame the control moves on is judged by the edge's predicted move.
+  // A frame predicted to move under the cast's step is named in `unjudged`.
+  // Where the proof falls back to the cast's step, as in WebKit, a frame
+  // that step cannot show is too little to judge. It fails by name
+  // (`BusyFrameUnjudgedError`). Each such run keeps its frames and storyboard.
   let proof: BusyProof;
   try {
     proof = busyWindowProof(tracked, block, {
       axis: ZOOM_AXIS,
       settledWithin: ZOOM_SETTLED_PX,
       control,
+      ahead,
+      controlStarts: [busyControl.start, aheadControl.start],
       judgeEveryFrame: true,
     });
   } catch (error) {
     if (error instanceof BusyFrameUnjudgedError) {
       await record({unjudged: error.frames}, block);
+    } else if (
+      error instanceof FrameStarvationError ||
+      error instanceof BusyPredictionError
+    ) {
+      await record({error: error.message}, block);
     }
     throw error;
   }

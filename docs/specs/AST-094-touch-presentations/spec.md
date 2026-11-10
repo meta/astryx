@@ -884,12 +884,12 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - Browser evidence: the busy-main-thread proof and no layout or paint during
   the animation in Chromium with phone emulation, the busy-main-thread proof
   in WebKit, curves sampled by seeking the running animations, iOS simulator
-  recordings for every claim about the reference values, real-device
-  evidence for every claim about iOS Safari behavior, and, for every claim
-  about Android Chrome behavior, Chrome with Gboard in the Android emulator
-  at the exact head, with animations at normal scale and removed, plus a
-  slow-device profile, with no human device check (`spec:AST-013` FR10,
-  DEC-27).
+  recordings for every claim about the reference values, real-device evidence
+  for every claim about iOS Safari behavior, and, for every claim about
+  Android Chrome behavior, Chrome with Gboard in the Android emulator at the
+  exact head, or carried to it under DEC-31, with animations at normal scale
+  and removed, plus a slow-device profile, with no human device check
+  (`spec:AST-013` FR10, DEC-27, DEC-31).
 - Presented hit testing (FR11's and FR19's iOS WebKit sentences): unit tests
   that mimic iOS WebKit's hit testing at the motion's start, the WebKit tap and
   drag proof with the correction off as its control, and the iOS Simulator
@@ -1105,6 +1105,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR43 trackpad   | Unit tests on timed wheel streams; WebKit browser tests with trackpad streams (Chromium's driver wheels read as a mouse wheel)                      | a form and a required sheet pulled 30 to 240 px by a finger and by a trackpad; mouse lines, notches, ticks and accelerated deltas over a sheet, a pager and a row; ten swipes each starting mid-momentum, ten whose momentum ends, and a slow drag with 150 ms pauses; a trackpad flick and a slow stopped drag on an info sheet; a fling, a slow 60 px swipe, a 42 px spike and back-to-back swipes on a pager; a row opened and swiped back within one gesture, and a long fast swipe; a pinch ending; a trackpad pan through a window blur and through a hidden page                                                                                                                                                                                                                                                                    | a trackpad stretch that differs from a finger's for the same travel (120 px gives 54 px on the reference sheet), a mouse wheel that moves a sheet, a pager or a row, splitter counts other than ten, ten and one, momentum that moves a surface, a flick released with no velocity, a pager that travels past one page or pages on a spike, an info sheet a flick leaves open or a slow stopped drag closes, an open row that reveals its other side within one gesture, a trackpad pan a window blur or a hidden page leaves mid-gesture, or a pinch that ends after 100 ms fails                                                                                                                       |
 | FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer                                 | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari devices; Android Chrome in the Android emulator (DEC-27) | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| all (DEC-31)    | The evidence-carry check, before device or emulator evidence from an earlier head counts at a later head                                            | a later head that only merges `main`; the pull request's own changes byte-identical or changed; a merge that changes a file the pull request changes, a direct import of those changes, a shared motion or layer module, or none of them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the evidence-carry check compares the PR's own diff between the two heads, and the merge's changed files against the files the PR changes, the changes' direct imports and the shared motion and layer modules (currently `motion/transientCopy`, `motion/inertClone`, `motion/animator`, `Layer/useLayer`, `hooks/usePager`); any overlap fails                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Decision log
 
@@ -1472,6 +1473,22 @@ Safari claims keep real-device evidence. The owner decided this on
 checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
+
+### DEC-31 — Device and emulator evidence carries across a main merge that touches none of the pull request's files, direct imports or shared motion and layer modules
+
+**Reference:** `spec:AST-094/DEC-31`
+**Decider:** `cixzhang`, `2026-11-09`
+
+Evidence taken on a device or in the emulator at an earlier head still counts
+at a later head that only merges `main`, when the pull request's own changes
+are byte-identical between the two heads and the merge changed none of the
+files the pull request changes, none of the files those changes import
+directly, and none of the shared motion and layer modules that the verification
+row lists. Otherwise the evidence is taken again at the new head. This is an
+exception to DEC-27's exact-head rule for heads that only merge main; DEC-27
+holds for every other head.
+
+Rejected: a new take after every main merge.
 
 ### DEC-28 — Sheet stretch at the tallest detent
 
