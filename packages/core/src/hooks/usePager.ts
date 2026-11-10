@@ -1061,6 +1061,8 @@ export function createPager(
       settleHandle != null && animator != null ? readSeed(animator) : null;
     const oldStride = stride();
     const oldWidth = pageWidth > 0 ? pageWidth : 1;
+    // A settle that began before the viewport had a width showed nothing.
+    const wasLaidOut = pageWidth > 0;
     isRtl = rtl;
     pageWidth = width;
     // Where a position on the old layout sits on the new one. The same pages
@@ -1147,7 +1149,9 @@ export function createPager(
     if (!isDragging && !caughtSettle) {
       // A track the resize leaves past its new last page lands on its target
       // at once, as at rest. A held row's scroll offset can still move under
-      // it as the browser clamps it.
+      // it as the browser clamps it. So does a settle that began before the
+      // viewport had a width. A viewer that opens on a photo shows it at once,
+      // with no slide from the first.
       const isPastEnd =
         seed != null &&
         !isLooping() &&
@@ -1157,6 +1161,7 @@ export function createPager(
         settleHandle != null &&
         animator != null &&
         seed != null &&
+        wasLaidOut &&
         !isFlipped &&
         !isPastEnd
       ) {

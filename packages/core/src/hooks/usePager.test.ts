@@ -1529,6 +1529,73 @@ describe('createPager', () => {
     return {f, pager, calls, resize};
   }
 
+  it('a settle that began before the viewport had a width lands on its target at once when it gets one: no slide from the first page', async () => {
+    let onResize: ResizeObserverCallback | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          onResize = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.resetModules();
+    const fresh = await import('./usePager');
+    const f = setup({defaultIndex: 0});
+    f.pager.dispose();
+    // A viewer not shown yet: its viewport has no width, and its pages keep
+    // their gap.
+    Object.defineProperty(f.viewport, 'clientWidth', {
+      value: 0,
+      configurable: true,
+    });
+    const settles: string[] = [];
+    const pager = fresh.createPager(
+      {
+        count: 3,
+        gap: 40,
+        defaultIndex: 0,
+        onSettle: (index, previous) => settles.push(`${index}:${previous}`),
+      },
+      {
+        host: f.host,
+        animator: f.animator,
+        requestFrame: callback => {
+          frameQueue.push(callback);
+        },
+      },
+    );
+    pager.attach(f.viewport, f.track);
+    try {
+      pager.goTo(1);
+      await advance(0, f.clock);
+      await advance(16, f.clock);
+      expect(pager.isSettling).toBe(true);
+      Object.defineProperty(f.viewport, 'clientWidth', {
+        value: WIDTH,
+        configurable: true,
+      });
+      expect(onResize).not.toBeNull();
+      onResize!(
+        [{target: f.viewport} as unknown as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      // At once: the track stands on the page, and the settle has ended.
+      expect(pager.isSettling).toBe(false);
+      expect(f.x()).toBe(-(WIDTH + 40));
+      await advance(16, f.clock);
+      await advance(16, f.clock);
+      expect(f.x()).toBe(-(WIDTH + 40));
+      expect(settles).toEqual(['1:0']);
+    } finally {
+      pager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('a writing-direction change during a settle re-places the track on its target at once: no sweep across the row', async () => {
     const {f, pager, resize} = await uniformPager(0);
     try {
