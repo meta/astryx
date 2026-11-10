@@ -981,9 +981,9 @@ export function Lightbox({
       // lines.
       const lineCount = hasLine ? linesOf(caption.clientHeight) : 0;
       setCaptionShownLines(lineCount);
-      // An open caption scrolls, so its height also holds the toggle's place.
-      // So its count never falls by itself. A new width can need fewer lines.
-      // The flow's height counts only the text's own lines.
+      // The open caption is a scroll container, so its height includes the
+      // toggle's place, and that height never falls by itself. A new width
+      // can need fewer lines. The flow's height counts only the text's lines.
       const flow = bandCaptionFlowRef.current;
       const width = caption.clientWidth;
       if (
@@ -1125,6 +1125,32 @@ export function Lightbox({
     captionToggleHitAreaRef,
   );
   usePressTracker(captionToggleRef);
+  // An opened caption first lays out without the toggle's place, so its
+  // first count is the text's own lines. The place also takes the toggle's
+  // width for its new label. Then a toggle that does not fit beside the last
+  // line takes a line of its own, before the resize delivery reads the
+  // caption.
+  useIsomorphicLayoutEffect(() => {
+    const caption = bandCaptionRef.current;
+    const flow = bandCaptionFlowRef.current;
+    const toggle = captionToggleRef.current;
+    if (!isCaptionOpen || caption == null || flow == null) {
+      return;
+    }
+    const view = caption.ownerDocument.defaultView ?? window;
+    const line = parseFloat(view.getComputedStyle(caption).lineHeight);
+    if (Number.isFinite(line) && line > 0) {
+      // The layout width, as the observer's own fallback reads it: a scaled
+      // ancestor does not change it.
+      const toggleWidth = toggle?.offsetWidth ?? 0;
+      if (toggleWidth > 0) {
+        setCaptionToggleWidth(toggleWidth);
+      }
+      setCaptionShownLines(
+        Math.round(flow.getBoundingClientRect().height / line),
+      );
+    }
+  }, [isCaptionOpen]);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
   // follows, so nothing reads the toggle there. A hidden toggle's size is
@@ -1993,11 +2019,14 @@ export function Lightbox({
                                         hasUnderline
                                         aria-expanded={isCaptionOpen}
                                         aria-controls={fullCaptionId}
-                                        onClick={() =>
+                                        onClick={() => {
+                                          if (!isCaptionOpen) {
+                                            setCaptionShownLines(0);
+                                          }
                                           setOpenCaptionIndex(
                                             isCaptionOpen ? null : index,
-                                          )
-                                        }
+                                          );
+                                        }}
                                         xstyle={
                                           [
                                             styles.captionToggle,

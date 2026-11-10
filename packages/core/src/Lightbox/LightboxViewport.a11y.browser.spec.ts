@@ -559,6 +559,85 @@ test(`a clamped caption's "more" still ends its second line after the viewport n
   }).toPass({timeout: 3_000});
 });
 
+/** The open caption's last text row, its toggle, and the room beside it. */
+async function readOpenToggle(dialog: Locator) {
+  return dialog.evaluate(element => {
+    const caption = element.querySelector(
+      '[data-current] [data-lightbox-caption]',
+    ) as HTMLElement;
+    const text = caption.querySelector('.astryx-text') as HTMLElement;
+    const toggle = caption.querySelector('button') as HTMLElement;
+    const place = text.querySelector('span[aria-hidden="true"]') as HTMLElement;
+    const textBox = text.getBoundingClientRect();
+    const toggleBox = toggle.getBoundingClientRect();
+    const style = getComputedStyle(text);
+    const lineHeight = parseFloat(style.lineHeight);
+    const words: DOMRect[] = [];
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      words.push(...[...range.getClientRects()].filter(r => r.width > 0));
+    }
+    const lastBottom = Math.max(...words.map(rect => rect.bottom));
+    const lastRow = words.filter(
+      rect => rect.bottom > lastBottom - lineHeight / 2,
+    );
+    return {
+      isOwnRow: textBox.bottom - lastBottom > lineHeight / 2,
+      lastTextEnd: Math.max(...lastRow.map(rect => rect.right)),
+      // The width the last line keeps beside the toggle's place.
+      room:
+        textBox.right -
+        parseFloat(style.paddingRight) -
+        place.getBoundingClientRect().width -
+        parseFloat(getComputedStyle(place).marginLeft),
+      toggleLeft: toggleBox.left,
+      toggleMiddle: (toggleBox.top + toggleBox.bottom) / 2,
+      textBottom: textBox.bottom,
+      lineHeight,
+    };
+  });
+}
+
+for (const width of [336, 375, 400, 874, 1440]) {
+  test(`an opened caption puts "less" on a line of its own only where the last line leaves no room (${width}×874)`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const errors: string[] = [];
+      (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+      window.addEventListener('error', event => {
+        errors.push(event.message);
+      });
+    });
+    const dialog = await openCaptionGallery(page, {width, height: 874});
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await expect(async () => {
+      const facts = await readOpenToggle(dialog);
+      const detail = JSON.stringify(facts);
+      if (facts.isOwnRow) {
+        expect(facts.lastTextEnd, detail).toBeGreaterThan(facts.room + 0.5);
+      } else {
+        expect(facts.lastTextEnd, detail).toBeLessThanOrEqual(
+          facts.toggleLeft + 0.5,
+        );
+      }
+      expect(
+        Math.abs(
+          facts.toggleMiddle - (facts.textBottom - facts.lineHeight / 2),
+        ),
+        detail,
+      ).toBeLessThanOrEqual(1);
+    }).toPass({timeout: 3_000});
+    const errors = await page.evaluate(
+      () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+    );
+    expect(errors).toEqual([]);
+  });
+}
+
 test(`an open caption's "less" still ends its last line after the viewport widens (402×874 → 874×402)`, async ({
   page,
 }) => {
