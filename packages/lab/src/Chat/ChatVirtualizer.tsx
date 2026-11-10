@@ -1346,10 +1346,19 @@ export function ChatVirtualizer<T>(
     el.addEventListener('wheel', onWheel, {passive: true});
     // The page's own scroller's box does not change size with the viewport,
     // so a window resize reaches it as a resize event instead.
+    // An iOS toolbar height change gives the page scroller no ResizeObserver
+    // entry and fires many resize events in one frame. So the handler reads no
+    // layout: it marks the geometry dirty and runs one correction pass per frame.
     const view = isPageScroller(el) ? el.ownerDocument.defaultView : null;
+    let viewportFrame: number | null = null;
     const onViewportResize = (): void => {
       geoChanged.current = true;
-      syncRef.current();
+      if (viewportFrame === null && view !== null) {
+        viewportFrame = view.requestAnimationFrame(() => {
+          viewportFrame = null;
+          syncRef.current();
+        });
+      }
     };
     view?.addEventListener('resize', onViewportResize, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
@@ -1362,6 +1371,10 @@ export function ChatVirtualizer<T>(
       scrollTarget.removeEventListener('scroll', scrollHandler);
       el.removeEventListener('wheel', onWheel);
       view?.removeEventListener('resize', onViewportResize);
+      if (viewportFrame !== null) {
+        view?.cancelAnimationFrame(viewportFrame);
+        viewportFrame = null;
+      }
       // A replaced or unmounted scroller ends the gesture with it: the
       // finger-scroll watch moves to the new element and reports no end for
       // the old one. The adjustment is dropped rather than folded — the

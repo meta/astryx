@@ -464,6 +464,73 @@ describe('ChatVirtualizer', () => {
     }
   });
 
+  it('on the page scroller, a window resize reads no layout in its handler and runs one pass per frame', async () => {
+    const trace = traceLayout();
+    const {el} = trace;
+    // The traced scroller stands for the page's own scroller.
+    const scrolling = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      'scrollingElement',
+    );
+    Object.defineProperty(document, 'scrollingElement', {
+      configurable: true,
+      get: () => el,
+    });
+    const marks: number[] = [];
+    const before = (): void => {
+      marks.push(trace.ops.length);
+    };
+    const after = (): void => {
+      marks.push(trace.ops.length);
+    };
+    try {
+      render(attachedTo(rows(60), el));
+      await settled();
+      window.addEventListener('resize', before, {capture: true});
+      window.addEventListener('resize', after);
+      // One resize: the handler reads nothing, and a pass follows.
+      trace.ops.length = 0;
+      marks.length = 0;
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(trace.ops.slice(marks[0], marks[1])).toEqual([]);
+      await settled();
+      const onePass = trace.ops.length;
+      const onePassSizeReads = trace.sizeReads();
+      // One correction pass: one size read, and at most the pass's two layouts.
+      expect(onePassSizeReads).toBe(1);
+      expect(trace.forcedLayouts()).toBeLessThanOrEqual(2);
+      // Three resizes in one frame, as a toolbar collapse sends: no reads in
+      // any handler, and the same single pass.
+      trace.ops.length = 0;
+      marks.length = 0;
+      act(() => {
+        for (let i = 0; i < 3; i++) {
+          window.dispatchEvent(new Event('resize'));
+        }
+      });
+      expect(trace.ops.slice(marks[0], marks[marks.length - 1])).toEqual([]);
+      await settled();
+      expect(trace.sizeReads()).toBe(onePassSizeReads);
+      expect(trace.forcedLayouts()).toBeLessThanOrEqual(2);
+      expect(trace.ops.length).toBe(onePass);
+    } finally {
+      window.removeEventListener('resize', before, {capture: true});
+      window.removeEventListener('resize', after);
+      delete (document as unknown as Record<string, unknown>).scrollingElement;
+      if (scrolling !== undefined) {
+        Object.defineProperty(
+          Document.prototype,
+          'scrollingElement',
+          scrolling,
+        );
+      }
+      trace.stop();
+      el.remove();
+    }
+  });
+
   it('skips the correction pass for a commit that changes nothing it reads', async () => {
     const trace = traceLayout();
     const {el} = trace;
