@@ -31,32 +31,47 @@ import {createPresentationHold} from '../Layer/presentationHold';
 import {prefersReducedMotion} from '../motion/reducedMotionPreference';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
+import {sharedState} from '../utils/sharedRealm';
 import type * as MenuSurfaceMotionModule from './menuSurfaceMotion';
 import type {MenuSurfaceGeometry, MenuSurfaceMotion} from './menuSurfaceMotion';
 
 type MotionModule = typeof MenuSurfaceMotionModule;
 
-let loaded: MotionModule | null = null;
-let loading: Promise<MotionModule> | null = null;
-let importMotion = async (): Promise<MotionModule> =>
-  import('./menuSurfaceMotion');
+async function importOwnMotion(): Promise<MotionModule> {
+  return import('./menuSurfaceMotion');
+}
+
+/**
+ * The grow's code, once per page for every copy of Core: the loaded module,
+ * the load in flight, and the import a test can replace. A change to the
+ * module's calls bumps the version, so each copy then keeps its own.
+ */
+const motionCode = sharedState(
+  'dropdown-menu/use-menu-surface-motion/code',
+  1,
+  () => ({
+    loaded: null as MotionModule | null,
+    loading: null as Promise<MotionModule> | null,
+    importMotion: importOwnMotion,
+  }),
+);
 
 /**
  * Starts loading the grow's code, once per page. A failed load is forgotten,
  * so the next open tries again.
  */
 async function loadMotion(): Promise<MotionModule> {
-  loading ??= importMotion().then(
+  motionCode.loading ??= motionCode.importMotion().then(
     module => {
-      loaded = module;
+      motionCode.loaded = module;
       return module;
     },
     (error: unknown) => {
-      loading = null;
+      motionCode.loading = null;
       throw error;
     },
   );
-  return loading;
+  return motionCode.loading;
 }
 
 /**
@@ -67,16 +82,16 @@ export const MENU_GROW_LOAD_WAIT_MS = 250;
 
 /** @internal For tests: forgets the loaded code. */
 export function resetMenuSurfaceMotionForTest(): void {
-  loaded = null;
-  loading = null;
-  importMotion = async () => import('./menuSurfaceMotion');
+  motionCode.loaded = null;
+  motionCode.loading = null;
+  motionCode.importMotion = importOwnMotion;
 }
 
 /** @internal For tests: replaces how the grow's code loads. */
 export function setMenuSurfaceMotionImportForTest(
   load: () => Promise<MotionModule>,
 ): void {
-  importMotion = load;
+  motionCode.importMotion = load;
 }
 
 /**
@@ -86,7 +101,11 @@ export function setMenuSurfaceMotionImportForTest(
  */
 function loadAtFirstTouch(view: Window): () => void {
   // Under a fine primary pointer the trigger's own touch loads it.
-  if (loaded != null || loading != null || !isCoarsePointer(view)) {
+  if (
+    motionCode.loaded != null ||
+    motionCode.loading != null ||
+    !isCoarsePointer(view)
+  ) {
     return () => {};
   }
   const unsubscribe = subscribeInput(view, 'touchstart', () => {
@@ -193,8 +212,8 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
         return;
       }
       const measure = () => ({surface: boxOf(surface), source: boxOf(source)});
-      if (loaded != null) {
-        motionFor(loaded, surface).enter(measure);
+      if (motionCode.loaded != null) {
+        motionFor(motionCode.loaded, surface).enter(measure);
         return;
       }
       // The grow's code is still loading: keep the surface clear until it
