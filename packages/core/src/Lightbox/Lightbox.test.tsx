@@ -2480,10 +2480,12 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onOpenChange).not.toHaveBeenCalled();
     // Above the photo, on the stage: its own tap closes the viewer, as on a
-    // gallery's page. The drag leaves nothing in its way.
+    // gallery's page. The drag leaves nothing in its way. The tap is timed as
+    // a browser times it: now.
     const tap: Contact = {id: 7, x: 200, y: 50};
-    touch('touchstart', stage, [tap], [tap], clock + 1000);
-    touch('touchend', stage, [], [tap], clock + 1040);
+    const now = performance.now();
+    touch('touchstart', stage, [tap], [tap], now);
+    touch('touchend', stage, [], [tap], now + 40);
     // A single tap waits out a double tap's interval.
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
