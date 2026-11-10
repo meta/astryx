@@ -13,7 +13,7 @@ owners: [cixzhang]
 affects_architecture: []
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: [Chart, ChartTooltip]
+affects_consumer_docs: [Chart, ChartTooltip, ChartAxis]
 ---
 
 # Chart value format system spec
@@ -25,6 +25,7 @@ affects_consumer_docs: [Chart, ChartTooltip]
   "paths": [
     "packages/charts/src/Chart.tsx",
     "packages/charts/src/ChartTooltip.tsx",
+    "packages/charts/src/ChartAxis.tsx",
     "packages/charts/src/tooltip.ts",
     "packages/charts/src/types.ts",
     "packages/charts/src/formatters.ts",
@@ -42,12 +43,13 @@ declares once how a series' values and the chart's x values read, for example
 `$152K` and `Mar 2025`. The tooltip that pointer users see and the hidden
 data table that screen reader users hear both show that text. A revenue chart
 does not announce `152300` while its tooltip says `$152K`, and a missing value
-reads the same on both surfaces.
+reads the same on both surfaces. Without a declared format, axis ticks, the
+tooltip, and the table share one default text.
 
 ## Non-goals
 
-- Axis tick labels. `ChartAxis` keeps its own `tickFormat`; DEC-2 explains
-  why the two stay separate.
+- A custom axis `tickFormat`. It stays separate from the value formats
+  (DEC-2); only the default tick text is shared (FR13).
 - Header text in the hidden data table. `component:Chart` owns the x and
   series column headers.
 - Words around a present value, such as a unit noun. These come from the
@@ -155,6 +157,17 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
   `tickFormat` callsites that use a built-in keep type-checking and keep their
   output.
 
+- **FR13 — One default text for ticks, tooltip, and table.** A `ChartAxis`
+  without `tickFormat` shows each continuous-scale tick value as
+  `String(value)`, the same default that FR9 gives the tooltip and the data
+  table. The three surfaces use one shared default, so they cannot drift
+  apart. A band-scale tick keeps its category string. An explicit
+  `tickFormat` wins over the default (DEC-2). Compatibility: this is a
+  default change, visible to every caller who sets no `tickFormat` on a
+  continuous axis. Digit grouping and the typographic minus disappear, and a
+  year axis reads `2019`, not `2,019`. `@astryxdesign/charts` has no stable
+  release.
+
 ### Platform support
 
 - Supported feature/engine floor: the `Intl` and `Temporal` support that
@@ -175,15 +188,19 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
   `ChartValueFormat` joins the package exports.
 - `packages/core/locales/en.json` gains `@astryx.chart.noData` with a
   translator description (`architecture:internationalization` INV6).
-- FR5 gap: the default tooltip body renders `String(value)` for every value,
-  so an empty value reads `undefined`.
-- FR6 gap: the hidden data table renders `String(value)` for every present
-  value and an empty cell for an empty value.
+- `component:ChartAxis` uses the shared default text for continuous ticks
+  without `tickFormat` (FR13); its draft FR3 changes to match.
+- FR8 gap: for an empty value, the default tooltip body reads `undefined` and
+  the hidden data table shows an empty cell.
 - FR11 gap: the function that `currency()` returns ignores a call-time locale.
 - FR12 gap: `compactNumber`, `percent`, and the `currency()` function read
   `null` as `0`, and `shortDate` and `monthYear` read it as `null`.
-- The `Chart` and `ChartTooltip` consumer docs and the formatter docs show the
-  declaration once, with a mixed-unit example and an empty-value example.
+- FR13 gap: `ChartAxis` formats continuous ticks with the d3 default tick
+  format, which groups digits (`2,019`) and uses a typographic minus
+  (`−20,000`).
+- The `Chart`, `ChartTooltip`, and `ChartAxis` consumer docs and the formatter
+  docs show the declaration once, with a mixed-unit example and an
+  empty-value example.
 
 ## Verification
 
@@ -197,13 +214,14 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
 | FR10     | Layout and pointer tests with a format that returns long text, and one that throws    | formatted and unformatted renders of the same data; a throwing format                                                                                                                            | scales, hover selection, or render-callback arguments change; a thrown error is swallowed; markup in the output is parsed                                                                                     |
 | FR11     | `currency()` unit tests with expected strings from platform `Intl`                    | factory locale only; call-time locale only; both, with different locales; neither; a one-argument `tickFormat` call                                                                              | a call-time locale beats the factory locale, a call-time locale is ignored, or a one-argument call changes output                                                                                             |
 | FR12     | Built-in formatter unit tests and a type test over `ChartAxis` `tickFormat` callsites | `null` and `undefined` into each built-in and the `currency()` function; present values; a built-in passed to `tickFormat`                                                                       | a built-in returns a string for an empty value, returns a non-string for a present value, or an existing `tickFormat` callsite stops type-checking                                                            |
+| FR13     | `ChartAxis` tests; expected strings are `String(tick)` of the scale's d3 ticks        | a year domain (2019–2025), a large domain (0–1,500,000), a negative domain (−20,000–20,000), a small-decimal domain (0–0.7), a band axis, an explicit `tickFormat`                               | a tick shows digit grouping or a typographic minus, differs from the tooltip text for the same value, a band label changes, or an explicit `tickFormat` loses                                                 |
 
 ## Decision log
 
 ### DEC-1 — A series owns how its values read; the chart owns how x reads
 
 **Reference:** `spec:AST-115/DEC-1`
-**Decider:** pending
+**Decider:** `cixzhang`, `2026-11-10`
 
 A series definition already owns its label and its color. Its unit belongs
 with them. Charts that show two units, such as revenue bars beside a margin
@@ -219,7 +237,7 @@ a format that switches on the data key.
 ### DEC-2 — Value formats and axis tick formats stay separate
 
 **Reference:** `spec:AST-115/DEC-2`
-**Decider:** pending
+**Decider:** `cixzhang`, `2026-11-10`
 
 Tick labels and value text answer different questions. A tick often wants a
 coarse label (`$150K`), and a tooltip or table cell wants the value (`$152,300`).
@@ -232,7 +250,7 @@ Rejected: deriving the tooltip and table text from the axis `tickFormat`.
 ### DEC-3 — `currency()` falls back to the call-time locale
 
 **Reference:** `spec:AST-115/DEC-3`
-**Decider:** pending
+**Decider:** `cixzhang`, `2026-11-10`
 
 `currency(symbol)` is the one built-in formatter that is a factory. Its
 returned function uses the locale passed at call time when the factory got
@@ -246,7 +264,7 @@ change.
 ### DEC-4 — The caller formats empty values; otherwise one catalog phrase
 
 **Reference:** `spec:AST-115/DEC-4`
-**Decider:** pending
+**Decider:** `cixzhang`, `2026-11-10`
 
 An empty value means different things in different products, such as "not
 reported", "0", or "—". A series format receives it and chooses the text
@@ -259,7 +277,7 @@ cell and the two surfaces must agree.
 ### DEC-5 — A nullish format result means the chart's default text
 
 **Reference:** `spec:AST-115/DEC-5`
-**Decider:** pending
+**Decider:** `cixzhang`, `2026-11-10`
 
 A pure formatter has no translator, so it cannot return the localized "No
 data" phrase. A format returns `null` or `undefined` to ask for it, and the
@@ -272,6 +290,21 @@ Rejected: built-ins return the empty string, because a missing value would then
 read differently with and without a built-in format.
 Rejected: built-ins return `String(value)`, because the surfaces would show
 `null` or `undefined` to people.
+
+### DEC-6 — One default text for every value surface
+
+**Reference:** `spec:AST-115/DEC-6`
+**Decider:** `cixzhang`, `2026-11-10`
+
+A person who reads `2019` in the tooltip reads `2019` on the axis, not
+`2,019`. Without a declared format, ticks, tooltip rows, and table cells show
+`String(value)` from one shared default (FR9, FR13). The d3 ticks are clean
+decimals, so the raw default shows no floating-point noise. A very small value
+reads in exponent form, such as `5e-7`, the same on every surface. An
+explicit `tickFormat` still gives short axis labels beside exact values
+(DEC-2).
+
+Rejected: locale-aware defaults, because they group years as `2,025`.
 
 ## Open questions
 
