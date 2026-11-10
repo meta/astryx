@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import {use, useId, useRef, type ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -29,11 +29,6 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
-import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
-import {useDeferredTooltipInterest} from '../hooks/useDeferredTooltipInterest';
-import {useMergedRefs} from '../hooks/useMergedRefs';
-import {attachedTooltipModule} from '../utils/attachedTooltipModule';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {Text} from '../Text';
 import {TextClampContext} from '../Text/textClampContext';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -45,6 +40,7 @@ import type {
   TextDisplay,
 } from '../theme/types';
 import {useLinkComponent} from './useLinkComponent';
+import {LinkTooltip, type LinkTooltipTriggerProps} from './LinkTooltip';
 import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
@@ -396,52 +392,6 @@ export function Link({
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
 
-  // The tooltip attaches to the link element itself, with no wrapper. Its
-  // module loads on demand; the first hover, tap or focus mounts it. The
-  // description is the link's own hidden copy of the tooltip text, after any
-  // caller value, so a screen reader reads it once, before and after the
-  // tooltip loads.
-  const hasTooltip = tooltip != null && tooltip !== '';
-  const tooltipInterest = useDeferredTooltipInterest(
-    hasTooltip,
-    attachedTooltipModule,
-  );
-  const tooltipDescriptionId = useId();
-  const tooltipAnchorRef = useRef<HTMLElement | null>(null);
-  const linkRef = useMergedRefs<HTMLElement>(
-    ref as React.Ref<HTMLElement>,
-    hasTooltip ? tooltipAnchorRef : undefined,
-  );
-  const tooltipTriggerProps = hasTooltip
-    ? {
-        'aria-describedby':
-          [props['aria-describedby'], tooltipDescriptionId]
-            .filter(Boolean)
-            .join(' ') || undefined,
-        onPointerEnter: composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
-        ),
-        onPointerLeave: composeEventHandlers(
-          tooltipInterest.onPointerLeave,
-          props.onPointerLeave,
-        ),
-        onPointerDown: composeEventHandlers(
-          tooltipInterest.onPointerDown,
-          props.onPointerDown,
-        ),
-        onMouseEnter: composeEventHandlers(
-          tooltipInterest.onMouseEnter,
-          props.onMouseEnter,
-        ),
-        onMouseLeave: composeEventHandlers(
-          tooltipInterest.onMouseLeave,
-          props.onMouseLeave,
-        ),
-        onFocus: composeEventHandlers(tooltipInterest.onFocus, props.onFocus),
-        onBlur: composeEventHandlers(tooltipInterest.onBlur, props.onBlur),
-      }
-    : null;
   // For a color the root paints, the label inherits it, so the label, the
   // underline, and the icon keep one color at rest and on hover, whatever a
   // theme sets on its text targets.
@@ -472,133 +422,127 @@ export function Link({
     </>
   );
 
-  let linkElement: React.ReactElement;
+  const renderLink = (
+    trigger: LinkTooltipTriggerProps | null,
+  ): React.ReactElement => {
+    // The tooltip's ref already holds the caller's.
+    const {ref: tooltipRef, ...tooltipTrigger} = trigger ?? {ref: undefined};
+    const elementRef: React.Ref<HTMLElement> | undefined = tooltipRef ?? ref;
+    if (renderAsButton) {
+      return (
+        <button
+          ref={elementRef as React.Ref<HTMLButtonElement>}
+          type="button"
+          onClick={onClick}
+          {...(isDisabled ? undefined : pressable)}
+          aria-label={label || undefined}
+          {...mergeProps(
+            themeProps('link', {color}),
+            focusOutlineProps.focusVisible(
+              styles.base,
+              styles.buttonReset,
+              linkColorStyles[color],
+              // The system's pressed overlay behind the text; the hover stays the
+              // colour change above, so a press is the one background it paints.
+              !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
+              hasUnderline && styles.hasUnderline,
+              isStandalone && styles.standalone,
+              isDisabled && styles.disabled,
+              maxLines > 0 && styles.truncating,
+              xstyle,
+            ),
+            className,
+            style,
+          )}
+          {...props}
+          {...tooltipTrigger}
+          {...reflectedAttributes}
+          {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
+          {sharedContent}
+        </button>
+      );
+    } else if (isDisabled) {
+      // A disabled link renders as an <a> with no href, so nothing can navigate
+      // and the consumer onClick never fires. It keeps a Tab stop and the link
+      // role so keyboard and screen-reader users still find it. The router
+      // LinkComponent is deliberately skipped — a disabled link performs no
+      // navigation, and custom router links may require a live href. target/rel
+      // are omitted with the href.
+      return (
+        <a
+          ref={elementRef as React.Ref<HTMLAnchorElement>}
+          aria-label={label || undefined}
+          tabIndex={0}
+          {...mergeProps(
+            themeProps('link', {color}),
+            focusOutlineProps.focusVisible(
+              styles.base,
+              isInClampedText && styles.inClampedText,
+              linkColorStyles[color],
+              hasUnderline && styles.hasUnderline,
+              isStandalone && styles.standalone,
+              styles.disabled,
+              maxLines > 0 && styles.truncating,
+              xstyle,
+            ),
+            className,
+            style,
+          )}
+          {...props}
+          {...tooltipTrigger}
+          {...reflectedAttributes}
+          {...disabledAnchorProps(props.onKeyDown)}>
+          {sharedContent}
+        </a>
+      );
+    } else {
+      return (
+        <LinkComponent
+          ref={elementRef as React.Ref<HTMLAnchorElement>}
+          href={href}
+          target={target}
+          rel={rel}
+          onClick={onClick}
+          {...(isDisabled ? undefined : pressable)}
+          aria-label={label || undefined}
+          aria-disabled={isDisabled || undefined}
+          tabIndex={isDisabled ? -1 : undefined}
+          {...mergeProps(
+            themeProps('link', {color}),
+            focusOutlineProps.focusVisible(
+              styles.base,
+              isInClampedText && styles.inClampedText,
+              linkColorStyles[color],
+              !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
+              hasUnderline && styles.hasUnderline,
+              isStandalone && styles.standalone,
+              isDisabled && styles.disabled,
+              maxLines > 0 && styles.truncating,
+              xstyle,
+            ),
+            className,
+            style,
+          )}
+          {...props}
+          {...tooltipTrigger}
+          {...reflectedAttributes}>
+          {sharedContent}
+        </LinkComponent>
+      );
+    }
+  };
 
-  if (renderAsButton) {
-    linkElement = (
-      <button
-        ref={linkRef as React.Ref<HTMLButtonElement>}
-        type="button"
-        onClick={onClick}
-        {...(isDisabled ? undefined : pressable)}
-        aria-label={label || undefined}
-        {...mergeProps(
-          themeProps('link', {color}),
-          focusOutlineProps.focusVisible(
-            styles.base,
-            styles.buttonReset,
-            linkColorStyles[color],
-            // The system's pressed overlay behind the text; the hover stays the
-            // colour change above, so a press is the one background it paints.
-            !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
-            hasUnderline && styles.hasUnderline,
-            isStandalone && styles.standalone,
-            isDisabled && styles.disabled,
-            maxLines > 0 && styles.truncating,
-            xstyle,
-          ),
-          className,
-          style,
-        )}
-        {...props}
-        {...tooltipTriggerProps}
-        {...reflectedAttributes}
-        {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
-        {sharedContent}
-      </button>
-    );
-  } else if (isDisabled) {
-    // A disabled link renders as an <a> with no href, so nothing can navigate
-    // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it. The router
-    // LinkComponent is deliberately skipped — a disabled link performs no
-    // navigation, and custom router links may require a live href. target/rel
-    // are omitted with the href.
-    linkElement = (
-      <a
-        ref={linkRef as React.Ref<HTMLAnchorElement>}
-        aria-label={label || undefined}
-        tabIndex={0}
-        {...mergeProps(
-          themeProps('link', {color}),
-          focusOutlineProps.focusVisible(
-            styles.base,
-            isInClampedText && styles.inClampedText,
-            linkColorStyles[color],
-            hasUnderline && styles.hasUnderline,
-            isStandalone && styles.standalone,
-            styles.disabled,
-            maxLines > 0 && styles.truncating,
-            xstyle,
-          ),
-          className,
-          style,
-        )}
-        {...props}
-        {...tooltipTriggerProps}
-        {...reflectedAttributes}
-        {...disabledAnchorProps(props.onKeyDown)}>
-        {sharedContent}
-      </a>
-    );
-  } else {
-    linkElement = (
-      <LinkComponent
-        ref={linkRef as React.Ref<HTMLAnchorElement>}
-        href={href}
-        target={target}
-        rel={rel}
-        onClick={onClick}
-        {...(isDisabled ? undefined : pressable)}
-        aria-label={label || undefined}
-        aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
-        {...mergeProps(
-          themeProps('link', {color}),
-          focusOutlineProps.focusVisible(
-            styles.base,
-            isInClampedText && styles.inClampedText,
-            linkColorStyles[color],
-            !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
-            hasUnderline && styles.hasUnderline,
-            isStandalone && styles.standalone,
-            isDisabled && styles.disabled,
-            maxLines > 0 && styles.truncating,
-            xstyle,
-          ),
-          className,
-          style,
-        )}
-        {...props}
-        {...tooltipTriggerProps}
-        {...reflectedAttributes}>
-        {sharedContent}
-      </LinkComponent>
-    );
-  }
-
-  if (hasTooltip) {
-    const AttachedTooltip = tooltipInterest.loadedModule?.AttachedTooltip;
+  // The tooltip attaches to the link element itself, with no wrapper; its
+  // module loads on the first hover, tap or focus.
+  if (tooltip) {
     return (
-      <>
-        {linkElement}
-        <span id={tooltipDescriptionId} popover="manual">
-          {tooltip}
-        </span>
-        {tooltipInterest.isWanted && AttachedTooltip != null && (
-          <TooltipPresentInterestContext value={tooltipInterest.interestRef}>
-            <AttachedTooltip
-              anchorRef={tooltipAnchorRef}
-              content={tooltip}
-              placement="above"
-            />
-          </TooltipPresentInterestContext>
-        )}
-      </>
+      <LinkTooltip tooltip={tooltip} callerRef={ref} callerProps={props}>
+        {renderLink}
+      </LinkTooltip>
     );
   }
 
-  return linkElement;
+  return renderLink(null);
 }
 
 Link.displayName = 'Link';
