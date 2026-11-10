@@ -180,6 +180,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   every root (link, button, static) hides them from assistive technology, so
   the accessible name is only the person's name, and the default name tooltip
   (FR7) shows that name on hover and focus.
+  The drawn initials come from a `data-initials` attribute on the initials
+  element, read by its decorative `::before` content, because CSS draws
+  generated text only from an attribute. `data-initials` is public and holds
+  only the initials the avatar already shows (DEC-1).
 - **AR2 — Status reaches assistive technology.** Because a `role="img"` root
   prunes its descendants, the status label is composed into the avatar's own
   name (FR5).
@@ -247,7 +251,21 @@ no root part, so no anatomy-theming block is declared.
 
 ## Decision log
 
-None recorded. The record describes shipped behavior.
+### DEC-1 — `data-initials` is a public attribute for the drawn initials
+
+**Reference:** `component:Avatar/DEC-1`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "Yeah ok 10816 makes sense I guess", accepting the attribute
+under `architecture:public-component-api` DEC-2. The initials are drawn by
+generated content so they stay out of the accessible name (AR1), and CSS reads
+generated text only from an attribute. The name `data-initials` mirrors no
+Avatar prop, so theme compilation, which writes selectors only on the
+`data-astryx-*` scopes and on attributes that mirror props, never generates a
+selector on it.
+
+Rejected: removing the attribute, which would put the initials back into the
+accessible name.
 
 ## Open questions
 

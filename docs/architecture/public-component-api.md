@@ -283,7 +283,9 @@ guidance owns the process used to propose and test APIs.
   sit in its baseline, which only shrinks. Tests may name a private attribute,
   because they assert the DOM a component renders. A private attribute appears
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
-  promise, and may change in any release. The public data attributes are
+  promise, and may change in any release. A data attribute outside the
+  `data-astryx-*` namespace is public too, and is added only when a current
+  record names it (DEC-2). The public data attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -407,6 +409,25 @@ the existing patterns in the system and introduces no new term for a concept
 the system already names.
 
 Rejected: component-local names for shared concepts.
+
+### DEC-2 — Every data attribute a component renders is public surface
+
+**Reference:** `architecture:public-component-api/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "New data attributes are public facing and shoudln't be used
+for internal only concerns without a clear spec that by passes this rule", and
+"main reason to be careful of data attributes is we generate them for themes".
+Theme compilation writes selectors on data attributes (the `data-astryx-*`
+scopes and attributes that mirror props, such as `data-size` and
+`data-variant`), so a data attribute a component renders can be read or
+targeted by a theme and becomes public surface. A component therefore adds a
+new data attribute only when a current record names it and states why; an
+internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
+attribute at all.
+
+Rejected: adding a data attribute for an internal concern without a record
+that names it.
 
 ## Verification
 
