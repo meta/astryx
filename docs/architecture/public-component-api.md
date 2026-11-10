@@ -298,23 +298,26 @@ guidance owns the process used to propose and test APIs.
   among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
   theme build, AspectRatio, the Chat composer, the press and menu-press hooks,
   and the edge-compensation styles, and the lint rule allows their names.
-- **INV24 — Each pull request carries a generated public API delta.** No
-  package commits a generated API report. CI runs one surface generator on the
-  merge base and on the exact head, from each published package's built
-  declarations and stylesheet by entry point, and writes the API changes
-  between them, uncommitted, as CI's API-changes artifact. The delta lists new,
-  changed, and removed exports, component props with their types, hooks with
-  their signatures, supporting types, public CSS custom properties and theme
-  targets, the public `data-astryx-*` attributes INV23 names, and public
-  events, each row with its signature. A reachable member tagged internal
-  appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
-  including Lab, do not. A member inside a canonical experimental boundary
-  appears marked experimental (`spec:AST-017` FR21). The merge gate reads that
-  artifact and fails closed when it is missing or the generator errors. The
-  review bot's review of each pull request starts its summary notes with the
-  delta, each row with a usage example, or says "New public API: none";
-  public-API review reads that delta. The delta's rows are evidence and decide
-  no acceptance (INV13).
+- **INV24 — Each pull request carries a generated public API delta.** No package
+  commits a generated API report. For a pull request that changes a published
+  package's source or build, CI runs one surface generator on the merge base and
+  on the exact head, from each published package's built declarations and
+  stylesheet by entry point, and writes the API changes between them,
+  uncommitted, as CI's API-changes artifact. The delta lists new, changed, and
+  removed exports, component props with their types, hooks with their
+  signatures, supporting types, public CSS custom properties and theme targets,
+  the public `data-astryx-*` attributes INV23 names, and public events, each row
+  with its signature. A reachable member tagged internal appears (INV12); Core's
+  `./internal/*` subpaths and unpublished packages, including Lab, do not. A
+  member inside a canonical experimental boundary appears marked experimental
+  (`spec:AST-017` FR21). The merge gate reads that artifact for such a pull
+  request and fails closed when it is missing or the generator errors. A pull
+  request that changes no published package runs none of the package lanes it
+  leaves untouched (`spec:AST-030` FR5), so it carries no artifact, and its
+  review notes say "New public API: none". The review bot's review of each pull
+  request starts its summary notes with the delta, each row with a usage
+  example, or says "New public API: none"; public-API review reads that delta.
+  The delta's rows are evidence and decide no acceptance (INV13).
 - **INV25 — Undeclared public API goes to a human.** Public-API review
   compares each added or changed row of the pull request's API delta (INV24)
   with current records. A row
@@ -445,7 +448,7 @@ that names it.
 
 **Decider:** `cixzhang`, `2026-11-09`
 
-The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads and fails closed without; the review bot's delta at the start of its summary notes is the human view (INV24).
+The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact, and a pull request that changes no published package carries none, since its untouched package lanes do not run (`spec:AST-030` FR5). The review bot's delta at the start of its summary notes is the human view (INV24).
 
 Rejected: keeping a committed generated API report per package.
 
