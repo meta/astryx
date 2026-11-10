@@ -245,11 +245,11 @@ const styles = stylex.create({
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
-  // Generated content draws the initials, so they are part of the picture and
-  // not text of the control: on a link or button, visible text that the name
-  // does not contain fails Label in Name. Engines that read alternative text
-  // for generated content get an empty one; older engines draw the plain
-  // string, and the control's aria-label still names it.
+  // Generated content draws the initials. They are part of the picture, not
+  // text of the control. On a link or button, visible text that the name does
+  // not contain fails Label in Name. Newer engines get empty alternative text.
+  // Older engines draw the plain string; the aria-label still names the
+  // control.
   initials: (quoted: string) => ({
     '::before': {
       content: {
