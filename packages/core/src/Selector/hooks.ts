@@ -46,6 +46,42 @@ function getLayoutTop(element: HTMLElement): number {
   return top;
 }
 
+/**
+ * Return the anchor's viewport block edges without the anchor's own
+ * transform. A press scales the trigger, and a list that opens on the press
+ * release reads the anchor while the scale returns. The layer settles against
+ * the unpressed box, so a pressed read leaves the list out of place. Ancestor
+ * transforms stay in the result, because the layer follows them too.
+ */
+function getUntransformedBlockEdges(anchor: HTMLElement): {
+  top: number;
+  bottom: number;
+} {
+  const rect = anchor.getBoundingClientRect();
+  const style = getComputedStyle(anchor);
+  const matrix = /^matrix\(([^)]+)\)$/.exec(style.transform);
+  const values = matrix?.[1].split(',').map(Number);
+  // Only a scale and a translation have block edges to undo. Another
+  // transform keeps the measured box.
+  if (
+    values == null ||
+    values[1] !== 0 ||
+    values[2] !== 0 ||
+    !(values[3] > 0)
+  ) {
+    return {top: rect.top, bottom: rect.bottom};
+  }
+  const [, , , scaleY, , translateY] = values;
+  const height = rect.height / scaleY;
+  // The layout height converts local px to viewport px through any ancestor
+  // scale.
+  const ancestorScale =
+    anchor.offsetHeight > 0 ? height / anchor.offsetHeight : 1;
+  const originY = parseFloat(style.transformOrigin.split(' ')[1] ?? '') || 0;
+  const top = rect.top - ancestorScale * (originY * (1 - scaleY) + translateY);
+  return {top, bottom: top + height};
+}
+
 // =============================================================================
 // useSelectedItemOffset - Position dropdown to center selected item over trigger
 // =============================================================================
@@ -98,7 +134,7 @@ function measureSelectedItem(
     return null;
   }
 
-  const anchorRect = anchor.getBoundingClientRect();
+  const anchorEdges = getUntransformedBlockEdges(anchor);
 
   // offset* metrics intentionally exclude the popover's entry transform.
   const listboxHeight = listbox.offsetHeight;
@@ -114,7 +150,7 @@ function measureSelectedItem(
     getLayoutTop(listbox) -
     listbox.scrollTop +
     targetItem.offsetHeight / 2;
-  const anchorCenter = anchorRect.top + anchorRect.height / 2;
+  const anchorCenter = (anchorEdges.top + anchorEdges.bottom) / 2;
 
   // Desired top aligns the selected item's center with the anchor center.
   const desiredTop =
@@ -144,12 +180,12 @@ function measureSelectedItem(
 
   // useLayer positions the popover below the outer anchor. Apply a negative
   // block-start margin to the layer container so the listbox top moves from
-  // anchorRect.bottom to clampedTop.
-  const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
+  // the anchor's bottom to clampedTop.
+  const clampedOffset = Math.max(0, anchorEdges.bottom - clampedTop);
 
   return {
     offset: clampedOffset,
-    anchorBottom: anchorRect.bottom,
+    anchorBottom: anchorEdges.bottom,
     listboxHeight,
   };
 }
