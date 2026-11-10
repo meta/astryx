@@ -7,10 +7,11 @@
  * @input the ordered response, the gathered candidates, and the query
  * @output the same response with the same results, maybe in a new order
  * @position api/search; rankWith (_main-searcher.mjs) runs it after
- * orderMatches, with the weights the adapter loads (loadSearchData). The fit
- * is build's block-picker match (build/blocks/blocks.mjs) with its shipped
- * weights, so an entry the weights never saw is scored from its own docs the
- * same way.
+ * orderMatches, with the weights the adapter loads (loadSearchData) through
+ * build's own loader. The fit is build's block-picker match
+ * (build/blocks/blocks.mjs) with its shipped weights, so an entry the weights
+ * never saw is scored from its own docs the same way. Without readable
+ * weights the order stays.
  */
 
 import {
@@ -110,7 +111,7 @@ function candidateSide(c, weights) {
  * @param {Weights} weights
  * @returns {Side}
  */
-function sideOf(r, candidates, weights) {
+function resultSideOf(r, candidates, weights) {
   const byKey = keysOf(candidates);
   if (r.domain === 'doc' && r.section) {
     const c = byKey.get(`doc:${r.name}#${r.section}`);
@@ -203,8 +204,8 @@ export function orderByFit(results, candidates, query, weights) {
  * @returns {any[]}
  */
 function demoteWeak(run, request, candidates, weights, named) {
-  const fits = run.map(r =>
-    matchOf(request, sideOf(r, candidates, weights), weights),
+  const fits = run.map(
+    r => matchOf(request, resultSideOf(r, candidates, weights), weights).match,
   );
   const sorted = [...fits].sort((a, b) => a - b);
   const n = sorted.length;

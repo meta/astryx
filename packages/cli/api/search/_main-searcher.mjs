@@ -97,7 +97,7 @@ export function rankWith(request, catalog, weights) {
   const rows = signals(table, query, lexical.data.results, route);
   const limit = options.limit ?? 20;
   // The fit pass reads the first FIT_PLACES results at every limit, so a
-  // smaller limit shows the top of the same answer.
+  // smaller limit shows the top of that order.
   const ordered = withFitOrder(
     orderMatches(
       table,

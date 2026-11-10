@@ -16,6 +16,7 @@ import {
 } from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
+import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
 import {gatherHooks} from './_gather-hooks.mjs';
@@ -167,8 +168,10 @@ export function gatherCandidatesReused(options) {
  * @property {SearcherWeights} main The main searcher's weights.
  * @property {SearcherWeights} doc The doc searcher's weights.
  * @property {SearcherWeights} template The template searcher's weights.
- * @property {import('../build/blocks/blocks.mjs').BlockPickerWeights} [picker]
- *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads.
+ * @property {import('../build/blocks/blocks.mjs').BlockPickerWeights | null} picker
+ *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
+ *   null when build's loader finds the file absent, unreadable, or the wrong
+ *   shape.
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
  */
 
@@ -177,8 +180,9 @@ let searchData = null;
 
 /**
  * The search tree's static data, read once: the entry cards, each node's
- * weights file, and build's block-picker weights for the fit pass, which are
- * read only when the pass first needs them.
+ * weights file, and build's block-picker weights for the fit pass. Build's
+ * loader (loadBlockPicker) reads and checks the picker weights, only when the
+ * pass first needs them.
  *
  * These files are static, reviewed data that only order matches inside a score
  * band; ORDERING.md beside them says what each holds and how
@@ -190,8 +194,6 @@ export function loadSearchData() {
     /** @param {string} file */
     const read = file =>
       JSON.parse(readFileSync(new URL(file, import.meta.url), 'utf8'));
-    /** @type {import('../build/blocks/blocks.mjs').BlockPickerWeights | undefined} */
-    let picker;
     searchData = {
       cards: read('./_cards.json'),
       router: read('./tree.weights.json'),
@@ -200,8 +202,7 @@ export function loadSearchData() {
       template: read('./_template-searcher.weights.json'),
       // Read on first use: most searches never reach the fit pass.
       get picker() {
-        picker ??= read('../build/blocks/blocks.weights.json');
-        return picker;
+        return loadBlockPicker();
       },
     };
   }
