@@ -1634,6 +1634,17 @@ describe('linkUtils', () => {
       expect(sanitizeUrl('example.com')).toBe('https://example.com/');
     });
 
+    it('defaults a scheme-less host with a port to https', () => {
+      expect(sanitizeUrl('example.com:8080')).toBe('https://example.com:8080/');
+      expect(sanitizeUrl('example.com:8080/docs?q=1')).toBe(
+        'https://example.com:8080/docs?q=1',
+      );
+      expect(sanitizeUrl('www.example.com:8080')).toBe(
+        'https://www.example.com:8080/',
+      );
+      expect(sanitizeUrl('localhost:3000')).toBe('https://localhost:3000/');
+    });
+
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
@@ -1656,6 +1667,8 @@ describe('linkUtils', () => {
       expect(validateUrl('https://example.com')).toBe(true);
       expect(validateUrl('example.com')).toBe(true);
       expect(validateUrl('mailto:a@b.com')).toBe(true);
+      expect(validateUrl('example.com:8080')).toBe(true);
+      expect(validateUrl('localhost:3000')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
