@@ -186,6 +186,8 @@ export function createTableRuntime() {
   };
 }
 export type TableRuntime = ReturnType<typeof createTableRuntime>;
+// Protocol 2: the value says whether the Table windows inside its parent's
+// height, instead of carrying the first window's seed height.
 export const TableRuntimeContext = createSharedContext<
-  (TableRuntime & {viewportHeight?: number}) | null
->('TableRuntimeContext', 1, null);
+  (TableRuntime & {isBlockViewport: boolean}) | null
+>('TableRuntimeContext', 2, null);
