@@ -1159,6 +1159,36 @@ describe('Button tooltip description (FR12)', () => {
 });
 
 describe('Button tooltip mount on the first interaction', () => {
+  it("a touch tap activates the button and shows no tooltip, though the tap's compatibility mouseenter fires", async () => {
+    const showPopover = withPopover();
+    const onClick = vi.fn();
+    render(
+      <Button label="Save" tooltip="Save your changes" onClick={onClick} />,
+    );
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    fireEvent.pointerEnter(button, {pointerType: 'touch'});
+    fireEvent.pointerDown(button, {pointerType: 'touch'});
+    fireEvent.pointerUp(button, {pointerType: 'touch'});
+    fireEvent.mouseEnter(button);
+    fireEvent.click(button);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    });
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(showPopover).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('a mouseenter alone holds the hover, as a mounted tooltip does', async () => {
+    const showPopover = withPopover();
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    fireEvent.mouseEnter(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+  }, 15000);
+
   it('the first hover mounts the tooltip and opens it after the delay', async () => {
     const showPopover = withPopover();
     render(<Button label="Save" tooltip="Save your changes" />);
