@@ -138,7 +138,8 @@ async function openCalendar(
     driver,
     sheet,
     viewport,
-    track: page.locator('[data-month-track]'),
+    // The track is the months viewport's only child.
+    track: viewport.locator(':scope > *'),
     title: page.locator('[data-title="month-year"]'),
     width: rect.width,
     center: {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2},
@@ -148,7 +149,7 @@ async function openCalendar(
 /** The content offset in months: 0 at January in this story. */
 async function monthsIn(viewport: Locator): Promise<number> {
   return viewport.evaluate(element => {
-    const track = element.querySelector('[data-month-track]');
+    const track = element.firstElementChild;
     if (track == null) {
       return NaN;
     }
@@ -181,7 +182,10 @@ test.describe('with a mouse', () => {
       .click();
     const viewport = page.locator('[data-scroller="months"]');
     await expect(viewport).toBeVisible();
-    expect(await page.locator('[data-month-track]').count()).toBe(0);
+    // The pager's viewport clips its track; the snap scroller's scrolls.
+    expect(
+      await viewport.evaluate(element => getComputedStyle(element).overflowX),
+    ).not.toBe('hidden');
     expect(
       await viewport.evaluate(
         element => getComputedStyle(element).scrollSnapType,
@@ -419,7 +423,7 @@ async function startOffsetLog(viewport: Locator) {
   await viewport.evaluate(element => {
     const log: number[] = [];
     (window as unknown as {offsets: number[]}).offsets = log;
-    const track = element.querySelector('[data-month-track]');
+    const track = element.firstElementChild;
     const t0 = performance.now();
     const tick = () => {
       if (track != null) {
@@ -694,7 +698,7 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
   const play = async (script: Parameters<typeof driver.play>[0]) => {
     await sheet.evaluate((sheetElement, top) => {
       const months = document.querySelector('[data-scroller="months"]');
-      const track = months?.querySelector('[data-month-track]');
+      const track = months?.firstElementChild;
       const seen = {
         sheetDrop: 0,
         monthsMin: Infinity,
@@ -866,7 +870,7 @@ test.describe('a trackpad (spec:AST-094 FR43)', () => {
     }
     return {
       field,
-      track: page.locator('[data-month-track]'),
+      track: viewport.locator(':scope > *'),
       at: {x: box.x + box.width / 2, y: box.y + box.height / 2},
     };
   }

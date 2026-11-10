@@ -305,7 +305,7 @@ function MonthPagerComponent({
       ref={viewportRef}
       data-scroller="months"
       {...stylex.props(styles.viewport)}>
-      <div ref={trackRef} data-month-track="" {...stylex.props(styles.track)}>
+      <div ref={trackRef} {...stylex.props(styles.track)}>
         {paneSize > 0 &&
           rowsIn(visibleRows).map(row => (
             <MonthPane
