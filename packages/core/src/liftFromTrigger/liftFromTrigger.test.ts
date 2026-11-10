@@ -322,6 +322,28 @@ describe('lift', () => {
     expect(lift.isLifted()).toBe(false);
   });
 
+  it('pins the caller’s styles with its own while lifted, and puts them back with them once the source is back', async () => {
+    const {source} = renderList();
+    const lift = createLiftFromTrigger();
+    lift.lift(
+      source,
+      options({
+        pin: {'background-color': 'rgb(1, 2, 3)', 'border-radius': '12px'},
+      }),
+    );
+    expect(source.style.getPropertyValue('background-color')).toBe(
+      'rgb(1, 2, 3)',
+    );
+    expect(source.style.getPropertyPriority('background-color')).toBe(
+      'important',
+    );
+    expect(source.style.getPropertyValue('border-radius')).toBe('12px');
+    lift.drop();
+    await vi.runAllTimersAsync();
+    expectInlineAsBefore(source);
+    expect(source.style.getPropertyValue('border-radius')).toBe('');
+  });
+
   it('an unmount mid-lift ends it at once: no element, document listener or timer left', () => {
     const {source} = renderList();
     const rest = count();

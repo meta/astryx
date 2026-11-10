@@ -87,6 +87,12 @@ export interface LiftFromTriggerOptions {
    * own reads find the page barely changed. The source lifts above it.
    */
   readonly onLayerShown?: (lifted: LiftFromTriggerResult) => void;
+  /**
+   * Inline styles the source takes while it is lifted, such as a plate behind
+   * a source with no surface of its own. The lift pins them with its own and
+   * puts them back with them, once the source is back in the page.
+   */
+  readonly pin?: Readonly<Record<string, string>>;
   /** The tint, a CSS color resolved where the source is. */
   readonly tint?: string;
   /** The inset an app declares for a bar over an edge (LayerProvider). */
@@ -783,6 +789,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
         'margin-left': '0',
         'box-sizing': 'border-box',
         ...kept,
+        ...options.pin,
         'pointer-events': 'none',
       },
       saved,
