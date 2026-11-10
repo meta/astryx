@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Project} from '../../foundation/config/project.mjs';
 import {
@@ -331,6 +332,9 @@ export default {};
       path.join(sharedDir, 'handler.mjs'),
       "export const handle = async (report) => ({status: 'filed', message: 'shared'});\n",
     );
+    const sharedHandler = pathToFileURL(
+      path.join(sharedDir, 'handler.mjs'),
+    ).href;
 
     const dir1 = packageDir('@test/first');
     fs.mkdirSync(dir1, {recursive: true});
@@ -340,7 +344,7 @@ export default {};
     );
     fs.writeFileSync(
       path.join(dir1, 'astryx.integration.mjs'),
-      `import {handle} from ${JSON.stringify(path.join(sharedDir, 'handler.mjs'))};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
+      `import {handle} from ${JSON.stringify(sharedHandler)};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
     );
 
     const dir2 = packageDir('@test/second');
@@ -351,7 +355,7 @@ export default {};
     );
     fs.writeFileSync(
       path.join(dir2, 'astryx.integration.mjs'),
-      `import {handle} from ${JSON.stringify(path.join(sharedDir, 'handler.mjs'))};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
+      `import {handle} from ${JSON.stringify(sharedHandler)};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
     );
 
     configure(['@test/first', '@test/second']);
