@@ -120,3 +120,8 @@ export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';
 
 // Lab's TabBar finds a panel's scroll area with Core's scroll test.
 export {measureLogicalScrollAxis} from '../hooks/scrollGeometry';
+
+// Lab's RefreshControl cross-fades its list through a copy under Reduce
+// Motion, so the list shows on every frame.
+export {playReducedMotionCrossFade} from '../motion/reducedMotionCrossFade';
+export type {ReducedMotionCrossFade} from '../motion/reducedMotionCrossFade';

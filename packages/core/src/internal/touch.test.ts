@@ -198,6 +198,16 @@ describe('internal/touch', () => {
     );
   });
 
+  it("re-exports by name the cross-fade Lab's RefreshControl plays", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const crossFade = await import('../motion/reducedMotionCrossFade');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.playReducedMotionCrossFade).toBe('function');
+    expect(entry.playReducedMotionCrossFade).toBe(
+      crossFade.playReducedMotionCrossFade,
+    );
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
