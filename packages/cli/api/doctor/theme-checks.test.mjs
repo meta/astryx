@@ -1138,6 +1138,67 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 passes when a Google Fonts import names the family', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Ocean+Sans:wght@400;500;600;700&display=swap');\n",
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('check 9 passes for the older Google Fonts endpoint and a bare import string', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@import "https://fonts.googleapis.com/css?family=Roboto:400,700|Ocean+Sans:400";\n',
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('check 9 still warns when a Google Fonts import names a different family', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=Ocean+Serif&display=swap');\n",
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'warn'});
+    expect(result.message).toContain('Ocean Sans');
+  });
+
+  it('check 9 does not trust a Google Fonts lookalike host', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@import url('https://fonts.googleapis.com.example/css2?family=Ocean+Sans');\n",
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('Ocean Sans'),
+    });
+  });
+
   it('check 10 fails on conflicting unscoped rules across added themes', async () => {
     const {dir} = await fixture([
       {slug: 'ocean', css: 'body { color: blue; }\n'},

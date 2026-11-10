@@ -315,13 +315,46 @@ function namedThemeFonts(files) {
   return new Set(names.values());
 }
 
+/**
+ * The families a Google Fonts stylesheet URL asks for. That service answers
+ * with an `@font-face` rule for each family named in the URL and nothing else,
+ * so the URL itself is the evidence. Any other URL proves nothing.
+ *
+ * @param {string} params the `@import` rule's params
+ * @returns {string[]}
+ */
+function googleFontsImportFamilies(params) {
+  const match = /^\s*(?:url\(\s*)?(['"]?)([^'")\s]+)\1/iu.exec(params);
+  if (!match) return [];
+  let url;
+  try {
+    url = new URL(match[2]);
+  } catch {
+    return [];
+  }
+  if (url.hostname !== 'fonts.googleapis.com') return [];
+  if (url.pathname !== '/css' && url.pathname !== '/css2') return [];
+  // css2 repeats `family=`; the older css endpoint joins families with `|`.
+  return url.searchParams
+    .getAll('family')
+    .flatMap(value => value.split('|'))
+    .map(value => normalizeFontName(value.split(':')[0]))
+    .filter(Boolean);
+}
+
 /** @param {string} css */
 function fontStylesheetEvidence(css) {
   const loaded = new Set();
   let external = false;
   const root = postcss.parse(css);
   root.walkAtRules(atRule => {
-    if (atRule.name.toLowerCase() === 'import') external = true;
+    if (atRule.name.toLowerCase() === 'import') {
+      external = true;
+      for (const family of googleFontsImportFamilies(atRule.params)) {
+        loaded.add(family.toLowerCase());
+      }
+      return;
+    }
     if (atRule.name.toLowerCase() !== 'font-face') return;
     atRule.walkDecls(/^font-family$/iu, declaration => {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
@@ -1423,7 +1456,7 @@ export async function checkAppThemes(cwd) {
               label: 'Theme font loading',
               status: 'pass',
               message:
-                'Every named non-system font has a local @font-face loader.',
+                'Every named non-system font has a local @font-face rule or a Google Fonts import that names it.',
             },
   );
 
