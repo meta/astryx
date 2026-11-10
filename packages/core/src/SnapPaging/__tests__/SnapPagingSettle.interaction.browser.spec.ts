@@ -24,6 +24,8 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   drag,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   openStory,
   requireFrames,
   tap,
@@ -255,37 +257,123 @@ function expectInStep(log: Watch) {
 }
 
 /**
- * Resolves on the first frame where the lead item's settle runs from the
- * start the browser gave it, or false after 2 s. A settle created in the
- * press's task has no start until a frame commits it. With `moved`, the
- * lead must also show `moved` px of the settle.
+ * Starts reading the lead item on every frame, before an action. Each frame
+ * reads whether the paging holds the lead, whether its settle runs from the
+ * start the browser gave it, and its translate. The settle starts at the
+ * paging's first `animate` call on the lead. A drag before it holds the lead
+ * too, and its travel is not the settle's. A settle created in the action's
+ * task has no start until a frame commits it. The returned read resolves true
+ * for the first frame where the settle runs and the lead shows `moved` px of
+ * it. That frame may come before the read: a loaded runner can start the read
+ * after the settle ends. Else the read resolves false 2 s after it starts. A
+ * frame gap over the starvation gap between the settle's start and its
+ * hand-back hides its run, so that read fails by name.
  */
-async function settleRuns(scroller: Locator, moved = 0) {
-  return scroller.evaluate(
-    async (el, distance) =>
-      new Promise<boolean>(resolve => {
-        const lead = el.firstElementChild as HTMLElement;
-        const xOf = () =>
-          Number.parseFloat(getComputedStyle(lead).translate) || 0;
-        const from = xOf();
-        const timer = setTimeout(() => resolve(false), 2000);
-        const check = () => {
-          if (
-            lead
-              .getAnimations()
-              .some(a => a.playState === 'running' && a.startTime != null) &&
-            Math.abs(xOf() - from) >= distance
-          ) {
-            clearTimeout(timer);
-            resolve(true);
-          } else {
-            requestAnimationFrame(check);
-          }
-        };
+async function watchSettleRuns(scroller: Locator, moved = 0) {
+  type Watch = {
+    frames: {t: number; held: boolean; runs: boolean}[];
+    runs: boolean;
+    startedAt: number | null;
+    from: number;
+    done: boolean;
+    animate: typeof Element.prototype.animate;
+  };
+  await scroller.evaluate((el, distance) => {
+    const lead = el.firstElementChild as HTMLElement;
+    const xOf = () => Number.parseFloat(getComputedStyle(lead).translate) || 0;
+    const watch: Watch = {
+      frames: [],
+      runs: false,
+      startedAt: null,
+      from: 0,
+      done: false,
+      animate: Element.prototype.animate,
+    };
+    (window as unknown as {__settleRuns: Watch}).__settleRuns = watch;
+    Element.prototype.animate = function (this: Element, ...args) {
+      if (this === lead && watch.startedAt == null) {
+        watch.startedAt = performance.now();
+        watch.from = xOf();
+      }
+      return watch.animate.apply(this, args);
+    };
+    const check = (time: number) => {
+      const animations = lead.getAnimations();
+      watch.runs =
+        watch.startedAt != null &&
+        animations.some(
+          a => a.playState === 'running' && a.startTime != null,
+        ) &&
+        Math.abs(xOf() - watch.from) >= distance;
+      watch.frames.push({
+        t: time,
+        held: animations.length > 0 || lead.style.translate !== '',
+        runs: watch.runs,
+      });
+      if (!watch.runs && !watch.done) {
         requestAnimationFrame(check);
-      }),
-    moved,
-  );
+      }
+    };
+    requestAnimationFrame(check);
+  }, moved);
+  return async () => {
+    const {runs, startedAt, frames} = await scroller.evaluate(async () => {
+      const watch = (window as unknown as {__settleRuns: Watch}).__settleRuns;
+      const until = performance.now() + 2000;
+      while (!watch.runs && performance.now() < until) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+      watch.done = true;
+      Element.prototype.animate = watch.animate;
+      return {
+        runs: watch.runs,
+        startedAt: watch.startedAt,
+        frames: watch.frames,
+      };
+    });
+    // The paging started a settle, but no frame showed it run `moved` px.
+    // A frame gap over the starvation gap between the settle's start and its
+    // hand-back hid it, which fails by name.
+    if (!runs && startedAt != null) {
+      const first = frames.findIndex(frame => frame.t >= startedAt);
+      const from = first < 0 ? frames.length : first;
+      const released = frames.findIndex((frame, i) => i >= from && !frame.held);
+      const settle = frames.slice(
+        Math.max(0, from - 1),
+        released < 0 ? frames.length : released + 1,
+      );
+      try {
+        requireFrames(settle, {
+          min: 1,
+          during:
+            moved > 0
+              ? `the settle showed ${moved} px of its move`
+              : 'the settle ran',
+          where: frame => frame.runs,
+        });
+      } catch (shortfall) {
+        if (shortfall instanceof FrameStarvationError) {
+          throw shortfall;
+        }
+      }
+    }
+    return runs;
+  };
+}
+
+/**
+ * The touch reached the page too late to judge the catch. The row showed less
+ * than a pixel of the settle left. A frame gap longer than the starvation gap
+ * came first. The runner held the touch back, so the run proves nothing about
+ * where the catch stops.
+ */
+class LateTouchError extends Error {
+  constructor(shown: number, end: number, gapMs: number) {
+    super(
+      `the touch reached the page with the row at ${shown.toFixed(2)} px, within a pixel of the settle's end at ${end.toFixed(2)} px, after a ${gapMs.toFixed(0)} ms frame gap: the runner held the touch back, so the run proves nothing about where the catch stops`,
+    );
+    this.name = 'LateTouchError';
+  }
 }
 
 /**
@@ -416,15 +504,14 @@ test('a touch that catches the settle stops every item where the lead shows it',
   await settled(scroller);
   expect(await offset()).toBeLessThan(1);
   const shown = await watchShown(scroller);
+  const driver = await touchDriver(page);
+  const runs = await watchSettleRuns(scroller, 4);
   await next.click();
   // The touch lands once the row shows some of the settle, so where it stops
   // lies strictly between the settle's start and its end.
-  expect(await settleRuns(scroller, 4), 'the press starts its settle').toBe(
-    true,
-  );
+  expect(await runs(), 'the press starts its settle').toBe(true);
   // A still touch stops the move where it shows, by the pager's catch time
   // at the latest. Its lift settles the row on a stop.
-  const driver = await touchDriver(page);
   await driver.play(
     tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 250}),
   );
@@ -444,6 +531,18 @@ test('a touch that catches the settle stops every item where the lead shows it',
   }
   const before = log.frames.filter(frame => frame.t < start).at(-1);
   expect(before?.running, 'the touch lands while the settle runs').toBe(true);
+  if (before != null && before.position >= end - 1) {
+    // Only a frame gap before the touch shows the runner held it back. With
+    // none, the checks below judge the catch.
+    const shownBefore = log.frames.filter(frame => frame.t < start);
+    const gapMs = Math.max(
+      0,
+      ...shownBefore.slice(1).map((frame, i) => frame.t - shownBefore[i].t),
+    );
+    if (gapMs > FRAME_STARVATION_MS) {
+      throw new LateTouchError(before.position, end, gapMs);
+    }
+  }
   const held = requireFrames(log.frames, {
     min: 2,
     during: 'the hold after the catch',
@@ -473,9 +572,10 @@ test('a second flick in a settle measures every item where it is drawn, and rest
       .filter((_, index) => index % 3 === 0)
       .map(item => Math.min(item.offsetLeft - items[0].offsetLeft, travel));
   });
+  const runs = await watchSettleRuns(scroller, 150);
   await flick(page, scroller);
   // The second flick lands once the row shows half of the first settle.
-  expect(await settleRuns(scroller, 150), 'the first flick settles').toBe(true);
+  expect(await runs(), 'the first flick settles').toBe(true);
   await flick(page, scroller);
   await settled(scroller);
   const at = await scroller.evaluate(el => Math.abs(el.scrollLeft));
@@ -491,10 +591,9 @@ test('a second press in a settle moves every item with the lead', async ({
   const {scroller} = await open(page);
   const next = page.getByRole('button', {name: 'Scroll right'});
   const shown = await watchShown(scroller);
+  const runs = await watchSettleRuns(scroller);
   await next.click();
-  expect(await settleRuns(scroller), 'the first press starts its settle').toBe(
-    true,
-  );
+  expect(await runs(), 'the first press starts its settle').toBe(true);
   await next.click();
   await settled(scroller);
   const log = await shown();
