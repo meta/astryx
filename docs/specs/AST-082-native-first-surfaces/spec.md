@@ -575,7 +575,7 @@ release never waits on a native platform. Core keeps the core and web contracts;
 bindings, native theme configuration, and native implementations, and reads core
 only through the portable entry, apart from the build-time reads FR16 lists
 until that entry ships.
-The React Native candidate's native code lives in the platform packages of
+The React Native candidate's native code lives in the platform package of
 `spec:AST-112` (FR4), and `@astryxdesign/native` stays the single cross-platform
 contracts package.
 

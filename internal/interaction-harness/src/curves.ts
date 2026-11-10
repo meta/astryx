@@ -27,15 +27,10 @@ import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
 import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
+import {TARGET_WAIT_MS} from './target-wait';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
 export const END_INSET_MS = 0.5;
-
-/**
- * How long a hold waits for its scope, or a judged target, to be on the
- * page, ms.
- */
-const TARGET_WAIT_MS = 5_000;
 
 /**
  * The element that `scope` names, or null without a scope. Throws by name
