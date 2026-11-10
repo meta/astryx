@@ -81,6 +81,10 @@ describe('createISOTimeString', () => {
     expect(createISOTimeString('14:30.5')).toBeNull();
   });
 
+  it('rejects a field with more than two digits', () => {
+    expect(createISOTimeString('014:30')).toBeNull();
+  });
+
   it('answers null for a value that is not a string', () => {
     expect(createISOTimeString(undefined as unknown as string)).toBeNull();
     expect(createISOTimeString(null as unknown as string)).toBeNull();
