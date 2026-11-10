@@ -310,14 +310,14 @@ guidance owns the process used to propose and test APIs.
   with its signature. A reachable member tagged internal appears (INV12); Core's
   `./internal/*` subpaths and unpublished packages, including Lab, do not. A
   member inside a canonical experimental boundary appears marked experimental
-  (`spec:AST-017` FR21). The merge gate reads that artifact for such a pull
-  request and fails closed when it is missing or the generator errors. A pull
-  request that changes no published package runs none of the package lanes it
-  leaves untouched (`spec:AST-030` FR5), so it carries no artifact, and its
-  review notes say "New public API: none". The review bot's review of each pull
-  request starts its summary notes with the delta, each row with a usage
-  example, or says "New public API: none"; public-API review reads that delta.
-  The delta's rows are evidence and decide no acceptance (INV13).
+  (`spec:AST-017` FR21). The merge gate reads that artifact only for a pull
+  request that changes a published package's source or build, and fails closed
+  when it is missing or the generator errors. For any other pull request the
+  gate reads no artifact, and its review notes say "New public API: none". The
+  review bot's review of each pull request starts its summary notes with the
+  delta, each row with a usage example, or says "New public API: none";
+  public-API review reads that delta. The delta's rows are evidence and decide
+  no acceptance (INV13).
 - **INV25 — Undeclared public API goes to a human.** Public-API review
   compares each added or changed row of the pull request's API delta (INV24)
   with current records. A row
@@ -448,7 +448,7 @@ that names it.
 
 **Decider:** `cixzhang`, `2026-11-09`
 
-The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact, and a pull request that changes no published package carries none, since its untouched package lanes do not run (`spec:AST-030` FR5). The review bot's delta at the start of its summary notes is the human view (INV24).
+The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
 
 Rejected: keeping a committed generated API report per package.
 
@@ -475,7 +475,7 @@ Rejected: keeping a committed generated API report per package.
 | INV21a                  | Public-API review of each breaking or deprecating change to a shipped API                                                | A breaking or deprecating change to a shipped public API justified only by conformance to a system rule                                                                                                                                                                                                                                                                                                                                                                                 |
 | INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside hooks whose result only an Astryx component or StyleX can use and `useMenuPress` (by owner decision), or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                               |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
-| INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance                                                              |
+| INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
 | INV25                   | Public-API review routing against the pull request's API delta                                                           | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
