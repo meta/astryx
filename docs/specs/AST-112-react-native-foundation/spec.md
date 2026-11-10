@@ -174,7 +174,8 @@ shared icon names under FR17.
     react-native-screens, react-native-safe-area-context, and
     `@callstack/liquid-glass` are optional, so an app that does not import it
     installs none of them, and no other entry imports it. It is removed
-    before the package joins the stable channel (FR14).
+    when `./navigation` holds the Astryx router and the native hosts, and in
+    any case before the package joins the stable channel (FR14).
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
