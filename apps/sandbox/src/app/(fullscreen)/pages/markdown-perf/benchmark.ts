@@ -40,12 +40,24 @@ export function generateMarkdownFixture(sectionCount: number): string {
   ].join('\n\n');
 }
 
+/** What a change shows when it has no value or no baseline to compare. */
+export interface BenchmarkChangeEmptyLabels {
+  /** Shown when no baseline is saved. Defaults to '—'. */
+  noBaseline?: string;
+  /** Shown when a baseline is saved but there is no value yet. Defaults to '—'. */
+  noValue?: string;
+}
+
 export function formatBenchmarkChange(
   value: number | null,
   baseline: number | null,
+  empty: BenchmarkChangeEmptyLabels = {},
 ): string {
-  if (value == null || baseline == null) {
-    return '—';
+  if (baseline == null) {
+    return empty.noBaseline ?? '—';
+  }
+  if (value == null) {
+    return empty.noValue ?? '—';
   }
   if (baseline === 0) {
     return value === 0 ? '0.0%' : 'new';

@@ -179,18 +179,17 @@ export function TimeGridView({
       timezoneID,
     ],
   );
-  const positioning = useRef({
-    currentTime,
-    days,
-    minHour: normalizedMinHour,
-    hourHeight,
-  });
-  positioning.current = {
+  const latestPositioning = {
     currentTime,
     days,
     minHour: normalizedMinHour,
     hourHeight,
   };
+  const positioning = useRef(latestPositioning);
+  // Syncs the positioning effect's inputs at commit, before it reads them.
+  useLayoutEffect(() => {
+    positioning.current = latestPositioning;
+  });
   const isBlockScrollable = scrollState.block.isScrollable;
   // The clock is 0 only in the server snapshot; wait for the client's.
   const hasClock = currentTime !== 0;
@@ -246,8 +245,6 @@ export function TimeGridView({
     eventID: string;
     dayISO: string;
   } | null>(null);
-  const openBlockRef = useRef(openBlock);
-  openBlockRef.current = openBlock;
   const openEvent =
     openBlock == null
       ? null
@@ -264,8 +261,6 @@ export function TimeGridView({
       setOpenBlock(null);
     }, []),
   });
-  const popoverRef = useRef(popover);
-  popoverRef.current = popover;
   // A pointer press on a block while the popover is open would close it by
   // the browser's light dismiss before the click arrives, and the layer then
   // absorbs a show() from that same press. So the press itself decides: a
@@ -282,9 +277,10 @@ export function TimeGridView({
       target
         ?.closest('[data-schedule-event-block]')
         ?.getAttribute('data-schedule-event-block') ?? null;
-    const current = openBlockRef.current;
     const currentKey =
-      current == null ? null : blockKeyOf(current.eventID, current.dayISO);
+      openBlock == null
+        ? null
+        : blockKeyOf(openBlock.eventID, openBlock.dayISO);
     openBlockAtPressRef.current = pressedKey == null ? null : currentKey;
     if (
       pressedKey != null &&
@@ -306,9 +302,9 @@ export function TimeGridView({
     const key = blockKeyOf(event.id, dayISO);
     const openAtPress = openBlockAtPressRef.current;
     openBlockAtPressRef.current = null;
-    const current = openBlockRef.current;
     const isCurrent =
-      current != null && blockKeyOf(current.eventID, current.dayISO) === key;
+      openBlock != null &&
+      blockKeyOf(openBlock.eventID, openBlock.dayISO) === key;
     if (openAtPress === key || (isCurrent && popover.isOpen)) {
       if (popover.isOpen) {
         popover.hide();
@@ -327,7 +323,7 @@ export function TimeGridView({
   let openContent: ReactNode = null;
   useEffect(() => {
     if (openBlockKey != null && !paintedBlockKeys.has(openBlockKey)) {
-      popoverRef.current.hide();
+      popover.hide();
       setOpenBlock(null);
     }
   });

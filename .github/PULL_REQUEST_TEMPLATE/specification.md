@@ -37,6 +37,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] This PR contains specification records only.
 - [ ] It records observable behavior and preserves equivalent internal implementations.
 - [ ] Any named internal mechanism is intentionally public, names its dependent caller/system, and explains why an equivalent implementation would not satisfy the contract.
