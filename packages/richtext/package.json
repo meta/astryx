@@ -1,7 +1,7 @@
 {
   "name": "@astryxdesign/richtext",
   "displayName": "Rich Text",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
   "author": "Meta Open Source",
   "license": "MIT",
@@ -79,7 +79,7 @@
   },
   "peerDependencies": {
     "@stylexjs/stylex": ">=0.10.0",
-    "@astryxdesign/core": "0.7.13",
+    "@astryxdesign/core": "0.7.14",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "lexical": "^0.52.0",
