@@ -13,7 +13,7 @@ export const docs = {
   sections: [
     {
       title: 'Overview',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
@@ -24,7 +24,7 @@ export const docs = {
     {
       id: 'surface-colors',
       title: 'Color Tokens',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
@@ -40,7 +40,7 @@ export const docs = {
     {
       id: 'usage',
       title: 'Use color tokens in StyleX',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
@@ -68,7 +68,7 @@ const styles = stylex.create({
     },
     {
       title: 'Best Practices',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'list',
