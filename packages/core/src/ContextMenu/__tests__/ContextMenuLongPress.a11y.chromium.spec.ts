@@ -131,6 +131,28 @@ async function holdLiftThenTapOutside(
     touchPoints: [],
   });
   await nextFrame(page);
+  // A lifted trigger's tint swallows a tap while the lift still grows, so
+  // the outside tap waits for the lift to settle.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const layer = document.querySelector('[data-astryx-context-menu-lift]');
+        return layer == null
+          ? 0
+          : document.getAnimations().filter(animation => {
+              const target =
+                animation.effect instanceof KeyframeEffect
+                  ? animation.effect.target
+                  : null;
+              return (
+                target != null &&
+                animation.playState === 'running' &&
+                (layer === target || layer.contains(target))
+              );
+            }).length;
+      }),
+    )
+    .toBe(0);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{x: 5, y: 5, id: 2}],
