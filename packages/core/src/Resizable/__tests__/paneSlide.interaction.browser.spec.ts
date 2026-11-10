@@ -13,7 +13,12 @@
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
+import {
+  openStory,
+  requireFrames,
+  webInputDriver,
+  withStorybook,
+} from '@astryxdesign/interaction-harness';
 import {settlingDuration, toSpring} from '../../motion/spring';
 import {springs} from '../../motion/uikit/springs';
 
@@ -791,6 +796,8 @@ async function pressHandle(page: Page): Promise<{x: number; y: number}> {
 }
 
 interface EdgeFrame {
+  /** When the page drew the frame: its animation-frame time, ms. */
+  t: number;
   laidOut: number;
   buttonWidth: number;
   drawnEdge: number;
@@ -811,12 +818,13 @@ async function recordEdgeFrames(page: Page): Promise<void> {
     const button = pane?.querySelector('button');
     const frames: EdgeFrame[] = [];
     (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames = frames;
-    const step = () => {
+    const step = (t: number) => {
       if (pane == null || content == null || handle == null || button == null) {
         return;
       }
       const handleBox = handle.getBoundingClientRect();
       frames.push({
+        t,
         laidOut: pane.offsetWidth,
         buttonWidth: button.offsetWidth,
         drawnEdge: pane.getBoundingClientRect().right,
@@ -958,15 +966,15 @@ test('a spring-back past a limit lays out no frame: the edge glides back over th
     const handle = document.querySelector(
       '[role="separator"][aria-label="Resize panel"]',
     );
-    const trace: {laidOut: number; drawn: number}[] = [];
+    const trace: {t: number; laidOut: number; drawn: number}[] = [];
     (window as unknown as {springTrace: typeof trace}).springTrace = trace;
     const startedAt = performance.now();
-    const step = () => {
+    const step = (t: number) => {
       if (pane == null || handle == null) {
         return;
       }
       const box = handle.getBoundingClientRect();
-      trace.push({laidOut: pane.offsetWidth, drawn: box.x + box.width / 2});
+      trace.push({t, laidOut: pane.offsetWidth, drawn: box.x + box.width / 2});
       if (performance.now() - startedAt < 1200) {
         requestAnimationFrame(step);
       }
@@ -979,7 +987,7 @@ test('a spring-back past a limit lays out no frame: the edge glides back over th
     () =>
       (
         window as unknown as {
-          springTrace: {laidOut: number; drawn: number}[];
+          springTrace: {t: number; laidOut: number; drawn: number}[];
         }
       ).springTrace,
   );
@@ -988,13 +996,15 @@ test('a spring-back past a limit lays out no frame: the edge glides back over th
   const widths = [...new Set(trace.map(frame => frame.laidOut))];
   expect(widths.length).toBeLessThanOrEqual(2);
   expect(widths.at(-1)).toBe(320);
-  // The edge still passes through the places in between.
+  // The edge still passes through the places in between, on 3 frames at
+  // least. A page starved of frames shows fewer, and fails by name.
   const first = trace[0]?.drawn ?? 0;
   const last = trace.at(-1)?.drawn ?? 0;
-  const between = trace.filter(
-    frame => frame.drawn < first - 1 && frame.drawn > last + 1,
-  );
-  expect(between.length).toBeGreaterThanOrEqual(3);
+  requireFrames(trace, {
+    min: 3,
+    during: 'the edge glided back to the limit',
+    where: frame => frame.drawn < first - 1 && frame.drawn > last + 1,
+  });
 });
 
 for (const [label, waitMs] of [
@@ -1175,7 +1185,9 @@ for (const side of ['start', 'end'] as const) {
     const frames = await page.evaluate(
       () => (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames,
     );
-    expect(frames.length).toBeGreaterThan(10);
+    // A page starved of frames draws too few to judge the slide, and fails
+    // by name.
+    requireFrames(frames, {min: 11, during: 'the handle slid shut'});
     for (let index = 1; index < frames.length; index++) {
       expect(
         towardOpen * (frames[index].handle - frames[index - 1].handle),
@@ -1286,10 +1298,24 @@ test('a flick toward closing from above the threshold closes on its lift', async
   await openFixture(page, STORY.start);
   await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
-  const at = await pressHandle(page);
-  // 110 px is over the threshold; the release velocity carries it past.
-  await page.mouse.move(at.x - 90, at.y, {steps: 3});
-  await page.mouse.up();
+  const box = await page
+    .getByRole('separator', {name: 'Resize panel'})
+    .boundingBox();
+  if (box == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  // 90 px toward closed, a move each 60 Hz frame, leaves 110 px: over the
+  // threshold, and the release velocity carries it past. The page reads the
+  // velocity from the events' own times. In Chromium those are the stroke's,
+  // so a late runner cannot slow the flick.
+  const driver = await webInputDriver(page);
+  await driver.mouse([
+    {...at, t: 0},
+    {x: at.x - 30, y: at.y, t: 16},
+    {x: at.x - 60, y: at.y, t: 32},
+    {x: at.x - 90, y: at.y, t: 48},
+  ]);
   await expect(pane).toHaveAttribute('inert', '');
 });
 

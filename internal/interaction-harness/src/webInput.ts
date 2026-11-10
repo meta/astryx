@@ -7,6 +7,7 @@
  *   a run of wheel steps as one gesture (`wheelBurst({x, y, steps})`) and a
  *   pen stroke (`pen(points)`) as REAL engine input, for proofs that the same
  *   motion works for every pointer, not only a finger (`spec:AST-100` FR4).
+ *   `mouse(points)` sends a mouse stroke as real input too.
  * @position The non-touch half of the input drivers; touch.ts is the touch
  *   half and owns the input log both are read through. Untrusted DOM events
  *   are not input (a component can tell them apart with `isTrusted`), so both
@@ -32,6 +33,9 @@
  * - A pen stroke over a native scroller does not pan it: Chromium sends the
  *   pen through its mouse pipeline, so the stroke scrolls nothing, raises no
  *   `pointercancel` and ends in a `click`.
+ * - A mouse stroke goes out as a pen stroke does, with `pointerType: 'mouse'`
+ *   and the left button, each event stamped with its scripted time. A runner
+ *   that sends an event late does not change the time the page reads.
  *
  * WebKit (Playwright's Linux build): `page.mouse.wheel` in a desktop context
  * (`isMobile: false`, `hasTouch: false`), waiting the same way. The step
@@ -39,6 +43,10 @@
  * which Chromium's step does neither. WebKit's mobile emulation has no
  * wheel input, and Playwright has no pen for WebKit: both throw, naming the
  * reason, so a proof skips on the driver's flags instead.
+ *
+ * A WebKit mouse stroke is `page.mouse`, each event sent at its scripted
+ * time on the wall clock. WebKit stamps an event when it arrives, so a late
+ * send reaches the page late.
  *
  * SYNC: Keep the engine limits above equal to the README's table and to the
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
@@ -303,12 +311,16 @@ function frameGapAcross(
   return best;
 }
 
-/** A point of a pen stroke. */
-export interface PenPoint {
+/** A point of a mouse stroke. */
+export interface MousePoint {
   readonly x: number;
   readonly y: number;
   /** Ms after the stroke's first point. */
   readonly t: number;
+}
+
+/** A point of a pen stroke. */
+export interface PenPoint extends MousePoint {
   /** 0–1 (default 0.5) while the pen touches. */
   readonly pressure?: number;
   /** Degrees, -90–90 (default 0). */
@@ -343,6 +355,26 @@ export interface WebInputDriver {
   }>;
   /** Presses at the first point, moves through all of them, releases at the last; paced on the wall clock. */
   pen(points: readonly PenPoint[]): Promise<void>;
+  /**
+   * Presses the left button at the first point, moves through the rest and
+   * releases at the last, on the stroke's schedule. In Chromium each event
+   * carries its scripted time, so the page reads the stroke's speed however
+   * late a busy runner sends an event. WebKit stamps an event when it
+   * arrives, so there the stroke leaves on the wall clock. In Chromium the
+   * stroke goes around Playwright's own `page.mouse`, so a later
+   * `page.mouse` move starts where Playwright last put the mouse. In WebKit
+   * it starts at the stroke's last point.
+   */
+  mouse(points: readonly MousePoint[], options?: StrokeOptions): Promise<void>;
+}
+
+export interface StrokeOptions {
+  /**
+   * Called after each event is sent, with its index (the press is 0), before
+   * the next one leaves. The next event waits for it, so a delay here sends
+   * that event late.
+   */
+  readonly onEvent?: (index: number) => Promise<void> | void;
 }
 
 /** Why a proof skips when the driver has no wheel in this page. */
@@ -770,54 +802,90 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
       );
     },
     async pen(points) {
-      if (points.length === 0) {
-        return;
-      }
-      // Two presented frames first: the press reaches the compositor with no
-      // page round trip, and right after a navigation it could still carry
-      // the previous document's page scale. The harness's own frames, not a
-      // frozen timer gate's (story.ts).
-      await page.evaluate(
-        () =>
-          new Promise<void>(resolve => {
-            const gate = (
-              window as unknown as {
-                __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
-              }
-            ).__harnessTimerGate;
-            const frame =
-              gate?.frame ?? window.requestAnimationFrame.bind(window);
-            frame(() => frame(() => resolve()));
-          }),
+      await cdpStroke(page, cdp, points, (type, point) => ({
+        pointerType: 'pen',
+        force: type === 'mouseReleased' ? 0 : (point.pressure ?? 0.5),
+        tiltX: point.tiltX ?? 0,
+        tiltY: point.tiltY ?? 0,
+      }));
+    },
+    async mouse(points, {onEvent} = {}) {
+      await cdpStroke(
+        page,
+        cdp,
+        points,
+        () => ({pointerType: 'mouse'}),
+        onEvent,
       );
-      const startWall = Date.now();
-      const startStamp = Date.now() / 1000;
-      const events = [
-        {type: 'mousePressed' as const, point: points[0]},
-        ...points.slice(1).map(point => ({type: 'mouseMoved' as const, point})),
-        {type: 'mouseReleased' as const, point: points[points.length - 1]},
-      ];
-      for (const {type, point} of events) {
-        const wait = startWall + point.t - Date.now();
-        if (wait > 0) {
-          await sleep(wait);
-        }
-        await cdp.send('Input.dispatchMouseEvent', {
-          type,
-          x: point.x,
-          y: point.y,
-          button: 'left',
-          buttons: type === 'mouseReleased' ? 0 : 1,
-          clickCount: type === 'mouseMoved' ? 0 : 1,
-          pointerType: 'pen',
-          force: type === 'mouseReleased' ? 0 : (point.pressure ?? 0.5),
-          tiltX: point.tiltX ?? 0,
-          tiltY: point.tiltY ?? 0,
-          timestamp: startStamp + point.t / 1000,
-        });
-      }
     },
   };
+}
+
+type StrokeEventType = 'mousePressed' | 'mouseMoved' | 'mouseReleased';
+
+/**
+ * Sends a stroke through CDP: a press at the first point, a move to each
+ * point after it and a release at the last. Each event leaves at its
+ * scripted time and carries that time as its timestamp.
+ */
+async function cdpStroke<Point extends MousePoint>(
+  page: Page,
+  cdp: CDPSession,
+  points: readonly Point[],
+  pointer: (
+    type: StrokeEventType,
+    point: Point,
+  ) => {
+    pointerType: 'mouse' | 'pen';
+    force?: number;
+    tiltX?: number;
+    tiltY?: number;
+  },
+  onEvent?: StrokeOptions['onEvent'],
+): Promise<void> {
+  if (points.length === 0) {
+    return;
+  }
+  // Two presented frames first. The press reaches the compositor with no
+  // page round trip. Right after a navigation, it could still carry the
+  // previous document's page scale. The harness's own frames, not a frozen
+  // timer gate's (story.ts).
+  await page.evaluate(
+    () =>
+      new Promise<void>(resolve => {
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        frame(() => frame(() => resolve()));
+      }),
+  );
+  const startWall = Date.now();
+  const startStamp = Date.now() / 1000;
+  const events = [
+    {type: 'mousePressed' as const, point: points[0]},
+    ...points.slice(1).map(point => ({type: 'mouseMoved' as const, point})),
+    {type: 'mouseReleased' as const, point: points[points.length - 1]},
+  ];
+  for (const [index, {type, point}] of events.entries()) {
+    const wait = startWall + point.t - Date.now();
+    if (wait > 0) {
+      await sleep(wait);
+    }
+    await cdp.send('Input.dispatchMouseEvent', {
+      type,
+      x: point.x,
+      y: point.y,
+      button: 'left',
+      buttons: type === 'mouseReleased' ? 0 : 1,
+      clickCount: type === 'mouseMoved' ? 0 : 1,
+      timestamp: startStamp + point.t / 1000,
+      ...pointer(type, point),
+    });
+    await onEvent?.(index);
+  }
 }
 
 async function webkitWebInput(page: Page): Promise<WebInputDriver> {
@@ -878,6 +946,32 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
     },
     async pen() {
       throw new Error(`webInputDriver: ${PEN_SKIP}`);
+    },
+    async mouse(points, {onEvent} = {}) {
+      if (points.length === 0) {
+        return;
+      }
+      const startWall = Date.now();
+      const strokeEvents: (() => Promise<void>)[] = [
+        async () => {
+          await page.mouse.move(points[0].x, points[0].y);
+          await page.mouse.down();
+        },
+        ...points.slice(1).map(point => async () => {
+          const wait = startWall + point.t - Date.now();
+          if (wait > 0) {
+            await sleep(wait);
+          }
+          await page.mouse.move(point.x, point.y);
+        }),
+        async () => {
+          await page.mouse.up();
+        },
+      ];
+      for (const [index, send] of strokeEvents.entries()) {
+        await send();
+        await onEvent?.(index);
+      }
     },
   };
 }

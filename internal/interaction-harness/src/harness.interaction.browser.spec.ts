@@ -3975,6 +3975,84 @@ test.describe('wheel and pen input', () => {
     ).toBeCloseTo(100, 0);
   });
 
+  test('a mouse stroke reaches the page as trusted mouse pointers, at its scripted times in Chromium', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await webInputDriver(page);
+    await driver.mouse([
+      {x: 100, y: 100, t: 0},
+      {x: 100, y: 140, t: 50},
+      {x: 100, y: 180, t: 100},
+    ]);
+    const log = await readInputLog(page);
+    const down = log.find(r => r.type === 'pointerdown');
+    // WebKit's stroke moves the mouse to its first point before the press.
+    const moves = log.filter(
+      r => r.type === 'pointermove' && r.timeStamp >= (down?.timeStamp ?? NaN),
+    );
+    const up = log.find(r => r.type === 'pointerup');
+    expect(down).toMatchObject({
+      isTrusted: true,
+      pointerType: 'mouse',
+      x: 100,
+      y: 100,
+    });
+    expect(moves.at(-1)).toMatchObject({
+      isTrusted: true,
+      pointerType: 'mouse',
+      y: 180,
+    });
+    expect(up).toMatchObject({isTrusted: true, pointerType: 'mouse', y: 180});
+    if (driver.engine === 'chromium') {
+      // The scripted 100 ms between the first and last points reach the page.
+      expect(
+        (moves.at(-1)?.timeStamp ?? NaN) - (down?.timeStamp ?? NaN),
+      ).toBeCloseTo(100, 0);
+    }
+  });
+
+  test('in Chromium a mouse release sent 100 ms late still carries its scripted time', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await webInputDriver(page);
+    test.skip(
+      driver.engine !== 'chromium',
+      'WebKit stamps a mouse event when it arrives',
+    );
+    const sentAt: number[] = [];
+    await driver.mouse(
+      [
+        {x: 100, y: 100, t: 0},
+        {x: 100, y: 130, t: 16},
+        {x: 100, y: 160, t: 32},
+      ],
+      {
+        onEvent: async index => {
+          sentAt.push(performance.now());
+          // The release leaves 100 ms after the last move, as a busy runner
+          // sends it.
+          if (index === 2) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        },
+      },
+    );
+    expect(sentAt[3] - sentAt[2]).toBeGreaterThanOrEqual(100);
+    const log = await readInputLog(page);
+    const moves = log.filter(r => r.type === 'pointermove');
+    const up = log.find(r => r.type === 'pointerup');
+    // The page reads the moves a frame apart, and the release with the last
+    // move. It reads no rest before the lift, so it reads the stroke's speed.
+    expect(
+      (moves.at(-1)?.timeStamp ?? NaN) - (moves.at(-2)?.timeStamp ?? NaN),
+    ).toBeCloseTo(16, 0);
+    expect(
+      (up?.timeStamp ?? NaN) - (moves.at(-1)?.timeStamp ?? NaN),
+    ).toBeCloseTo(0, 0);
+  });
+
   test('a stroke sent right after a navigation presses where it is scripted', async ({
     page,
   }) => {
