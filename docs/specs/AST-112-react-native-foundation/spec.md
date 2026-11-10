@@ -78,7 +78,9 @@ shared icon names under FR17.
       (web view and sign-in session), `pdf` (document view), `controls`
       (native button, text field, date pickers, and the swipe-row,
       drag-snap, and zoom-pager views), and `navigation` (the native stack
-      and tab hosts, DEC-9).
+      and tab hosts, DEC-9). The `navigation` capability's native hosts
+      follow in a release after the first; until then the router and its
+      navigators ship in the `./navigation` entries.
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
@@ -165,8 +167,8 @@ shared icon names under FR17.
   - `./storage` (storage, secure storage, files) and `./network` (network,
     cookies, client identity) hold the rest of the core.
   - `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and
-    `./navigation` are the optional capabilities' entries; `./navigation`
-    also holds the Astryx router and its navigators (FR2).
+    `./navigation` are the optional capabilities' entries; `./navigation` and
+    `./navigation/core` also hold the Astryx router and its navigators (FR2).
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
