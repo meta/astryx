@@ -23,9 +23,9 @@ export default function steps(page) {
     let found = -1;
     await eventually(async () => (found = await dataRows().count()) === expected, () => `expected ${expected} data rows, found ${found}`);
   };
-  const firstAndLast = async () => {
+  const nameOrder = async () => {
     const rows = await dataRows().allInnerTexts();
-    return [NAMES.find(name => rows[0]?.includes(name)), NAMES.find(name => rows.at(-1)?.includes(name))];
+    return rows.map(row => NAMES.find(name => row.includes(name)) ?? '?').join(', ');
   };
   return [
     ['a table with four column headers and six rows', async () => {
@@ -57,12 +57,13 @@ export default function steps(page) {
       await one(button, 'button in the Name header');
       await button.click();
       await eventually(async () => (await nameHeader.getAttribute('aria-sort')) === 'ascending', 'Name header is not aria-sort="ascending" after one press');
-      let [first, last] = await firstAndLast();
-      assert(first === 'Ada Lovelace' && last === 'Margaret Hamilton', `A to Z order is wrong: first ${first}, last ${last}`);
+      const ascending = NAMES.join(', ');
+      let order;
+      await eventually(async () => (order = await nameOrder()) === ascending, () => `A to Z order is wrong: ${order}`);
       await button.click();
       await eventually(async () => (await nameHeader.getAttribute('aria-sort')) === 'descending', 'Name header is not aria-sort="descending" after two presses');
-      [first, last] = await firstAndLast();
-      assert(first === 'Margaret Hamilton' && last === 'Ada Lovelace', `Z to A order is wrong: first ${first}, last ${last}`);
+      const descending = NAMES.toReversed().join(', ');
+      await eventually(async () => (order = await nameOrder()) === descending, () => `Z to A order is wrong: ${order}`);
     }],
   ];
 }
