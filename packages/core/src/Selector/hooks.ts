@@ -18,6 +18,7 @@
  */
 
 import {useCallback, useState} from 'react';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
@@ -404,14 +405,9 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
         return selectedIndex;
       }
-      const enabledIndices = getEnabledIndices();
-      return (
-        (fromEnd
-          ? enabledIndices[enabledIndices.length - 1]
-          : enabledIndices[0]) ?? -1
-      );
+      return enabledEdgeIndex(selectableItems, fromEnd);
     },
-    [findSelectedIndex, getEnabledIndices, selectableItems],
+    [findSelectedIndex, selectableItems],
   );
 
   const closeAndReset = useCallback(() => {

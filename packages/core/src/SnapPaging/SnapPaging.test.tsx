@@ -16,17 +16,26 @@ import {act, render, renderHook, screen} from '@testing-library/react';
 import {Carousel, type CarouselHandle} from '../Carousel/Carousel';
 import {useSnapPaging} from './SnapPaging';
 import {
+  attachSnapPaging,
   type HeldRow,
   type HeldRowListener,
   isSnapPaging,
+  itemsSpan,
   makeSnapPaging,
+  moveSnapPaging,
   nearestStop,
   type SnapPagingAttachment,
   snapPages,
   snapStops,
 } from './snapPagingValue';
 
+/** Each resize observer callback the code under test made. */
+const resizeObserved = new Set<ResizeObserverCallback>();
+
 class MockResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserved.add(callback);
+  }
   observe() {}
   unobserve() {}
   disconnect() {}
@@ -342,6 +351,248 @@ describe('Carousel with hasSnap', () => {
       act(() => handle.current?.scrollTo(2));
       // The stop is the item's start less the padding, not its border edge.
       expect(moves[0](0, 500)).toBe(184);
+    });
+  });
+
+  describe("a held row's stops", () => {
+    // Seven items 94.67 px wide and 8 px apart in a 300 px row. They are held
+    // with a translate that moves 0.3 px a millisecond toward the row's end.
+    // Each rect read comes 1 ms after the one before, as WebKit reads each
+    // rect at its own time. A style read right after a rect sees that time.
+    function heldRow(isRtl: boolean) {
+      const element = document.createElement('div');
+      element.style.direction = isRtl ? 'rtl' : 'ltr';
+      Object.defineProperty(element, 'offsetWidth', {value: 300});
+      Object.defineProperty(element, 'clientWidth', {value: 300});
+      element.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+      let clock = 0;
+      const translate = () => (isRtl ? 1 : -1) * (30 + 0.3 * clock);
+      const items = new Set<Element>();
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const start = i * (94.67 + 8);
+        item.getBoundingClientRect = () => {
+          clock += 1;
+          const left = isRtl ? 300 - start - 94.67 : start;
+          return new DOMRect(left + translate(), 0, 94.67, 100);
+        };
+        items.add(item);
+        element.append(item);
+      }
+      const readStyle = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (target, pseudo) =>
+          items.has(target)
+            ? ({translate: `${translate()}px`} as CSSStyleDeclaration)
+            : readStyle(target, pseudo),
+      );
+      document.body.append(element);
+      return element;
+    }
+    const layoutStops = [0, 1, 2, 3, 4].map(i => i * (94.67 + 8));
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    for (const isRtl of [false, true]) {
+      it(`${isRtl ? 'right to left' : 'left to right'}, take each item's translate off its rect: rects read at different times give the layout's stops`, () => {
+        const {stops} = snapPages(heldRow(isRtl), 0, 411, true);
+        expect(stops.slice(0, 5)).toHaveLength(5);
+        stops.slice(0, 5).forEach((stop, i) => {
+          expect(stop).toBeCloseTo(layoutStops[i], 6);
+        });
+      });
+    }
+  });
+
+  describe("a held row's span", () => {
+    // Seven items 94.67 px wide and 8 px apart move 0.3 px a millisecond.
+    // Each rect read comes 1 ms after the one before, as WebKit reads each
+    // rect at its own time. A style read right after a rect sees that time.
+    // A row under an ancestor's `scale` shows its rects `scale` times as
+    // large, translate included.
+    function movingRow(scale = 1) {
+      const element = document.createElement('div');
+      Object.defineProperty(element, 'offsetWidth', {value: 300});
+      element.getBoundingClientRect = () =>
+        new DOMRect(0, 0, 300 * scale, 100 * scale);
+      let clock = 0;
+      const translate = () => -280 - 0.3 * clock;
+      const items = new Set<Element>();
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const left = i * (94.67 + 8);
+        item.getBoundingClientRect = () => {
+          clock += 1;
+          return new DOMRect(
+            (left + translate()) * scale,
+            0,
+            94.67 * scale,
+            100 * scale,
+          );
+        };
+        items.add(item);
+        element.append(item);
+      }
+      const readStyle = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (target, pseudo) =>
+          items.has(target)
+            ? ({translate: `${translate()}px`} as CSSStyleDeclaration)
+            : readStyle(target, pseudo),
+      );
+      document.body.append(element);
+      return element;
+    }
+    const layoutSpan = 6 * (94.67 + 8) + 94.67;
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('takes each item\u2019s translate off its rect, so rects read at different times give the layout\u2019s span', () => {
+      expect(itemsSpan(movingRow(), true)).toBeCloseTo(layoutSpan, 6);
+    });
+
+    it('under a scaled row takes the scale off each rect before its translate', () => {
+      expect(itemsSpan(movingRow(2), true)).toBeCloseTo(layoutSpan, 6);
+    });
+
+    it('at rest reads the rects as they are', () => {
+      const element = movingRow();
+      // The rects alone mix the moments they were read at.
+      expect(Math.abs(itemsSpan(element) - layoutSpan)).toBeGreaterThan(1);
+    });
+  });
+
+  describe("a held row's travel after a resize", () => {
+    /** What a style declaration's property reads as. */
+    type StyleValue =
+      string | number | ((...args: never[]) => unknown) | undefined;
+
+    // Animations that keep running, so the paging keeps the row held.
+    beforeEach(() => {
+      HTMLElement.prototype.animate = function () {
+        const ready = new Promise(() => {});
+        return {
+          startTime: null,
+          currentTime: null,
+          playState: 'running',
+          ready,
+          cancel() {},
+        } as unknown as Animation;
+      };
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+      vi.restoreAllMocks();
+    });
+
+    it("takes each item's translate off its rect: rects read at different times give the layout's travel and stops", async () => {
+      // Seven items 94.67 px wide and 8 px apart in a 300 px row, 711 px
+      // wide. Once held, they show a translate of -30 px that moves 0.3 px a
+      // millisecond. Each rect read comes 1 ms after the one before, as
+      // WebKit reads each rect at its own time. A style read right after a
+      // rect sees that time.
+      const element = document.createElement('div');
+      let width = 300;
+      Object.defineProperty(element, 'clientWidth', {get: () => width});
+      Object.defineProperty(element, 'scrollWidth', {get: () => 711});
+      element.getBoundingClientRect = () => new DOMRect(0, 0, width, 100);
+      element.scrollTo = () => {};
+      let isHeld = false;
+      let clock = 0;
+      const translate = () => (isHeld ? -30 - 0.3 * clock : 0);
+      const items = new Set<Element>();
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const left = i * (94.67 + 8);
+        item.getBoundingClientRect = () => {
+          clock += 1;
+          return new DOMRect(left + translate(), 0, 94.67, 100);
+        };
+        items.add(item);
+        element.append(item);
+      }
+      const readStyle = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (target, pseudo) => {
+          const style = readStyle(target, pseudo);
+          if (!items.has(target)) {
+            return style;
+          }
+          return new Proxy(style, {
+            get(declaration, key): StyleValue {
+              if (key === 'translate') {
+                return `${translate()}px`;
+              }
+              const value = Reflect.get(
+                declaration,
+                key,
+                declaration,
+              ) as StyleValue;
+              return typeof value === 'function'
+                ? value.bind(declaration)
+                : value;
+            },
+          });
+        },
+      );
+      document.body.append(element);
+      const {result} = renderHook(() => useSnapPaging());
+      const reports: HeldRow[] = [];
+      const detach = attachSnapPaging(result.current, element, held => {
+        if (held != null) {
+          reports.push(held);
+        }
+      });
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      try {
+        act(() => {
+          moveSnapPaging(element, () => 300);
+        });
+        isHeld = true;
+        await act(async () => {
+          await frame();
+        });
+        expect(reports.at(-1)?.travel, 'the paging holds the row').toBe(411);
+        width = 270;
+        act(() => {
+          resizeObserved.forEach(callback =>
+            callback(
+              [{target: element} as unknown as ResizeObserverEntry],
+              {} as ResizeObserver,
+            ),
+          );
+        });
+        await act(async () => {
+          await frame();
+        });
+        expect(
+          reports.at(-1)?.travel,
+          "the held row's travel after a 30 px narrowing (px)",
+        ).toBe(441);
+        // The pager places the held row on its page's stop, the fourth item's
+        // start in the layout, once any settle there ends.
+        let last = Number.NaN;
+        for (let i = 0; i < 60 && reports.at(-1)?.offset !== last; i++) {
+          last = reports.at(-1)?.offset ?? Number.NaN;
+          await act(async () => {
+            await frame();
+          });
+        }
+        expect(
+          reports.at(-1)?.offset,
+          "the held row's page after the narrowing (px)",
+        ).toBeCloseTo(3 * (94.67 + 8), 6);
+      } finally {
+        detach();
+      }
     });
   });
 
