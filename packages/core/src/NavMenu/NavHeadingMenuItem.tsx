@@ -12,7 +12,7 @@
  * - /packages/core/src/NavMenu/index.ts
  */
 
-import React, {useCallback, useRef, type ReactNode} from 'react';
+import React, {useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {Text} from '../Text';
@@ -23,15 +23,22 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, mergeRefs} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
 import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
+import {keepDisabledRowUnfocused} from '../DropdownMenu/menuItemRoles';
 
 const styles = stylex.create({
   root: {
     boxSizing: 'border-box',
+    // A held pointer slides across the items; it selects no item text.
+    // Caller content beside the items stays selectable.
+    userSelect: 'none',
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
@@ -153,55 +160,25 @@ export function NavHeadingMenuItem({
   const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
 
   // The element type above changes when `isDisabled` flips, so React replaces
-  // the row. Carry focus over to the replacement when the outgoing node held it
-  // (spec:AST-085 FR4). The ref cleanup runs before the old node is removed, so
-  // `activeElement` is still readable there. Only a different node replacing a
-  // removed one takes focus, and only if focus has fallen to the page: React
-  // also detaches and re-attaches the same node (for example when an <Activity>
-  // boundary hides and reveals the row), and neither case may pull focus back
-  // after the person has moved elsewhere.
-  const focusedNodeRef = useRef<HTMLElement | null>(null);
-  const itemRef = useCallback(
-    (node: HTMLElement | null) => {
-      if (node === null) {
-        return;
-      }
-      const outgoing = focusedNodeRef.current;
-      focusedNodeRef.current = null;
-      // Focus only follows the swap when it has fallen to the page. If the
-      // person moved focus elsewhere in the meantime (for example while an
-      // <Activity> boundary kept the row hidden), leave it alone.
-      const focusFell =
-        document.activeElement === null ||
-        document.activeElement === document.body;
-      if (
-        outgoing !== null &&
-        outgoing !== node &&
-        !outgoing.isConnected &&
-        focusFell
-      ) {
-        node.focus();
-      }
-      const release = mergeRefs<HTMLElement>(ref)(node);
-      return () => {
-        focusedNodeRef.current = document.activeElement === node ? node : null;
-        release?.();
-      };
-    },
-    [ref],
-  );
+  // the row; focus follows to the replacement (spec:AST-085 FR4).
+  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
 
   return (
     <Element
       {...restProps}
+      onMouseDown={composeEventHandlers(
+        restProps.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={itemRef}
       role="menuitem"
-      // A disabled link row has no href, so without tabIndex it could not take
-      // focus at all. -1 keeps it focusable but out of the Tab order, as an
-      // enabled row is (spec:AST-085 FR1).
-      tabIndex={isDisabled && !href ? undefined : -1}
+      // Every row, disabled included, takes focus but is not a Tab stop.
+      tabIndex={-1}
       aria-disabled={isDisabled || undefined}
       href={isDisabled ? undefined : href}
+      // A menu row is never a draggable link: a mouse press that slides to
+      // another row would start a drag and cancel the press.
+      draggable={href != null ? false : undefined}
       onClick={handleClick}
       data-testid={testId}
       {...mergeProps(
@@ -224,7 +201,7 @@ export function NavHeadingMenuItem({
         ) : (
           label
         )}
-        {description && (
+        {isRenderable(description) && (
           <Text type="supporting" maxLines={1}>
             {description}
           </Text>

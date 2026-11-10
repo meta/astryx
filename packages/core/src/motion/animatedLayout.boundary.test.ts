@@ -4,11 +4,14 @@
  * @file animatedLayout.boundary.test.ts
  * @input The source of motion/animatedLayout.ts, the core entry points and
  *   every core source file that imports the module
- * @output The source boundary check `architecture:react-component-runtime`
- *   INV12 asks for: the module animates no layout property, its walk reaches
- *   elements only through parentElement / nextElementSibling (and
- *   firstElementChild under `display: contents`), the reporting functions are
- *   not public, and only the hook and the adopting components use it
+ * @output The source boundary check that
+ *   `architecture:react-component-runtime` INV12 asks for. The module
+ *   animates no layout property. Its walk reaches
+ *   elements only through parentElement and the element siblings on either
+ *   side, and firstElementChild under `display: contents`. It stops at the
+ *   band around the visible part. The reporting functions are not public.
+ *   Only the hook, the adopting components and the resize controller's edge
+ *   reveal use it
  * @position Testing; the real-browser half of INV12's verification is in
  *   __tests__/animatedLayout.interaction.browser.spec.ts
  */
@@ -64,7 +67,7 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     ]);
   });
 
-  it('walks only through parentElement and nextElementSibling, entering display: contents alone', () => {
+  it('walks only through parentElement and the element siblings on either side, entering display: contents alone, and stops at the band', () => {
     const body = code(moduleSource);
     for (const forbidden of [
       'TreeWalker',
@@ -73,20 +76,33 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
       'getElementsBy',
       '.children',
       'childNodes',
-      'lastElementChild',
-      'previousElementSibling',
     ]) {
       expect(body, forbidden).not.toContain(forbidden);
     }
-    // Every descent is a `display: contents` branch: the follower walk's and
-    // the exit's search for the next box.
-    const descents = body.match(/firstElementChild/g) ?? [];
-    expect(descents).toHaveLength(2);
+    // Every descent is a `display: contents` branch: the walk's (in its own
+    // direction, first child or last), and the searches for the box after an
+    // element (an exit, an end edge's reveal) and before it (a start edge's).
+    const descents = body.match(/(first|last)ElementChild/g) ?? [];
+    expect(descents).toHaveLength(4);
     const contentsDescents =
       body.match(
-        /display === 'contents'\)\s*\{\s*for\s*\(\s*let child = \w+\.firstElementChild/g,
+        /(?:display|part) === 'contents'\)\s*\{\s*for\s*\(\s*let child =[^;]*\.(first|last)ElementChild/g,
       ) ?? [];
-    expect(contentsDescents).toHaveLength(2);
+    expect(contentsDescents).toHaveLength(3);
+    // Each level's sibling walk ends at the first sibling past the band.
+    expect(body).toMatch(
+      /sibling != null && take\(sibling, true\);\s*sibling = sibling\.nextElementSibling/,
+    );
+    expect(body).toMatch(
+      /sibling != null && take\(sibling, false\);\s*sibling = sibling\.previousElementSibling/,
+    );
+    // One more descent: a block edge's reveal reads the changed element's own
+    // children, and stops at the first one past the band.
+    expect(body.match(/\.firstChild\b/g) ?? []).toHaveLength(1);
+    expect(body).toMatch(
+      /for \(let node = element\.firstChild; node != null; node = node\.nextSibling\)/,
+    );
+    expect(body).toMatch(/if \(box\.top > band\.end\) \{\s*break;/);
   });
 
   it('keeps the reporting functions out of every public entry point', () => {
@@ -105,6 +121,12 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
         'playLayoutChange',
         'applyLayoutChangeTransition',
         'createAnimatedLayout',
+        'holdLayoutSwap',
+        'playLayoutSwap',
+        'playLayoutFrames',
+        'holdLayoutEdge',
+        'playLayoutEdge',
+        'reportLayoutEdge',
       ]) {
         expect(
           source,
@@ -112,6 +134,33 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
         ).not.toMatch(new RegExp(`\\b${name}\\b`));
       }
     }
+  });
+
+  it("keeps the copy mechanism to the swap and the layer's exit copy", () => {
+    const users = sourceFiles(coreSrc)
+      .filter(path =>
+        /from '[./]+(motion\/)?transientCopy'/.test(readFileSync(path, 'utf8')),
+      )
+      .map(path => relative(coreSrc, path))
+      .sort();
+    expect(users).toEqual([
+      'Layer/layerExitCopy.ts',
+      'motion/animatedLayout.ts',
+    ]);
+  });
+
+  it("keeps the inert clone to the copy mechanism and the reorder's preview", () => {
+    const users = sourceFiles(coreSrc)
+      .filter(path =>
+        /from '[./]+(motion\/)?inertClone'/.test(readFileSync(path, 'utf8')),
+      )
+      .map(path => relative(coreSrc, path))
+      .sort();
+    expect(users).toEqual([
+      'List/listReorderEngine.tsx',
+      'motion/animatedLayout.ts',
+      'motion/transientCopy.ts',
+    ]);
   });
 
   it('is used only by the hook and the components that adopt it', () => {
@@ -125,7 +174,13 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
       .map(path => relative(coreSrc, path))
       .sort();
     expect(users).toEqual([
+      'AppShell/AppShell.tsx',
       'Collapsible/Collapsible.tsx',
+      'List/List.tsx',
+      'List/listLayoutUpdates.ts',
+      'Resizable/resizablePane.ts',
+      'SideNav/railMotion.ts',
+      'Table/plugins/rowExpansion/useTableRowExpansion.tsx',
       'TreeList/TreeList.tsx',
       'hooks/useAnimatedLayout.ts',
     ]);

@@ -8,7 +8,7 @@
  * @position Chromium evidence for component:TreeList AR1 (component:TreeList's row-naming implementation gap, closed)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   createChromiumHarness,
   holdMotionStill,

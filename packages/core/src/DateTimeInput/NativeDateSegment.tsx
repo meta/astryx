@@ -33,7 +33,7 @@ import {hasEditableDateSegments} from '../DateInput/nativeDateSegments';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
@@ -47,6 +47,13 @@ import {
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {InputStatusType} from '../Field';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/NativeDateSegment.generated';
+
+registerEnglishFallback(english);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -100,7 +107,7 @@ export function NativeDateSegment({
     onBlur: onBlurProp,
     ...inputProps
   } = controlProps ?? {};
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);

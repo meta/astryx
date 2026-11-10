@@ -1,8 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, expectTypeOf, vi} from 'vitest';
 import type {IconRegistry} from '../Icon/globalIconRegistry';
-import type {DefinedTheme} from './defineTheme';
+import type {
+  DefinedTheme,
+  DefineThemeInput,
+  ResolvedDefinedTheme,
+} from './defineTheme';
 import {
   defineTheme,
   generateThemeCSS,
@@ -1666,6 +1670,180 @@ describe('defineTheme extends', () => {
     const base = defineTheme({name: 'base', icons: baseIcons});
     const child = defineTheme({name: 'child', extends: base});
     expect(child.icons?.close).toBe('X');
+  });
+
+  // spec:AST-087 FR2, FR3, FR18 — one theme-level list; a child that sets it
+  // replaces the inherited list, one that omits it inherits; entry functions
+  // receive `variant` typed as the theme's listed names.
+  describe('iconVariants', () => {
+    it('keeps the listed names on the defined theme', () => {
+      const list = ['outline', 'filled'];
+      const theme = defineTheme({name: 'variants', iconVariants: list});
+
+      expect(theme.iconVariants).toEqual(['outline', 'filled']);
+      list.push('bold');
+      expect(theme.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('has no list when no theme in the lineage sets one', () => {
+      const base = defineTheme({name: 'no-variants'});
+      const child = defineTheme({name: 'no-variants-child', extends: base});
+
+      expect(base.iconVariants).toBeUndefined();
+      expect('iconVariants' in base).toBe(false);
+      expect(child.iconVariants).toBeUndefined();
+    });
+
+    it('inherits the base list when a child omits it', () => {
+      const base = defineTheme({
+        name: 'variants-base',
+        iconVariants: ['outline', 'filled'],
+      });
+      const child = defineTheme({name: 'variants-inherit', extends: base});
+
+      expect(child.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('replaces the base list, without merging, when a child sets it', () => {
+      const base = defineTheme({
+        name: 'variants-base',
+        iconVariants: ['outline', 'filled'],
+      });
+      const child = defineTheme({
+        name: 'variants-replace',
+        extends: base,
+        iconVariants: ['bold'],
+      });
+      const emptied = defineTheme({
+        name: 'variants-empty',
+        extends: base,
+        iconVariants: [],
+      });
+
+      expect(child.iconVariants).toEqual(['bold']);
+      expect(emptied.iconVariants).toEqual([]);
+      expect(base.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('types entry functions by the listed names', () => {
+      const base = defineTheme({
+        name: 'variants-typed',
+        iconVariants: ['outline', 'filled'],
+        icons: {
+          info: ({size, variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<
+              'outline' | 'filled' | undefined
+            >();
+            return `${size}-${variant ?? 'normal'}`;
+          },
+          close: ({variant}) =>
+            // @ts-expect-error — 'bold' is not a name this theme lists.
+            variant === 'bold' ? 'bold-close' : 'close',
+        },
+      });
+      expectTypeOf(base).toEqualTypeOf<
+        ResolvedDefinedTheme<'outline' | 'filled'>
+      >();
+
+      defineTheme({
+        name: 'variants-typed-inherit',
+        extends: base,
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<
+              'outline' | 'filled' | undefined
+            >();
+            return null;
+          },
+        },
+      });
+
+      defineTheme({
+        name: 'variants-typed-replace',
+        extends: base,
+        iconVariants: ['bold'],
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<'bold' | undefined>();
+            return null;
+          },
+          close: ({variant}) =>
+            // @ts-expect-error — the child replaced the list; 'filled' is gone.
+            variant === 'filled' ? 'filled-close' : 'close',
+        },
+      });
+
+      defineTheme({
+        name: 'variants-typed-none',
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<undefined>();
+            return null;
+          },
+        },
+      });
+
+      const plainBase: DefinedTheme = base;
+      defineTheme({
+        name: 'variants-typed-plain-base',
+        extends: plainBase,
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<string | undefined>();
+            return null;
+          },
+        },
+      });
+
+      expectTypeOf<DefinedTheme['iconVariants']>().toEqualTypeOf<
+        ReadonlyArray<string> | undefined
+      >();
+    });
+
+    it('keeps resolved themes with and without lists assignable to each other', () => {
+      const shared: DefineThemeInput = {name: 'variants-shared'};
+      const unlisted = defineTheme({name: 'variants-active'});
+      // Each annotation is the check: these assignments compiled before
+      // iconVariants existed and must keep compiling.
+      const fromShared: typeof unlisted = defineTheme(shared);
+      const fromListed: typeof unlisted = defineTheme({
+        name: 'variants-listed-active',
+        iconVariants: ['outline'],
+      });
+      const listed = defineTheme({
+        name: 'variants-listed',
+        iconVariants: ['outline', 'filled'],
+      });
+      const fromUnlisted: typeof listed = defineTheme({
+        name: 'variants-unlisted',
+      });
+      const resolved: ResolvedDefinedTheme = fromUnlisted;
+
+      expect(
+        [unlisted, fromShared, fromListed, listed, resolved].map(t => t.name),
+      ).toEqual([
+        'variants-active',
+        'variants-shared',
+        'variants-listed-active',
+        'variants-listed',
+        'variants-unlisted',
+      ]);
+    });
+
+    it('passes no variant to entry functions', () => {
+      const info = vi.fn(
+        ({size, variant}: {size: string; variant?: string}) =>
+          `${size}-${variant ?? 'normal'}`,
+      );
+      const theme = defineTheme({
+        name: 'variants-no-request',
+        iconVariants: ['outline', 'filled'],
+        icons: {info},
+      });
+
+      expect(theme.icons?.info).toBe('md-normal');
+      expect(info).toHaveBeenCalledWith({size: 'md'});
+    });
   });
 
   it('merges function icon entries by key and reads them at md', () => {

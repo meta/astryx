@@ -18,6 +18,8 @@ import {useTranslator, type TranslatorFn} from './useTranslator';
 import {InternationalizationProvider} from './InternationalizationProvider';
 import {InternationalizationContext} from './InternationalizationContext';
 import {__resetForTests} from './resolve';
+import {InternationalizationContext as PublicInternationalizationContext} from './publicContext';
+import enCatalog from './generated-locales/en.generated';
 import type {
   MessagesByLocale,
   Overrides,
@@ -51,6 +53,21 @@ describe('useTranslator — resolution', () => {
   it('resolves a shipped key to English when no provider is mounted', () => {
     const {result} = renderHook(() => useTranslator());
     expect(result.current('@astryx.pagination.next')).toBe('Go to next page');
+  });
+
+  it('resolves every shipped key to its English, whichever modules are loaded', () => {
+    // Application code may translate any Astryx key through the public hook.
+    const {result} = renderHook(() => useTranslator());
+    for (const [key, message] of Object.entries(enCatalog)) {
+      expect(result.current(key)).toBe(message);
+    }
+  });
+
+  it('resolves every shipped key through the public context export', () => {
+    const {result} = renderHook(() => use(PublicInternationalizationContext));
+    for (const [key, message] of Object.entries(enCatalog)) {
+      expect(result.current.translate(key, undefined)).toBe(message);
+    }
   });
 
   it('interpolates values into the message', () => {

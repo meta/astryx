@@ -29,15 +29,19 @@
 
 import {SETTLE_THRESHOLD, type Animator, type MotionCurve} from './animator';
 import {solveDecay} from './decay';
+import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {scroll} from './uikit/scroll';
+import {registerScrollTable, scroll} from './uikit/scroll';
 
 export interface CoastOptions {
   /** Per-millisecond velocity factor; UIScrollView's normal rate by default. */
   rate?: number;
   /** Edges: a coast crossing one hands its velocity to `bounce`. */
   bounds?: Partial<Record<'x' | 'y', {min: number; max: number}>>;
-  /** The edge spring; `scroll.bounce` by default. */
+  /**
+   * The edge spring; `scroll.bounce` by default, which plays its table value
+   * (it is not a motion role: `spec:AST-094` FR4 lists no scroll spring).
+   */
   bounce?: SpringDescription;
   /**
    * The release time on the document timeline (ms, `performance.now()`
@@ -85,7 +89,10 @@ export function coast(
     }
   }
   const rate = options.rate ?? scroll.decelerationRate.normal;
-  const bounce = toSpring(options.bounce ?? scroll.bounce);
+  registerScrollTable();
+  const bounce = toSpring(
+    resolveMotion(animator.element, options.bounce ?? scroll.bounce),
+  );
   const curves: Partial<Record<'x' | 'y', MotionCurve>> = {};
   for (const [key, v0] of Object.entries(velocities) as ['x' | 'y', number][]) {
     const from = animator.get(key, options.at);

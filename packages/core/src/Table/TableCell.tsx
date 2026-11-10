@@ -38,6 +38,7 @@ import {
   mergeXStyle,
 } from './useTableCellStyles';
 import {mergeProps} from '../utils';
+import {glidingDividerStyles} from './glidingDivider';
 import {themeProps} from '../utils/themeProps';
 
 /** Props for TableCell — thin `<td>` wrapper */
@@ -158,7 +159,12 @@ const dividerRowStyles = stylex.create({
       // Scoped to tableRowMarker so only the parent <tr> is checked —
       // without the scope, <tbody> (also a :last-child) would match
       // and suppress borders on every row.
-      [stylex.when.ancestor(':last-child', tableRowMarker)]: '0',
+      [stylex.when.ancestor(
+        ':last-child:not([data-table-final-row="false"])',
+        tableRowMarker,
+      )]: '0',
+      [stylex.when.ancestor('[data-table-final-row="true"]', tableRowMarker)]:
+        '0',
     },
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
@@ -234,6 +240,8 @@ export function TableCell({
           dividerColumnStyles.cell,
         ),
         ...(hasContextMenu ? [contextMenuCellStyles.cell] : []),
+        // While a glide moves the row, its divider moves with it.
+        glidingDividerStyles.cell,
       ]
     : [];
 

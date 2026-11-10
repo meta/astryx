@@ -16,12 +16,16 @@
  * - /packages/core/src/Layout/LayoutFooter.tsx
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export interface LayoutDividerContextValue {
   defaultHasDividers: boolean;
 }
 
 export const LayoutDividerContext =
-  createContext<LayoutDividerContextValue | null>(null);
+  createLayerScopedContext<LayoutDividerContextValue | null>(
+    'LayoutDividerContext',
+    1,
+    null,
+  );
 LayoutDividerContext.displayName = 'LayoutDividerContext';

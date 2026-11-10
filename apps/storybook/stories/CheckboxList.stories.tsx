@@ -3,9 +3,11 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {List} from '@astryxdesign/core/List';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
+import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {Link} from '@astryxdesign/core/Link';
 import CheckboxListSelectAllPattern from '../../../packages/cli/assets/templates/blocks/components/CheckboxList/CheckboxListSelectAllPattern';
 
@@ -199,6 +201,62 @@ export const ReadOnly: Story = {
   ),
 };
 
+/**
+ * A checkbox placed in a row's content is its own control. Under a finger it
+ * paints its own press, and the row it sits in does not.
+ */
+export const CheckboxInRowContent: Story = {
+  name: "Checkbox in a row's content",
+  render: () => {
+    const [value, setValue] = useState<string[]>([]);
+    const [digest, setDigest] = useState(false);
+    return (
+      <CheckboxList label="Notifications" value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Email"
+          value="email"
+          endContent={
+            <CheckboxInput
+              label="Daily digest"
+              value={digest}
+              onChange={setDigest}
+            />
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+};
+
+// A CheckboxList placed in a row's content keeps its own rows' press: holding
+// the outer row leaves the inner list's boxes at rest.
+export const CheckboxListInRowContent: Story = {
+  name: "Checkbox list in a row's content",
+  render: () => {
+    const [value, setValue] = useState<string[]>([]);
+    const [channels, setChannels] = useState<string[]>([]);
+    return (
+      <CheckboxList label="Notifications" value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Email"
+          value="email"
+          endContent={
+            <CheckboxList
+              label="Email channels"
+              value={channels}
+              onChange={setChannels}>
+              <CheckboxListItem label="Work" value="work" />
+              <CheckboxListItem label="Personal" value="personal" />
+            </CheckboxList>
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+};
+
 export const SelectAllWithIndeterminate: Story = {
   render: () => {
     const allItems = ['email', 'sms', 'push'];
@@ -328,6 +386,53 @@ export const DisabledItem: Story = {
   },
   args: {
     label: 'Notification preferences',
+  },
+};
+
+export const Optional: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+        <CheckboxListItem label="Push notification" value="push" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification preferences',
+    description: 'Leave all unchecked to receive no notifications.',
+    isOptional: true,
+  },
+};
+
+export const Required: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const [submitted, setSubmitted] = useState(false);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <form
+        onSubmit={event => {
+          event.preventDefault();
+          setSubmitted(true);
+        }}>
+        <CheckboxList {...restArgs} value={value} onChange={setValue}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Engineering" value="eng" />
+          <CheckboxListItem label="Research" value="research" />
+        </CheckboxList>
+        <button type="submit">Submit</button>
+        {submitted ? <p>Submitted</p> : null}
+      </form>
+    );
+  },
+  args: {
+    label: 'Topics',
+    description: 'Choose at least one.',
+    isRequired: true,
   },
 };
 
@@ -504,6 +609,28 @@ export const InsideCardWithDividers: Story = {
             <CheckboxListItem value="guest" label="Guest" />
           </CheckboxList>
         </Card>
+      </div>
+    );
+  },
+};
+
+// A list inside a ClickableCard. Nested controls work independently, so a
+// finger on the card presses the card, and a finger on a row presses that row.
+export const InsideClickableCard: Story = {
+  name: 'Inside a clickable card',
+  render() {
+    const [selected, setSelected] = useState<string[]>(['email']);
+    return (
+      <div style={{maxWidth: 400}}>
+        <ClickableCard label="Notification settings" onClick={() => {}}>
+          <CheckboxList
+            label="Notifications"
+            value={selected}
+            onChange={setSelected}>
+            <CheckboxListItem value="email" label="Email" />
+            <CheckboxListItem value="sms" label="SMS" />
+          </CheckboxList>
+        </ClickableCard>
       </div>
     );
   },

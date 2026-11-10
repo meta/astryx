@@ -4,8 +4,9 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
- *   (useTranslator)
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
+ *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
  *
@@ -19,6 +20,7 @@
  */
 
 import {
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -38,10 +40,11 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
-import {useTranslator} from '../../../i18n';
 import {rtlStyles} from '../../../utils';
 import {
   hasInteractiveAncestor,
@@ -53,7 +56,32 @@ import type {
   BodyRowRenderProps,
   BodyCellRenderProps,
   HeaderCellRenderProps,
+  ScrollWrapperRenderProps,
 } from '../../types';
+import {LayoutChangeSnapshot} from '../../../motion/LayoutChangeSnapshot';
+import {
+  applyLayoutChangeTransition,
+  glideOf,
+  playLayoutChange,
+  reportLayoutChange,
+  type AnimatedLayout,
+  type LayoutChange,
+} from '../../../motion/animatedLayout';
+import {
+  dividerOffset,
+  GLIDING_ATTRIBUTE,
+  glidingDividerStyles,
+  markGlidingRows,
+  rowEdge,
+  type BottomEdge,
+} from '../../glidingDivider';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/rowExpansion/useTableRowExpansion.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config
@@ -78,6 +106,17 @@ export interface UseTableRowExpansionConfig<T extends Record<string, unknown>> {
    * it is expanded. Receives the row's item.
    */
   renderExpanded: (item: T) => ReactNode;
+  /**
+   * Derive a human-readable row identity for the expansion control's accessible
+   * name. The plugin combines it with localized expand/collapse wording. Blank
+   * labels fall back to the generic row label.
+   *
+   * @example
+   * ```
+   * getRowLabel: item => item.name
+   * ```
+   */
+  getRowLabel?: (item: T) => string;
   /**
    * Control which rows are expandable. Non-expandable rows show no chevron, no
    * context-menu action, and never render a panel. @default all rows expandable
@@ -115,6 +154,13 @@ export interface UseTableRowExpansionConfig<T extends Record<string, unknown>> {
    * @default false (only the chevron toggles expansion).
    */
   hasRowClickExpansion?: boolean;
+  /**
+   * A handle from `useAnimatedLayout`. With it, opening or closing a row's
+   * panel glides the rows after it to their new places instead of jumping,
+   * and an opening panel plays its entrance on the same motion. Without it,
+   * rows jump, as before.
+   */
+  animatedLayout?: AnimatedLayout;
 }
 
 // =============================================================================
@@ -174,6 +220,21 @@ const expansionStyles = stylex.create({
       color: colorVars['--color-icon-primary'],
     },
   },
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chevron: {
     transitionProperty: 'transform',
     transitionDuration: durationVars['--duration-fast'],
@@ -194,7 +255,11 @@ const expansionStyles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
     },
   },
-  expandedRow: {
+  // The wash goes on the panel's cell, not on its row. A row that paints its
+  // own box plays in under a clip that moves with its edge. On iOS that clip
+  // can trail the rows that glide below it. The cell slides in with the
+  // panel's content.
+  mutedPanel: {
     backgroundColor: colorVars['--color-background-muted'],
   },
   expandedCell: {
@@ -222,12 +287,18 @@ const expansionStyles = stylex.create({
  */
 const dividerStyles = stylex.create({
   expandedRowCell: {
+    '--_table-row-divider-width': '0px',
     borderBottomWidth: 0,
   },
   // The row's divider, carried down: its row's themed or app-set border
   // reaches the panel through `--_table-panel-divider-*` on the panel's cell
   // (set after each commit, see ExpansionPanelCell), the tokens otherwise.
   panelCell: {
+    // The width this divider draws, for its stand-in during a glide.
+    '--_table-row-divider-width': {
+      default: `var(--_table-panel-divider-width, ${borderVars['--border-width']})`,
+      [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
+    },
     borderBottomWidth: {
       default: `var(--_table-panel-divider-width, ${borderVars['--border-width']})`,
       // Same rule TableCell uses: no trailing line under the last row of the
@@ -308,17 +379,27 @@ const chevronOffsetStyles = stylex.create({
 // =============================================================================
 
 function ExpansionChevron({
+  rowLabel,
   isExpanded,
   onToggle,
 }: {
+  rowLabel?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const ariaLabel = rowLabel
+    ? isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRowNamed', {label: rowLabel})
+      : t('@astryx.tableRowExpansion.expandRowNamed', {label: rowLabel})
+    : isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRow')
+      : t('@astryx.tableRowExpansion.expandRow');
   const ctx = useTableContext();
   return (
     <button
       type="button"
+      data-expansion-toggle=""
       {...stylex.props(
         expansionStyles.chevronButton,
         chevronOffsetStyles[ctx?.density ?? 'balanced'],
@@ -327,22 +408,25 @@ function ExpansionChevron({
         e.stopPropagation();
         onToggle();
       }}
-      aria-label={
-        isExpanded
-          ? t('@astryx.tableRowExpansion.collapseRow')
-          : t('@astryx.tableRowExpansion.expandRow')
-      }
+      aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
-        xstyle={[
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
           expansionStyles.chevron,
           isExpanded
             ? expansionStyles.chevronExpanded
             : expansionStyles.chevronCollapsed,
-        ]}
-      />
+        )}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+          />
+        </span>
+      </span>
     </button>
   );
 }
@@ -401,6 +485,8 @@ function PanelDividerModeWatch({
   const {mode} = useTheme();
   const themeName = useThemeName();
   const lastRef = useRef({mode, themeName});
+  // Syncs the panel dividers with the computed theme CSS after a color mode or
+  // theme change.
   useLayoutEffect(() => {
     const last = lastRef.current;
     if (last.mode === mode && last.themeName === themeName) {
@@ -424,10 +510,12 @@ function PanelDividerModeWatch({
 function ExpansionPanelCell({
   colSpan,
   cellsRef,
+  isMuted,
   children,
 }: {
   colSpan: number;
   cellsRef: RefObject<Set<HTMLTableCellElement>>;
+  isMuted: boolean;
   children: ReactNode;
 }) {
   const ctx = useTableContext();
@@ -438,9 +526,27 @@ function ExpansionPanelCell({
   // Read after each commit, and on a colour-mode change by the table's one
   // PanelDividerModeWatch.
   useLayoutEffect(() => {
-    if (hasRowDividers && cellRef.current != null) {
-      carryPanelDivider(cellRef.current);
+    const cell = cellRef.current;
+    const row = cell?.parentElement?.previousElementSibling;
+    if (cell == null || row == null || !hasRowDividers) {
+      return;
     }
+    if (!row.hasAttribute(GLIDING_ATTRIBUTE)) {
+      carryPanelDivider(cell);
+      return;
+    }
+    // A row a glide is moving has transparent cells until it ends: the
+    // panel reads its row once the glide has let it go.
+    let frame = 0;
+    const carryWhenStill = () => {
+      if (row.hasAttribute(GLIDING_ATTRIBUTE)) {
+        frame = requestAnimationFrame(carryWhenStill);
+        return;
+      }
+      carryPanelDivider(cell);
+    };
+    frame = requestAnimationFrame(carryWhenStill);
+    return () => cancelAnimationFrame(frame);
   });
   useLayoutEffect(() => {
     const cell = cellRef.current;
@@ -459,12 +565,46 @@ function ExpansionPanelCell({
       colSpan={colSpan}
       {...stylex.props(
         expansionStyles.expandedCell,
+        isMuted && expansionStyles.mutedPanel,
         panelIndentStyles[ctx?.density ?? 'balanced'],
         hasRowDividers && dividerStyles.panelCell,
+        glidingDividerStyles.cell,
+        hasRowDividers && glidingDividerStyles.panelCell,
       )}>
       {children}
     </td>
   );
+}
+
+/**
+ * Measures each expansion change for the glide, except in a table with
+ * column lines (`dividers` "columns" or "grid"): they are painted at the
+ * cells' static places too, and only row dividers have a moving stand-in, so
+ * such a table changes at once, panel, rows and chevron, as without a handle
+ * (component:Table FR15).
+ */
+function ExpansionSnapshot({
+  value,
+  onBeforeChange,
+  onColumnLines,
+}: {
+  value: Set<string>;
+  onBeforeChange: (previous: Set<string>) => void;
+  /** The chevrons drop a spring an earlier glide set on them. */
+  onColumnLines: () => void;
+}) {
+  const ctx = useTableContext();
+  const hasColumnLines =
+    ctx?.dividers === 'grid' || ctx?.dividers === 'columns';
+  useLayoutEffect(() => {
+    if (hasColumnLines) {
+      onColumnLines();
+    }
+  }, [hasColumnLines, onColumnLines]);
+  if (hasColumnLines) {
+    return null;
+  }
+  return <LayoutChangeSnapshot value={value} onBeforeChange={onBeforeChange} />;
 }
 
 // =============================================================================
@@ -493,6 +633,7 @@ function ExpansionPanelCell({
  *       return next;
  *     }),
  *   getRowKey: item => item.id,
+ *   getRowLabel: item => item.name,
  *   renderExpanded: item => <OrderDetails order={item} />,
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{expansion}} />;
@@ -506,18 +647,234 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     onToggle,
     getRowKey,
     renderExpanded,
+    getRowLabel,
     getIsItemExpandable,
     hasRowClickExpansion,
     panelVariant = 'transparent',
+    animatedLayout,
   } = config;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   // Final rendered column count, captured in transformColumns (pipeline step
   // 1) and read in transformBodyRow for the detail panel's colSpan.
   const columnCountRef = useRef(1);
   // The open panels' cells, for the table's one colour-mode watch.
   const panelCellsRef = useRef(new Set<HTMLTableCellElement>());
+
+  // With an `animatedLayout` handle, a panel opening or closing glides the
+  // rows after it (`spec:AST-105`, `architecture:react-component-runtime`
+  // INV12). LayoutChangeSnapshot measures each changed row in the commit,
+  // before the DOM changes; the layout effect below runs the glide after it.
+  const scrollWrapperRef = useRef<HTMLDivElement | null>(null);
+  // The scroll wrapper's merged ref, kept while the inner ref is the same.
+  const mergedScrollWrapperRef = useRef<{
+    inner: ScrollWrapperRenderProps['htmlProps']['ref'] | null;
+    merged: (node: HTMLDivElement | null) => void;
+  } | null>(null);
+  const pendingLayoutRef = useRef<
+    {change: LayoutChange; key: string; isExpanding: boolean}[]
+  >([]);
+  // The height the closing panels gave up (read with the measurement), and
+  // the height the scroll wrapper holds while rows glide up into it (see the
+  // layout effect).
+  const closedHeightRef = useRef(0);
+  const heldHeightRef = useRef(0);
+  const holdBaseRef = useRef<{padding: number; margin: number} | null>(null);
+  // This table's own body rows only: a table nested in a panel can reuse the
+  // same row keys. The first table in the wrapper is this one.
+  const rowFor = useCallback(
+    (key: string) =>
+      scrollWrapperRef.current
+        ?.querySelector('table')
+        ?.querySelector<HTMLElement>(
+          `:scope > tbody > tr[data-expansion-key="${CSS.escape(key)}"]`,
+        ) ?? null,
+    [],
+  );
+  const measureChanges = useCallback(
+    (previous: Set<string>) => {
+      if (animatedLayout == null) {
+        return;
+      }
+      const changed = [
+        ...[...previous].filter(key => !expandedKeys.has(key)),
+        ...[...expandedKeys].filter(key => !previous.has(key)),
+      ];
+      for (const key of changed) {
+        const row = rowFor(key);
+        if (row == null) {
+          continue;
+        }
+        const change = reportLayoutChange(animatedLayout, () => row);
+        change.measureBefore();
+        // A closing panel's height, read in the same layout the measurement
+        // just read.
+        const panel = row.nextElementSibling;
+        if (
+          !expandedKeys.has(key) &&
+          panel?.hasAttribute('data-expansion-panel') === true
+        ) {
+          closedHeightRef.current += panel.getBoundingClientRect().height;
+          // The wrapper's own bottom padding and margin (a container's
+          // bleed), which the hold adds to rather than replaces.
+          const wrapper = scrollWrapperRef.current;
+          if (wrapper != null && holdBaseRef.current == null) {
+            const style = getComputedStyle(wrapper);
+            holdBaseRef.current = {
+              padding: parseFloat(style.paddingBlockEnd) || 0,
+              margin: parseFloat(style.marginBlockEnd) || 0,
+            };
+          }
+        }
+        // The chevron turns on the glide's motion (component:Table FR15);
+        // written after the measurement so the read finds the layout clean.
+        applyLayoutChangeTransition(
+          animatedLayout,
+          row.querySelector<HTMLElement>('[data-expansion-toggle] > *'),
+        );
+        pendingLayoutRef.current.push({
+          change,
+          key,
+          isExpanding: expandedKeys.has(key),
+        });
+      }
+    },
+    [animatedLayout, expandedKeys, rowFor],
+  );
+  // The chevrons back on the theme's own turn: a spring a handle set stays
+  // only while the glide runs (`spec:AST-105` FR2), so it goes without a
+  // handle and in a table with column lines.
+  const resetChevrons = useCallback(() => {
+    const table = scrollWrapperRef.current?.querySelector('table');
+    for (const glyph of table?.querySelectorAll<HTMLElement>(
+      '[data-expansion-toggle] > *',
+    ) ?? []) {
+      // This table's chevrons, not a nested table's.
+      if (glyph.closest('table') === table) {
+        applyLayoutChangeTransition(null, glyph);
+      }
+    }
+  }, []);
+  // Syncs the chevron transitions with the `animatedLayout` handle. Without a
+  // handle, the chevrons use the theme's turn.
+  useLayoutEffect(() => {
+    if (animatedLayout == null) {
+      resetChevrons();
+    }
+  }, [animatedLayout, resetChevrons]);
+
+  useLayoutEffect(() => {
+    const pendings = pendingLayoutRef.current;
+    pendingLayoutRef.current = [];
+    // The rows that changed, each with the panel it opened (if that panel
+    // plays in) and the borders of the rows the glide may move.
+    const moved: {
+      row: HTMLElement;
+      panel: HTMLElement | null;
+      entrance: Animation | null;
+      panelOffset: number | null;
+      edges: Map<Element, BottomEdge>;
+    }[] = [];
+    for (const pending of pendings) {
+      const row = rowFor(pending.key);
+      if (row == null) {
+        pending.change.animate();
+        continue;
+      }
+      const next = row.nextElementSibling;
+      // Filled in by beforeMove, during the glide's own microtask.
+      const record = {
+        row,
+        panel:
+          pending.isExpanding &&
+          next instanceof HTMLElement &&
+          next.hasAttribute('data-expansion-panel')
+            ? next
+            : null,
+        entrance: null as Animation | null,
+        panelOffset: null as number | null,
+        edges: new Map<Element, BottomEdge>(),
+      };
+      // Read where the glide reads the layout, before anything moves: the
+      // rows' borders, then the panel's entrance (it reads too).
+      const isMeasured = pending.change.animate(candidates => {
+        for (const candidate of candidates) {
+          if (
+            candidate instanceof HTMLTableRowElement &&
+            candidate.parentElement === row.parentElement
+          ) {
+            const edge = rowEdge(candidate);
+            if (edge != null) {
+              record.edges.set(candidate, edge);
+            }
+          }
+        }
+        if (record.panel != null) {
+          const edge = rowEdge(record.panel);
+          if (edge != null) {
+            record.edges.set(record.panel, edge);
+            // Its entrance moves its cell: read where its line hangs first.
+            record.panelOffset = dividerOffset(record.panel, edge);
+          }
+          record.entrance = playLayoutChange(animatedLayout, record.panel);
+        }
+      });
+      if (isMeasured) {
+        moved.push(record);
+      }
+    }
+    // The table's scroll wrapper clips what it holds, and a panel that closed
+    // shrank it at once: the rows gliding up into its place would be cut off
+    // at its new bottom until they arrive. For the glide, it keeps the height
+    // the panels gave up as bottom padding, given back with an equal negative
+    // margin so the content after the table moves exactly as it would have;
+    // both go together when the rows stop, which changes nothing outside.
+    const wrapper = scrollWrapperRef.current;
+    const held = moved.length > 0 ? closedHeightRef.current : 0;
+    closedHeightRef.current = 0;
+    if (heldHeightRef.current === 0 && held <= 0.5) {
+      holdBaseRef.current = null;
+    }
+    if (moved.length === 0) {
+      return;
+    }
+    // The glide starts in the microtask the module queued in animate(); this
+    // one runs after it, before the frame paints, and only writes.
+    queueMicrotask(() => {
+      const stopped = Promise.all(
+        moved.map(async ({row, panel, entrance, panelOffset, edges}) =>
+          markGlidingRows(
+            row,
+            edges,
+            panel != null && entrance != null
+              ? {row: panel, animation: entrance, offset: panelOffset}
+              : null,
+            glideOf,
+          ),
+        ),
+      );
+      if (held <= 0.5 || wrapper == null) {
+        return;
+      }
+      const hold = (height: number) => {
+        const base = holdBaseRef.current ?? {padding: 0, margin: 0};
+        wrapper.style.paddingBlockEnd =
+          height > 0 ? `${base.padding + height}px` : '';
+        wrapper.style.marginBlockEnd =
+          height > 0 ? `${base.margin - height}px` : '';
+        if (height <= 0) {
+          holdBaseRef.current = null;
+        }
+      };
+      heldHeightRef.current += held;
+      hold(heldHeightRef.current);
+      void stopped.then(() => {
+        heldHeightRef.current = Math.max(0, heldHeightRef.current - held);
+        hold(heldHeightRef.current);
+      });
+    });
+  }, [expandedKeys, animatedLayout, rowFor]);
 
   const expansionColumn = useMemo(
     (): TableColumn<T> => ({
@@ -539,19 +896,22 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           return null;
         }
         const key = getRowKey(item);
+        const isExpanded = expandedKeys.has(key);
         return (
           <ExpansionChevron
-            isExpanded={expandedKeys.has(key)}
+            rowLabel={getRowLabel?.(item)?.trim() || undefined}
+            isExpanded={isExpanded}
             onToggle={() => onToggle(key)}
           />
         );
       },
     }),
-    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, t],
+    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, getRowLabel, t],
   );
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'detail',
       // One colour-mode watch per table for the open panels' dividers.
       transformTableContext(children: ReactNode): ReactNode {
         return (
@@ -628,6 +988,48 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
         };
       },
 
+      transformScrollWrapper(
+        props: ScrollWrapperRenderProps,
+      ): ScrollWrapperRenderProps {
+        // One merged ref per inner ref, so React does not detach and
+        // re-attach the wrapper's refs (a later plugin's listeners
+        // included) on every render.
+        const existingRef = props.htmlProps.ref ?? null;
+        const cached = mergedScrollWrapperRef.current;
+        const mergedRef =
+          cached != null && cached.inner === existingRef
+            ? cached.merged
+            : (node: HTMLDivElement | null) => {
+                scrollWrapperRef.current = node;
+                if (typeof existingRef === 'function') {
+                  existingRef(node);
+                } else if (existingRef != null) {
+                  existingRef.current = node;
+                }
+              };
+        mergedScrollWrapperRef.current = {
+          inner: existingRef,
+          merged: mergedRef,
+        };
+        return {
+          ...props,
+          htmlProps: {...props.htmlProps, ref: mergedRef},
+          beforeTable:
+            animatedLayout == null ? (
+              props.beforeTable
+            ) : (
+              <>
+                {props.beforeTable}
+                <ExpansionSnapshot
+                  value={expandedKeys}
+                  onBeforeChange={measureChanges}
+                  onColumnLines={resetChevrons}
+                />
+              </>
+            ),
+        };
+      },
+
       transformBodyRow(props: BodyRowRenderProps, item: T): BodyRowRenderProps {
         const expandable = getIsItemExpandable
           ? getIsItemExpandable(item)
@@ -636,15 +1038,23 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           return props;
         }
         const key = getRowKey(item);
+        // The row a glide measures from, found again after the commit.
+        const keyAttribute: Record<string, string> = {
+          'data-expansion-key': key,
+        };
+        const keyed = {
+          ...props,
+          htmlProps: {...props.htmlProps, ...keyAttribute},
+        };
 
         // Whole-row-click expansion (opt-in), applied before the collapsed
         // early-return: a collapsed row is precisely the one a click has to
         // reach, since opening it is the whole point.
         const withClick = hasRowClickExpansion
           ? {
-              ...props,
+              ...keyed,
               htmlProps: {
-                ...props.htmlProps,
+                ...keyed.htmlProps,
                 onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
                   // Don't hijack clicks on interactive cell content (the
                   // chevron already stops propagation, but a composed
@@ -678,13 +1088,13 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
                   if (hasTextSelection(row)) {
                     return;
                   }
-                  props.htmlProps.onClick?.(event);
+                  keyed.htmlProps.onClick?.(event);
                   onToggle(key);
                 },
               },
-              xstyle: [...props.xstyle, expansionStyles.clickableRow],
+              xstyle: [...keyed.xstyle, expansionStyles.clickableRow],
             }
-          : props;
+          : keyed;
 
         if (!expandedKeys.has(key)) {
           return withClick;
@@ -702,11 +1112,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               // Carries the marker so the panel cell's divider can ask whether
               // this row is the table's last, the same way TableCell does.
               tableRowMarker,
-              panelVariant === 'muted' && expansionStyles.expandedRow,
+              glidingDividerStyles.row,
             )}>
             <ExpansionPanelCell
               colSpan={columnCountRef.current}
-              cellsRef={panelCellsRef}>
+              cellsRef={panelCellsRef}
+              isMuted={panelVariant === 'muted'}>
               {renderExpanded(item)}
             </ExpansionPanelCell>
           </tr>
@@ -735,6 +1146,9 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       onToggle,
       t,
       expansionColumn,
+      animatedLayout,
+      measureChanges,
+      resetChevrons,
     ],
   );
 }

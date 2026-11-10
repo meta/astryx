@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {Activity, type KeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,6 +8,8 @@ import {LinkProvider} from '../Link';
 import {NavHeadingMenu} from './NavHeadingMenu';
 import {NavHeadingMenuItem} from './NavHeadingMenuItem';
 import {NavHeadingCloseContext} from './NavMenuContext';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 
 describe('NavHeadingMenu', () => {
   it('renders with role="menu"', () => {
@@ -346,6 +348,28 @@ describe('NavHeadingMenuItem', () => {
 });
 
 describe('keyboard navigation', () => {
+  it('reaches a disabled row with the keys and type-ahead; the row stays inert', async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Rename" />
+        <NavHeadingMenuItem label="Archive" isDisabled onClick={onArchive} />
+        <NavHeadingMenuItem label="Delete" />
+      </NavHeadingMenu>,
+    );
+    const [rename, archive, del] = screen.getAllByRole('menuitem');
+    rename.focus();
+    fireEvent.keyDown(rename, {key: 'ArrowDown'});
+    expect(archive).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onArchive).not.toHaveBeenCalled();
+    fireEvent.keyDown(archive, {key: 'ArrowDown'});
+    expect(del).toHaveFocus();
+    fireEvent.keyDown(del, {key: 'a'});
+    expect(archive).toHaveFocus();
+  });
+
   it('keeps arrow navigation when an item handler cancels', () => {
     const onKeyDown = vi.fn((event: KeyboardEvent) => event.preventDefault());
     render(
@@ -493,7 +517,7 @@ describe('keyboard navigation', () => {
     expect(screen.getByRole('menuitem', {name: 'Paste'})).toHaveFocus();
   });
 
-  it('typeahead skips a disabled menuitem (menus-11)', () => {
+  it('typeahead reaches a disabled menuitem, which stays discoverable', () => {
     render(
       <NavHeadingMenu>
         <NavHeadingMenuItem label="Cut" />
@@ -502,14 +526,10 @@ describe('keyboard navigation', () => {
       </NavHeadingMenu>,
     );
     const menu = screen.getByRole('menu');
-    // Typing "p" must land on the enabled "Paste special", never the disabled
-    // "Paste (disabled)" — the disabled item is excluded from the typeahead
-    // selector entirely.
     fireEvent.keyDown(menu, {key: 'p'});
-    expect(screen.getByRole('menuitem', {name: 'Paste special'})).toHaveFocus();
     expect(
       screen.getByRole('menuitem', {name: 'Paste (disabled)'}),
-    ).not.toHaveFocus();
+    ).toHaveFocus();
   });
 });
 
@@ -634,5 +654,79 @@ describe('NavHeadingMenuItem pass-through props', () => {
     const item = screen.getByTestId('item');
     expect(item).toHaveAttribute('role', 'menuitem');
     expect(item).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('NavHeadingMenu as an action group (family:action-groups)', () => {
+  beforeEach(() => {
+    __resetMenuPressForTest();
+  });
+
+  const item = (name: string) => screen.getByRole('menuitem', {name});
+  const finger = {pointerType: 'touch', pointerId: 1};
+  const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
+
+  function renderMenu() {
+    const onDashboard = vi.fn();
+    const onSettings = vi.fn();
+    const closeMenu = vi.fn();
+    render(
+      <NavHeadingCloseContext value={{closeMenu}}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Dashboard" onClick={onDashboard} />
+          <NavHeadingMenuItem label="Settings" onClick={onSettings} />
+          <NavHeadingMenuItem label="Archive" isDisabled />
+        </NavHeadingMenu>
+      </NavHeadingCloseContext>,
+    );
+    return {onDashboard, onSettings, closeMenu};
+  }
+
+  it('renders a link item undraggable, so a mouse press that slides to another item is not a drag', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Sign out" onClick={() => {}} />
+      </NavHeadingMenu>,
+    );
+    expect(item('Docs')).toHaveAttribute('draggable', 'false');
+    expect(item('Sign out')).not.toHaveAttribute('draggable');
+  });
+
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item to the browser', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Status" href="/status" />
+      </NavHeadingMenu>,
+    );
+    expectNativeLinkClicks(item('Docs'));
+  });
+
+  it('acts on the item a finger lifts on, once, after sliding from another (FR1, FR2)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Dashboard'), finger);
+    fireEvent.pointerMove(item('Settings'), finger);
+    fireEvent.pointerUp(item('Settings'), finger);
+    expect(onSettings).toHaveBeenCalledTimes(1);
+    expect(onDashboard).not.toHaveBeenCalled();
+  });
+
+  it('acts on the item a held mouse lifts on (FR5)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Settings'), mouse);
+    fireEvent.pointerMove(item('Dashboard'), mouse);
+    fireEvent.pointerUp(item('Dashboard'), mouse);
+    expect(onDashboard).toHaveBeenCalledTimes(1);
+    expect(onSettings).not.toHaveBeenCalled();
+  });
+
+  it('acts on nothing for a lift on a disabled item (FR2)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Dashboard'), finger);
+    fireEvent.pointerMove(item('Archive'), finger);
+    fireEvent.pointerUp(item('Archive'), finger);
+    expect(onDashboard).not.toHaveBeenCalled();
+    expect(onSettings).not.toHaveBeenCalled();
   });
 });

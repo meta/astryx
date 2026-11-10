@@ -26,7 +26,7 @@ This is the first in a series on the Astryx CLI. It is the tool an agent uses to
 
 Agents live in the terminal now. Give one a good tool and it uses it well. But most tools we hand agents are not good enough. So we made a call that the CLI is the docs. That is where every doc, example, and reference starts. The docs site you are reading is a consumer of the CLI and not the other way around. The CLI is the source of truth. An agent always reads the exact source we wrote and maintain. There is no second copy to fall out of sync. Nothing goes stale.
 
-Docs are only part of it. The CLI also serves templates that show an agent how to build a real page. It builds themes. It searches across all of it. The best CLI is one you never run. The agent runs it. It is all open source so [have a look for yourself](https://github.com/facebook/astryx/blob/main/apps/docsite/scripts/generate-data.mjs). Or do not read this post at all. Tell your agent to run `astryx blog` and it will read it for you.
+Docs are only part of it. The CLI also serves templates that show an agent how to build a real page. It builds themes. It searches across all of it. The best CLI is one you never run. The agent runs it. It is all open source so [have a look for yourself](https://github.com/meta/astryx/blob/main/apps/docsite/scripts/generate-data.mjs). Or do not read this post at all. Tell your agent to run `astryx blog` and it will read it for you.
 
 ## The tour
 

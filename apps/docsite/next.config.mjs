@@ -1,11 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Configure the docsite's routes, response headers, and theme resolution.
+ * @file Configure docsite routes, response headers, theme resolution, and build
+ *   memory.
  * @input Next.js build configuration, the early playground cookie guard, and
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
- *   Client main-app chunks start with the preview's cookie compatibility guard.
+ *   Client main-app chunks start with the preview's cookie compatibility guard;
+ *   large Webpack builds run with isolated, memory-optimized compilation. The
+ *   experimental DOCSITE_ICON_SET setting draws template previews with an
+ *   installed icon set.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -31,6 +35,13 @@ const docRedirects = existsSync(docRedirectsPath)
   ? JSON.parse(readFileSync(docRedirectsPath, 'utf8'))
   : {};
 
+// Experimental: the icon set template previews draw with, main set first and
+// backups after it, separated by commas. Unset, previews keep the icons their
+// templates import, and the loader is not added.
+const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
+const templateSources =
+  /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
+
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
   process.env.VERCEL_ENV === 'production';
@@ -38,6 +49,13 @@ const stagesStaticApps =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
+  // The custom Webpack hook below disables Next's default build worker. The
+  // canary docsite compiles the live workspace, so keep that compilation in a
+  // separate process and use Next's low-risk peak-memory optimization.
+  experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
   // The search API (app/api/search) runs `astryx search` itself. The CLI stays
   // an external module (see webpack below), so its code and dependencies are
   // traced as installed; these are the files it reads from disk at run time:
@@ -168,6 +186,22 @@ const nextConfig = {
         t,
         'dist/theme.css',
       );
+    }
+
+    if (previewIconSet) {
+      config.module.rules.push({
+        test: templateSources,
+        enforce: 'pre',
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
     }
 
     // Vercel can add Toolbar instrumentation to Next's shared main-app entry.
