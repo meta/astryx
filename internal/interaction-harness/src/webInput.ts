@@ -210,16 +210,31 @@ function releaseMessage(read: WheelReleaseRead): string {
  */
 export class WheelPageStallError extends Error {
   constructor(
-    readonly maxGapMs: number,
+    readonly maxGapMs: number | null,
     readonly stall: WheelPageStall,
+    readonly release: WheelReleaseRead | null = null,
   ) {
     super(
-      stall.frameGapMs == null
-        ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, at or over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
-        : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, at or over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
+      release != null
+        ? releaseHoldMessage(release, stall)
+        : stall.frameGapMs == null
+          ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, at or over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
+          : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, at or over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'WheelPageStallError';
   }
+}
+
+function releaseHoldMessage(
+  read: WheelReleaseRead,
+  stall: WheelPageStall,
+): string {
+  const steps = `inside the steps the release reads, ${read.readStep - 1} to ${read.liftStep}`;
+  const held =
+    stall.frameGapMs == null
+      ? `the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time ${steps}, and held the next step ${stall.gapMs.toFixed(0)} ms`
+      : `the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms ${steps}, holding a step ${stall.gapMs.toFixed(0)} ms, while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms`;
+  return `webInputDriver: ${held}: the page, not the runner, changed the release the gesture host read. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`;
 }
 
 /**
@@ -368,32 +383,143 @@ export function wheelGapCauses(
       dispatchStalls.push(gapMs);
       continue;
     }
-    const widened = sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS;
-    const handlingMs = listenerTimeWithin(
-      stamps[i - 1],
-      stamps[i],
-      receivedAt.slice(0, i),
-      handledAt.slice(0, i),
+    const hold = pageHoldAt(
+      engine,
+      i,
+      stamps,
+      handledAt,
+      sendGapMs,
+      frames,
+      receivedAt,
     );
-    const heldBack =
-      engine === 'webkit' &&
-      Number.isFinite(handledAt[i - 1]) &&
-      stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
-      handlingMs + HELD_BACK_MS >= gapMs - (sendGapMs ?? 0) &&
-      widened;
-    const frameGap =
-      engine === 'webkit' && widened
-        ? frameGapAcross(frames, stamps[i - 1], stamps[i])
-        : null;
-    if (heldBack) {
-      pageStalls.push({gapMs, handlingMs});
-    } else if (frameGap != null && frameGap.covered >= gapMs - HELD_BACK_MS) {
-      pageStalls.push({gapMs, handlingMs, frameGapMs: frameGap.gapMs});
+    if (hold != null) {
+      pageStalls.push(hold);
     } else {
       dispatchStalls.push(gapMs);
     }
   }
   return {pageStalls, dispatchStalls};
+}
+
+/**
+ * Whether the page held the gap before received step `i`, whatever its
+ * length. WebKit only, as `wheelGapCauses` judges it. The gap must be more
+ * than a frame wider than its send spacing. Then either the page's listeners
+ * held the step, or the page drew no frame across nearly all of the gap. The
+ * page's cause must itself outlast a frame: listeners that ran longer than
+ * one, or a stretch without frames longer than two. A frame of slack is the
+ * dispatch's, so it never makes a short gap the page's.
+ */
+function pageHoldAt(
+  engine: Engine,
+  i: number,
+  stamps: readonly number[],
+  handledAt: readonly number[],
+  sendGapMs: number | null | undefined,
+  frames: readonly number[],
+  receivedAt: readonly number[],
+): WheelPageStall | null {
+  const gapMs = stamps[i] - stamps[i - 1];
+  const widened = sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS;
+  if (engine !== 'webkit' || !widened) {
+    return null;
+  }
+  const handlingMs = listenerTimeWithin(
+    stamps[i - 1],
+    stamps[i],
+    receivedAt.slice(0, i),
+    handledAt.slice(0, i),
+  );
+  if (
+    Number.isFinite(handledAt[i - 1]) &&
+    stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
+    handlingMs > HELD_BACK_MS &&
+    handlingMs + HELD_BACK_MS >= gapMs - (sendGapMs ?? 0)
+  ) {
+    return {gapMs, handlingMs};
+  }
+  const frameGap = frameGapAcross(frames, stamps[i - 1], stamps[i]);
+  if (
+    frameGap != null &&
+    frameGap.gapMs > 2 * HELD_BACK_MS &&
+    frameGap.covered >= gapMs - HELD_BACK_MS
+  ) {
+    return {gapMs, handlingMs, frameGapMs: frameGap.gapMs};
+  }
+  return null;
+}
+
+/**
+ * Whether the page held a step inside the steps a release reads, from
+ * `readStep - 1` to `liftStep`. Each gap there gets the page-hold test that
+ * splits a burst, whatever its length. A merged step there also gets it over
+ * its own wait, from its stamp to its arrival. WebKit holds such steps while
+ * the page's main thread is busy, then stamps them like the step before. The
+ * first hold found, or null when the page held none. The page's cause must
+ * outlast a frame here too, as in `pageHoldAt`.
+ */
+export function wheelReleaseHold(
+  engine: Engine,
+  read: Pick<WheelReleaseRead, 'readStep' | 'liftStep'>,
+  steps: readonly {readonly dx?: number; readonly dy?: number}[],
+  sentAt: readonly number[],
+  stamps: readonly number[],
+  got: {
+    readonly receivedAt: readonly number[];
+    readonly handledAt: readonly number[];
+    readonly frames: readonly number[];
+    readonly deltas: readonly (readonly [number, number])[];
+  },
+): WheelPageStall | null {
+  if (engine !== 'webkit') {
+    return null;
+  }
+  const carried = carriedSteps(steps, got.deltas);
+  const sendGapsMs = wheelSendGaps(steps, sentAt, got.deltas);
+  for (const [i, range] of carried.entries()) {
+    if (
+      i === 0 ||
+      range == null ||
+      range[1] < read.readStep - 1 ||
+      range[0] > read.liftStep
+    ) {
+      continue;
+    }
+    const hold = pageHoldAt(
+      engine,
+      i,
+      stamps,
+      got.handledAt,
+      sendGapsMs[i - 1],
+      got.frames,
+      got.receivedAt,
+    );
+    if (hold != null) {
+      return hold;
+    }
+    const waitMs = got.receivedAt[i] - stamps[i];
+    if (range[1] === range[0] || waitMs <= HELD_BACK_MS) {
+      continue;
+    }
+    const handlingMs = listenerTimeWithin(
+      stamps[i],
+      got.receivedAt[i],
+      got.receivedAt.slice(0, i),
+      got.handledAt.slice(0, i),
+    );
+    if (handlingMs > HELD_BACK_MS && handlingMs + HELD_BACK_MS >= waitMs) {
+      return {gapMs: waitMs, handlingMs};
+    }
+    const frameGap = frameGapAcross(got.frames, stamps[i], got.receivedAt[i]);
+    if (
+      frameGap != null &&
+      frameGap.gapMs > 2 * HELD_BACK_MS &&
+      frameGap.covered >= waitMs - HELD_BACK_MS
+    ) {
+      return {gapMs: waitMs, handlingMs, frameGapMs: frameGap.gapMs};
+    }
+  }
+  return null;
 }
 
 /**
@@ -1018,6 +1144,10 @@ async function untilRunReceived(
       everyMs,
     );
     if (read != null && wheelReleaseStrays(read)) {
+      const hold = wheelReleaseHold(engine, read, steps, sentAt, stamps, got);
+      if (hold != null) {
+        throw new WheelPageStallError(maxGapMs ?? null, hold, read);
+      }
       throw new WheelPacingError(maxGapMs ?? null, receivedGapsMs, read);
     }
   }

@@ -780,8 +780,13 @@ between `readStep - 1` and `liftStep`. The host decays such a merge its own
 way, so no reading of the script's steps can say what it read. `stepwise:
 {from, to}` names later steps the host reads one by one, such as the glide
 after a lift. A merge that begins there, stamped past `WHEEL_BUNCHED_MS`,
-reads as one big move, so the burst throws for it too. A script outside its
-own bar is the proof's mistake, never the dispatch's. On 248 logged runs of
+reads as one big move, so the burst throws for it too. Before it names the
+runner, the burst gives the page-hold test that splits a burst to the steps
+the release reads, and to the wait behind any merge there. A hold the page's
+own listeners caused, or one across which it drew no frame, throws
+`WheelPageStallError` instead. The page's cause must outlast a frame, since a
+frame of slack is the dispatch's. A script outside its own bar is the proof's
+mistake, never the dispatch's. On 248 logged runs of
 the trackpad-follow proofs, this read matched the host's own travel exactly
 wherever no merge fell inside those steps. It named every run that failed the
 proof. It named no run in CI's WebKit profile, and a fifth of the passing

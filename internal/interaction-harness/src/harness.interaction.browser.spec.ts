@@ -3721,15 +3721,45 @@ test.describe('wheel and pen input', () => {
       await page.goto('http://wheel-slow-burst.test/');
       const driver = await webInputDriver(page);
       test.skip(!driver.wheels, WHEEL_SKIP);
-      await expect(
-        driver.wheelBurst({
+      // The page's own record of each step's stamp, the clock the host
+      // reads.
+      await page.evaluate(() => {
+        const stamps: number[] = [];
+        (window as unknown as {__stamps: number[]}).__stamps = stamps;
+        addEventListener('wheel', event => stamps.push(event.timeStamp), {
+          capture: true,
+          passive: true,
+        });
+      });
+      const outcome = await driver
+        .wheelBurst({
           x: 200,
           y: 300,
           steps: Array.from({length: 4}, () => ({dx: 10})),
           everyMs: 180,
           maxGapMs: 100,
-        }),
-      ).rejects.toBeInstanceOf(WheelPacingError);
+        })
+        .then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
+      expect(outcome).toBeInstanceOf(WheelPacingError);
+      // It names the gaps the page stamped, as measured. The proof takes no
+      // second run.
+      const stamps = await page.evaluate(
+        () => (window as unknown as {__stamps: number[]}).__stamps,
+      );
+      const {receivedGapsMs} = outcome as WheelPacingError;
+      expect(receivedGapsMs).toEqual(
+        stamps.slice(1).map((stamp, i) => stamp - stamps[i]),
+      );
+      const longestMs = Math.max(...receivedGapsMs);
+      expect(longestMs).toBeGreaterThanOrEqual(100);
+      expect(String(outcome)).toMatch(
+        new RegExp(
+          `stamped the wheel burst with a gap of ${longestMs.toFixed(0)} ms, at or over its 100 ms \\(gaps ${receivedGapsMs.map(gapMs => gapMs.toFixed(0)).join(', ')} ms\\)`,
+        ),
+      );
     } finally {
       await context.close();
     }

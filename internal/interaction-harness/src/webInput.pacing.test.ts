@@ -18,6 +18,7 @@
 import {describe, expect, it} from 'vitest';
 import {
   wheelGapCauses,
+  wheelReleaseHold,
   wheelReleaseRead,
   wheelReleaseStrays,
   wheelSendGaps,
@@ -659,6 +660,173 @@ describe('WheelPacingError with a release read', () => {
     })!;
     expect(new WheelPacingError(null, [], read).message).toMatch(
       /received sent steps 9 to 10 as one wheel, stamped 32 ms after the one before, past the gesture host's 1\.5 ms merge window/,
+    );
+  });
+});
+
+describe('wheelReleaseHold', () => {
+  /** A delivery on pace: each step arrives at its stamp, handled in 1 ms. */
+  function onPace() {
+    const stamps = SENT.slice();
+    return {
+      stamps,
+      got: {
+        receivedAt: stamps.slice(),
+        handledAt: stamps.map(t => t + 1),
+        frames: Array.from({length: 20}, (_, k) => 8 + 16 * k),
+        deltas: DELTAS,
+      },
+    };
+  }
+
+  it('gives the page a gap inside the read that its own listeners held', () => {
+    // Step 4's listeners took 60 ms; step 5 was stamped 2 ms after they
+    // finished.
+    const {stamps, got} = onPace();
+    got.handledAt[4] = 124;
+    for (let i = 5; i < stamps.length; i++) {
+      stamps[i] += 46;
+      got.receivedAt[i] = stamps[i];
+      got.handledAt[i] = stamps[i] + 1;
+    }
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toEqual({gapMs: 62, handlingMs: 60});
+  });
+
+  it('gives the page a gap inside the read across which it drew no frame', () => {
+    const {stamps, got} = onPace();
+    for (let i = 5; i < stamps.length; i++) {
+      stamps[i] += 100;
+      got.receivedAt[i] = stamps[i];
+      got.handledAt[i] = stamps[i] + 1;
+    }
+    got.frames = [8, 56, 180, 196, 212, 228, 244, 260, 276];
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toEqual({gapMs: 116, handlingMs: 1, frameGapMs: 124});
+  });
+
+  it('leaves the runner a late step the page did not hold: listeners idle, frames running', () => {
+    const {stamps, got} = onPace();
+    for (let i = 5; i < stamps.length; i++) {
+      stamps[i] += 100;
+      got.receivedAt[i] = stamps[i];
+      got.handledAt[i] = stamps[i] + 1;
+    }
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toBeNull();
+  });
+
+  it('gives the page a merged step whose wait its own listeners covered', () => {
+    // Steps 5 and 6 arrived as one wheel, stamped like step 4, 66 ms late.
+    // Step 4's listeners ran 64 ms of that wait.
+    const merged = [
+      ...DELTAS.slice(0, 5),
+      [19, 0] as [number, number],
+      ...DELTAS.slice(7),
+    ];
+    const stamps = [0, 16, 32, 48, 64, 64, 112, 128, 144, 160, 176];
+    const receivedAt = [0, 16, 32, 48, 64, 130, 131, 132, 144, 160, 176];
+    const handledAt = [1, 17, 33, 49, 128, 131, 132, 133, 145, 161, 177];
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, {
+        receivedAt,
+        handledAt,
+        frames: Array.from({length: 20}, (_, k) => 8 + 16 * k),
+        deltas: merged,
+      }),
+    ).toEqual({gapMs: 66, handlingMs: 64});
+  });
+
+  it('gives the page a logged hold whose listeners ran 30 ms of a 69 ms gap', () => {
+    // Logged under load: step 1's listeners ran until 52, and step 2 was
+    // stamped at 69, where the script spaces them 19 ms.
+    const deltas = [12, 12, 12, 23, 10, 9, 8, 7, 6, 5, 4].map(
+      (dx): [number, number] => [dx, 0],
+    );
+    expect(
+      wheelReleaseHold(
+        'webkit',
+        RELEASE,
+        RELEASE_STEPS,
+        [0, 17, 36, 53, 77, 85, 100, 120, 141, 153, 166, 182],
+        [0, 0, 69, 69, 102, 129, 129, 162, 162, 181, 182],
+        {
+          receivedAt: [7, 51, 69, 70, 103, 130, 133, 163, 165, 181, 182],
+          handledAt: [36, 52, 70, 70, 103, 130, 134, 163, 166, 181, 183],
+          frames: [-17, -1, 44, 51, 68, 92, 117, 125, 140, 156, 175, 196],
+          deltas,
+        },
+      ),
+    ).toEqual({gapMs: 69, handlingMs: 30});
+  });
+
+  it('leaves the runner a logged gap that only a frame of slack could pin on the page', () => {
+    // Logged under load: a 31 ms gap where the script spaces 10 ms, with
+    // 1 ms of listener time. One frame of slack is the dispatch's.
+    const deltas = [12, 12, 12, 12, 11, 10, 24, 11, 4].map(
+      (dx): [number, number] => [dx, 0],
+    );
+    expect(
+      wheelReleaseHold(
+        'webkit',
+        RELEASE,
+        RELEASE_STEPS,
+        [0, 25, 33, 55, 65, 101, 103, 136, 147, 158, 165, 176],
+        [0, 36, 81, 81, 112, 137, 138, 139, 159],
+        {
+          receivedAt: [13, 49, 96, 99, 112, 138, 143, 147, 160],
+          handledAt: [35, 50, 97, 99, 113, 138, 143, 148, 160],
+          frames: [-15, 4, 44, 49, 60, 78, 97, 103, 125, 138, 158, 173],
+          deltas,
+        },
+      ),
+    ).toBeNull();
+  });
+
+  it('judges only the steps the release reads, and only in WebKit', () => {
+    // Step 9's listeners held step 10, after the lift.
+    const {stamps, got} = onPace();
+    got.handledAt[9] = 204;
+    for (let i = 10; i < stamps.length; i++) {
+      stamps[i] += 50;
+      got.receivedAt[i] = stamps[i];
+      got.handledAt[i] = stamps[i] + 1;
+    }
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toBeNull();
+    // Chromium stamps a step at dispatch: the page cannot hold its stamps.
+    got.handledAt[4] = 124;
+    expect(
+      wheelReleaseHold('chromium', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toBeNull();
+  });
+});
+
+describe('WheelPageStallError over a release', () => {
+  it('names the page, its hold and the steps the release reads, and is not a pacing error', () => {
+    const read = wheelReleaseRead(RELEASE_STEPS, SENT, SENT, DELTAS, RELEASE)!;
+    const error = new WheelPageStallError(
+      220,
+      {gapMs: 62, handlingMs: 60},
+      read,
+    );
+    expect(error.name).toBe('WheelPageStallError');
+    expect(error.message).toMatch(
+      /the page's own wheel listeners took 60 ms of page wall time inside the steps the release reads, 2 to 7, and held the next step 62 ms: the page, not the runner, changed the release the gesture host read/,
+    );
+    expect(error).not.toBeInstanceOf(WheelPacingError);
+    expect(
+      new WheelPageStallError(
+        220,
+        {gapMs: 116, handlingMs: 1, frameGapMs: 124},
+        read,
+      ).message,
+    ).toMatch(
+      /the page drew no frame for 124 ms inside the steps the release reads/,
     );
   });
 });
