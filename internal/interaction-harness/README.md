@@ -219,7 +219,11 @@ that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
 callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
-the settle begins. An animation counts once it is no longer pending and has
+the settle begins. The window's `animation.runs` lists each animation the
+block counts, as the page read them when it caught one: the properties each
+animates, and its curve's start and end. A spec checks a run there: a read
+after the block misses a run that ended since, and a loaded machine delays
+that read. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
 created in the frame the page looks is not on the compositor yet. It counts
 only before its curve's held tail (keyframes that end in a run of identical

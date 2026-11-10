@@ -18,6 +18,7 @@ import {
   test,
   type Locator,
   type Page,
+  type TestInfo,
 } from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
@@ -1043,6 +1044,7 @@ test('a tap beside the photo closes the viewer; a tap on it does not', async ({
 
 test('the double-tap zoom keeps advancing every frame while the main thread is blocked', async ({
   page,
+  browserName,
 }, testInfo) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
@@ -1053,6 +1055,8 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // A second control half a leg ahead reads the frames near the first one's
   // turns. So every frame has a time of its own, and the proof predicts.
   const aheadControl = await startBusyControl(page, {ahead: true});
+  const stimulus = await zoomStimulus(page, browserName, testInfo);
+  const {tempo, blockMs} = stimulus;
   const at = {x: 201, y: before.stage.y + before.stage.height / 2};
   // The same zoom at the default tempo, to compare the slowed one with.
   await driver.play(doubleTap(at));
@@ -1062,27 +1066,31 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await waitForAnimation(photo);
   await waitForRest(photo);
   // With the main thread blocked, a loaded runner's compositor presents a
-  // frame every 100 to 250 ms. The spring moves for half a second, which
+  // frame every 35 to 600 ms. The spring moves for half a second, which
   // leaves too few frames to judge. So the zoom plays at a slow tempo.
-  await slowViewer(page, ZOOM_TEMPO);
-  const since = await page.evaluate(() => performance.now());
+  await slowViewer(page, tempo);
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
   // spring covers most of its travel early, and a round trip from the test
   // would start the block too late.
-  const blocking = blockMainThread(page, ZOOM_BLOCK_MS, {during: photo});
+  const blocking = blockMainThread(page, blockMs, {during: photo});
   await driver.play(doubleTap(at));
   const block = await blocking;
-  // Lightbox's own zoom played at that tempo. Each curve is that many times
-  // as long as at tempo 1, and still runs after the block.
-  const slowed = curvesByProperty(await waitForAnimation(photo, {since}));
+  // Lightbox's own zoom played at that tempo. The page read each curve when
+  // the block caught the zoom. Each is that many times as long as at tempo 1,
+  // and ends after the block. A later read misses a run that ended since, and
+  // a loaded machine delays that read.
+  const slowed = new Map(
+    (block.animation?.runs ?? []).map(run => [run.properties, run]),
+  );
   expect([...slowed.keys()].sort()).toEqual([...atTempo1.keys()].sort());
   expect(slowed.size).toBeGreaterThan(0);
   for (const [property, run] of slowed) {
-    const ratio = run.ms / (atTempo1.get(property)?.ms ?? Number.NaN);
-    expect(ratio, property).toBeGreaterThan(ZOOM_TEMPO - 0.1);
-    expect(ratio, property).toBeLessThan(ZOOM_TEMPO + 0.1);
-    expect(run.isRunning, property).toBe(true);
+    const ratio =
+      (run.to - run.from) / (atTempo1.get(property)?.ms ?? Number.NaN);
+    expect(ratio, property).toBeGreaterThan(tempo - 0.1);
+    expect(ratio, property).toBeLessThan(tempo + 0.1);
+    expect(run.to, property).toBeGreaterThan(block.to);
   }
   // A few frames after the block, so the screencast holds its end.
   await frames(page, 6);
@@ -1104,6 +1112,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
         [`${testInfo.project.name}.json`]: JSON.stringify(
           {
             block,
+            stimulus,
             controlStarts: [busyControl.start, aheadControl.start],
             ...result,
             frames: tracked.map(f => ({
@@ -1168,7 +1177,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The photo keeps
   // pace with the control, and a main-thread animation would not.
-  expect(proof.verdict.failures).toEqual([]);
+  expect(proof.verdict.failures, stimulusNote(stimulus)).toEqual([]);
   // The verdict, spelled out. The top edge takes a new position on every
   // frame the control moves, with none excused as under a cast step. The
   // control moves on at least the verdict's floor of four frames. With
@@ -1181,15 +1190,177 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
 });
 
 /**
- * The tempo the busy zoom proof plays the viewer at. Blocked, WebKit's
- * software compositor on a loaded runner presents a frame only every 190 to
- * 250 ms. At tempo 5 the spring moves for over two seconds, so its judged
- * part holds about eight such frames. At tempo 3 it held three to six.
+ * The tempo the busy zoom proof plays the viewer at in Chromium, and how long
+ * it blocks the main thread, ms. At tempo 5 the spring moves for over two
+ * seconds.
  */
 const ZOOM_TEMPO = 5;
-
-/** How long the busy zoom proof blocks the main thread, ms. */
 const ZOOM_BLOCK_MS = 2500;
+
+/**
+ * How long the cadence probe blocks the main thread, ms. Under CPU pressure a
+ * blocked WebKit presents a frame only every 600 to 1200 ms. One frame is then
+ * enough: the cadence asks for the slowest tempo.
+ */
+const CADENCE_PROBE_MS = 2500;
+
+/**
+ * The cadence one tempo step stands for, ms. Near the judged part's end the
+ * edge moves about 0.011 × 24 px per ms at tempo 1. At a tempo of the cadence
+ * over 20 ms, that end move stays near 5 px a cast frame. That is over two of
+ * WebKit's 2 px steps.
+ */
+const CADENCE_PER_TEMPO_MS = 20;
+
+/** The tempos the cadence may pick, slowest last. */
+const ZOOM_TEMPO_RANGE = [5, 15] as const;
+
+/**
+ * Overrides the measured tempo, to run a red again at its stimulus. The
+ * block follows the tempo.
+ */
+const ZOOM_TEMPO_ENV = 'ASTRYX_ZOOM_TEMPO';
+
+interface ZoomStimulus {
+  readonly tempo: number;
+  readonly blockMs: number;
+  /** The blocked cadence the probe measured, ms; null when none ran. */
+  readonly cadenceMs: number | null;
+  /** The control's presented moves in the probe, and the probe's span, ms. */
+  readonly probe: {readonly frames: number; readonly spanMs: number} | null;
+  /** The tempo the cadence asked for, before the range clamped it. */
+  readonly asked: number | null;
+  readonly source: 'fixed' | 'probe' | 'override';
+}
+
+/** The block for a tempo: the slowed edge moves for most of it. */
+function blockFor(tempo: number): number {
+  return Math.max(ZOOM_BLOCK_MS, 300 * tempo);
+}
+
+/** The stimulus in words, for the annotation and a failed verdict. */
+function stimulusNote(stimulus: ZoomStimulus): string {
+  const {tempo, blockMs, cadenceMs, asked, source, probe} = stimulus;
+  // Under three presented frames, the probe bounds the cadence: it never
+  // measured a value.
+  const sized =
+    cadenceMs == null || probe == null
+      ? source
+      : probe.frames < 3
+        ? `a blocked cadence slower than ${Math.round(probe.spanMs / (probe.frames + 1))} ms a frame (${probe.frames} frame${probe.frames === 1 ? '' : 's'} in ${Math.round(probe.spanMs)} ms)`
+        : `a blocked cadence of ${cadenceMs.toFixed(0)} ms`;
+  const clamped =
+    asked != null && asked !== tempo && (probe == null || probe.frames >= 3)
+      ? `; that cadence asks for tempo ${asked}, outside ${ZOOM_TEMPO_RANGE[0]} to ${ZOOM_TEMPO_RANGE[1]}, so it plays at ${tempo}`
+      : '';
+  return `zoom stimulus: tempo ${tempo}, a ${blockMs} ms block, from ${sized}${clamped} (rerun with ${ZOOM_TEMPO_ENV}=${tempo})`;
+}
+
+/**
+ * The busy zoom proof's stimulus on this runner. Blocked, WebKit's software
+ * compositor presents a frame every 35 to 600 ms, by the runner's load. The
+ * block starts up to 1.9 s into the zoom there, and the judged part ends
+ * where the edge comes within `ZOOM_SETTLED_PX` of its rest. A slow tempo
+ * keeps enough presented frames in that part. A fast cadence needs a fast
+ * tempo, or the edge's last moves fall under the cast's step. So in WebKit a
+ * probe blocks the main thread once with the controls running, and the
+ * tempo follows the cadence it measures. Chromium presents every frame, and
+ * keeps tempo 5. The stimulus goes in an annotation and the evidence.
+ */
+async function zoomStimulus(
+  page: Page,
+  browserName: string,
+  testInfo: TestInfo,
+): Promise<ZoomStimulus> {
+  const stimulus = await measureStimulus(page, browserName);
+  testInfo.annotations.push({
+    type: 'zoom stimulus',
+    description: stimulusNote(stimulus),
+  });
+  return stimulus;
+}
+
+async function measureStimulus(
+  page: Page,
+  browserName: string,
+): Promise<ZoomStimulus> {
+  if (browserName !== 'webkit') {
+    return {
+      tempo: ZOOM_TEMPO,
+      blockMs: ZOOM_BLOCK_MS,
+      cadenceMs: null,
+      probe: null,
+      asked: null,
+      source: 'fixed',
+    };
+  }
+  const override = process.env[ZOOM_TEMPO_ENV];
+  if (override != null && override !== '') {
+    const tempo = Number(override);
+    if (!Number.isFinite(tempo) || tempo <= 0) {
+      throw new TypeError(
+        `${ZOOM_TEMPO_ENV} must be a positive tempo, not ${override}`,
+      );
+    }
+    return {
+      tempo,
+      blockMs: blockFor(tempo),
+      cadenceMs: null,
+      probe: null,
+      asked: null,
+      source: 'override',
+    };
+  }
+  const cast = await startScreencast(page);
+  const probe = await blockMainThread(page, CADENCE_PROBE_MS);
+  await frames(page, 2);
+  const control = await trackMarker(page, await cast.stop(), {
+    rgb: CONTROL_RGB,
+  });
+  const moves: number[] = [];
+  let last: number | null = null;
+  for (const frame of control) {
+    const x = frame.box?.x ?? null;
+    if (x == null) {
+      continue;
+    }
+    if (
+      last != null &&
+      x !== last &&
+      frame.t > probe.from &&
+      frame.t < probe.to
+    ) {
+      moves.push(frame.t);
+    }
+    last = x;
+  }
+  // With no presented frame, the cadence is unknown, and no tempo stands in.
+  if (moves.length === 0) {
+    throw new FrameStarvationError({
+      by: 'cadence probe',
+      during: `a ${Math.round(probe.spanMs)} ms probe block held the main thread`,
+      frames: 0,
+      min: 1,
+      longestGapMs: probe.spanMs,
+      cause:
+        'the page presented no frame to size the zoom stimulus, so the run proves nothing about the motion',
+    });
+  }
+  const cadenceMs = probe.spanMs / moves.length;
+  const asked = Math.round(cadenceMs / CADENCE_PER_TEMPO_MS);
+  const tempo = Math.min(
+    ZOOM_TEMPO_RANGE[1],
+    Math.max(ZOOM_TEMPO_RANGE[0], asked),
+  );
+  return {
+    tempo,
+    blockMs: blockFor(tempo),
+    cadenceMs,
+    probe: {frames: moves.length, spanMs: probe.spanMs},
+    asked,
+    source: 'probe',
+  };
+}
 
 /**
  * The photo's coordinate the busy zoom proof judges: its top edge. The zoom
@@ -1203,15 +1374,15 @@ const ZOOM_AXIS = 'y';
 /**
  * Where the busy zoom proof stops judging, in px of the top edge from its
  * end. There the edge's move between two cast frames falls under one cast
- * step. Near the end, each 60 Hz frame moves the spring about 0.042 of what
- * remains (2π / 2.5 s, critically damped). Chromium casts every frame in 1 px
- * steps, so its moves fall under a step 23.9 px from the end. Blocked, WebKit
- * casts a frame only every 116 ms or more, seven 60 Hz frames, in 2 px steps.
- * Its moves stay over a step until about 8 px from the end, inside 24 px.
+ * step. Near the end, at tempo 5, each 60 Hz frame moves the spring about
+ * 0.042 of what remains (2π / 2.5 s, critically damped). Chromium casts every
+ * frame in 1 px steps, so its moves fall under a step 23.9 px from the end.
+ * In WebKit the tempo follows the blocked cadence (`zoomStimulus`). So there
+ * a cast frame moves about 5 px at 24 px from the end, over two 2 px steps.
  */
 const ZOOM_SETTLED_PX = 24;
 
-/** Each animated property's curve length, and whether it still runs. */
+/** Each animated property's curve length, ms. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
   const meta = new Set(['offset', 'easing', 'composite', 'computedOffset']);
   return new Map(
@@ -1220,7 +1391,7 @@ function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
         .filter(key => !meta.has(key))
         .sort()
         .join(','),
-      {ms: run.to - run.from, isRunning: run.finishedAt == null},
+      {ms: run.to - run.from},
     ]),
   );
 }
@@ -1261,46 +1432,60 @@ async function breakZoom(
   }, pace);
 }
 
+// Each mutant runs on the stimulus the runner measures. In WebKit it also runs
+// at both ends of the tempo range, so the proof stays red wherever the cadence
+// puts it.
 for (const pace of ['main-thread', 'frozen'] as const) {
-  test(`the busy proof fails a slowed double-tap zoom that ${pace === 'frozen' ? 'freezes' : 'the main thread drives'}`, async ({
-    page,
-  }) => {
-    const {driver, photo, state} = await openViewer(page);
-    const before = await state();
-    await markElement(photo, {mode: 'outline'});
-    await startBusyControl(page);
-    await slowViewer(page, ZOOM_TEMPO);
-    await breakZoom(page, pace);
-    const cast = await startScreencast(page);
-    await driver.play(
-      doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
-    );
-    // Neither runs on the compositor, so the block starts after the tap.
-    await page.waitForTimeout(150);
-    const block = await blockMainThread(page, ZOOM_BLOCK_MS);
-    await frames(page, 6);
-    const castFrames = await cast.stop();
-    const tracked = await trackMarker(page, castFrames);
-    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-    let failures: ReadonlyArray<string>;
-    try {
-      failures = busyWindowProof(tracked, block, {
-        axis: ZOOM_AXIS,
-        settledWithin: ZOOM_SETTLED_PX,
-        control,
-      }).verdict.failures;
-    } catch (error) {
-      // A run the machine starved proves nothing, so it fails by name and
-      // never counts as this proof's red.
-      if (error instanceof FrameStarvationError) {
-        throw error;
+  for (const pinned of [null, ...ZOOM_TEMPO_RANGE]) {
+    test(`the busy proof fails a slowed double-tap zoom that ${pace === 'frozen' ? 'freezes' : 'the main thread drives'}${pinned == null ? '' : ` at tempo ${pinned}`}`, async ({
+      page,
+      browserName,
+    }, testInfo) => {
+      test.skip(
+        pinned != null && browserName !== 'webkit',
+        'only WebKit sizes its stimulus from the cadence',
+      );
+      const {driver, photo, state} = await openViewer(page);
+      const before = await state();
+      await markElement(photo, {mode: 'outline'});
+      await startBusyControl(page);
+      const {tempo, blockMs} =
+        pinned == null
+          ? await zoomStimulus(page, browserName, testInfo)
+          : {tempo: pinned, blockMs: blockFor(pinned)};
+      await slowViewer(page, tempo);
+      await breakZoom(page, pace);
+      const cast = await startScreencast(page);
+      await driver.play(
+        doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+      );
+      // Neither runs on the compositor, so the block starts after the tap.
+      await page.waitForTimeout(150);
+      const block = await blockMainThread(page, blockMs);
+      await frames(page, 6);
+      const castFrames = await cast.stop();
+      const tracked = await trackMarker(page, castFrames);
+      const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+      let failures: ReadonlyArray<string>;
+      try {
+        failures = busyWindowProof(tracked, block, {
+          axis: ZOOM_AXIS,
+          settledWithin: ZOOM_SETTLED_PX,
+          control,
+        }).verdict.failures;
+      } catch (error) {
+        // A run the machine starved proves nothing, so it fails by name and
+        // never counts as this proof's red.
+        if (error instanceof FrameStarvationError) {
+          throw error;
+        }
+        // A zoom that never moved has settled before the window: a red too.
+        expect(error).toBeInstanceOf(BusyWindowTooLateError);
+        failures = [(error as Error).message];
       }
-      // A zoom that never moved has settled before the window: a red too.
-      expect(error).toBeInstanceOf(BusyWindowTooLateError);
-      failures = [(error as Error).message];
-    }
-    expect(failures.length).toBeGreaterThan(0);
-  });
+      expect(failures.length).toBeGreaterThan(0);
+    });
+  }
 }
 
 test('the zoom settles and the pinch do no Layout or Paint per frame', async ({

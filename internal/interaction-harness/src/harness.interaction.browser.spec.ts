@@ -1258,6 +1258,48 @@ test.describe('frame evidence', () => {
     await control.remove();
   });
 
+  test('a caught window keeps every counted run as the page read it then: a run that ends inside the block keeps its end, which a later read misses', async ({
+    page,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    const since = await page.evaluate(() => performance.now());
+    await box.evaluate(el => {
+      el.animate([{opacity: 1}, {opacity: 0.4}], {
+        duration: 800,
+        easing: 'linear',
+      });
+      el.animate([{translate: '0px'}, {translate: '200px'}], {
+        duration: 4000,
+        easing: 'linear',
+      });
+    });
+    const window = await blockMainThread(page, 1500, {during: box});
+    const runs = new Map(
+      (window.animation?.runs ?? []).map(run => [run.properties, run]),
+    );
+    expect([...runs.keys()].sort()).toEqual(['opacity', 'translate']);
+    const short = runs.get('opacity');
+    const long = runs.get('translate');
+    if (short == null || long == null) {
+      throw new Error('blockMainThread kept no run for a property');
+    }
+    expect(short.to - short.from).toBeCloseTo(800, 0);
+    expect(long.to - long.from).toBeCloseTo(4000, 0);
+    expect(short.to).toBeLessThan(window.to);
+    expect(long.to).toBeGreaterThan(window.to);
+    // One round trip after the block, the short run has ended. A read then
+    // reports only the run still running.
+    const later = await waitForAnimation(box, {since});
+    expect(
+      later.map(run =>
+        Object.keys(run.keyframes[0] ?? {}).filter(key =>
+          ['opacity', 'translate'].includes(key),
+        ),
+      ),
+    ).toEqual([['translate']]);
+  });
+
   test('a sub-pixel read follows a compositor slide under a pixel a frame through a blocked main thread; a rAF slide still fails', async ({
     page,
     browserName,
