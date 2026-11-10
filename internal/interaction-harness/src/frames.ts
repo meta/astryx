@@ -489,9 +489,22 @@ export async function trackMarker(
 }
 
 /**
+ * A color for `trackMarkers` with its own search area. With `region` (CSS
+ * px), only that part of each frame is searched for this color, as
+ * `trackMarker`'s `region` searches. Without it, the call's `region` applies.
+ */
+export interface MarkerColor {
+  readonly rgb: readonly [number, number, number];
+  readonly region?: Box;
+}
+
+/**
  * `trackMarker` for several colors at once. Each frame is decoded once and
  * searched for every color, so a proof that tracks a marker and a control
- * decodes each frame once. Returns one track per color, in order.
+ * decodes each frame once. A color given as a `MarkerColor` is searched only
+ * in its own `region`. A proof can then find its marker anywhere and the
+ * control in its strip (`controlColor`) from the same decode. Returns one
+ * track per color, in order.
  */
 export async function trackMarkers(
   page: Page,
@@ -502,7 +515,7 @@ export async function trackMarkers(
     region,
     subpixel = false,
   }: {
-    colors: readonly (readonly [number, number, number])[];
+    colors: readonly (readonly [number, number, number] | MarkerColor)[];
     tolerance?: number;
     region?: Box;
     subpixel?: boolean;
@@ -513,7 +526,12 @@ export async function trackMarkers(
       "trackMarkers: subpixel needs a PNG cast; a JPEG frame's chroma blocks hide the marker's edges",
     );
   }
-  const isDefaultMarker = colors.map(rgb =>
+  const entries = colors.map(color =>
+    'rgb' in color
+      ? {rgb: color.rgb, region: color.region ?? region}
+      : {rgb: color, region},
+  );
+  const isDefaultMarker = entries.map(({rgb}) =>
     rgb.every((value, i) => value === MARKER_RGB[i]),
   );
   const scratch = await page.context().newPage();
@@ -523,7 +541,7 @@ export async function trackMarkers(
     for (let i = 0; i < frames.length; i += 12) {
       const batch = frames.slice(i, i + 12);
       const results = await scratch.evaluate(
-        async ({batch: items, palette, tol, area, sub}) => {
+        async ({batch: items, palette, areas, tol, sub}) => {
           const found: {
             boxes: ({
               x: number;
@@ -546,149 +564,164 @@ export async function trackMarkers(
             }
             context.drawImage(bitmap, 0, 0);
             const scale = bitmap.width / item.viewportWidth;
-            const left = area == null ? 0 : Math.floor(area.x * scale);
-            const top = area == null ? 0 : Math.floor(area.y * scale);
-            const right =
-              area == null
-                ? bitmap.width
-                : Math.min(
-                    bitmap.width,
-                    Math.ceil((area.x + area.width) * scale),
-                  );
-            const bottom =
-              area == null
-                ? bitmap.height
-                : Math.min(
-                    bitmap.height,
-                    Math.ceil((area.y + area.height) * scale),
-                  );
-            const {data, width, height} = context.getImageData(
-              left,
-              top,
-              right - left,
-              bottom - top,
-            );
-            const minX = palette.map(() => Infinity);
-            const minY = palette.map(() => Infinity);
-            const maxX = palette.map(() => -Infinity);
-            const maxY = palette.map(() => -Infinity);
+            const boxes: ({
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            } | null)[] = palette.map(() => null);
             const pixels = palette.map(() => 0);
-            for (let y = 0; y < height; y += 1) {
-              for (let x = 0; x < width; x += 1) {
-                const o = (y * width + x) * 4;
-                for (let c = 0; c < palette.length; c += 1) {
-                  const color = palette[c];
-                  if (
-                    Math.abs(data[o] - color[0]) <= tol &&
-                    Math.abs(data[o + 1] - color[1]) <= tol &&
-                    Math.abs(data[o + 2] - color[2]) <= tol
-                  ) {
-                    pixels[c] += 1;
-                    if (x < minX[c]) {
-                      minX[c] = x;
-                    }
-                    if (x > maxX[c]) {
-                      maxX[c] = x;
-                    }
-                    if (y < minY[c]) {
-                      minY[c] = y;
-                    }
-                    if (y > maxY[c]) {
-                      maxY[c] = y;
+            // Colors with the same area share one read of its pixels.
+            const groups = new Map<string, number[]>();
+            areas.forEach((area, c) => {
+              const key = JSON.stringify(area);
+              groups.set(key, [...(groups.get(key) ?? []), c]);
+            });
+            for (const members of groups.values()) {
+              const area = areas[members[0]];
+              const left = area == null ? 0 : Math.floor(area.x * scale);
+              const top = area == null ? 0 : Math.floor(area.y * scale);
+              const right =
+                area == null
+                  ? bitmap.width
+                  : Math.min(
+                      bitmap.width,
+                      Math.ceil((area.x + area.width) * scale),
+                    );
+              const bottom =
+                area == null
+                  ? bitmap.height
+                  : Math.min(
+                      bitmap.height,
+                      Math.ceil((area.y + area.height) * scale),
+                    );
+              const {data, width, height} = context.getImageData(
+                left,
+                top,
+                right - left,
+                bottom - top,
+              );
+              const minX = palette.map(() => Infinity);
+              const minY = palette.map(() => Infinity);
+              const maxX = palette.map(() => -Infinity);
+              const maxY = palette.map(() => -Infinity);
+              for (let y = 0; y < height; y += 1) {
+                for (let x = 0; x < width; x += 1) {
+                  const o = (y * width + x) * 4;
+                  for (const c of members) {
+                    const color = palette[c];
+                    if (
+                      Math.abs(data[o] - color[0]) <= tol &&
+                      Math.abs(data[o + 1] - color[1]) <= tol &&
+                      Math.abs(data[o + 2] - color[2]) <= tol
+                    ) {
+                      pixels[c] += 1;
+                      if (x < minX[c]) {
+                        minX[c] = x;
+                      }
+                      if (x > maxX[c]) {
+                        maxX[c] = x;
+                      }
+                      if (y < minY[c]) {
+                        minY[c] = y;
+                      }
+                      if (y > maxY[c]) {
+                        maxY[c] = y;
+                      }
                     }
                   }
                 }
+              }
+              // The marker's box from its anti-aliased edges: each pixel counts
+              // by its color's share of the way from the background to the
+              // marker's. The background is the median of a ring 2 px out.
+              const fine = (c: number) => {
+                const x0 = Math.max(0, minX[c] - 2);
+                const x1 = Math.min(width - 1, maxX[c] + 2);
+                const y0 = Math.max(0, minY[c] - 2);
+                const y1 = Math.min(height - 1, maxY[c] + 2);
+                const ring: number[][] = [[], [], []];
+                for (let y = y0; y <= y1; y += 1) {
+                  for (let x = x0; x <= x1; x += 1) {
+                    if (x === x0 || x === x1 || y === y0 || y === y1) {
+                      const o = (y * width + x) * 4;
+                      for (let k = 0; k < 3; k += 1) {
+                        ring[k].push(data[o + k]);
+                      }
+                    }
+                  }
+                }
+                const background = ring.map(values => {
+                  const sorted = values.sort((a, b) => a - b);
+                  return sorted[Math.floor(sorted.length / 2)];
+                });
+                const toward = palette[c].map((v, k) => v - background[k]);
+                const span = toward.reduce((sum, v) => sum + v * v, 0);
+                if (span < 30 * 30) {
+                  throw new Error(
+                    `trackMarkers: the marker's color lies within ${Math.sqrt(span).toFixed(0)} of its background, too close to read under a pixel`,
+                  );
+                }
+                let total = 0;
+                let sumX = 0;
+                let sumY = 0;
+                const rows: number[] = [];
+                const columns = new Array<number>(x1 - x0 + 1).fill(0);
+                for (let y = y0; y <= y1; y += 1) {
+                  let row = 0;
+                  for (let x = x0; x <= x1; x += 1) {
+                    const o = (y * width + x) * 4;
+                    let dot = 0;
+                    for (let k = 0; k < 3; k += 1) {
+                      dot += (data[o + k] - background[k]) * toward[k];
+                    }
+                    const weight = Math.min(1, Math.max(0, dot / span));
+                    total += weight;
+                    sumX += weight * (x + 0.5);
+                    sumY += weight * (y + 0.5);
+                    row += weight;
+                    columns[x - x0] += weight;
+                  }
+                  if (y > minY[c] && y < maxY[c]) {
+                    rows.push(row);
+                  }
+                }
+                const median = (values: number[], fallback: number) => {
+                  if (values.length === 0) {
+                    return fallback;
+                  }
+                  const sorted = [...values].sort((a, b) => a - b);
+                  return sorted[Math.floor(sorted.length / 2)];
+                };
+                const markerWidth = median(rows, maxX[c] - minX[c] + 1);
+                const markerHeight = median(
+                  columns.filter(
+                    (_, i) => x0 + i > minX[c] && x0 + i < maxX[c],
+                  ),
+                  maxY[c] - minY[c] + 1,
+                );
+                return {
+                  x: (left + sumX / total - markerWidth / 2) / scale,
+                  y: (top + sumY / total - markerHeight / 2) / scale,
+                  width: markerWidth / scale,
+                  height: markerHeight / scale,
+                };
+              };
+              for (const c of members) {
+                boxes[c] =
+                  pixels[c] === 0
+                    ? null
+                    : sub
+                      ? fine(c)
+                      : {
+                          x: (left + minX[c]) / scale,
+                          y: (top + minY[c]) / scale,
+                          width: (maxX[c] - minX[c] + 1) / scale,
+                          height: (maxY[c] - minY[c] + 1) / scale,
+                        };
               }
             }
-            // The marker's box from its anti-aliased edges: each pixel counts
-            // by its color's share of the way from the background to the
-            // marker's. The background is the median of a ring 2 px out.
-            const fine = (c: number) => {
-              const x0 = Math.max(0, minX[c] - 2);
-              const x1 = Math.min(width - 1, maxX[c] + 2);
-              const y0 = Math.max(0, minY[c] - 2);
-              const y1 = Math.min(height - 1, maxY[c] + 2);
-              const ring: number[][] = [[], [], []];
-              for (let y = y0; y <= y1; y += 1) {
-                for (let x = x0; x <= x1; x += 1) {
-                  if (x === x0 || x === x1 || y === y0 || y === y1) {
-                    const o = (y * width + x) * 4;
-                    for (let k = 0; k < 3; k += 1) {
-                      ring[k].push(data[o + k]);
-                    }
-                  }
-                }
-              }
-              const background = ring.map(values => {
-                const sorted = values.sort((a, b) => a - b);
-                return sorted[Math.floor(sorted.length / 2)];
-              });
-              const toward = palette[c].map((v, k) => v - background[k]);
-              const span = toward.reduce((sum, v) => sum + v * v, 0);
-              if (span < 30 * 30) {
-                throw new Error(
-                  `trackMarkers: the marker's color lies within ${Math.sqrt(span).toFixed(0)} of its background, too close to read under a pixel`,
-                );
-              }
-              let total = 0;
-              let sumX = 0;
-              let sumY = 0;
-              const rows: number[] = [];
-              const columns = new Array<number>(x1 - x0 + 1).fill(0);
-              for (let y = y0; y <= y1; y += 1) {
-                let row = 0;
-                for (let x = x0; x <= x1; x += 1) {
-                  const o = (y * width + x) * 4;
-                  let dot = 0;
-                  for (let k = 0; k < 3; k += 1) {
-                    dot += (data[o + k] - background[k]) * toward[k];
-                  }
-                  const weight = Math.min(1, Math.max(0, dot / span));
-                  total += weight;
-                  sumX += weight * (x + 0.5);
-                  sumY += weight * (y + 0.5);
-                  row += weight;
-                  columns[x - x0] += weight;
-                }
-                if (y > minY[c] && y < maxY[c]) {
-                  rows.push(row);
-                }
-              }
-              const median = (values: number[], fallback: number) => {
-                if (values.length === 0) {
-                  return fallback;
-                }
-                const sorted = [...values].sort((a, b) => a - b);
-                return sorted[Math.floor(sorted.length / 2)];
-              };
-              const markerWidth = median(rows, maxX[c] - minX[c] + 1);
-              const markerHeight = median(
-                columns.filter((_, i) => x0 + i > minX[c] && x0 + i < maxX[c]),
-                maxY[c] - minY[c] + 1,
-              );
-              return {
-                x: (left + sumX / total - markerWidth / 2) / scale,
-                y: (top + sumY / total - markerHeight / 2) / scale,
-                width: markerWidth / scale,
-                height: markerHeight / scale,
-              };
-            };
-            found.push({
-              boxes: palette.map((_, c) =>
-                pixels[c] === 0
-                  ? null
-                  : sub
-                    ? fine(c)
-                    : {
-                        x: (left + minX[c]) / scale,
-                        y: (top + minY[c]) / scale,
-                        width: (maxX[c] - minX[c] + 1) / scale,
-                        height: (maxY[c] - minY[c] + 1) / scale,
-                      },
-              ),
-              pixels,
-              scale,
-            });
+            found.push({boxes, pixels, scale});
           }
           return found;
         },
@@ -698,9 +731,9 @@ export async function trackMarkers(
             format: f.format,
             viewportWidth: f.viewportWidth,
           })),
-          palette: colors.map(rgb => [...rgb]),
+          palette: entries.map(({rgb}) => [...rgb]),
+          areas: entries.map(entry => entry.region ?? null),
           tol: tolerance,
-          area: region ?? null,
           sub: subpixel,
         },
       );

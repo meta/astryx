@@ -1061,13 +1061,9 @@ export function checkIconSets(ctx) {
   }
   const order = choice.order ?? [];
   const unlisted = sets.filter(set => !order.includes(set));
-  if (sets.length > 1 && unlisted.length > 0) {
-    const {problem, fix} = unlistedIconSets(
-      sets.length,
-      list[0].selector,
-      list.slice(1).map(each => each.selector),
-      unlisted.map(set => `${set.package}/${set.name}`),
-    );
+  if (sets.length > 1 && unlisted.length > 0 && order.length > 0) {
+    const [main, ...backups] = order;
+    const {problem, fix} = unlistedIconSets(sets, main, backups, unlisted);
     return {
       id,
       label,

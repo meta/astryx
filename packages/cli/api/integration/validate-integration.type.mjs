@@ -140,6 +140,11 @@
  *   cannot prove either way (`icon`); an adapter export it cannot prove
  *   (`adapter`); and a theme map or theme-map entry it cannot read
  *   (`entry`).
+ * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
+ *   The icon definitions the bundled templates use that the set's `map`
+ *   does not name, each with how many templates use it, most used first,
+ *   then by name. A copied template renders a placeholder for each in a
+ *   project that uses only this set. Built-in ones are also error issues.
  */
 
 /**

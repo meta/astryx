@@ -94,9 +94,10 @@ jobs:
               return data.workflow_runs;
             };
             const byBot = runs => runs.filter(run => run.actor?.login === BOT);
-            // ci.yml names main's nightly full interaction run; it is no
-            // release-check.
+            // ci.yml names main's nightly full interaction run and the weekly
+            // full WebKit run; neither is a release-check.
             const interactionRun = run => /^Interaction proofs of /.test(run.display_title ?? '');
+            const webkitWeeklyRun = run => /^WebKit weekly of /.test(run.display_title ?? '');
             // Whether a lane is due for the tip. A cancelled run was replaced
             // while waiting, or stopped by a release re-check of main's tip,
             // which is itself a full check. A release-check that checked out a newer commit
@@ -146,7 +147,7 @@ jobs:
             };
             const allChecks = await dispatchedRuns('ci.yml');
             const allUnits = await dispatchedRuns('deploy.yml');
-            const checks = byBot(allChecks).filter(run => !interactionRun(run));
+            const checks = byBot(allChecks).filter(run => !interactionRun(run) && !webkitWeeklyRun(run));
             const units = byBot(allUnits);
             let heavy = await due(checks, 'release-check', HEAVY_WINDOW_MINUTES, true);
             // A person's run of main's tip covers it too.

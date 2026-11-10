@@ -1026,10 +1026,29 @@ interface TouchArrivalProbe {
 }
 
 /**
- * The longest time the page drew no frame while the gesture reached it, ms.
- * The span runs from the last frame before the first touch to the first
- * frame after the lift. With no such frame, the touch or the lift itself
- * bounds it. Null with no frame read.
+ * Each time the page drew no frame across a span, in order. The span runs
+ * from the last frame at or before `from` to the first frame at or after
+ * `to`. With no such frame, `from` or `to` itself bounds it. Empty with no
+ * frame read.
+ */
+export function frameGaps(
+  frames: readonly number[],
+  from: number,
+  to: number,
+): {readonly from: number; readonly to: number}[] {
+  if (frames.length === 0) {
+    return [];
+  }
+  const sorted = [...frames].sort((a, b) => a - b);
+  const before = sorted.filter(t => t <= from).at(-1) ?? from;
+  const after = sorted.find(t => t >= to) ?? to;
+  const edges = [before, ...sorted.filter(t => t > from && t < to), after];
+  return edges.slice(1).map((t, i) => ({from: edges[i], to: t}));
+}
+
+/**
+ * The longest time the page drew no frame while the gesture reached it, ms
+ * (`frameGaps` from the first touch to the lift). Null with no frame read.
  */
 export function longestFrameGap(
   frames: readonly number[],
@@ -1038,17 +1057,12 @@ export function longestFrameGap(
   if (frames.length === 0 || arrivals.length === 0) {
     return null;
   }
-  const from = arrivals[0].stamp;
-  const to = arrivals[arrivals.length - 1].stamp;
-  const sorted = [...frames].sort((a, b) => a - b);
-  const before = sorted.filter(t => t <= from).at(-1) ?? from;
-  const after = sorted.find(t => t >= to) ?? to;
-  const edges = [before, ...sorted.filter(t => t > from && t < to), after];
-  let longest = 0;
-  for (let i = 1; i < edges.length; i += 1) {
-    longest = Math.max(longest, edges[i] - edges[i - 1]);
-  }
-  return longest;
+  const gaps = frameGaps(
+    frames,
+    arrivals[0].stamp,
+    arrivals[arrivals.length - 1].stamp,
+  );
+  return Math.max(0, ...gaps.map(gap => gap.to - gap.from));
 }
 
 async function playSteps(

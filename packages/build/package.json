@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/build",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "description": "Build plugins for Astryx source builds — babel, PostCSS, and Vite integrations",
   "author": "Meta Open Source",
   "license": "MIT",
@@ -61,12 +61,12 @@
     "vite": "catalog:"
   },
   "dependencies": {
-    "autoprefixer": "^10.5.2",
-    "browserslist": "^4.28.4",
+    "autoprefixer": "^10.6.2",
+    "browserslist": "^4.29.5",
     "fast-glob": "^3.3.0",
     "glob-parent": "^6.0.0",
     "is-glob": "^4.0.0",
-    "lightningcss": "^1.32.0"
+    "lightningcss": "^1.33.0"
   },
   "devDependencies": {
     "@stylexjs/postcss-plugin": "catalog:",
