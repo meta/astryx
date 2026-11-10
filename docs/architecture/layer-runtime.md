@@ -787,7 +787,10 @@ it on the surface inside the layer and run no layout while it plays.
   presentation, held from the open until its close settles (INV14).
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
-  Escape/platform routing.
+  Escape/platform routing. The stack, the modal outlet registry, the gesture
+  counter and the per-document outside-press and popover-operation records
+  live under versioned keys, one per page, so every copy of Core on the page
+  orders, routes and dismisses through the same records (`spec:AST-110` FR3).
 - `Popover/usePopover.tsx` owns focus-trap composition and default native light
   dismiss for Popover-family surfaces.
 - `hooks/useFocusTrap.ts` adapts dismissible traps into current shared

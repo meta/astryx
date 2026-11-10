@@ -10,6 +10,7 @@ export const doc = {
   isReady: true,
   category: 'Table - Grouped',
   icons: {
+    ArrowsRightLeftIcon: 'transfer',
     BuildingLibraryIcon: 'bank',
     CreditCardIcon: 'creditCard',
     PresentationChartLineIcon: 'activity',
