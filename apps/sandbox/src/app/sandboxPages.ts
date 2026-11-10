@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
       },
       {
+        name: 'Tooltip Triggers',
+        href: '/pages/tooltip-triggers/',
+        description:
+          'Truncated text, icon buttons, buttons and links with tooltips over a page that scrolls with the document, to check a tap, a long press and a scroll on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:
