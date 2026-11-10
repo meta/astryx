@@ -278,7 +278,11 @@ a just-started compositor animation late (a sheet's release held on screen for
 late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, at the position the page last
 set before the block is excused. Pass that position as `setBeforeBlock`, such
-as the drag's last position at the release. An animation frozen at the block's
+as the drag's last position at the release. Without it, a block with `during`
+takes the position on the cast's last frame before the caught animation's
+start. Chromium on a loaded runner presents a just-started compositor
+animation late too: a slider's coast first showed 25–111 ms after its start.
+An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
 An element off screen before the block, such as a card that enters from an
@@ -552,10 +556,8 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 `Date.now()` sees one event per photograph, about 100 ms apart, so a
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
-`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
-the page's surface right after it changes ("Unable to capture screenshot"); a
-storyboard takes that photograph again two frames later, up to three attempts
-in all, and lists each retake under `recaptures` in the trace.
+`startScreencast` and `castStoryboard`. A photograph the engine fails
+throws the engine's error; a storyboard never takes it again.
 
 ## Page freeze
 
