@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {isInHeldLayer, isInputShield} from '../Layer/inputHold';
 import {cubicBezier} from '../motion/bezier';
+import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
 import {popover, timing} from '../motion/uikit';
 import {findPopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
@@ -370,8 +371,11 @@ describe('createPopoverSurfaceMotion', () => {
     expect(endMs).toBeLessThanOrEqual(ENTRANCE.ms + 1);
     expect(endMs).toBeGreaterThan(ENTRANCE.ms * 0.8);
     expect(peak).toBeLessThanOrEqual(1);
+    // It starts at the floor, not at 0: Chromium draws the start frame.
     const [opacityAnimation] = live('opacity');
-    expect(Number(opacityAnimation.keyframes[0].opacity)).toBe(0);
+    expect(Number(opacityAnimation.keyframes[0].opacity)).toBe(
+      ENTRANCE_OPACITY_FLOOR,
+    );
     expect(Number(opacityAnimation.keyframes.at(-1)!.opacity)).toBe(1);
   });
 

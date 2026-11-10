@@ -42,15 +42,23 @@ import {
   type LogicalAxisMapping,
   type LogicalOverflowGeometry,
 } from './scrollGeometry';
+import {publishScrollGeometry} from './scrollGeometrySubscriptions';
 import {
   registerScrollOwner,
   unregisterScrollOwner,
 } from './scrollOwnerRegistry';
 
+/** Logical axis or axes where native scrolling is requested. */
 export type ScrollAxis = 'inline' | 'block' | 'both';
+/** Whether effective axes pass scroll gestures to ancestors at an edge. */
 export type ScrollOverscroll = 'allow' | 'contain';
+/** Whether a fitting viewport deliberately remains a Sticky containing boundary. */
 export type ScrollStickyContainment = 'whenScrollable' | 'always';
 
+/**
+ * Where keyboard scrolling is reached: caller-owned content, a named viewport,
+ * or a named viewport that delegates forward Tab entry into its content.
+ */
 export type ScrollKeyboardAccess =
   | {owner: 'content'}
   | {owner: 'viewport'; label: string; role?: 'group' | 'region'}
@@ -60,21 +68,27 @@ export type ScrollKeyboardAccess =
       role?: 'group' | 'region';
     };
 
+/** Effective ownership and logical edge state for one requested axis. */
 export interface ScrollAxisState {
   isScrollable: boolean;
   atStart: boolean;
   atEnd: boolean;
 }
 
+/** Per-axis effective scroll state published by the hook. */
 export interface ScrollableAreaState {
   inline: ScrollAxisState;
   block: ScrollAxisState;
 }
 
 export interface UseScrollableAreaOptions {
+  /** Logical axis or axes where scrolling is allowed. */
   axis: ScrollAxis;
+  /** Keyboard reachability owner; a named viewport joins the tab order while effective. */
   keyboardAccess: ScrollKeyboardAccess;
+  /** Edge propagation on effective axes. @default 'allow' */
   overscroll?: ScrollOverscroll;
+  /** Sticky containment while fitting. @default 'whenScrollable' */
   stickyContainment?: ScrollStickyContainment;
 }
 
@@ -118,6 +132,52 @@ const styles = stylex.create({
     overflowY: 'auto' | 'hidden' | 'clip',
   ) => ({overflowX, overflowY}),
 });
+
+/**
+ * The inline declarations of an ancestor that change what the hook measures
+ * without changing a box: the axis mapping, and whether the boxes exist. A
+ * size change reaches the hook through the resize observers whatever caused
+ * it.
+ */
+const ANCESTOR_STYLE_PROPERTIES = [
+  'direction',
+  'writing-mode',
+  'display',
+  'visibility',
+  'content-visibility',
+] as const;
+
+function inlineDeclaration(
+  cssText: string | null,
+  property: string,
+): string | null {
+  if (cssText == null || !cssText.includes(property)) {
+    return null;
+  }
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]*)`, 'i').exec(
+    cssText,
+  );
+  return match == null ? null : match[1].trim();
+}
+
+/**
+ * Whether an ancestor's `style` attribute changed a declaration the
+ * measurement depends on (ANCESTOR_STYLE_PROPERTIES), between its old and new
+ * text.
+ */
+function inlineStyleChangesMapping(
+  before: string | null,
+  after: string | null,
+): boolean {
+  if (before === after) {
+    return false;
+  }
+  return ANCESTOR_STYLE_PROPERTIES.some(
+    property =>
+      inlineDeclaration(before, property) !==
+      inlineDeclaration(after, property),
+  );
+}
 
 function axisIsRequested(requested: ScrollAxis, axis: 'inline' | 'block') {
   return requested === axis || requested === 'both';
@@ -191,6 +251,19 @@ function useStableComposedRef(
  * Adds axis-aware scroll behavior to caller-owned viewport and content boxes.
  * The returned prop getters compose refs and preserve caller props, so spread
  * order cannot detach measurement or override behavior-owned accessibility.
+ *
+ * @example
+ * ```
+ * const {getViewportProps, getContentProps, state} = useScrollableArea({
+ *   axis: 'block',
+ *   keyboardAccess: {owner: 'viewport', label: 'Activity history'},
+ * });
+ * return (
+ *   <div {...getViewportProps({xstyle: styles.viewport})}>
+ *     <div {...getContentProps()}>{children}</div>
+ *   </div>
+ * );
+ * ```
  */
 export function useScrollableArea({
   axis,
@@ -204,11 +277,36 @@ export function useScrollableArea({
   const [overflow, setOverflow] =
     useState<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const [mapping, setMapping] = useState<LogicalAxisMapping>(INITIAL_MAPPING);
+  const [isViewportFocused, setViewportFocused] = useState(false);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
   const measureRef = useRef<(() => void) | null>(null);
 
   const viewportRef = useCallback((node: HTMLElement | null) => {
     setViewport(current => (current === node ? current : node));
+    if (node == null) {
+      return;
+    }
+    const syncFocus = () => {
+      // Only a viewport with no scrollable axis reads this state, and the
+      // measurement that ends its scrolling reads focus again, so a scrollable
+      // one can skip the render.
+      const {inline, block} = stateRef.current;
+      if (inline.isScrollable || block.isScrollable) {
+        return;
+      }
+      setViewportFocused(node.ownerDocument.activeElement === node);
+    };
+    syncFocus();
+    node.addEventListener('focusin', syncFocus);
+    node.addEventListener('focusout', syncFocus);
+    // React runs this cleanup instead of calling the ref with null, so the
+    // viewport state has to clear here as well.
+    return () => {
+      node.removeEventListener('focusin', syncFocus);
+      node.removeEventListener('focusout', syncFocus);
+      setViewportFocused(false);
+      setViewport(null);
+    };
   }, []);
   const contentRef = useCallback((node: HTMLElement | null) => {
     setContent(current => (current === node ? current : node));
@@ -237,6 +335,8 @@ export function useScrollableArea({
         statesEqual(current, nextState) ? current : nextState,
       );
     };
+    let hasContentInvalidation = true;
+    let hasLayoutInvalidation = true;
 
     // Measures now; `measure` is the frame callback that also clears the
     // pending frame. The same-commit remeasure below calls this one, so a frame
@@ -271,6 +371,13 @@ export function useScrollableArea({
         return;
       }
 
+      // Focus events do not always reach the viewport (Chromium fires none
+      // while the page lacks system focus), and this commit may drop the tab
+      // stop that keeps focus here. A scrollable viewport never reads it.
+      if (!inline.isScrollable && !block.isScrollable) {
+        setViewportFocused(viewport.ownerDocument.activeElement === viewport);
+      }
+
       const nextOverflow = {
         inline: inlineOverflow,
         block: blockOverflow,
@@ -285,6 +392,13 @@ export function useScrollableArea({
       );
       // The measured DOM state is the hook's output.
       publish(nextState);
+      publishScrollGeometry(
+        viewport,
+        hasContentInvalidation,
+        hasLayoutInvalidation,
+      );
+      hasContentInvalidation = false;
+      hasLayoutInvalidation = false;
       // A writing-mode change remaps the behavior-owned physical CSS.
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
@@ -355,13 +469,67 @@ export function useScrollableArea({
       if (next !== current) {
         publish(next);
       }
+      publishScrollGeometry(viewport);
     };
 
+    const scheduleContentMeasure = () => {
+      hasContentInvalidation = true;
+      scheduleMeasure();
+    };
+    const scheduleLayoutMeasure = () => {
+      hasLayoutInvalidation = true;
+      scheduleContentMeasure();
+    };
+    // An ancestor's inline style reaches the measurement two ways: through the
+    // viewport's or the content's box, which the resize observers report, or
+    // through the axis mapping and the boxes' existence. So an ancestor's
+    // `style` mutation counts only when one of those declarations changed.
+    // A surface that moves under a finger writes its transform on every input
+    // sample; measuring on each of those forced a style recalculation and a
+    // layout every frame of the drag.
+    const isUnmappedAncestorStyle = (record: MutationRecord) => {
+      const target = record.target;
+      return (
+        record.type === 'attributes' &&
+        record.attributeName === 'style' &&
+        target instanceof Element &&
+        !viewport.contains(target) &&
+        !content.contains(target) &&
+        !inlineStyleChangesMapping(
+          record.oldValue,
+          target.getAttribute('style'),
+        )
+      );
+    };
+    // A change below the content root, such as a mounted row, is content
+    // only. A change to the content root, the viewport or an ancestor can
+    // change how mounted content fits.
+    const onMutations = (records: MutationRecord[]) => {
+      const counted = records.filter(
+        record => !isUnmappedAncestorStyle(record),
+      );
+      if (counted.length === 0) {
+        return;
+      }
+      if (
+        counted.some(
+          record =>
+            record.target === content || !content.contains(record.target),
+        )
+      ) {
+        scheduleLayoutMeasure();
+      } else {
+        scheduleContentMeasure();
+      }
+    };
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
     measure();
-    const stopObservingViewport = observeResize(viewport, scheduleMeasure);
-    const stopObservingContent = observeResize(content, scheduleMeasure);
+    const stopObservingViewport = observeResize(
+      viewport,
+      scheduleLayoutMeasure,
+    );
+    const stopObservingContent = observeResize(content, scheduleLayoutMeasure);
 
     viewport.addEventListener('scroll', onScroll, {passive: true});
     window.addEventListener('resize', scheduleMeasure);
@@ -377,7 +545,7 @@ export function useScrollableArea({
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
-        : new MutationObserver(scheduleMeasure);
+        : new MutationObserver(onMutations);
     mutationObserver?.observe(viewport, {
       attributes: true,
       attributeFilter: ['class', 'dir', 'hidden', 'style'],
@@ -394,13 +562,14 @@ export function useScrollableArea({
       mutationObserver?.observe(ancestor, {
         attributes: true,
         attributeFilter: ['class', 'dir', 'hidden', 'style'],
+        attributeOldValue: true,
       });
       ancestor = ancestor.parentElement;
     }
 
     const fonts = document.fonts;
-    fonts?.addEventListener?.('loadingdone', scheduleMeasure);
-    void fonts?.ready.then(scheduleMeasure);
+    fonts?.addEventListener?.('loadingdone', scheduleLayoutMeasure);
+    void fonts?.ready.then(scheduleLayoutMeasure);
 
     return () => {
       isActive = false;
@@ -417,7 +586,7 @@ export function useScrollableArea({
       viewport.removeEventListener('animationend', scheduleMeasure);
       content.removeEventListener('transitionend', scheduleMeasure);
       content.removeEventListener('animationend', scheduleMeasure);
-      fonts?.removeEventListener?.('loadingdone', scheduleMeasure);
+      fonts?.removeEventListener?.('loadingdone', scheduleLayoutMeasure);
       if (frame != null) {
         window.cancelAnimationFrame(frame);
       }
@@ -512,12 +681,13 @@ export function useScrollableArea({
           ),
         ),
       ) as ScrollableElementProps<E>;
-      const viewportIsKeyboardOwner = keyboardAccess.owner !== 'content';
-      const keepsProgrammaticFocus =
-        (!viewportIsKeyboardOwner || !hasEffectiveAxis) &&
-        viewport != null &&
-        typeof document !== 'undefined' &&
-        document.activeElement === viewport;
+      // Focus state is stale while an axis scrolls, so until an axis change is
+      // measured, the last measured scrolling keeps a focused viewport's
+      // tabindex. Dropping it there blurs the viewport in Chromium.
+      const mayHoldFocus =
+        isViewportFocused ||
+        measured.inline.isScrollable ||
+        measured.block.isScrollable;
       const behaviorStyle: CSSProperties = {...styledProps.style};
       const containInline =
         overscroll === 'contain' && state.inline.isScrollable;
@@ -541,12 +711,7 @@ export function useScrollableArea({
           ? {
               role: keyboardAccess.role ?? 'group',
               'aria-label': keyboardAccess.label,
-              tabIndex:
-                viewportIsKeyboardOwner && hasEffectiveAxis
-                  ? 0
-                  : keepsProgrammaticFocus
-                    ? -1
-                    : undefined,
+              tabIndex: hasEffectiveAxis ? 0 : mayHoldFocus ? -1 : undefined,
             }
           : {};
 
@@ -570,13 +735,14 @@ export function useScrollableArea({
     [
       axis,
       getComposedViewportRef,
+      isViewportFocused,
       keyboardAccess,
       mapping,
+      measured,
       overflow,
       overscroll,
       state,
       stickyContainment,
-      viewport,
     ],
   );
 
@@ -584,9 +750,14 @@ export function useScrollableArea({
     <E extends HTMLElement>(
       props: ScrollableElementProps<E> = {},
     ): ScrollableElementProps<E> => {
+      const {xstyle, ...domProps} = props;
+      const styledProps = mergeProps(
+        domProps,
+        stylex.props(xstyle),
+      ) as ScrollableElementProps<E>;
       const result: ScrollableElementProps<E> = {
-        ...props,
-        ref: getComposedContentRef(props.ref),
+        ...styledProps,
+        ref: getComposedContentRef(styledProps.ref),
         'data-scroll-content': '',
       };
       return result;

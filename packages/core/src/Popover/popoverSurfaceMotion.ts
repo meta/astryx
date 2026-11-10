@@ -4,8 +4,8 @@
 
 /**
  * @file popoverSurfaceMotion.ts
- * @input A Popover's layer element, the source it hangs off and the
- *   compositor animator. Also the theme's duration and easing tokens, and
+ * @input A Popover's surface (the box that paints it, inside its layer),
+ *   the source it hangs off and the compositor animator. Also the theme's duration and easing tokens, and
  *   the layer runtime's exit copy and input hold
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and
@@ -27,6 +27,7 @@ import {
   type MotionHandle,
 } from '../motion/animator';
 import {holdInput} from '../Layer/inputHold';
+import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {mapProgress, mapRange} from '../motion/progress';
 import {
   easedProgress,
@@ -62,18 +63,20 @@ function surfaceCurves(
   to: SurfaceState,
   axis: 'x' | 'y',
   progress: MotionCurve,
+  opacityFloor = 0,
 ): Record<'scaleX' | 'scaleY' | 'opacity', MotionCurve> {
   // Unclamped, so an easing that overshoots carries the channels with it.
   const lerp = (a: number, b: number) =>
     mapRange([0, 1], [a, b], {clamp: false});
   const scale = lerp(from.scale, to.scale);
   const length = lerp(from.length, to.length);
+  const opacity = lerp(from.opacity, to.opacity);
   const across = mapProgress(progress, scale);
   const along = mapProgress(progress, p => scale(p) * length(p));
   return {
     scaleX: axis === 'x' ? along : across,
     scaleY: axis === 'y' ? along : across,
-    opacity: mapProgress(progress, lerp(from.opacity, to.opacity)),
+    opacity: mapProgress(progress, p => Math.max(opacityFloor, opacity(p))),
   };
 }
 
@@ -308,8 +311,17 @@ export function createPopoverSurfaceMotion(
       'transform-origin',
       `${next.originX}px ${next.originY}px`,
     );
+    // The growth fades in from the floor, so Chromium draws its first frame.
+    // The start values keep opacity 0. Reduce Motion replaces this curve with a
+    // cross-fade, which then starts from transparent.
     const handle = animator.play(
-      surfaceCurves(start, PRESENTED, next.axis, timing),
+      surfaceCurves(
+        start,
+        PRESENTED,
+        next.axis,
+        timing,
+        ENTRANCE_OPACITY_FLOOR,
+      ),
     );
     presentHandle = handle;
     endHold();

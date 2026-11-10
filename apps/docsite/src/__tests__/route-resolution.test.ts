@@ -9,6 +9,7 @@ import {
 import {packages} from '../generated/packageRegistry';
 import {linkifyCode} from '../components/codeLinkifiers';
 import {buildOutline} from '../components/docs/docOutline';
+import {docsSidebarGroups} from '../components/docsSidebarData';
 
 /**
  * Every topic page the site had before the CLI's docs were split into
@@ -95,8 +96,11 @@ describe('route resolution', () => {
     // `use-integrations` is the guide for apps that install one;
     // `cli-experimental-render-pages` is the experimental render guide;
     // `calendars` is the calendar systems page.
-    const sidebarGuides = docTopics
-      .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
+    // `styling` shows under `styling-overview`, and
+    // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
+    // under Icons in Foundations.
+    const sidebarGuides = docsSidebarGroups(docTopics)
+      .guide.flatMap(({page, children}) => [page, ...children])
       .map(d => d.topic)
       .sort();
     expect(sidebarGuides).toEqual(
@@ -105,8 +109,6 @@ describe('route resolution', () => {
         'browser-support',
         'calendars',
         'cli-component-lookups',
-        'cli-experimental-icon-set-files',
-        'cli-experimental-icon-sets',
         'cli-experimental-render-pages',
         'cli-host-entry',
         'global',

@@ -1049,6 +1049,38 @@ describe('two touches in a row', () => {
   });
 });
 
+describe('a pointerup that matches no held press', () => {
+  it('is ignored when it carries no pointerId and nothing is held', () => {
+    // The input stream reports a listener's throw through `reportError`.
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    try {
+      // A page's own drag script or test helper can dispatch a bare event
+      // named `pointerup`; a real PointerEvent always has a numeric pointerId.
+      document.body.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it('leaves a held finger press alone', () => {
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    coarsePrimaryPointer();
+    try {
+      // No box component is mounted, so the finger holds a press but no contact.
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      document.body.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(reportError).not.toHaveBeenCalled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+});
+
 describe('a phone or tablet paints a mouse or Space press itself', () => {
   // `(pointer: coarse)` reads the PRIMARY pointer. Where it matches, the
   // stylesheet drops every `:active` arm, so a trackpad click or a Space press

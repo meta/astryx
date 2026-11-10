@@ -26,9 +26,12 @@ import {
   fireEvent,
   waitFor,
   act,
+  cleanup,
+  within,
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
 import {StrictMode, useState, type ComponentProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
@@ -36,6 +39,7 @@ import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
 import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
+import {useFocusTrap} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Store original matches to restore later
@@ -636,7 +640,7 @@ describe('HoverCard', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('omits aria-expanded on a trigger whose role does not support it', () => {
+  it('gives a role-less trigger neither aria-haspopup nor aria-expanded', () => {
     render(
       <HoverCard content={<span>Card content</span>} label="Timestamp details">
         <time dateTime="2026-08-25" tabIndex={0}>
@@ -646,11 +650,26 @@ describe('HoverCard', () => {
     );
     const trigger = screen.getByText('2 hours ago');
     expect(trigger.tagName).toBe('TIME');
-    // Global attributes are valid on any element, so the popup relationship is
-    // still advertised.
-    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-    // aria-expanded is not: <time> has no role that supports it, and emitting
-    // it is a critical axe aria-allowed-attr violation.
+    // ARIA 1.2 supports neither attribute on the time role.
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
+
+  it('names the open card from a role-less trigger through aria-controls only', () => {
+    render(
+      <HoverCard
+        content={<span>Card content</span>}
+        label="Profile actions"
+        isOpen>
+        <span tabIndex={0} aria-controls="own-region">
+          Trigger
+        </span>
+      </HoverCard>,
+    );
+    const trigger = screen.getByText('Trigger');
+    const card = screen.getByRole('dialog', {hidden: true});
+    expect(trigger).toHaveAttribute('aria-controls', `own-region ${card.id}`);
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
     expect(trigger).not.toHaveAttribute('aria-expanded');
   });
 
@@ -787,11 +806,12 @@ describe('HoverCard', () => {
     );
     // Text should be rendered
     expect(screen.getByText('Just text, no element')).toBeInTheDocument();
-    // When labelled, the wrapper advertises a dialog popup.
+    // The wrapper is a role-less <span>, so it carries neither
+    // aria-haspopup nor aria-expanded.
     const wrapper = screen.getByText('Just text, no element');
     expect(wrapper.tagName).toBe('SPAN');
-    expect(wrapper).toHaveAttribute('aria-haspopup', 'dialog');
-    // The wrapper is a role-less <span>; aria-expanded is invalid there.
+    expect(wrapper).toHaveAttribute('tabindex', '0');
+    expect(wrapper).not.toHaveAttribute('aria-haspopup');
     expect(wrapper).not.toHaveAttribute('aria-expanded');
     // While closed, the layer is not in the DOM, so aria-controls is unset.
     expect(wrapper).not.toHaveAttribute('aria-controls');
@@ -904,10 +924,8 @@ describe('HoverCard', () => {
           Edited {isDraft && 'draft'} {null}today
         </HoverCard>,
       );
-      expect(screen.getByText(/Edited/)).toHaveAttribute(
-        'aria-haspopup',
-        'dialog',
-      );
+      // The text wrapper is the trigger: it is the tab stop.
+      expect(screen.getByText(/Edited/)).toHaveAttribute('tabindex', '0');
     });
 
     // The auto hover cue (FR8) is a class on the text trigger; a single
@@ -951,13 +969,14 @@ describe('HoverCard', () => {
 
     it('still attaches to the first element when one is present', () => {
       render(
-        <HoverCard label="History" content={<span>Card</span>}>
+        <HoverCard label="History" content={<span>Card</span>} isOpen>
           Edited <time dateTime="2026-11-02">today</time>
         </HoverCard>,
       );
+      const card = screen.getByRole('dialog', {hidden: true});
       expect(screen.getByText('today')).toHaveAttribute(
-        'aria-haspopup',
-        'dialog',
+        'aria-controls',
+        card.id,
       );
     });
   });
@@ -1068,6 +1087,255 @@ describe('HoverCard', () => {
   });
 
   describe('Escape key behavior', () => {
+    it('takes Escape before a focus-trap container its trigger sits in', async () => {
+      const onOpenChange = vi.fn();
+      const onEscape = vi.fn();
+      function Trap() {
+        const {containerRef} = useFocusTrap<HTMLDivElement>({
+          isActive: true,
+          onEscape,
+        });
+        return (
+          <div ref={containerRef}>
+            <HoverCard
+              content={<span>Card content</span>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>
+          </div>
+        );
+      }
+      render(<Trap />);
+      fireEvent.mouseEnter(screen.getByRole('button', {name: 'Trigger'}));
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+
+      fireEvent.keyDown(document.body, {key: 'Escape'});
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false));
+      expect(onEscape).not.toHaveBeenCalled();
+    });
+
+    describe('in a second document', () => {
+      // A same-origin iframe stands in for any second document an app renders
+      // into through a portal, Document Picture-in-Picture included. A key
+      // press reaches only the document it happened in.
+      let frame: HTMLIFrameElement;
+
+      beforeEach(() => {
+        frame = document.createElement('iframe');
+        document.body.appendChild(frame);
+        // The frame has its own element prototypes: give them the same
+        // Popover API stand-ins as this document's.
+        const frameWindow = frame.contentWindow as Window & typeof globalThis;
+        const proto = frameWindow.HTMLElement.prototype;
+        const frameMatches = proto.matches;
+        proto.showPopover = function (this: HTMLElement) {
+          popoverOpenState.set(this, true);
+        };
+        proto.hidePopover = function (this: HTMLElement) {
+          popoverOpenState.set(this, false);
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (proto as any).matches = function (selector: string): boolean {
+          if (selector === ':popover-open') {
+            return popoverOpenState.get(this) ?? false;
+          }
+          return frameMatches.call(this, selector);
+        };
+      });
+
+      afterEach(() => {
+        // Unmount before the frame goes, or React removes nodes from a
+        // document that no longer exists.
+        cleanup();
+        frame.remove();
+      });
+
+      it('closes a card rendered into the second document on Escape there', async () => {
+        const onOpenChange = vi.fn();
+        const frameDocument = frame.contentDocument!;
+        render(
+          createPortal(
+            <HoverCard
+              content={<span>Card content</span>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = within(frameDocument.body).getByRole('button', {
+          name: 'Trigger',
+        });
+
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(true),
+        );
+
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(false),
+        );
+      });
+
+      it('takes Escape in the second document when its trigger appears there after the hook mounts', async () => {
+        const frameDocument = frame.contentDocument!;
+        function LateTrigger() {
+          const card = useHoverCard({delay: 0, hideDelay: 0});
+          const [isShown, setIsShown] = useState(false);
+          return (
+            <>
+              <button type="button" onClick={() => setIsShown(true)}>
+                Show trigger
+              </button>
+              <output data-testid="state">
+                {card.isOpen ? 'open' : 'closed'}
+              </output>
+              {isShown
+                ? createPortal(
+                    <>
+                      <span ref={card.ref}>Late trigger</span>
+                      {card.renderHoverCard(<span>Card</span>)}
+                    </>,
+                    frameDocument.body,
+                  )
+                : null}
+            </>
+          );
+        }
+        render(<LateTrigger />);
+        fireEvent.click(screen.getByRole('button', {name: 'Show trigger'}));
+        const state = screen.getByTestId('state');
+        fireEvent.mouseEnter(
+          within(frameDocument.body).getByText('Late trigger'),
+        );
+        await waitFor(() => expect(state).toHaveTextContent('open'));
+
+        // A press in the page is not the card's.
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
+      });
+
+      it('takes Escape where its trigger is after the trigger moves into the frame and back', async () => {
+        const frameDocument = frame.contentDocument!;
+        function MovingTrigger() {
+          const card = useHoverCard({delay: 0, hideDelay: 0});
+          const [isInFrame, setIsInFrame] = useState(false);
+          return (
+            <>
+              <button type="button" onClick={() => setIsInFrame(x => !x)}>
+                Move trigger
+              </button>
+              <output data-testid="state">
+                {card.isOpen ? 'open' : 'closed'}
+              </output>
+              {createPortal(
+                <>
+                  <span ref={card.ref}>Moving trigger</span>
+                  {card.renderHoverCard(<span>Card</span>)}
+                </>,
+                isInFrame ? frameDocument.body : document.body,
+              )}
+            </>
+          );
+        }
+        render(<MovingTrigger />);
+        const state = screen.getByTestId('state');
+        const move = () =>
+          fireEvent.click(screen.getByRole('button', {name: 'Move trigger'}));
+        const openIn = async (doc: Document) => {
+          fireEvent.mouseEnter(within(doc.body).getByText('Moving trigger'));
+          await waitFor(() => expect(state).toHaveTextContent('open'));
+        };
+
+        move();
+        await openIn(frameDocument);
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
+
+        move();
+        await openIn(document);
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
+      });
+
+      it('stays open when focus moves from the trigger into the card', async () => {
+        const onOpenChange = vi.fn();
+        const frameDocument = frame.contentDocument!;
+        const button = (text: string) =>
+          Array.from(frameDocument.querySelectorAll('button')).find(
+            candidate => candidate.textContent === text,
+          );
+        render(
+          createPortal(
+            <HoverCard
+              content={<button type="button">Inside</button>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = button('Trigger')!;
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(true),
+        );
+        trigger.focus();
+        button('Inside')!.focus();
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        });
+        expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      });
+
+      it('returns focus to the trigger when Escape closes the card from inside it', async () => {
+        const frameDocument = frame.contentDocument!;
+        // Testing Library's role queries cannot read the frame's popover, so
+        // find buttons by text.
+        const button = (text: string) =>
+          Array.from(frameDocument.querySelectorAll('button')).find(
+            candidate => candidate.textContent === text,
+          );
+        render(
+          createPortal(
+            <HoverCard
+              content={<button type="button">Inside</button>}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = button('Trigger')!;
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() => expect(button('Inside')).toBeDefined());
+        const inside = button('Inside')!;
+        inside.focus();
+        // Compared as booleans: printing a frame's element fails.
+        expect(frameDocument.activeElement === inside).toBe(true);
+
+        fireEvent.keyDown(inside, {key: 'Escape'});
+        await waitFor(() =>
+          expect(frameDocument.activeElement === trigger).toBe(true),
+        );
+      });
+    });
+
     it('hides hover card when Escape is pressed on trigger', async () => {
       const onOpenChange = vi.fn();
       // Reset the mock before this test
@@ -1661,6 +1929,41 @@ describe('HoverCard', () => {
       // Reaching for the keyboard ends the touch interaction: the same trigger,
       // focused by Tab, still opens.
       fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('ignores focus returned after typing in a field, but not after Escape', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            delay={0}>
+            <button type="button">Rename</button>
+          </HoverCard>
+          <input type="text" aria-label="File name" />
+        </>,
+      );
+
+      const trigger = screen.getByRole('button', {name: 'Rename'});
+      const field = screen.getByLabelText('File name');
+      tap(trigger);
+      fireEvent.pointerDown(field, {pointerType: 'touch'});
+      // An on-screen keyboard sends a key press for each typed character.
+      // That is text entry, so the touch interaction goes on.
+      for (const key of ['-', 'v', '2', 'Enter']) {
+        fireEvent.keyDown(field, {key});
+      }
+      fireEvent.focusIn(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(true);
+
+      fireEvent.keyDown(field, {key: 'Escape'});
       fireEvent.focusIn(trigger);
 
       await waitFor(() => {

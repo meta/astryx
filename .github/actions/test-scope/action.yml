@@ -17,8 +17,9 @@
 #   classifier, an API error, an empty file list or one GitHub truncates)
 #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
 #   Changeset) fails the step, as the old scope job failed its dependents.
-# - A release-branch pull request is the generated version bump: spec-only and
-#   tooling-only, with `release_bump` true.
+# - A release-branch generated bump keeps its narrow lane. Any other candidate
+#   runs every test lane; the trusted release validator then admits only the
+#   proven test-repair class and rejects every broader change.
 #
 # The job must be checked out first: this is a local action.
 
@@ -53,6 +54,13 @@ inputs:
       and `head_file_present` says so whether or not `touches` holds.
     required: false
     default: ''
+  lab-only-specs:
+    description: >-
+      Optional pattern over changed paths. On a Lab-only change, a changed file
+      that matches it is still this job's work: `applies` holds, and
+      `lab_specs_path` lists those files, so the job runs only them.
+    required: false
+    default: ''
 
 outputs:
   spec_only:
@@ -79,7 +87,7 @@ outputs:
       classifier predates it reports nothing, which runs every test.
     value: ${{ steps.scope.outputs.vitest_full_suite }}
   release_bump:
-    description: The PR targets a release branch (the generated version bump).
+    description: The PR targets a release branch and must pass release validation.
     value: ${{ steps.scope.outputs.release_bump }}
   decided:
     description: >-
@@ -87,6 +95,11 @@ outputs:
       not decide; a job that must do work on a lane it cannot recognize (spec
       validation) reads this.
     value: ${{ steps.scope.outputs.decided }}
+  truncated:
+    description: >-
+      `true` when the step could not decide because GitHub truncated the pull
+      request's file list (3,000 files); a re-run cannot decide such a scope.
+    value: ${{ steps.scope.outputs.truncated }}
   touches:
     description: A changed path matches `paths` (true when `paths` is empty or undecidable).
     value: ${{ steps.scope.outputs.touches }}
@@ -112,10 +125,16 @@ outputs:
       `false` when the PR head lacks `requires-head-file` and its diff does not
       touch it (a head cut before the file existed); `true` otherwise.
     value: ${{ steps.scope.outputs.head_file_present }}
+  lab_specs_path:
+    description: >-
+      With `lab-only-specs`: on a Lab-only change, a file listing the changed
+      files that match it, one per line; empty otherwise.
+    value: ${{ steps.scope.outputs.lab_specs_path }}
   applies:
     description: >-
       The job's work applies: not a specialized lane (spec, docsite, tooling or
-      Lab only), `touches` holds, and any `requires-head-file` is present.
+      Lab only), `touches` holds, and any `requires-head-file` is present. On a
+      Lab-only change it also holds when `lab_specs_path` lists a file.
     value: ${{ steps.scope.outputs.applies }}
 
 runs:
@@ -128,6 +147,7 @@ runs:
         SCOPE_OUTSIDE_PR: ${{ inputs.outside-pull-request }}
         SCOPE_HEAD_FILE: ${{ inputs.requires-head-file }}
         SCOPE_COMPONENT_AUDIT: ${{ inputs.component-audit }}
+        SCOPE_LAB_ONLY_SPECS: ${{ inputs.lab-only-specs }}
       with:
         retries: 3
         script: |
@@ -148,6 +168,8 @@ runs:
             applies: 'true',
             head_file_present: 'true',
             decided: 'true',
+            truncated: 'false',
+            lab_specs_path: '',
           };
           // Outside a pull request, or when undecidable, every component audit
           // applies in full; a specialized lane has none.
@@ -169,6 +191,21 @@ runs:
             for (const [key, value] of Object.entries(values)) core.setOutput(key, value);
             core.info(Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' '));
           };
+          const writeChangedFiles = files => {
+            const changedFilesPath = path.join(
+              process.env.RUNNER_TEMP || os.tmpdir(),
+              'test-scope-changed-files.txt',
+            );
+            const changed = [
+              ...new Set(
+                files.flatMap(file =>
+                  [file.filename, file.previous_filename].filter(Boolean),
+                ),
+              ),
+            ];
+            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
+            return changedFilesPath;
+          };
 
           if (context.eventName !== 'pull_request') {
             core.info(`${context.eventName}: not a pull request, so everything is in scope.`);
@@ -176,20 +213,6 @@ runs:
             return;
           }
           const pr = context.payload.pull_request;
-          if (pr.base.ref.startsWith('release/v')) {
-            core.info('Release-branch pull request: the generated version bump.');
-            report({
-              ...everything,
-              ...(audit ? auditNone : {}),
-              spec_only: 'true',
-              tooling_only: 'true',
-              release_bump: 'true',
-              touches: 'false',
-              applies: 'false',
-            });
-            return;
-          }
-
           let files;
           let root;
           // The base's policy files are copied to a temporary folder that
@@ -212,6 +235,9 @@ runs:
                 '.github/scripts/change-scope.cjs',
                 '.github/scripts/knowledge-paths.cjs',
                 'scripts/component-packages.cjs',
+                ...(pr.base.ref.startsWith('release/v')
+                  ? ['scripts/release/release-paths.mjs']
+                  : []),
                 ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
                 // Data, not code: the Lab entry check reads the base's copy.
                 'packages/cli/assets/discover/official-packages.json',
@@ -235,7 +261,12 @@ runs:
               }
             } catch (error) {
               core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);
-              report({...everything, decided: 'false'});
+              report({
+                ...everything,
+                release_bump: String(pr.base.ref.startsWith('release/v')),
+                decided: 'false',
+                truncated: String(/truncated the file list/.test(error.message)),
+              });
               return;
             }
 
@@ -245,6 +276,40 @@ runs:
                 ? `R100\t${f.previous_filename}\t${f.filename}`
                 : `${STATUS[f.status] ?? 'M'}\t${f.filename}`)
               .join('\n');
+
+            if (pr.base.ref.startsWith('release/v')) {
+              const releaseKind = execFileSync(
+                'node',
+                [
+                  path.join(root, 'scripts/release/release-paths.mjs'),
+                  '--classify',
+                ],
+                {encoding: 'utf8', input: `${nameStatus}\n`},
+              ).trim();
+              if (releaseKind === 'version-bump') {
+                core.info('Release-branch pull request: the generated version bump.');
+                report({
+                  ...everything,
+                  ...(audit ? auditNone : {}),
+                  spec_only: 'true',
+                  tooling_only: 'true',
+                  release_bump: 'true',
+                  touches: 'false',
+                  applies: 'false',
+                });
+              } else {
+                core.info(
+                  `Release-branch ${releaseKind} candidate: every test lane runs; the release validator decides whether the change is allowed.`,
+                );
+                report({
+                  ...everything,
+                  ...(audit ? auditAll : {}),
+                  release_bump: 'true',
+                  changed_files_path: writeChangedFiles(files),
+                });
+              }
+              return;
+            }
             const outputFile = path.join(root, 'classification');
             fs.writeFileSync(outputFile, '');
             // GitHub's patch text for the Lab entry files, handed over as data:
@@ -281,12 +346,28 @@ runs:
             }
             // A base whose classifier predates lab_only reports none: false.
             const specialized = ['spec_only', 'docsite_only', 'tooling_only', 'lab_only'].some(key => classified[key] === 'true');
-            let applies = String(!specialized && touches === 'true');
+            // A Lab-only change skips Lab source, but a changed file the job
+            // names (an interaction spec) still runs, alone.
+            const labOnly =
+              classified.lab_only === 'true' &&
+              !['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
+            const labSpecs =
+              labOnly && process.env.SCOPE_LAB_ONLY_SPECS
+                ? files
+                    .filter(f => f.status !== 'removed' && new RegExp(process.env.SCOPE_LAB_ONLY_SPECS).test(f.filename))
+                    .map(f => f.filename)
+                : [];
+            let labSpecsPath = '';
+            if (labSpecs.length > 0) {
+              labSpecsPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-lab-specs.txt');
+              fs.writeFileSync(labSpecsPath, `${labSpecs.join('\n')}\n`);
+            }
+            let applies = String((!specialized && touches === 'true') || labSpecs.length > 0);
             // Whether the head has the file the work needs, decided whether or
             // not `touches` holds; a diff that touches the file keeps it.
             let headFilePresent = 'true';
             const headFile = process.env.SCOPE_HEAD_FILE;
-            if (!specialized && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
+            if ((!specialized || labSpecs.length > 0) && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
               try {
                 await github.rest.repos.getContent({...context.repo, path: headFile, ref: pr.head.sha});
               } catch (error) {
@@ -322,14 +403,9 @@ runs:
                   componentScope = auditAll;
                 }
               }
-              // A file, not an output value: a large pull request's list would
-              // not fit an environment variable.
-              const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
-              const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
-              fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
-              componentScope.changed_files_path = changedFilesPath;
+              componentScope.changed_files_path = writeChangedFiles(files);
             }
-            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent});
+            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent, lab_specs_path: labSpecsPath});
           } finally {
             if (root) fs.rmSync(root, {recursive: true, force: true});
           }

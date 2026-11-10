@@ -230,13 +230,15 @@ function staleOwnRowCount({base, head, committed, baseSource, stale}) {
 
 /**
  * @param {Array<{pkg: string, base: string|null, head: string,
- *   committed: string|null, baseSource?: 'build'|'head'|'committed'}>} packages
+ *   committed: string|null, baseSource?: 'build'|'head'|'committed'|'unknown'}>} packages
+ *   `unknown`: the merge base could not be surfaced; `base` is null
  */
 export function computeChanges(packages) {
   return packages
     .map(({pkg, base, head, committed, baseSource = 'committed'}) => {
       // With no report at the merge base there is nothing to compare: the
-      // package's report is new, and every row would read as added.
+      // package's report is new, or its merge base could not be surfaced,
+      // and every row would read as added.
       const baseline = base == null;
       const d = baseline
         ? {added: [], changed: [], removed: []}
@@ -245,6 +247,7 @@ export function computeChanges(packages) {
       return {
         pkg,
         baseline,
+        ...(baseSource === 'unknown' ? {baseUnknown: true} : {}),
         baseSource,
         stale,
         // A stale report is one line in the PR report, not its rows.
@@ -348,6 +351,8 @@ export function renderChanges(changes) {
   );
   if (!touched.length) return '';
   const parts = touched.map(c => {
+    if (c.baseUnknown === true)
+      return `${short(c.pkg)} unknown: base surface unavailable`;
     if (c.baseline === true && c.missing !== true)
       return `${short(c.pkg)} new report${c.stale ? ' (stale: run `pnpm api:report`)' : ''}`;
     const counts = c.rows.length
@@ -408,11 +413,15 @@ function rowTable(packages) {
  * @param {ReturnType<typeof computeChanges>} list
  */
 function renderBuiltChanges(list) {
+  // Packages the merge base could not surface share one headline entry.
+  const unknown = list.filter(c => c.baseUnknown === true);
   const touched = list.filter(
-    c => c.rows.length || c.missing === true || c.baseline === true,
+    c =>
+      c.baseUnknown !== true &&
+      (c.rows.length || c.missing === true || c.baseline === true),
   );
   const stale = list.filter(c => c.stale === true && c.missing !== true);
-  if (!touched.length && !stale.length) return '';
+  if (!touched.length && !stale.length && !unknown.length) return '';
   const parts = touched.map(c => {
     if (c.baseline === true && c.missing !== true)
       return `${short(c.pkg)} new report`;
@@ -431,6 +440,10 @@ function renderBuiltChanges(list) {
         : '';
     return `${short(c.pkg)}${counts}${missing}${committed}`;
   });
+  if (unknown.length)
+    parts.push(
+      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
+    );
   const L = [
     `**API changes:** ${parts.length ? parts.join('; ') : 'none in this pull request'}`,
   ];

@@ -8,13 +8,17 @@
  *   on (the control), every insertion carries one. Both engines; Chromium's
  *   trace also counts the style recalculations the scan forces. `openStory`
  *   returns once Storybook has finished the story's render, so no listener
- *   Storybook adds to the document or the window lands after it
+ *   Storybook adds to the document or the window lands after it. A WebKit
+ *   touch driver created after `openStory` tells a page task's wait from the
+ *   page's listeners
  * @position Self-test for story.ts; it needs the built Storybook, as every
  *   component proof does
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {drag} from './scripts';
 import {openStory, withStorybook} from './story';
+import {touchDriver, TouchPacingError} from './touch';
 import {countBetween, traceRendering} from './trace';
 
 const storybook = withStorybook(test);
@@ -166,4 +170,38 @@ test("openStory turns Storybook's highlight module off: an insertion in a story 
     expect(on.styleRecalc).toBeGreaterThan(0);
   }
   await control.close();
+});
+
+test("a WebKit touch driver created after openStory tells a page task's wait from the page's listeners", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'webkit',
+    'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+  );
+  // Each pointer move queues a 60 ms task, as a component's timer can. The
+  // listener itself returns at once, so the next move waits for the task
+  // before the page's listeners begin. The driver comes after the story
+  // loads, as in most proofs.
+  await page.addInitScript(
+    'addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});',
+  );
+  await openStory(page, storybook(), 'core-button--primary');
+  await page.addStyleTag({
+    content: 'html, body { margin: 0; height: 3000px; touch-action: none; }',
+  });
+  const driver = await touchDriver(page);
+  const outcome = await driver
+    .play(drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}), {
+      pacing: 'spacing',
+    })
+    .then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+  expect(outcome).toBeInstanceOf(TouchPacingError);
+  expect(String(outcome)).toMatch(
+    /an event waited \d+ ms for the main thread before the page's listeners began/,
+  );
 });
