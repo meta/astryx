@@ -7977,6 +7977,7 @@ test.describe('page freeze', () => {
 
   test('a block that thaws the scene starts with the motion the freeze held, which runs on the compositor from its start through the block', async ({
     page,
+    browserName,
   }) => {
     await installPageFreeze(page);
     await freezeFixture(page);
@@ -7995,12 +7996,24 @@ test.describe('page freeze', () => {
     const trace = JSON.stringify(
       tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
     );
-    // It names the run it thawed. The run starts at the thawed frame's time,
-    // and the block after that frame: about a frame apart, two at most.
+    // It names the run it thawed. The run starts at the time of the frame
+    // that thaws it. The block starts in the first task after the frame that
+    // hands the run to the compositor. That is the thawing frame in Chromium,
+    // and the next one in WebKit.
     expect(block.animation, trace).toBeDefined();
     const startedMs = block.from - (block.animation?.from ?? Number.NaN);
     expect(startedMs, trace).toBeGreaterThanOrEqual(0);
-    expect(startedMs, trace).toBeLessThan(2 * (1000 / 60));
+    if (browserName === 'webkit') {
+      // The run moves while the block waits for that frame. Its rendering
+      // update then takes less than a frame, as in Chromium.
+      expect(block.handoverWaitMs, trace).toBeDefined();
+      expect(startedMs, trace).toBeLessThan(
+        (block.handoverWaitMs ?? Number.NaN) + 1000 / 60,
+      );
+    } else {
+      expect(block.handoverWaitMs, trace).toBeUndefined();
+      expect(startedMs, trace).toBeLessThan(1000 / 60);
+    }
     // The run moves through the block on the compositor, from near its start.
     const inBlock = tracked.filter(
       f => f.box != null && f.t > block.from && f.t < block.to,

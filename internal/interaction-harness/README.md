@@ -219,10 +219,12 @@ that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
 callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
-the settle begins. With `thaw`, it starts a scene that a freeze holds instead. One page task
-thaws the scene, and the loop runs from the first task after the next frame.
-A motion the freeze held at its start then runs on the compositor as the block
-begins. An animation counts once it is no longer pending and has
+the settle begins. With `thaw`, it starts a scene that a freeze holds instead. The scene thaws in
+the next frame's callback, so a held motion starts at that frame's time,
+however late the frame comes. The loop runs from the first task after the
+frame that hands the motion to the compositor: that frame in Chromium, the
+next one in WebKit (`handoverWaitMs`). A wait for it longer than
+`FRAME_STARVATION_MS` throws `FrameStarvationError`. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
 created in the frame the page looks is not on the compositor yet. It counts
 only before its curve's held tail (keyframes that end in a run of identical

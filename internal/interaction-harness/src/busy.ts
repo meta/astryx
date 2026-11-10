@@ -688,6 +688,13 @@ export interface BlockedWindow extends BusyWindow {
    */
   readonly controlStarts?: readonly [number, number?];
   /**
+   * With `thaw` in WebKit: how long the block waited after the thawed frame
+   * for the next one, ms. WebKit hands a run started in a frame callback to its
+   * compositor only at that next frame. So a held motion has run this long
+   * when the block begins.
+   */
+  readonly handoverWaitMs?: number;
+  /**
    * With `during`: the animation the block caught, epoch ms on the page's
    * clock. `from` is its start, and `to` is where its curve ends, its held
    * tail excluded. It is absent when the animation's `playbackRate` is 0 or
@@ -757,11 +764,13 @@ export interface BlockedWindow extends BusyWindow {
  * does not.
  *
  * With `thaw`, the scene a freeze holds (`freezePageOn`, `freezePage`)
- * starts, and the block starts with it. One page task thaws the scene, the
- * same way `thawPage` does. The loop then runs from the first task after the
- * next frame, once that frame has handed the held motion to the compositor.
- * So a motion the freeze held at its start runs on the compositor as the block
- * begins, however late the page's frames are. A page that is not frozen
+ * starts, and the block starts with it. The scene stays frozen until the next
+ * frame, and thaws in that frame's callback, the same way `thawPage` does. So
+ * a held motion starts at that frame's time, however late the frame comes. The
+ * loop then runs from the first task after the frame that hands the motion to
+ * the compositor. That is the thawing frame in Chromium, and the next one in
+ * WebKit (`handoverWaitMs`). A wait for it longer than `FRAME_STARVATION_MS` throws
+ * `FrameStarvationError`. A page that is not frozen
  * throws. With `thaw`, `during` names the animation the block caught
  * (`animation`), with its replay, as a block that waits for it does. It is read
  * in the loop's task, and one still pending there throws. The wait does not
@@ -1497,10 +1506,19 @@ async function blockFromThaw(
     `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${defineCaughtAnimation.toString()})();(${defineThawScene.toString()})();`,
   );
   const blocked = (during ?? page.locator(':root')).evaluate(
-    (element, {duration, named, prop, pseudo, fillHolds, look}) =>
-      new Promise<BlockedWindow | 'not frozen' | 'pending'>(resolve => {
+    (
+      element,
+      {duration, named, prop, pseudo, fillHolds, look, nextFrame, starvationMs},
+    ) =>
+      new Promise<
+        BlockedWindow | 'not frozen' | 'pending' | {starvedMs: number}
+      >(resolve => {
         const w = window as unknown as {
-          __harnessFreeze?: {frozen: boolean};
+          __harnessFreeze?: {
+            frozen: boolean;
+            offset: number;
+            realNow: () => number;
+          };
           __harnessTimerGate?: {
             frame?: typeof requestAnimationFrame;
             now?: () => number;
@@ -1509,70 +1527,94 @@ async function blockFromThaw(
           __harnessThawScene: () => void;
           __harnessCaught: CaughtAnimation;
         };
-        if (w.__harnessFreeze?.frozen !== true) {
+        const freeze = w.__harnessFreeze;
+        if (freeze?.frozen !== true) {
           resolve('not frozen');
           return;
         }
-        w.__harnessThawScene();
-        // The harness's own waits run on the real timers.
+        // The harness's own waits run on the real timers and the real clock.
         const gate = w.__harnessTimerGate;
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
         const later = gate?.timeout ?? window.setTimeout.bind(window);
-        const read = gate?.now ?? (() => performance.now());
-        // The thawed motion reaches the compositor in the next frame's
-        // rendering update. A task queued in that frame runs after it.
+        const read = gate?.now ?? freeze.realNow;
+        // The scene thaws in the next frame's callback, so a held run starts at
+        // that frame's time, however late the frame comes.
         frame(() => {
-          later(() => {
-            // The animation `during` names starts in that frame, at the time
-            // the compositor takes. A run resumed by play() has no start time
-            // before it.
-            const caught = named
-              ? element
-                  .getAnimations({subtree: true})
-                  .find(
-                    a =>
-                      a.playState === 'running' &&
-                      w.__harnessCaught.counts(element, a, prop, pseudo),
-                  )
-              : undefined;
-            if (
-              caught != null &&
-              (caught.pending || caught.startTime == null)
-            ) {
-              resolve('pending');
+          w.__harnessThawScene();
+          // That frame's time on the real clock, where the held runs start.
+          const thawedAt =
+            Number(document.timeline.currentTime) + freeze.offset;
+          const block = (handoverWaitMs?: number) =>
+            later(() => {
+              // The animation `during` names starts in that frame, at the time
+              // the compositor takes. A run resumed by play() has no start time
+              // before it.
+              const caught = named
+                ? element
+                    .getAnimations({subtree: true})
+                    .find(
+                      a =>
+                        a.playState === 'running' &&
+                        w.__harnessCaught.counts(element, a, prop, pseudo),
+                    )
+                : undefined;
+              if (
+                caught != null &&
+                (caught.pending || caught.startTime == null)
+              ) {
+                resolve('pending');
+                return;
+              }
+              const animation =
+                caught == null
+                  ? undefined
+                  : w.__harnessCaught.windowOf(caught, fillHolds);
+              const start = read();
+              let now = start;
+              while (now - start < duration) {
+                now = read();
+              }
+              const blockFrom = performance.timeOrigin + start;
+              const blockTo = performance.timeOrigin + now;
+              const controlStarts = w.__harnessCaught.controlStarts();
+              resolve({
+                from: blockFrom,
+                to: blockTo,
+                spanMs: now - start,
+                ...(handoverWaitMs == null ? {} : {handoverWaitMs}),
+                ...(controlStarts == null ? {} : {controlStarts}),
+                ...(animation == null || caught == null
+                  ? {}
+                  : {
+                      animation: {
+                        ...animation,
+                        ...w.__harnessCaught.replayOf(
+                          caught,
+                          blockFrom - look,
+                          Math.min(blockTo, animation.to) + look,
+                        ),
+                      },
+                    }),
+              });
+            }, 0);
+          // Chromium hands a run started in a frame callback to its compositor
+          // in that frame's rendering update. A task queued in that frame runs
+          // after it. WebKit hands it over only at the next frame. With the
+          // thaw and the block in one frame, the box held still through the
+          // whole block in 20 of 20 runs. So in WebKit the block waits for
+          // that next frame.
+          if (!nextFrame) {
+            block();
+            return;
+          }
+          frame(() => {
+            const waited = read() - thawedAt;
+            if (waited > starvationMs) {
+              resolve({starvedMs: waited});
               return;
             }
-            const animation =
-              caught == null
-                ? undefined
-                : w.__harnessCaught.windowOf(caught, fillHolds);
-            const start = read();
-            let now = start;
-            while (now - start < duration) {
-              now = read();
-            }
-            const blockFrom = performance.timeOrigin + start;
-            const blockTo = performance.timeOrigin + now;
-            const controlStarts = w.__harnessCaught.controlStarts();
-            resolve({
-              from: blockFrom,
-              to: blockTo,
-              spanMs: now - start,
-              ...(controlStarts == null ? {} : {controlStarts}),
-              ...(animation == null || caught == null
-                ? {}
-                : {
-                    animation: {
-                      ...animation,
-                      ...w.__harnessCaught.replayOf(
-                        caught,
-                        blockFrom - look,
-                        Math.min(blockTo, animation.to) + look,
-                      ),
-                    },
-                  }),
-            });
-          }, 0);
+            block(waited);
+          });
         });
       }),
     {
@@ -1582,6 +1624,8 @@ async function blockFromThaw(
       pseudo: pseudoElement ?? null,
       fillHolds: fillHoldsOn(page),
       look: BUSY_PROOF_LOOKAROUND_MS,
+      nextFrame: page.context().browser()?.browserType().name() === 'webkit',
+      starvationMs: FRAME_STARVATION_MS,
     },
   );
   const [, held] = await Promise.all([defined, blocked]);
@@ -1594,6 +1638,16 @@ async function blockFromThaw(
     throw new Error(
       'blockMainThread: the animation `during` names was still pending in the first task after the thawed frame, so the window cannot name its start',
     );
+  }
+  if ('starvedMs' in held) {
+    throw new FrameStarvationError({
+      by: 'blockMainThread',
+      during:
+        'the thawed scene waited for the frame that hands its motion to the compositor',
+      frames: 1,
+      min: 2,
+      longestGapMs: held.starvedMs,
+    });
   }
   return held;
 }
