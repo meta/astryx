@@ -24,7 +24,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
@@ -373,7 +373,9 @@ export function TopNavMenu({
   const slot = useTopNavSlot();
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     // The popup's own role="menu" is the exposed semantics; a modal dialog
     // wrapper would announce an unnamed dialog around the menu and make the
     // trigger claim aria-haspopup="dialog" for menu content (see TabMenu).

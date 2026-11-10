@@ -2,8 +2,8 @@
 
 /**
  * @file LayerPanLightDismiss.interaction.browser.spec.ts
- * @input The built Default Popover, Selector, DropdownMenu and ContextMenu
- *   stories under the harness's phone profile, with real touch input in
+ * @input The built Popover, Selector, DropdownMenu, ContextMenu and other
+ *   menu stories under the harness's phone profile, with real touch input in
  *   Chromium (CDP)
  * @output Proof that a touch that pans over the page does not light-dismiss
  *   an open Popover or Selector list, with and without pointercancel. That
@@ -291,6 +291,52 @@ test.describe('DropdownMenu', () => {
     expect(await isLayerOpen(page)).toBe(false);
   });
 });
+
+// Every other anchored layer with menu semantics owns its outside pan too.
+const OTHER_MENUS: ReadonlyArray<Surface> = [
+  {
+    name: 'TabMenu',
+    story: 'core-tablist--with-menu',
+    role: 'button',
+    trigger: 'More',
+  },
+  {
+    name: 'BreadcrumbItem menu',
+    story: 'core-breadcrumbs--menu-crumb',
+    role: 'button',
+    trigger: 'Teams',
+  },
+  {
+    name: 'TopNavMenu',
+    story: 'core-topnavmenu--default',
+    role: 'button',
+    trigger: 'Products',
+  },
+  {
+    name: 'TopNavHeading menu',
+    story: 'core-topnav--with-heading-menu',
+    role: 'button',
+    trigger: 'Acme Suite',
+  },
+  {
+    name: 'SideNavHeading menu',
+    story: 'core-sidenav--with-header-menu',
+    role: 'button',
+    trigger: 'Product Name',
+  },
+];
+
+for (const menu of OTHER_MENUS) {
+  test.describe(menu.name, () => {
+    test.fixme('a pan outside: closes as a pan outside begins (FR21 gap)', async ({
+      page,
+    }) => {
+      const {driver, outside} = await openSurface(page, menu);
+      await pan(driver, outside, {x: outside.x, y: outside.y - 40}, 300);
+      expect(await isLayerOpen(page)).toBe(false);
+    });
+  });
+}
 
 // ContextMenu is a manual popover with its own outside-press close, so the
 // guard does not apply to it. These cases show that its outside behavior

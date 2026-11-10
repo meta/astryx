@@ -3178,6 +3178,82 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
   });
 });
 
+describe('a touch that pans outside an open light-dismiss layer', () => {
+  function PanHarness({ownsOutsidePan}: {ownsOutsidePan: boolean}) {
+    const layer = useLayerInternal({
+      mode: 'context',
+      lightDismiss: true,
+      ownsOutsidePan,
+    });
+    return (
+      <>
+        <button type="button" ref={layer.ref} onClick={() => layer.show()}>
+          Trigger
+        </button>
+        <button type="button" onClick={() => layer.hide()}>
+          Close
+        </button>
+        <div data-testid="page" />
+        {layer.render(<span>Layer content</span>, {placement: 'below'})}
+      </>
+    );
+  }
+
+  const touch = (pointerId: number, y: number) => ({
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    clientX: 10,
+    clientY: y,
+  });
+
+  let captured: {element: Element; pointerId: number}[] = [];
+  beforeEach(() => {
+    captured = [];
+    HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
+      captured.push({element: this, pointerId});
+    };
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+  });
+
+  /** A finger that presses the page and pans 20 px, then lifts. */
+  function panOnPage(page: Element, pointerId: number) {
+    fireEvent.pointerDown(page, touch(pointerId, 300));
+    fireEvent.pointerMove(page, touch(pointerId, 280));
+    fireEvent.pointerUp(page, touch(pointerId, 280));
+  }
+
+  it('claims the pan for the layer, so its release lands on the layer', () => {
+    const {container, getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([
+      {element: container.querySelector('[popover]'), pointerId: 5},
+    ]);
+  });
+
+  it('claims nothing once the layer is closed', () => {
+    const {getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    fireEvent.click(getByRole('button', {name: 'Close'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+
+  it('leaves the pan to an owner that owns it (an anchored menu)', () => {
+    const {getByRole, getByTestId} = render(<PanHarness ownsOutsidePan />);
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+});
+
 describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   function ClearHarness({placement}: {placement?: LayerPlacement}) {
     const layer = useLayerInternal({mode: 'context', keepsAnchorClear: true});
