@@ -1,0 +1,985 @@
+{
+  "$comment": "Module-scope cross-module identity the FR3 check knows about (spec:AST-110 FR3, FR7). \"open\" names the fix group that removes the entry; \"allowed\" gives the approved reason. A new hit or a stale entry fails scripts/shared-identity.test.mjs.",
+  "entries": {
+    "packages/core/src/AppShell/useAppShellMainId.ts:claims": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/AppShell/useAppShellMainId.ts:listeners": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/BottomSheet/BottomSheetPanel.tsx:stopViewportResize": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/BottomSheet/BottomSheetPanel.tsx:viewportHeight": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/BottomSheet/BottomSheetPanel.tsx:viewportHeightListeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/BottomSheet/bottomSheetStack.ts:showFocusesContainer": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Chat/useChatDictation.ts:_sharedAudioCtx": {
+      "status": "allowed",
+      "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
+    },
+    "packages/core/src/Chat/useChatStreamScroll.ts:following": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Chat/useSpeechRecognition.ts:_sharedAudioCtx": {
+      "status": "allowed",
+      "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
+    },
+    "packages/core/src/CodeBlock/highlightRanges.ts:dynamicStyleSheet": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/CodeBlock/highlightRanges.ts:registeredHighlightTypes": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/CodeBlock/highlightStyles.ts:inserted": {
+      "status": "allowed",
+      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+    },
+    "packages/core/src/CodeBlock/tokenizer.ts:langCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/CodeBlock/tokenizer.ts:valueCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/DateInput/monthGeometry.ts:GREGORIAN_MONTH_MODELS": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/DateInput/nativeDateSegments.ts:cachedEngine": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Icon/globalIconRegistry.tsx:globalRegistry": {
+      "status": "open",
+      "group": "F8 Public registries"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:claimedPress": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:clickedGesture": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:contextMenuGesture": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:gesture": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:isListening": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:pressPointerId": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:unsubscribePress": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerExitCopy.ts:copies": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:composingDocuments": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:entries": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:layerCountByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:nextSeq": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:seqByToken": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerSurfacePress.ts:surfaces": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/modalOutlet.ts:listeners": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/modalOutlet.ts:outletGroups": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/modalOutlet.ts:outlets": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/outsidePress.ts:outsideDismissals": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:browserHidesByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:browserHidesInFlight": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:ownOperationsByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:settledCallbacksByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/List/listReorderEngine.tsx:sessionsByOptions": {
+      "status": "open",
+      "group": "F10 List reorder"
+    },
+    "packages/core/src/Markdown/ast.ts:markdownAstLegacyCodeLanguage": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/characterReferences.ts:namedReferences": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Markdown/parser.ts:imageAltDepth": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/Markdown/parser.ts:incrementalCaches": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Markdown/parser.ts:incrementalStateMode": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/parser.ts:listMarkerShapes": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownSourceLinesDefinition": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformClaim": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformHasRenderer": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformPluginName": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformSourceUnchanged": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformTrusted": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:preparedPluginLists": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:reportedProductionPluginFailures": {
+      "status": "allowed",
+      "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:reusableScratch": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:scratchInUse": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:sourceHeadingMarker": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Markdown/plugins/semanticFence.ts:markdownFenceProposal": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/textTransform.ts:adoptedReplacements": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Markdown/remark.ts:REMARK_ORIGIN": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Markdown/remark.ts:activeRun": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/Markdown/remark.ts:adapterReasons": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/NumberInput/numberParser.ts:symbolsByLocale": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/PowerSearch/formatTokenValue.ts:tokenNumeralLocales": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Resizable/createResizable.ts:internals": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:lent": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:propsRegions": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:resizeHandles": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:watchers": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/useResizable.ts:releaseEnds": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/SegmentedControl/useSegmentedSelectionMotion.ts:ownSurface": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/SnapPaging/snapPagingValue.ts:attachments": {
+      "status": "allowed",
+      "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
+    },
+    "packages/core/src/Spinner/spinnerRotor.ts:flushScheduled": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/Spinner/spinnerRotor.ts:pendingRotors": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Table/glidingDivider.ts:inlineTopOf": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Table/glidingDivider.ts:markedBy": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Table/glidingDivider.ts:sourcesOf": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx:GROUP_HEADER": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Table/tableColumnAdmission.ts:heightSafe": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableColumnAdmission.ts:logicalRenderers": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:countIndependentPlugins": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:countReadingPlugins": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:indexReadingPlugins": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:trackedContexts": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:transformingPlugin": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRuntime.ts:ownedScrollWrappers": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Timestamp/formatRelativeTime.ts:formatters": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Timestamp/tooltipEntries.ts:warnedTimezoneIDs": {
+      "status": "allowed",
+      "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
+    },
+    "packages/core/src/Toast/useToast.tsx:fallbackContext": {
+      "status": "open",
+      "group": "F2 Toast host"
+    },
+    "packages/core/src/Toast/useToast.tsx:fallbackRoot": {
+      "status": "open",
+      "group": "F2 Toast host"
+    },
+    "packages/core/src/Toast/useToast.tsx:toastIdCounter": {
+      "status": "open",
+      "group": "F13 Shared id sequences"
+    },
+    "packages/core/src/TreeList/TreeList.tsx:clipGenerations": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/gestures/GestureRecognizer.ts:nextRecognizerId": {
+      "status": "open",
+      "group": "F13 Shared id sequences"
+    },
+    "packages/core/src/gestures/fingerScroll.ts:watches": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/gestures/gestureSync.ts:syncingDepth": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/gestures/haptics.ts:nextLabelId": {
+      "status": "open",
+      "group": "F13 Shared id sequences"
+    },
+    "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
+      "status": "allowed",
+      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+    },
+    "packages/core/src/gestures/touchActionRule.ts:sheets": {
+      "status": "allowed",
+      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+    },
+    "packages/core/src/hooks/modalAnnounce.ts:deferredByScope": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/modalAnnounce.ts:held": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/modalAnnounce.ts:presented": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:clearTimers": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:lastJoined": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:modalRoute": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:pendingByRegion": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:pendingFrames": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:pendingMessages": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:regions": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useFocusTrap.ts:activeEscapeTrapCount": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useFocusTrap.ts:activeRegionContainers": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useMediaQuery.ts:watches": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/hooks/useMenuPress.ts:isModelActivation": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useOverflow.ts:pendingMeasures": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/i18n/resolve.ts:formatterCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:focusTakeovers": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:stores": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:touchStartWatches": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardLayoutGuide.ts:guides": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardTarget.ts:currentRides": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardTarget.ts:riddenAnimators": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardTarget.ts:targets": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/motion/animatedLayout.ts:batches": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:changeStarts": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:edgeMotions": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:endedReports": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:exits": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:glideReports": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:glides": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:heldSlides": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:ours": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:presentedGlides": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:releaseGlides": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:replaced": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:resizeReveals": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:settleRetimes": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:settling": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:slideTargets": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:stoppedShown": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:transitionSettles": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:frameDepth": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:frameRead": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:openCall": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:openTask": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:shared": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:sheetReads": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:taskBakes": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:waitingCalls": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:waitingRead": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/resolveMotion.ts:springsAtTempo": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/motion/roles.ts:pathOfGroup": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:roleIdOfPath": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:roleOfLeaf": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:rolesById": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:tablesById": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/transientCopy.ts:carriedMotion": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/transientCopy.ts:inheritedValues": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/transientCopy.ts:scrollOffsets": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/privateAttributes/travelling.stylex.ts:marks": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
+      "status": "open",
+      "group": "F10 List reorder"
+    },
+    "packages/core/src/theme/Theme.tsx:injectedThemes": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/theme/declarationBoundary.ts:DECLARATION_ANALYSIS_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/theme/dynamicType.ts:sharedSyncs": {
+      "status": "allowed",
+      "reason": "Each copy writes the same reader text-size variables to the document root; the duplicate sync is idempotent."
+    },
+    "packages/core/src/theme/generateThemeRules.ts:REACHABLE_MATCH_SET_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/theme/generateThemeRules.ts:STATUS_ROLE_GENERATION_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/theme/generateThemeRules.ts:activeStatusRoleGeneration": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/theme/statusRoleDerivation.ts:coreCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/theme/themeRegistry.ts:themeRegistry": {
+      "status": "open",
+      "group": "F8 Public registries"
+    },
+    "packages/core/src/theme/useTheme.ts:rootModeAttrListeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/theme/useTheme.ts:rootModeAttrObserver": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/theme/useTheme.ts:rootNameAttrListeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/theme/useTheme.ts:rootNameAttrObserver": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/boxHold.ts:waits": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/calendarDateParser.ts:displayOptionCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/calendarDateParser.ts:eraChangeCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/calendarDateParser.ts:lexicons": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/calendarSystem.ts:supportedCalendars": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/devWarning.ts:warnedKeys": {
+      "status": "allowed",
+      "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
+    },
+    "packages/core/src/utils/focusReturn.ts:focusDetachedAtRemovalStart": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/utils/focusReturn.ts:temporaryFocus": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/utils/hitArea.ts:frame": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:interactive": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:interactiveDocument": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:isCoarse": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:observedSizes": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:pending": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:pointer": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:pressDocument": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:resize": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:scopeTimers": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:stopInteractiveWatch": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:view": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:visibility": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/hitArea.ts:watched": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/layoutViewport.ts:thicknesses": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/utils/plainDate.ts:dateTimeFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/plainDate.ts:dayNumberFormats": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/pressClaim.ts:watchers": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/utils/pressFeedback.ts:boxHold": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:button": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:contact": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:finger": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:holders": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:keyHeld": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:lastScrollAt": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:lastScroller": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:lastTouchAt": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:lastTouchTarget": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:stopTouchCancel": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:stopWatchingPointer": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:unsubscribers": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/rowMotion.ts:motions": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/sharedMutationObserver.ts:observers": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/sharedResizeObserver.ts:callbacks": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/sharedResizeObserver.ts:observer": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/timeFormat.ts:symbolsByLocale": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/touchHitArea.ts:heldWatches": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/windowExtent.ts:stopObserving": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/windowExtent.ts:windowWidth": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/windowExtent.ts:windowWidthListeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/lab/src/CodeEditor/CodeEditor.tsx:editorInstanceCounter": {
+      "status": "open",
+      "group": "F13 Shared id sequences"
+    },
+    "packages/lab/src/EmojiPicker/EmojiPicker.tsx:bundledCategories": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/lab/src/EmojiPicker/EmojiPicker.tsx:bundledLabelKeys": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/lab/src/LineClamp/LineClamp.tsx:deferredSyncs": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/lab/src/LineClamp/LineClamp.tsx:isReleaseFlushing": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/lab/src/Schedule/Schedule.tsx:eventLoaderCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/lab/src/Schedule/useCurrentTime.ts:currentTime": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/lab/src/Schedule/useCurrentTime.ts:interval": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/lab/src/Schedule/useCurrentTime.ts:listeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/richtext/src/CodeSyntaxPlugin.tsx:hasInjectedRules": {
+      "status": "allowed",
+      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+    },
+    "packages/richtext/src/markdownExtensionNode.ts:decorators": {
+      "status": "open",
+      "group": "F12 RichText extensions"
+    },
+    "packages/richtext/src/markdownExtensions.ts:extensionPlugin": {
+      "status": "open",
+      "group": "F12 RichText extensions"
+    },
+    "packages/richtext/src/markdownExtensions.ts:withExport": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/richtext/src/markdownSource.ts:canonicalCache": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/richtext/src/markdownSource.ts:importCount": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/vega/src/viewInputs.ts:OPAQUE": {
+      "status": "open",
+      "group": "triage"
+    }
+  }
+}

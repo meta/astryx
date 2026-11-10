@@ -877,6 +877,28 @@ export const LongAndNonLatinNames: Story = {
   ),
 };
 
+/**
+ * Names with quotes, a backslash, emoji and combining marks, on a link, a
+ * button and a static avatar. The initials are generated content, so they
+ * stay out of each control's accessible name.
+ */
+export const TrickyNameInitials: Story = {
+  name: 'Tricky names (initials)',
+  render: () => (
+    <div {...stylex.props(styles.row)}>
+      <Avatar
+        name={'Ada "The Countess" Lovelace'}
+        href="https://example.com"
+        size="lg"
+      />
+      <Avatar name={'O\\Brien Back\\slash'} onClick={() => {}} size="lg" />
+      <Avatar name="👩‍💻 Dev Team" size="lg" />
+      <Avatar name="🇯🇵 Tanaka" onClick={() => {}} size="lg" />
+      <Avatar name={'Zoë "Z" Kravitz'} size="lg" />
+    </div>
+  ),
+};
+
 export const NarrowContainer: Story = {
   render: () => (
     <div {...stylex.props(styles.narrow)}>

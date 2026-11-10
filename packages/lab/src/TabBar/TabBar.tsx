@@ -5,8 +5,8 @@
 /**
  * @file TabBar.tsx
  * @input React, StyleX, Core's theme tokens and hooks, TabBar's touch layer
- *   (TabBarTouch.ts), its geometry (tabBarModel.ts) and its UIKit values
- *   (uikitTabBar.ts)
+ *   (TabBarTouch.ts), its geometry (tabBarModel.ts), its UIKit values
+ *   (uikitTabBar.ts) and its panel scroll (panelScroll.ts)
  * @output TabBar (iOS 26's floating tab bar) and TabBarItem
  * @position Lab component: the phone presentation of an app's top-level
  *   sections, UITabBarController's counterpart
@@ -44,6 +44,7 @@ import {tabBarItemMarker} from './tabBar.stylex';
 import {tabBar} from './uikitTabBar';
 import {useTabBarLens} from './TabBarTouch';
 import {itemWidthCss, naturalWidth} from './tabBarModel';
+import {scrollPanelToTop} from './panelScroll';
 
 // =============================================================================
 // Types
@@ -70,7 +71,9 @@ export interface TabBarItemProps {
   badgeLabel?: string;
   /**
    * Id of the panel this tab controls, wired up as `aria-controls`. Put the
-   * same id on the panel element.
+   * same id on the panel element. Choosing the selected tab again scrolls
+   * that panel to its top: the panel itself when it scrolls, or else the
+   * first scroll area inside it.
    */
   panelId?: string;
   /**
@@ -93,7 +96,8 @@ export interface TabBarProps extends Omit<
   onChange: (value: string) => void;
   /**
    * Called with the selected tab's `value` when it is chosen again: pop its
-   * navigation stack to the root, as iOS does.
+   * navigation stack to the root, as iOS does. Its panel (`panelId`) also
+   * scrolls to its top.
    */
   onReselect?: (value: string) => void;
   /**
@@ -562,6 +566,10 @@ export function TabBar({
         return;
       }
       if (item.value === value) {
+        const document = capsuleRef.current?.ownerDocument;
+        if (document != null) {
+          scrollPanelToTop(document, item.panelId);
+        }
         onReselect?.(item.value);
       } else {
         onChange(item.value);
