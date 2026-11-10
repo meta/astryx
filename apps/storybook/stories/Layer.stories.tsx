@@ -630,12 +630,13 @@ function sameRect(a: DOMRect, b: DOMRect) {
 }
 
 /**
- * Click the trigger, read the first frame's geometry synchronously (the
- * discrete event flushes React and the rect read forces layout), then settle
- * and read again. A difference is a paint-then-shift (FR8).
+ * Click the trigger and let React commit in a microtask before reading the
+ * first frame's geometry. No animation frame runs before this read; a
+ * difference after settling is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
   canvasElement.querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+  await committed();
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);
