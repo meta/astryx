@@ -207,3 +207,12 @@ describe('internal/touch', () => {
     expect(onDocument).not.toHaveBeenCalled();
   });
 });
+
+it('re-exports the shared group tracking that Lab Rating reads', async () => {
+  const entry = await import('./touch');
+  const group = await import('../hooks/useGroupPressTracking');
+  const marker = await import('../privateAttributes/pressGroupItem.stylex');
+  expect(entry.useGroupPressTracking).toBe(group.useGroupPressTracking);
+  expect(entry.GROUP_PRESS_POINTERS).toBe(group.GROUP_PRESS_POINTERS);
+  expect(entry.pressGroupItemProps).toBe(marker.pressGroupItemProps);
+});
