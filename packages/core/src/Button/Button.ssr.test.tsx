@@ -2,13 +2,14 @@
 
 /**
  * @file Button.ssr.test.tsx
- * @input A disabled submit or reset Button, alone and in a disabled
+ * @input A disabled or loading submit or reset Button, alone and in a
  *   ButtonGroup or InputGroup, as server markup in a form, used before and
  *   after hydration, and rendered on the client only
  * @output Proves the server markup cannot submit or reset its form, that
  *   hydration matches it, and that the caller's type returns after hydration
- *   with no change to role, name or disabled state
- * @position SSR acceptance test for a disabled submit or reset Button
+ *   with no change to role, name, disabled or busy state
+ * @position SSR acceptance test for a disabled or loading submit or reset
+ *   Button
  */
 
 import {act} from 'react';
@@ -48,6 +49,19 @@ const layouts: [string, (kind: Kind) => React.ReactElement][] = [
     ),
   ],
   [
+    'a loading Button',
+    kind => <Button label="Place order" type={kind} isLoading />,
+  ],
+  [
+    'a loading Button in a ButtonGroup',
+    kind => (
+      <ButtonGroup label="Order actions">
+        <Button label="Back" />
+        <Button label="Place order" type={kind} isLoading />
+      </ButtonGroup>
+    ),
+  ],
+  [
     'a Button in a disabled InputGroup',
     kind => (
       <InputGroup label="Coupon" isDisabled>
@@ -78,8 +92,8 @@ function serverForm(tree: React.ReactElement) {
   formElement.addEventListener('submit', submits);
   formElement.addEventListener('reset', resets);
   const button = () =>
-    Array.from(container.querySelectorAll('button')).find(
-      element => element.textContent === 'Place order',
+    Array.from(container.querySelectorAll('button')).find(element =>
+      element.textContent?.includes('Place order'),
     )!;
   const note = container.querySelector('input')!;
   return {container, form, submits, resets, button, note};
@@ -110,6 +124,7 @@ describe.each(layouts)('%s', (_name, layout) => {
         role: button().tagName,
         name: button().textContent,
         disabled: button().getAttribute('aria-disabled'),
+        busy: button().getAttribute('aria-busy'),
         label: button().getAttribute('aria-label'),
       };
       act(() => {
@@ -122,6 +137,7 @@ describe.each(layouts)('%s', (_name, layout) => {
         role: button().tagName,
         name: button().textContent,
         disabled: button().getAttribute('aria-disabled'),
+        busy: button().getAttribute('aria-busy'),
         label: button().getAttribute('aria-label'),
       }).toEqual(before);
       expect(button()).not.toHaveAttribute('disabled');
@@ -146,12 +162,12 @@ describe.each(layouts)('%s', (_name, layout) => {
   });
 
   it('renders the caller type at once in a client-only render', () => {
-    render(inForm(layout('submit')));
-
-    expect(screen.getByRole('button', {name: 'Place order'})).toHaveAttribute(
-      'type',
-      'submit',
+    const {container} = render(inForm(layout('submit')));
+    const button = Array.from(container.querySelectorAll('button')).find(
+      element => element.textContent?.includes('Place order'),
     );
+
+    expect(button).toHaveAttribute('type', 'submit');
   });
 });
 

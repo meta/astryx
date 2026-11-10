@@ -760,11 +760,10 @@ export function Button({
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
   // Server markup has no click guard until it hydrates, and a native submit
-  // or reset button acts on its form without one. A disabled one renders as
-  // a plain button until hydration, then takes the caller's type.
+  // or reset button acts on its form without one.
   const isHydrating = useIsHydrating();
   const renderedType =
-    isTrueDisabled && isHydrating && (type === 'submit' || type === 'reset')
+    buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
       ? 'button'
       : type;
   // The group draws one band for all its members: a ButtonGroup, or a
