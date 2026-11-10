@@ -2,9 +2,9 @@
 // @pr-a11y scope ^packages/core/src/Avatar/ ^apps/storybook/stories/Avatar
 
 /**
- * @file AvatarLabelInName.a11y.chromium.spec.ts
+ * @file AvatarLabelInName.a11y.browser.spec.ts
  * @input The built Avatar "Interactive" and "Initials Fallback" stories in
- *   real Chromium, axe, and keyboard focus
+ *   real Chromium and WebKit, axe, and keyboard focus
  * @output Browser evidence that an initials avatar's control is named by the
  *   person's name with no visible text label it does not contain (WCAG 2.5.3
  *   Label in Name), that the initials stay on screen, also in forced colors,
@@ -35,13 +35,12 @@ async function openStory(page: Page, story: string): Promise<void> {
   await page.locator('.astryx-avatar').first().waitFor();
 }
 
-/** The text each initials element draws through its generated content. */
+/** The text each initials fallback draws through its generated content. */
 async function drawnInitials(page: Page): Promise<string[]> {
   return page.evaluate(() =>
-    Array.from(
-      document.querySelectorAll('[data-initials]'),
-      el => getComputedStyle(el, '::before').content,
-    ),
+    Array.from(document.querySelectorAll('.astryx-avatar-fallback'))
+      .filter(el => el.querySelector('svg') == null)
+      .map(el => getComputedStyle(el, '::before').content),
   );
 }
 
@@ -54,7 +53,13 @@ test('no interactive initials avatar fails Label in Name', async ({page}) => {
   // The rule saw initials avatars, not an empty page.
   const named = page.getByRole('link', {name: 'Grace Hopper'});
   await expect(named).toBeVisible();
-  await expect(named.locator('[data-initials="GH"]')).toHaveCount(1);
+  await expect(named).toHaveText('');
+  const drawn = await named
+    .locator('.astryx-avatar-fallback')
+    .evaluate(el => getComputedStyle(el, '::before').content);
+  expect(drawn).toContain('GH');
+  // No public attribute carries the initials.
+  await expect(page.locator('[data-initials]')).toHaveCount(0);
   await expect(
     page.getByRole('button', {name: /Dorothy Vaughan/}),
   ).toBeVisible();
