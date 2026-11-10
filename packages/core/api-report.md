@@ -2659,6 +2659,7 @@ component Tokenizer(props: TokenizerProps)
   prop labelTooltip?: string
   prop maxEntries?: number
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1
   prop onBlur?: (e: React.FocusEvent) => void
@@ -2666,6 +2667,7 @@ component Tokenizer(props: TokenizerProps)
   prop onChangeQuery?: (query: string) => void
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
+  prop onOpenChange?: (isOpen: boolean) => void
   prop placeholder?: string
   prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
@@ -5765,7 +5767,9 @@ type TokenValue = string | [light: string, dark: string]
 type TokenizerChange<T extends SearchableItem> = { item: T; type: 'add' } | { item: T; type: 'create' } | { item: T; type: 'remove' } | { type: 'reorder' }
 interface TokenizerHandle
   blur: () => void
+  close: () => void
   focus: () => void
+  open: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
 type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)

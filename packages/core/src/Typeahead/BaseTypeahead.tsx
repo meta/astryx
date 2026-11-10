@@ -648,6 +648,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // A composing field's focus wiring is for this typeahead only; a typeahead
   // inside its menu gets none.
   const focusWiring = use(BaseTypeaheadFocusContext);
+  const menuFocusReturnRef = focusWiring?.menuFocusReturn;
+  const pressedOpenerRef = focusWiring?.pressedOpener;
   const t = useComponentTranslator();
   const placeholder =
     placeholderFromProps ?? t('@astryx.typeahead.searchPlaceholder');
@@ -979,13 +981,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           ? (focusWiring?.inputReturnTarget?.() ?? element)
           : element;
       isDialogFocusReturnRef.current = target === inputRef.current;
+      if (menuFocusReturnRef != null) {
+        menuFocusReturnRef.current = true;
+      }
       try {
         target.focus();
       } finally {
         isDialogFocusReturnRef.current = false;
+        if (menuFocusReturnRef != null) {
+          menuFocusReturnRef.current = false;
+        }
       }
     },
-    [focusWiring],
+    [focusWiring, menuFocusReturnRef],
   );
   // The element focused when the handle's `open()` ran. The open runs after
   // the commit, and a click's own handlers can move focus before it (a token
@@ -1850,19 +1858,25 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     () => ({
       open() {
         openRequestedRef.current = true;
+        const pressed = pressedOpenerRef?.current;
+        if (pressedOpenerRef != null) {
+          pressedOpenerRef.current = null;
+        }
         const active = inputRef.current?.ownerDocument.activeElement;
         openerAtRequestRef.current =
-          active instanceof HTMLElement &&
-          findMenuLayer(inputRef.current)?.contains(active) !== true
-            ? active
-            : null;
+          pressed?.isConnected === true
+            ? pressed
+            : active instanceof HTMLElement &&
+                findMenuLayer(inputRef.current)?.contains(active) !== true
+              ? active
+              : null;
         setOpenRequest(request => request + 1);
       },
       close() {
         popover.hide();
       },
     }),
-    [popover],
+    [popover, pressedOpenerRef],
   );
 
   const handledOpenRequestRef = useRef(openRequest);
