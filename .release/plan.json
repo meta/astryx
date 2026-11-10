@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 2,
+  "version": "0.7.13",
+  "branch": "release/v0.7.13",
+  "cutSha": "fcf92864d3d66f187a8ab905eaeadf8f302b36ee",
+  "changesets": [
+    {
+      "path": ".changeset/announce-swizzle-shared.md",
+      "sha256": "7f393362672091740bac30b096bf374210e2acdcaa28baecd8bc0d075937d8e1",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled component and the package's components now announce through one pair of live regions: messages from both join the same frame, and a copy no longer mounts a second pair that screen readers would read twice or skip. The modal announcement route is shared the same way. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-pull-cancels-pan.md",
+      "sha256": "b75a03a7cd0954be3e263679a80be98da59e668f63fd497d1b5e83857351951a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: a finger's pull on the sheet's content at a scroll edge cancels the content's native pan as soon as the pull reaches a tap's wobble (5 px), before the sheet's own drag begins at 8 px. In iOS Safari the first `touchmove` a page keeps committed the touch to the content's scroll, so a slow-starting swipe down rubber-banded the content under the finger while the sheet moved beside it. A tap that wobbles less than 5 px keeps its click, while a tap that wobbles 5 to 8 px toward the edge now loses it. A real scroll is never cancelled. A mostly sideways swipe on a horizontal row is not cancelled before the sheet's drag begins; a first move past 8 px starts the drag in any direction, as before.",
+      "contributors": [
+        "imdreamrunner",
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-discover-tab-bar-more-list.md",
+      "sha256": "6d9aedeabf41a279751b0075585efaf60cff93a4ac6965c475e6757d64950036",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx discover` lists the experimental TabBarMoreList component from `@astryxdesign/lab`.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hook-doc-use-direction.md",
+      "sha256": "0d5d2dc8ad7e9dd6609149cbb09418494d2d0b215608d9a038a665499f4d9a14",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Add hook documentation and interactive sparkline example block for `useDirection`, detailing render-time direction handling and CSS logical properties best practices.",
+      "contributors": [
+        "utkarshpatwa393-sys"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/i18n-provider-calendar-example.md",
+      "sha256": "4f8323a8b593b48130be1b8a5f95f1ac19de70a3320d44201504fdfe6ba7c97f",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "InternationalizationProvider has a calendar example: the provider's `calendar` prop shows a `Calendar` and a `DateInput` in the Japanese or Buddhist calendar, and the value stays a Gregorian ISO date. Both calendars work without `Temporal`.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-sets-main-backups-placeholder.md",
+      "sha256": "78ddbadb6fe53b2486feb597badcf1d4ac1bc28c53547bdd8ff1979c2882dec2",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "Icon sets: a project picks one main icon set and backup sets in order, and an icon no set has becomes a placeholder in the copied file. Only the experimental icon commands, projects that set `experimental.iconSet`, templates that declare `icons`, and the icon-set guide change.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- **Main set and backups.** `astryx experimental icon use <main> --backup <set>` (repeatable, order kept) writes `experimental.iconSet` as a list, the main set first; with no `--backup` it writes the plain string as before. The receipt adds `backups`, the installed sets the list leaves out (`unlisted`), and the command that adds them (`next`). `experimental icon --list` shows the `order` and each set's `role` and `rank`, and, when two or more sets are installed and none is the main set, the command to run. A CLI before 0.7.12 refuses the list form, and `use` warns when the project's CLI range admits one.\n- **Copied templates follow the list.** `astryx template` takes each icon from the first set in the list that has its meaning, never mixing sets within one icon, and reports the set used, a missing look (`variant: {asked, used}`), and each set used with its license (`icons.sets`).\n- **No stray library imports.** An icon no set in the list loses the template's original import. The copied file declares a small `MissingIcon` component once (a dashed square, 1em, in the current text color, hidden from screen readers unless a use gives it a label), and each place the icon was renders it, with a comment naming the meaning. It needs no new package. The output prints a note naming the meaning and both fixes (map it in the main set, or add a backup set), and the JSON lists it in `icons.placeholder`.\n- **Doctor.** With the opt-in, the `icon-sets` check fails when the list names a set that is not installed, withdrawn, or shipped by two packages, and when more than one set is installed and the list leaves one out. A new `icon-placeholders` check warns while copied code still uses the placeholder, naming each file and meaning; a commented-out or quoted copy does not count. Projects that have not opted in see no change.\n- **Labeled template icons.** Every icon a bundled template uses now declares its meaning, with 30 new icon definitions. `integration check` notes an icon a template imports but does not declare (`template_icon_undeclared`), in a package whose templates declare `icons`: an import from a module the package declares icons from, which the template renders as an element with no children or passes as a value. Any other import from that module, such as a type, a function it calls, or a provider with children, is listed as not checked. The note fails `--strict --next` and leaves `--strict` as it was. A generic renderer (a bare `Icon`, or one every use gives an icon prop) and an import that matches an icon by its name only are listed as not checked instead."
+    },
+    {
+      "path": ".changeset/layers-swizzle-shared.md",
+      "sha256": "862e618c18f453187e24e28915af8a7807a7ec528ee13eb5689ba95e9f31713f",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled overlay that carries its own copy of the layer runtime now shares the package's: one layer stack, one modal outlet order, one gesture counter, and one record of outside dismissals, popover show and hide operations, layer surfaces and press claims per page. Before, such a copy kept its own, so Escape over a swizzled HoverCard inside a package Dialog could close the Dialog too, and the two copies could race each other's popover operations or miss each other's outside presses. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/link-disabled-exposure-survives-caller-props.md",
+      "sha256": "4f8397d6212047f884444c08829a9395e95eb926ca4798b513795ee1845423de",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A disabled Link stays announced as disabled, with its own role, when the caller also passes `aria-disabled` or `role`. Before, those caller props replaced Link's own, so `aria-disabled={false}` announced a disabled link as enabled, and `role=\"button\"` announced a button that does nothing.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/markdown-parser-url-schemes.md",
+      "sha256": "d98383d97164166728efb53ed88211dc456bd377ddff1aa2dc3ac72144b4f7cb",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Markdown's public parser drops every data: link and image URL, and `<Markdown>` renders data: links and images as source text.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/production-dependency-floors-1108.md",
+      "sha256": "97794b720d65a20bff1c536ebec4d318e9fa7fc81231a5d643478de41418ea04",
+      "packages": [
+        {
+          "name": "@astryxdesign/build",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-butter",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-chocolate",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-gothic",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-matcha",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-neutral",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-stone",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/theme-y2k",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/shared-list-window-engine.md",
+      "sha256": "efcbda96ecf9242f001f3591ff143ea78080b7c3ae95d23455504b54c3792433",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: Table's row virtualization now runs on one shared list-windowing module inside Core, which later long lists will reuse. The undocumented `@astryxdesign/core/internal/virtualization` entry gives Lab the same module. Table's behavior and public API do not change. Internal entries are outside the public API and its compatibility promise.",
+      "contributors": [
+        "humbertovirtudes",
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/snap-paging-held-read-bracket.md",
+      "sha256": "07f336a0cdd44f9a5c7449adb0ed4ee85065912106d5d6600dd2da7afa711e52",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Carousel snap paging: in Safari, a held row's stops and span stay on each item's start edge when the settle moves between an item's rect read and its translate read.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-menu.md",
+      "sha256": "d8c5c35bee09a466f5d705fd6646fd01bac1e901f2d339f56b7e381062ab3d24",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Tokenizer forwards BaseTypeahead's `menu` and `onOpenChange` in its inline presentation, and its handle gains `open()` and `close()`. A token whose own button calls `open()` with a dialog-role menu opens the dialog, and Escape returns focus to that token: focus that a press puts on a token's control, and the menu's focus return, stay there instead of moving to the input. The sheet presentation keeps its own sheet.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/typeahead-menu-cli-block.md",
+      "sha256": "4ac3d575800d089b5f038d515b5711e7438ff2d7f1e2cf98823978b8d4ec4506",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "The CLI adds a `BaseTypeaheadMenu` block: a BaseTypeahead whose listbox menu shows information around the result list, and whose pick or filter button opens a dialog-role menu on the same layer.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/typeahead-token-backspace-clears.md",
+      "sha256": "b0d88ff29f0cc6ac1dc0b2e8d6cc916f1752f771b23bf3e40fd9f39dcd4576cb",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Typeahead: Backspace or Delete on the selected Token clears the value, as the clear button does, when the clear button shows: it calls `onChange(null)`, announces the cleared value, and moves focus to the empty input. Without `hasClear`, the keys start editing, as a click does.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    }
+  ]
+}
