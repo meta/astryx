@@ -559,7 +559,9 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   When a replaced viewport or track attaches, a motion that the detach
  *   stopped ends on its page. Its report and `onSettle` go out from a frame.
  * - A controlled `index` wins. A page that the pager reports and the owner
- *   does not take returns the pager to `index`, without a report.
+ *   does not take returns the pager to `index`, without a report. A resize
+ *   that renumbers the pages keeps the settle's page under its new number,
+ *   also without a report. A controlled `index` then names the old number.
  * - The pan and the catch attach for every pointer. A mouse drags the track
  *   as a finger does. The pan follows a trackpad's scroll along its axis, but
  *   never a mouse wheel's.
@@ -1149,9 +1151,9 @@ export function createPager(
     if (!isDragging && !caughtSettle) {
       // A track the resize leaves past its new last page lands on its target
       // at once, as at rest. A held row's scroll offset can still move under
-      // it as the browser clamps it. So does a settle that began before the
-      // viewport had a width. A viewer that opens on a photo shows it at once,
-      // with no slide from the first.
+      // it as the browser clamps it. A settle that began before the viewport
+      // had a width also lands at once. It showed nothing, so a viewer that
+      // opens on a photo shows it with no slide from the first.
       const isPastEnd =
         seed != null &&
         !isLooping() &&
