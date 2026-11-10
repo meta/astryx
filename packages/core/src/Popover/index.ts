@@ -18,7 +18,7 @@ export type {
   UsePopoverOptions,
   UsePopoverReturn,
 } from './usePopover';
-export type {PopoverAnchor} from './popoverAnchor';
+export type {PopoverAnchor, PopoverRectAnchor} from './popoverAnchor';
 
 // Popover component
 export {Popover} from './Popover';
