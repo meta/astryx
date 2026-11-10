@@ -68,40 +68,12 @@ function paintsOwnBox(trigger: HTMLElement): boolean {
 /**
  * UIKit lifts a preview on an opaque rounded platter. A trigger that paints
  * no box of its own lifts on the theme's surface, at the container radius.
- * The lift pins the trigger's own background while it is up, so the platter
- * overrides that pin. The platter goes as the lift hides the trigger's
- * popover, in the task that returns it to the page.
+ * The lift pins the plate with its own styles and puts it back with them.
  */
-function placePlatter(trigger: HTMLElement): void {
-  const {style} = trigger;
-  const surface = colorVars['--color-background-surface'];
-  const radius = radiusVars['--radius-container'];
-  const ownRadius = style.getPropertyValue('border-radius');
-  const ownRadiusPriority = style.getPropertyPriority('border-radius');
-  style.setProperty('background-color', surface, 'important');
-  style.setProperty('border-radius', radius, 'important');
-  const remove = () => {
-    trigger.removeEventListener('beforetoggle', onBeforeToggle);
-    // Only what is still the platter's: the lift can put the trigger's own
-    // background back first.
-    if (style.getPropertyValue('background-color') === surface) {
-      style.removeProperty('background-color');
-    }
-    if (style.getPropertyValue('border-radius') === radius) {
-      if (ownRadius === '') {
-        style.removeProperty('border-radius');
-      } else {
-        style.setProperty('border-radius', ownRadius, ownRadiusPriority);
-      }
-    }
-  };
-  const onBeforeToggle = (event: Event) => {
-    if ((event as ToggleEvent).newState === 'closed') {
-      remove();
-    }
-  };
-  trigger.addEventListener('beforetoggle', onBeforeToggle);
-}
+const PLATE: Readonly<Record<string, string>> = {
+  'background-color': colorVars['--color-background-surface'],
+  'border-radius': radiusVars['--radius-container'],
+};
 
 /**
  * The trigger lifts and the tint rises on `springs.contextMenuLift`. The menu
@@ -162,12 +134,10 @@ export function useContextMenuLift(
           from,
           release,
           onLayerShown,
+          pin: needsPlatter ? PLATE : undefined,
           inset: layerInsetRef.current,
           onBackdropTap: () => onBackdropTapRef.current(),
         });
-        if (lifted != null && needsPlatter) {
-          placePlatter(trigger);
-        }
         return lifted;
       },
       enterMenu(menu) {
