@@ -336,6 +336,12 @@ input hold's shield joins while the lift grows, and the layer runtime's exit
 copy while the menu closes. A menu opened by mouse or keyboard adds none of
 them.
 
+A trigger that paints no surface of its own, such as a row of text or a table
+cell, lifts on a plate: the theme's surface color at the container radius, a
+style on the trigger and not a fourth element (DD2). A card, or anything else
+that paints its own surface, lifts as it is (owner direction, 2026-11-09:
+"The rifht side and left side ones had text overflow for the context menu. Also the cards looked okay without platter but agree about the others").
+
 Rejected: a copy of the trigger above the tint, because it mounts the
 trigger's content twice and its count grows with the trigger. Rejected: a
 shadow under the lifted trigger, because it made the lift look worse.
