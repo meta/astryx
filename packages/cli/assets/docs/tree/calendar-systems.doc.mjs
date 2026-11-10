@@ -91,7 +91,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has only `iso8601`, the Gregorian calendar with ISO 8601 weeks. Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
+          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has only the Gregorian calendar (`gregory` and `iso8601`). Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
         },
         {
           type: 'code',
