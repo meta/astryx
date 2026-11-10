@@ -66,7 +66,7 @@ server code stay calendar-neutral.
 - Values that carry their calendar, such as `2024-02-10[u-ca=hebrew]`.
 - A public calendar adapter or plugin API.
 - Calendar arithmetic owned by Astryx. Temporal owns it.
-- Calendar identifiers outside FR1, including the observational Islamic
+- Calendar identifiers outside FR1, including the observational Hijri
   calendars.
 - Japanese era names before Meiji (1868).
 - Guaranteed behavior for dates before 1900. Such dates display and navigate as
@@ -412,7 +412,7 @@ These requirements apply to the text fields of `DateInput` and
 | ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; an unknown identifier; component over provider over default; bare `fa-IR`; a `-u-ca-` locale stays Gregorian                                                                                                       | A locale selects a calendar, the precedence changes, or an unknown identifier throws                                                                                             |
 | FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                                   | Any reported or submitted value is not Gregorian ISO                                                                                                                             |
-| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a `chinese` leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                                         | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
+| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a Chinese leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                                           | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
 | FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                                  | A crash, a missing warning, or a hydration mismatch                                                                                                                              |
 | FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                                   | A week number that is not ISO 8601                                                                                                                                               |
 | FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads               | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads, other than a one-digit year, stops committing |
@@ -517,9 +517,10 @@ host's `Intl` data and make native environments less consistent.
 **Reference:** `spec:AST-111/DEC-6`
 **Decider:** `nynexman4464`, 2026-11-02
 
-`Temporal` defines week numbering only for the ISO calendar, so `hasWeekNumbers`
-keeps one meaning. In a thirteen-month calendar, twelve months is not a year, so
-a year step moves to the same month of the next calendar year.
+`Temporal` defines week numbering only for `iso8601`, the Gregorian calendar
+with ISO 8601 weeks, so `hasWeekNumbers` keeps one meaning. In a thirteen-month
+calendar, twelve months is not a year, so a year step moves to the same month of
+the next calendar year.
 
 ### DEC-7 — A non-Gregorian calendar wins over the native picker
 
@@ -548,7 +549,8 @@ English name, such as the Minguo calendar for `roc`, the Dangi calendar for
 identifier in code font only where the API value itself is meant. The `iso8601`
 calendar, which CLDR names the Gregorian calendar with ISO 8601 weeks, counts
 as the Gregorian calendar where weeks do not matter. Era names that `Intl`
-writes, such as `民國`, are data and appear as `Intl` writes them.
+writes, such as `民國`, are data and appear as `Intl` writes them. Search
+keywords may also list other common names so people can find a page.
 
 Rejected: names that are not CLDR's, such as a country, a state, or a holiday
 standing for a calendar, because a standard name stays neutral and matches what

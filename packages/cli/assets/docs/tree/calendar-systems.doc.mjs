@@ -91,7 +91,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has no non-ISO calendars. Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
+          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has only `iso8601`, the Gregorian calendar with ISO 8601 weeks. Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
         },
         {
           type: 'code',
@@ -139,7 +139,7 @@ if (!('Temporal' in globalThis)) {
       content: [
         {
           type: 'prose',
-          text: "`Calendar`'s `hasWeekNumbers` shows ISO 8601 week numbers in every calendar. Temporal defines week numbering only for the ISO calendar.",
+          text: "`Calendar`'s `hasWeekNumbers` shows ISO 8601 week numbers in every calendar. Temporal defines week numbering only for `iso8601`, the Gregorian calendar with ISO 8601 weeks.",
         },
       ],
     },
