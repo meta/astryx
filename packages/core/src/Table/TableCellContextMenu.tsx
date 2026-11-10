@@ -28,7 +28,11 @@ import type {
   ContextMenuExternalTrigger,
   ContextMenuTriggerHandlers,
 } from '../ContextMenu/ContextMenu';
-import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
+import {
+  ContextMenuTrigger,
+  contextMenuPoint,
+  type TriggerPoint,
+} from '../ContextMenu/ContextMenuTrigger';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useLongPress} from '../hooks/useLongPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -91,14 +95,16 @@ function createLazyTableContextMenu() {
 let LazyTableContextMenu: ComponentType<LazyMenuProps> =
   createLazyTableContextMenu();
 
-/** An invocation that arrived before the menu, replayed when it attaches. */
+/**
+ * An invocation that arrived before the menu, replayed when it attaches. Its
+ * point is in the trigger's own box, so a scroll during the load keeps it on
+ * the content.
+ */
 type HeldInvocation = {
   owner: object;
   gesture: number;
-} & (
-  | {kind: 'contextmenu'; event: React.MouseEvent<HTMLElement>}
-  | {kind: 'long-press'; point: {x: number; y: number}}
-);
+  point: TriggerPoint;
+};
 
 // One hold serves all cells, in every copy of Core on the page. A later
 // invocation replaces it, as a second press closes the first menu after the
@@ -196,11 +202,7 @@ function CellTrigger({
         ) {
           return;
         }
-        if (held.kind === 'contextmenu') {
-          handlers.onContextMenu(held.event);
-        } else {
-          handlers.openFromLongPress(held.point);
-        }
+        handlers.openAtTriggerPoint(held.point);
       });
     },
   }).current;
@@ -226,11 +228,15 @@ function CellTrigger({
       if (handlers != null) {
         handlers.openFromLongPress(point);
       } else {
+        const rect = triggerRef.current?.getBoundingClientRect();
         holdInvocation({
           owner: triggerRef,
           gesture: currentGesture(),
-          kind: 'long-press',
-          point,
+          point: {
+            x: rect ? point.x - rect.left : point.x,
+            y: rect ? point.y - rect.top : point.y,
+            isTouch: true,
+          },
         });
       }
     },
@@ -271,8 +277,7 @@ function CellTrigger({
           holdInvocation({
             owner: triggerRef,
             gesture: currentGesture(),
-            kind: 'contextmenu',
-            event,
+            point: contextMenuPoint(event, triggerRef.current),
           });
           preloadTableContextMenu();
         }}

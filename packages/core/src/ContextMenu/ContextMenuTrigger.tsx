@@ -5,12 +5,18 @@
 /**
  * @file ContextMenuTrigger.tsx
  * @input React, StyleX, mergeProps
- * @output ContextMenuTrigger, the right-click target and its 1px cursor anchor
+ * @output ContextMenuTrigger, the right-click target and its 1px cursor anchor,
+ *   and contextMenuPoint, where a right-click opens the menu in the trigger
  * @position ContextMenu renders it around its children; Table cells render it
  * before their lazily loaded menu arrives. It imports no menu code.
  */
 
-import type {ComponentPropsWithoutRef, ReactNode, Ref} from 'react';
+import type {
+  ComponentPropsWithoutRef,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+  Ref,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '../theme/types';
 import {mergeProps} from '../utils/mergeProps';
@@ -38,6 +44,35 @@ const styles = stylex.create({
 });
 
 const ORIGIN = {x: 0, y: 0};
+
+/** A point in the trigger's own box where the menu opens. */
+export interface TriggerPoint {
+  x: number;
+  y: number;
+  /** The invocation came from a finger, so its press belongs to the open. */
+  isTouch: boolean;
+}
+
+/**
+ * The point in `trigger`'s box where a `contextmenu` event opens the menu. A
+ * keyboard `contextmenu` (Shift+F10, the Menu key) has coordinates (0, 0) in
+ * several browsers. Then the menu opens at the trigger's bottom-left corner,
+ * so it is reachable without a pointer.
+ */
+export function contextMenuPoint(
+  event: ReactMouseEvent,
+  trigger: Element | null,
+): TriggerPoint {
+  const rect = trigger?.getBoundingClientRect();
+  const isKeyboard =
+    event.clientX === 0 && event.clientY === 0 && event.detail === 0;
+  return {
+    x: isKeyboard || !rect ? 0 : event.clientX - rect.left,
+    y: isKeyboard || !rect ? (rect?.height ?? 0) : event.clientY - rect.top,
+    isTouch:
+      (event.nativeEvent as Partial<PointerEvent>).pointerType === 'touch',
+  };
+}
 
 type TriggerDOMProps = Omit<
   ComponentPropsWithoutRef<'div'>,

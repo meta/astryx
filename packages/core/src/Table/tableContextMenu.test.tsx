@@ -10,7 +10,7 @@ import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {Table} from './Table';
 import type {TablePlugin, TableColumn} from './types';
-import {resolveContextActions} from './tableContextMenu';
+import {resolveContextActions} from './tableContextActions';
 import {warmTableContextMenu} from './__tests__/warmTableContextMenu';
 
 // Cells load their context menu lazily; resolve it once so menus open

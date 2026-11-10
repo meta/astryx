@@ -8,7 +8,6 @@
  * and plugins, so reading actions never pulls in the context menu itself.
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Table/tableContextMenu.tsx (re-exports resolveContextActions)
  * - /packages/core/src/Table/types.ts (TableContextAction)
  */
 

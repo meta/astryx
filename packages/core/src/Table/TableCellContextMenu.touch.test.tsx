@@ -4,7 +4,9 @@
  * @file TableCellContextMenu.touch.test.tsx
  * @output Tests what an invocation before the menu loads does once it loads:
  *   a long press opens the menu, a tap does not, only the last held cell
- *   opens, and a later press or key drops the hold
+ *   opens, a later press or key drops the hold, the held point stays in the
+ *   cell across a scroll, focus returns to the cell, and an unmounted cell
+ *   drops only its own hold
  * @position Validates early invocations in TableCellContextMenu. Each test
  *   starts from a fresh module registry and a fresh mock. The mock holds the
  *   menu module until the test releases it.
@@ -43,9 +45,13 @@ type ColdCell = {label: string; actions?: TableContextAction[]};
  * Renders one row of cells from a fresh module registry. The menu module stays
  * held until `loadMenu` releases it.
  */
-async function renderColdCells(cells: ColdCell[]): Promise<{
+async function renderColdCells(
+  cells: ColdCell[],
+  content?: (label: string) => ReactNode,
+): Promise<{
   triggers: HTMLElement[];
   loadMenu: () => Promise<void>;
+  unmount: () => void;
 }> {
   const [{Table}, {TableBody}, {TableRow}, {TableCell}, menu] =
     await Promise.all([
@@ -63,16 +69,21 @@ async function renderColdCells(cells: ColdCell[]): Promise<{
             <TableCell
               key={cell.label}
               contextMenuActions={cell.actions ?? scenarioActions}>
-              {cell.label}
+              {content ? content(cell.label) : cell.label}
             </TableCell>
           ))}
         </TableRow>
       </TableBody>
     </Table>
   );
-  render(table);
+  const {unmount} = render(table);
   return {
-    triggers: cells.map(cell => screen.getByText(cell.label)),
+    unmount,
+    triggers: cells.map(
+      cell =>
+        screen.getByText(cell.label).closest('td')
+          ?.firstElementChild as HTMLElement,
+    ),
     loadMenu: async () => {
       gate.release();
       await act(async () => {
@@ -166,5 +177,93 @@ describe('TableCellContextMenu early invocation', () => {
     await loadMenu();
 
     expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  });
+  it('keeps a held right-click at its point in the cell when the page scrolls during the load', async () => {
+    const {triggers, loadMenu} = await renderColdCells([{label: 'Name'}]);
+    const trigger = triggers[0];
+    let top = 200;
+    trigger.getBoundingClientRect = () =>
+      ({
+        left: 100,
+        top,
+        width: 200,
+        height: 40,
+        right: 300,
+        bottom: top + 40,
+      }) as DOMRect;
+    expect(
+      fireEvent.contextMenu(trigger, {clientX: 130, clientY: 215, detail: 1}),
+    ).toBe(false);
+    // The page scrolls 150px while the menu loads.
+    top = 50;
+
+    await loadMenu();
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+    ).toBeTruthy();
+    const anchor = trigger.querySelector<HTMLElement>(
+      'span[aria-hidden="true"]',
+    );
+    expect(anchor?.style.left).toBe('30px');
+    expect(anchor?.style.top).toBe('15px');
+  });
+
+  it('restores focus to the cell on close when the focused element before a held right-click was not an HTML element', async () => {
+    const {triggers, loadMenu} = await renderColdCells(
+      [{label: 'Name'}],
+      label => (
+        <>
+          {label}
+          <svg tabIndex={0} aria-label="Mark" />
+        </>
+      ),
+    );
+    const trigger = triggers[0];
+    const mark = screen.getByLabelText('Mark');
+    mark.focus();
+    expect(document.activeElement).toBe(mark);
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    const focusTrigger = vi.spyOn(trigger, 'focus');
+
+    await loadMenu();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    fireEvent.keyDown(document, {key: 'Escape'});
+
+    // The menu restores focus to the cell's trigger, as a direct right-click
+    // on the cell does.
+    expect(focusTrigger).toHaveBeenCalled();
+  });
+
+  it('drops the hold of a cell that unmounts before the menu loads', async () => {
+    const hold = () =>
+      (globalThis as unknown as Record<symbol, {current: unknown}>)[
+        Symbol.for('@astryxdesign/core/table/context-menu-hold/v1')
+      ];
+    const first = await renderColdCells([{label: 'Name'}]);
+    expect(fireEvent.contextMenu(first.triggers[0])).toBe(false);
+    expect(hold().current).not.toBeNull();
+
+    first.unmount();
+
+    expect(hold().current).toBeNull();
+    await first.loadMenu();
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  });
+
+  it("keeps another cell's hold when a cell unmounts before the menu loads", async () => {
+    const first = await renderColdCells([{label: 'Name'}]);
+    const second = await renderColdCells([
+      {label: 'Email', actions: [{id: 'b', label: 'Beta', onSelect: () => {}}]},
+    ]);
+    expect(fireEvent.contextMenu(first.triggers[0])).toBe(false);
+    expect(fireEvent.contextMenu(second.triggers[0])).toBe(false);
+
+    first.unmount();
+    await second.loadMenu();
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Beta', hidden: true}),
+    ).toBeTruthy();
   });
 });

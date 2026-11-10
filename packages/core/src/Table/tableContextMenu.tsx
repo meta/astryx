@@ -24,10 +24,6 @@ import {
 import {Icon} from '../Icon/Icon';
 import type {TableContextAction, TableContextActions} from './types';
 
-// Re-exported for existing imports. Cells and plugins import
-// tableContextActions, which does not load the menu.
-export {resolveContextActions} from './tableContextActions';
-
 /**
  * Convert the flat action list into ContextMenu options, inserting a divider
  * between groups (first-seen group order). Ungrouped actions form a trailing

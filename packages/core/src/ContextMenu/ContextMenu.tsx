@@ -108,7 +108,11 @@ import type {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {ContextMenuTrigger} from './ContextMenuTrigger';
+import {
+  ContextMenuTrigger,
+  contextMenuPoint,
+  type TriggerPoint,
+} from './ContextMenuTrigger';
 import {
   useAdaptivePresentation,
   type AdaptivePresentation,
@@ -302,6 +306,8 @@ export interface ContextMenuTriggerHandlers {
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   /** Opens the menu as a long press at this viewport point does. */
   openFromLongPress: (point: {x: number; y: number}) => void;
+  /** Opens the menu for an invocation held at this point in the trigger. */
+  openAtTriggerPoint: (point: TriggerPoint) => void;
   onTouchStart: (event: React.TouchEvent<HTMLElement>) => void;
   onTouchMove: (event: React.TouchEvent<HTMLElement>) => void;
   onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
@@ -690,29 +696,30 @@ function useContextMenuElement(
         return;
       }
       e.preventDefault();
-      const rect = getAnchorBaseRect();
-      // A keyboard-initiated contextmenu (Shift+F10 / the Menu key) fires a
-      // `contextmenu` event whose coordinates are (0, 0) in several browsers.
-      // Detect that and anchor the menu to the trigger's bottom-left instead,
-      // so the menu is reachable without a pointer (menus-8).
-      const isKeyboardInvoked =
-        e.clientX === 0 && e.clientY === 0 && e.detail === 0;
-      // Convert the viewport cursor point into the trigger's local space so
-      // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      // The anchor lives inside the trigger, so it scrolls with the trigger.
+      const point = contextMenuPoint(e, triggerRef.current);
       // A finger's long press reaches here as a pointer `contextmenu` where
       // the browser sends one (Chromium); its compatibility mousedown then
       // belongs to the opening press. A mouse or the keyboard opens without
       // one, so every later mousedown is a press outside.
-      openingGestureRef.current =
-        (e.nativeEvent as Partial<PointerEvent>).pointerType === 'touch'
-          ? currentGesture()
-          : null;
-      openAtLocalPoint(localX, localY, e.currentTarget as HTMLElement);
+      openingGestureRef.current = point.isTouch ? currentGesture() : null;
+      openAtLocalPoint(point.x, point.y, e.currentTarget as HTMLElement);
     },
-    [isDisabled, openAtLocalPoint, getAnchorBaseRect],
+    [isDisabled, openAtLocalPoint],
+  );
+
+  // An invocation that a caller's trigger held, at the point in the trigger
+  // where it arrived. The trigger is the focus element, because the held
+  // event no longer has a current target.
+  const openAtTriggerPoint = useCallback(
+    (point: TriggerPoint) => {
+      if (isDisabled) {
+        return;
+      }
+      openingGestureRef.current = point.isTouch ? currentGesture() : null;
+      openAtLocalPoint(point.x, point.y, triggerRef.current);
+    },
+    [isDisabled, openAtLocalPoint],
   );
 
   // Touch long-press invocation (menus-8). iOS Safari never synthesizes a
@@ -921,6 +928,7 @@ function useContextMenuElement(
     () => ({
       onContextMenu: handleTriggerContextMenu,
       openFromLongPress,
+      openAtTriggerPoint,
       onTouchStart: handleTriggerTouchStart,
       onTouchMove: handleTriggerTouchMove,
       onTouchEnd: handleTriggerTouchEnd,
@@ -929,6 +937,7 @@ function useContextMenuElement(
     [
       handleTriggerContextMenu,
       openFromLongPress,
+      openAtTriggerPoint,
       handleTriggerTouchStart,
       handleTriggerTouchMove,
       handleTriggerTouchEnd,
