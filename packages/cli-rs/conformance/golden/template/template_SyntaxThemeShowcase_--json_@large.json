@@ -1,0 +1,14 @@
+{
+ "id": "template_SyntaxThemeShowcase_--json_@large",
+ "args": [
+  "template",
+  "SyntaxThemeShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SyntaxThemeShowcase\",\n    \"description\": \"A concise code block rendered with the One Dark Pro syntax preset to show how SyntaxTheme changes highlighting colors without making the page long.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"CodeBlock\",\n      \"Stack\",\n      \"SyntaxTheme\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {SyntaxTheme} from '@astryxdesign/core/theme';\\nimport {oneDarkPro} from '@astryxdesign/core/theme/syntax';\\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst sampleCode = `async function save() {\\n  await api.update(values);\\n  toast.show('Saved');\\n}`;\\n\\nexport default function SyntaxThemeShowcase() {\\n  return (\\n    <SyntaxTheme theme={oneDarkPro}>\\n      <Stack\\n        direction=\\\"vertical\\\"\\n        gap={2}\\n        style={{width: 360, maxWidth: '100%'}}>\\n        <Text type=\\\"supporting\\\" weight=\\\"bold\\\" color=\\\"secondary\\\">\\n          One Dark Pro preset\\n        </Text>\\n        <CodeBlock code={sampleCode} language=\\\"tsx\\\" />\\n      </Stack>\\n    </SyntaxTheme>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

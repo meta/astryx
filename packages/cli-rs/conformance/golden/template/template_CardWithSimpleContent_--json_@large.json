@@ -1,0 +1,14 @@
+{
+ "id": "template_CardWithSimpleContent_--json_@large",
+ "args": [
+  "template",
+  "CardWithSimpleContent",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CardWithSimpleContent\",\n    \"description\": \"A card with a heading and body text. Use for summaries, descriptions, or any grouped content that needs visual separation from the page. The card handles its own border, background, and padding; just pass your content as children. Set a width to constrain it, or leave it to fill the parent.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Heading, Text} from '@astryxdesign/core/Text';\\n\\nexport default function CardWithSimpleContent() {\\n  return (\\n    <Card width={360}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Heading level={3}>Project Overview</Heading>\\n        <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n          This project tracks the redesign of the onboarding flow. The goal is\\n          to reduce drop-off by 15% in Q2.\\n        </Text>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Last updated 2 hours ago\\n        </Text>\\n      </Stack>\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

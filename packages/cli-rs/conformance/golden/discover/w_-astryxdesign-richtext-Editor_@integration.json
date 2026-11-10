@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-richtext-Editor_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/richtext/Editor"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: \"Editor\" not found in @astryxdesign/richtext\n\n  @astryxdesign/richtext/RichTextEditor  (similar name)\n  @astryxdesign/richtext/RichTextEditorAutoLinkPlugin  (similar name)\n  @astryxdesign/richtext/RichTextEditorToolbar  (similar name)\n  @astryxdesign/richtext/RichTextEditorShowcase  (similar name)\n",
+ "exit": 1,
+ "files": []
+}

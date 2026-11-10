@@ -1,0 +1,23 @@
+{
+ "id": "ex_experimental_icon_add_Dice5_--from_-acme-glyph-library_--new-definition_random_--description_Pick-something-at-random~2",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Dice5",
+  "--from",
+  "@acme/glyph-library",
+  "--new-definition",
+  "random",
+  "--description",
+  "Pick something at random.",
+  "--words",
+  "dice,shuffle,chance"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon add works only in a project. Run it in the icon-set package.\n",
+ "exit": 1,
+ "files": []
+}

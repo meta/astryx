@@ -1,0 +1,13 @@
+{
+ "id": "shell_--_blog_@empty",
+ "args": [
+  "--",
+  "blog"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\n",
+ "exit": 1,
+ "files": []
+}

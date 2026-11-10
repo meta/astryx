@@ -1,0 +1,17 @@
+{
+ "id": "w_doc_replaces_bad",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "topic",
+  "--replaces",
+  "a b"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --replaces must name a topic using letters, digits, _ and - only.\n",
+ "exit": 1,
+ "files": []
+}

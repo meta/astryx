@@ -1,0 +1,14 @@
+{
+ "id": "template_FormLayoutShowcase_--json_@large",
+ "args": [
+  "template",
+  "FormLayoutShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"FormLayoutShowcase\",\n    \"description\": \"A vertical form layout with text input fields.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"FormLayout\",\n      \"TextInput\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {FormLayout} from '@astryxdesign/core/FormLayout';\\nimport {TextInput} from '@astryxdesign/core/TextInput';\\n\\nexport default function FormLayoutShowcase() {\\n  const [first, setFirst] = useState('Priya');\\n  const [last, setLast] = useState('Sharma');\\n  const [email, setEmail] = useState('priya.sharma@example.com');\\n  const [city, setCity] = useState('San Francisco');\\n  const [state, setState] = useState('CA');\\n  const [zip, setZip] = useState('94105');\\n\\n  return (\\n    <FormLayout>\\n      <FormLayout direction=\\\"horizontal\\\">\\n        <TextInput label=\\\"First Name\\\" value={first} onChange={setFirst} />\\n        <TextInput label=\\\"Last Name\\\" value={last} onChange={setLast} />\\n      </FormLayout>\\n      <TextInput label=\\\"Email\\\" value={email} onChange={setEmail} />\\n      <FormLayout direction=\\\"horizontal\\\">\\n        <TextInput label=\\\"City\\\" value={city} onChange={setCity} />\\n        <TextInput label=\\\"State\\\" value={state} onChange={setState} />\\n        <TextInput label=\\\"ZIP\\\" value={zip} onChange={setZip} />\\n      </FormLayout>\\n    </FormLayout>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

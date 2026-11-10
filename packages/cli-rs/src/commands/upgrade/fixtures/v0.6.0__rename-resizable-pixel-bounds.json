@@ -1,0 +1,130 @@
+[
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSizePx: 120, maxSizePx: 480});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSize: 120, maxSize: 480});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core';\nconst region = useResizable({minSize: 160, minSizePx: 80});",
+  "output": "import {useResizable} from '@astryxdesign/core';\nconst region = useResizable({\n  minSize: 160\n});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst minSizePx = 120;\nconst region = useResizable({minSizePx});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst minSizePx = 120;\nconst region = useResizable({minSize: minSizePx});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable as resize} from '@astryxdesign/core/Resizable';\nconst regions = resize({regions: {\n  nav: {defaultSize: 240, minSizePx: 120},\n  detail: {defaultSize: 480, maxSizePx: 900},\n}});",
+  "output": "import {useResizable as resize} from '@astryxdesign/core/Resizable';\nconst regions = resize({regions: {\n  nav: {defaultSize: 240, minSize: 120},\n  detail: {defaultSize: 480, maxSize: 900},\n}});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst legacy = {minSizePx: 160};\nconst region = useResizable({minSizePx: 80, ...legacy});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst legacy = {minSizePx: 160};\nconst region = useResizable({/* TODO(astryx upgrade): This useResizable configuration contains a spread or computed property. Rename minSizePx/maxSizePx to minSize/maxSize manually without changing property precedence. */\nminSizePx: 80, ...legacy});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst region = useResizable({[key]: 160, minSizePx: 80});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst region = useResizable({[key]: 160, /* TODO(astryx upgrade): This useResizable configuration contains a spread or computed property. Rename minSizePx/maxSizePx to minSize/maxSize manually without changing property precedence. */\nminSizePx: 80});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst region = useResizable({minSizePx: 80, [key]: 160});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst region = useResizable({/* TODO(astryx upgrade): This useResizable configuration contains a spread or computed property. Rename minSizePx/maxSizePx to minSize/maxSize manually without changing property precedence. */\nminSizePx: 80, [key]: 160});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst regions = useResizable({regions: {nav: {[key]: 160, minSizePx: 80}}});",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst key = 'minSize';\nconst regions = useResizable({regions: {nav: {[key]: 160, /* TODO(astryx upgrade): This useResizable configuration contains a spread or computed property. Rename minSizePx/maxSizePx to minSize/maxSize manually without changing property precedence. */\nminSizePx: 80}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst config = {minSizePx: 120};\nconst region = useResizable(config);\nconst unrelated = {maxSizePx: 500};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core';\nfunction wrapper(useResizable) {\n  return useResizable({minSizePx: 120, keep: 1});\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Astryx from '@astryxdesign/core';\nconst region = Astryx.useResizable({defaultSize: 240, minSizePx: 120, maxSizePx: 480});",
+  "output": "import * as Astryx from '@astryxdesign/core';\nconst region = Astryx.useResizable({defaultSize: 240, minSize: 120, maxSize: 480});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Other from 'other-resizable';\nconst region = Other.useResizable({minSizePx: 120});",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Astryx from '@astryxdesign/core';\nfunction build(Astryx) {\n  return Astryx.useResizable({minSizePx: 120});\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSizePx: 120} as const);",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSize: 120} as const);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSizePx: 120} satisfies object);",
+  "output": "import {useResizable} from '@astryxdesign/core/Resizable';\nconst region = useResizable({defaultSize: 240, minSize: 120} satisfies object);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/rename-resizable-pixel-bounds",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useResizable} from '@astryxdesign/core';\nconst regions = useResizable({regions: {\n  nav: {defaultSize: 240, minSizePx: 120} as const,\n} as const});",
+  "output": "import {useResizable} from '@astryxdesign/core';\nconst regions = useResizable({regions: {\n  nav: {defaultSize: 240, minSize: 120} as const,\n} as const});",
+  "error": null
+ }
+]

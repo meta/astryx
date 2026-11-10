@@ -1,0 +1,18 @@
+{
+ "id": "swizzle_@brokencore",
+ "args": [
+  "swizzle"
+ ],
+ "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nAvailable components\n\nUsage: npx @astryxdesign/cli@0.7.12 swizzle <component>\n\nExample: npx @astryxdesign/cli@0.7.12 swizzle Button\n         npx @astryxdesign/cli@0.7.12 swizzle XDSButton  (XDS prefix also works)\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/brokencore\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

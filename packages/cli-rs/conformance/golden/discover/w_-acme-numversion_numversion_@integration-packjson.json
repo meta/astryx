@@ -1,0 +1,13 @@
+{
+ "id": "w_-acme-numversion_numversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/numversion"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "name:      @acme/numversion\npackage:   @acme/numversion\ncategory:  @acme/numversion\nversion:   1\ndocs:      guide\ninstalled: true\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @acme/numversion/<item>\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

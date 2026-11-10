@@ -1,0 +1,20 @@
+{
+ "id": "component_Overlay_--zh_@large",
+ "args": [
+  "component",
+  "Overlay",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Overlay\n\nOverlay layers action or supporting content over media, cards, video, or other bounded surfaces with an optional scrim and reveal behavior. Host attributes and DOM handlers (id, data-*, aria-*) reach the root element.\n\n**Import:** `import {Overlay} from '@astryxdesign/core/Overlay';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Base content | No | The media, card, or bounded surface that the overlay sits on top of. |\n| Scrim | No | Optional dark or light overlay background that improves content contrast. |\n| Overlay content | Yes | Actions, labels, or supporting content rendered above the base surface. |\n\n## Best Practices\n\n- **Do:** Use overlays for short, contextual actions or labels that belong directly to the underlying media or surface.\n- **Do:** Keep overlay content compact so it remains legible over the scrim and does not obscure important visual information.\n- **Don't:** Do not use Overlay for floating content anchored outside the surface. Use Popover, Tooltip, or Dialog for those patterns.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `content` | `ReactNode` | - | Content rendered inside the overlay scrim. **(required)** |\n| `children` | `ReactNode` | - | Base content such as an image, video, card, or media surface that the overlay sits on top of. |\n| `showOn` | `'hover' \\| 'always' \\| 'focus' \\| 'hover-or-focus'` | `'always'` | Visibility trigger. Hover mode also reveals on focus for keyboard accessibility; hover-or-focus is an alias for hover. |\n| `isOpen` | `boolean` | - | Controlled visibility override. When set, this takes precedence over showOn and touch toggle behavior. |\n| `scrim` | `'dark' \\| 'light' \\| false` | `'dark'` | Scrim background mode. Set to false to render overlay content without a scrim background. |\n| `position` | `'fill' \\| 'bottom' \\| 'top'` | `'fill'` | Where the scrim appears within the base surface. |\n| `align` | `'start' \\| 'center' \\| 'end'` | `'end'` | Alignment of the overlay content within the scrim. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n| `className` | `string` | - | CSS class name(s) appended to the root element. Prefer xstyle for styling when possible. |\n| `style` | `React.CSSProperties` | - | Inline styles applied to the root element. Prefer xstyle for design-system styling. |\n| `ref` | `Ref<HTMLDivElement>` | - | Ref forwarded to the overlay root element. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-overlay` | - | - | - |\n| `astryx-overlay-scrim` | `data-position` | position | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'overlay': {\n    base: { /* CSS properties */ },\n  },\n  'overlay-scrim': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

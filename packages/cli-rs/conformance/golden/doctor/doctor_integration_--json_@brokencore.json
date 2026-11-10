@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_--json_@brokencore",
+ "args": [
+  "doctor",
+  "integration",
+  "--json"
+ ],
+ "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"JSON output is not supported for the 'doctor integration' command\",\n  \"code\": \"ERR_INVALID_OPTION\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

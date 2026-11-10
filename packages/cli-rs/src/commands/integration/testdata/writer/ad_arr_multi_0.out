@@ -1,0 +1,12 @@
+export default {
+  agentDocs: {
+    append: [
+      'First line.', // why
+      'Second.',
+    ],
+  },
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

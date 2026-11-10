@@ -1,0 +1,20 @@
+{
+ "id": "template_shell-top-nav_--skeleton_@large",
+ "args": [
+  "template",
+  "shell-top-nav",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# shell-top-nav - Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\n# Components: AppShell, Badge, Card, Grid, IconButton, NavIcon, Stack, TopNav, TopNavMegaMenu, TopNavMegaMenuFeaturedCard\n\n<AppShell contentPadding={6} variant=\"surface\" />\n/* topNav: */\n<TopNav />\n<TopNavHeading />\n<NavIcon />\n<TopNavMegaMenu />\n<MegaFeatured />\n<TopNavMegaMenu />\n<MegaFeatured />\n<TopNavItem />\n<TopNavItem />\n<IconButton variant=\"ghost\" />\n<Button variant=\"ghost\" />\n<Button variant=\"primary\" />\n<VStack gap={10}>\n  <Card padding={0} variant=\"muted\" height={360} width=\"100%\" />\n  <VStack gap={4}>\n    <Card padding={0} variant=\"muted\" height={24} width={200} />\n    <Grid gap={4} columns={{minWidth: 160, repeat: 'fit'}}>\n      <VStack gap={2}>\n        <Card padding={0} variant=\"muted\" height={120} width=\"100%\" />\n        <Card padding={0} variant=\"muted\" height={14} width=\"60%\" />\n      </VStack>\n    </Grid>\n  </VStack>\n</VStack>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

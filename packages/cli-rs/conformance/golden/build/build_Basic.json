@@ -1,0 +1,19 @@
+{
+ "id": "build_Basic",
+ "args": [
+  "build",
+  "Basic"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"Basic\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `classic-gallery`, `contact-form`, `login` only loosely, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        login\npackage:     @astryxdesign/core\ndescription: Minimal centered credential form on a plain ground: two fields and a submit, nothing competing for attention.\ncommand:     npx @astryxdesign/cli@0.7.12 template login --type page <path>\n\nname:        table-page\npackage:     @astryxdesign/core\ndescription: Flat table of uniform rows under a block of record-level facts, narrowed three ways at once - a full-text search box, a scope toggle, and per-column popovers - with sortable and filterable columns, per-row hover detail, and totals derived from the visible rows that flag themselves as partial while a filter is on.\ncommand:     npx @astryxdesign/cli@0.7.12 template table-page --type page <path>\n\nKeyword search matched these page templates: classic-gallery (@astryxdesign/core), contact-form (@astryxdesign/core), login (@astryxdesign/core).\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

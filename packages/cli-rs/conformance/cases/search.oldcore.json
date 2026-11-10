@@ -1,0 +1,224 @@
+[
+  {
+    "id": "oldcore_search_button_@core-0.7.11",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.7.11",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.7.11",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.7.11",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_button_@core-0.7.5",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.7.5",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.7.5",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.7.5",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_button_@core-0.6.8",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.6.8",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.6.8",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.6.8",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_button_@core-0.5.4",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.5.4",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.5.4",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.5.4",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_button_@core-0.4.7",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.4.7",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.4.7",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.4.7",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_button_@core-0.3.0",
+    "args": [
+      "search",
+      "button"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_data-table_--json_@core-0.3.0",
+    "args": [
+      "search",
+      "data table",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_dark-mode_@core-0.3.0",
+    "args": [
+      "search",
+      "dark mode"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_search_buton_@core-0.3.0",
+    "args": [
+      "search",
+      "buton"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

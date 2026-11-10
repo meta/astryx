@@ -1,0 +1,5 @@
+function f() {}
+export default {
+      name: 'x',
+      b: 'y',
+};

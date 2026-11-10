@@ -1,0 +1,20 @@
+{
+ "id": "template_CheckboxInputIndeterminateState_--skeleton_@large",
+ "args": [
+  "template",
+  "CheckboxInputIndeterminateState",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# CheckboxInputIndeterminateState - A \"select all\" checkbox that controls a group of options. When only some options are checked, it shows a dash instead of a checkmark. Clicking it checks or unchecks everything.\n# Components: CheckboxInput, Divider, Stack\n\n<Stack gap={3} />\n<CheckboxInput />\n<Divider />\n<Stack gap={3} />\n<CheckboxInput />\n<CheckboxInput />\n<CheckboxInput />\n<CheckboxInput />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

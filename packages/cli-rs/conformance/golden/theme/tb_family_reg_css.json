@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_reg_css",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "reg/css.mjs",
+  "reg/css-child.mjs",
+  "--family-key",
+  "fam-css"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from reg/css.mjs...\n\nBuilding theme from reg/css-child.mjs...\n",
+ "stderr": "Error: Theme family registry graph imports CSS: ./x.css\n",
+ "exit": 1,
+ "files": []
+}

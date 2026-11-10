@@ -1,0 +1,19 @@
+{
+ "id": "search_InputGroupText",
+ "args": [
+  "search",
+  "InputGroupText"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"InputGroupText\" (3)\n\nname:        InputGroupText\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/InputGroup\ndescription: Use InputGroupText inside InputGroup for a short fixed prefix or suffix, such as a currency symbol, a protocol, or a unit, or for a decorative icon. It is plain text, not a control, and it is not part of the input's accessible name.\ncommand:     npx @astryxdesign/cli@0.7.12 component InputGroupText\n\nname:        InputGroupBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InputGroup - Basic\nkind:        block\ndescription: A currency field with static prefix and suffix addons around a TextInput. Use InputGroupText to clarify units or input format.\ncommand:     npx @astryxdesign/cli@0.7.12 template InputGroupBasic --type block\n\nname:        InputGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/InputGroup\ndescription: InputGroup connects an input with prefix/suffix addons in a single visual unit. Use it for URL fields, currency inputs, search fields with action buttons, or any input that needs contextual decorations.\ncommand:     npx @astryxdesign/cli@0.7.12 component InputGroup\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover InputGroupText\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

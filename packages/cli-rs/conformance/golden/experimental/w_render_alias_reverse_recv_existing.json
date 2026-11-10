@@ -1,0 +1,17 @@
+{
+ "id": "w_render_alias_reverse_recv_existing",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "aliased.html",
+  "--out",
+  "recv/page.tsx"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: aliased.html imports recv/new/src/components/Card.tsx, recv/new/src/data/info.json through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.\n",
+ "exit": 1,
+ "files": []
+}

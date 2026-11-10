@@ -1,0 +1,20 @@
+{
+ "id": "hook_useTranslator_--dense",
+ "args": [
+  "hook",
+  "useTranslator",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useTranslator\n\nReturns a translator function that resolves keys against the current locale, provider overrides, and the shipped English fallback catalog. Call inside a component; the returned function can be used anywhere within that component's scope.\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `value` | `(key: string, values?: Record<string, string \\| number \\| Date>) => string` | A stable translator function bound to the current InternationalizationProvider context. Call it with a message key and optional ICU MessageFormat values to get the formatted string in the active locale. Safe to use in render, event handlers, effects, or any code that runs during the parent component's lifecycle. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for InternationalizationProvider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

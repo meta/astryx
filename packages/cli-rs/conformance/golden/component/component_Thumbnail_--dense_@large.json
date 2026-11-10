@@ -1,0 +1,20 @@
+{
+ "id": "component_Thumbnail_--dense_@large",
+ "args": [
+  "component",
+  "Thumbnail",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Thumbnail\n\nCompact square image preview. Shimmer while uploading, image on success, placeholder when empty. Use in chat composers, file lists, or small media previews.\n\n**Import:** `import {Thumbnail} from '@astryxdesign/core/Thumbnail';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Image | No | The preview image, displayed as a square with cover fit. |\n| Placeholder | No | An image silhouette icon shown when no src is provided. |\n| Remove button | No | An overlaid close button in the top-right corner. Appears when onRemove is set. Sits on a fixed --color-overlay scrim with an --color-on-dark icon to stay visible on any image. |\n| Upload overlay | No | A semi-transparent overlay with a spinner, shown when isLoading is true and a src preview is available. |\n| Skeleton | No | A shimmer animation shown when isLoading is true and no src is set. |\n\n## Best Practices\n\n- **Do:** Always set label (file name) for a11y; powers screen reader announce + hover tooltip.\n- **Do:** isLoading w/o src → skeleton; isLoading w/ src → spinner overlay. Two distinct loading states.\n- **Do:** onClick adds button semantics + hover overlay; pair with lightbox for full preview.\n- **Don't:** Don't use for non-image files (PDF, xlsx); use file attachment component with icon instead.\n- **Don't:** Don't omit alt when src present; screen readers need image content description, not just label.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `src` | `string` | - | Image source URL. |\n| `alt` | `string` | - | Alt text for image. Omitted → explicitly decorative (alt=\"\" + role=\"presentation\" + aria-hidden); dev warn when src set with no alt and no label. |\n| `label` | `string` | - | Accessible label (file name). Tooltip on hover, aria-label. |\n| `onRemove` | `(e: React.MouseEvent) => void` | - | (e) => void. Overlaid remove button callback. |\n| `onClick` | `(e: React.MouseEvent) => void` | - | (e) => void. Adds button semantics + hover overlay. |\n| `isLoading` | `boolean` | `false` | Skeleton (no src) or upload overlay (with src). Default: false. |\n| `isDisabled` | `boolean` | `false` | Disabled state. Default: false. |\n| `showRemoveOn` | `'always' \\| 'hover'` | `'hover'` | When remove button shows: hover (default: reveal on hover/focus, stays visible on touch) \\| always. Only when onRemove set. |\n| `xstyle` | `StyleXStyles` | - | stylex.create() for layout. |\n| `className` | `string` | - | CSS class. Prefer xstyle. |\n| `style` | `CSSProperties` | - | Inline styles. Prefer xstyle. |\n| `data-testid` | `string` | - | Test selector. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-thumbnail` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'thumbnail': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

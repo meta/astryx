@@ -1,0 +1,14 @@
+{
+ "id": "template_StatusDotPulsing_--json_@large",
+ "args": [
+  "template",
+  "StatusDotPulsing",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"StatusDotPulsing\",\n    \"description\": \"Animated pulsing dots for live, processing, and error states.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"StatusDot\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {StatusDot} from '@astryxdesign/core/StatusDot';\\nimport {HStack} from '@astryxdesign/core/Layout';\\n\\nexport default function StatusDotPulsing() {\\n  return (\\n    <HStack gap={2} vAlign=\\\"center\\\">\\n      <StatusDot variant=\\\"success\\\" label=\\\"Live\\\" isPulsing />\\n      <StatusDot variant=\\\"warning\\\" label=\\\"Processing\\\" isPulsing />\\n      <StatusDot variant=\\\"error\\\" label=\\\"Error\\\" isPulsing />\\n      <StatusDot variant=\\\"accent\\\" label=\\\"Processing\\\" isPulsing />\\n      <StatusDot variant=\\\"neutral\\\" label=\\\"Error\\\" isPulsing />\\n    </HStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

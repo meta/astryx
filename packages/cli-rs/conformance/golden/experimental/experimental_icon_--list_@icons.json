@@ -1,0 +1,20 @@
+{
+ "id": "experimental_icon_--list_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "--list"
+ ],
+ "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
+ "stdout": "Icon sets\n\nstatus:     selected\nprojectSet: @acme/glyphs/glyphs\nreason:     experimental.iconSet names \"glyphs\".\n\nname:        glyphs\ndisplayName: Acme glyphs\npackage:     @acme/glyphs\nlicense:     MIT\niconCount:   4\ndefault:     outline\nvariants:    outline/solid\nbuiltIn:     2/29\ndefinitions: 2/145\nown:         random, sparkle\nmissing:     arrowDown, arrowsUpDown, arrowUp, calendar, check, checkDouble, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, clock, copy, error, externalLink, eyeSlash, funnel, info, menu, microphone, moreHorizontal, stop, success, upload, viewColumns, warning, wrench\nproject:     true\ndescription: Hand-drawn test icons.\n\nFind one: npx @astryxdesign/cli@0.7.12 experimental icon <words>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/icons\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

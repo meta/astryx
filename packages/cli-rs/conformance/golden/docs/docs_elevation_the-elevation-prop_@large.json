@@ -1,0 +1,20 @@
+{
+ "id": "docs_elevation_the-elevation-prop_@large",
+ "args": [
+  "docs",
+  "elevation",
+  "the-elevation-prop"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## The elevation prop\n\nConfigurable surfaces expose a single `elevation` prop instead of asking consumers to hand-write a box-shadow. It takes the graded enum `none | low | med | high`, narrowed per component to the steps that surface needs: Card, ClickableCard, SelectableCard, Button, IconButton, ButtonGroup, ToggleButton, and Banner expose the full scale, while ChatComposer exposes only `none | low`. `none` is a flat literal (`box-shadow: none`); the other levels map to the `--shadow-*` tokens above, so a surface stays theme-agnostic.\n\nProp defaults preserve current appearance: every surface defaults to `none` except ChatComposer, which defaults to `low` to keep its raised look. Set `elevation=\"none\"` to flatten it; the flat composer draws a border with the same rest / hover / focus treatment as a text input.\n\nRaising a surface with the elevation prop:\n```tsx\nimport {Plus} from 'lucide-react';\n\n// Flat by default; raise only when the surface needs to float.\n<Card elevation=\"low\">Raised card</Card>\n\n// A floating action button.\n<IconButton icon={<Icon icon={Plus} />} label=\"New\" variant=\"primary\" elevation=\"med\" />\n\n// Flatten the composer (defaults to 'low').\n<ChatComposer elevation=\"none\" onSubmit={handleSubmit} />\n```\n\nAlways float; no prop: intrinsic overlays (Dialog, Popover, Tooltip, Toast, HoverCard, DropdownMenu, and the components that compose them) bake their elevation in and never expose the prop. Flow content (inputs, Text, layout) is never elevated; input fields use inset rings, which are a separate concept from elevation.\n\nUp: npx @astryxdesign/cli@0.7.12 docs elevation --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs elevation choosing-a-level\nNext: npx @astryxdesign/cli@0.7.12 docs elevation usage\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

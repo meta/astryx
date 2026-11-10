@@ -1,0 +1,19 @@
+{
+ "id": "build_how-do-I-make-a-landing-page",
+ "args": [
+  "build",
+  "how do I make a landing page"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"how do I make a landing page\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe closest template; none is exactly this page. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        centered-hero\npackage:     @astryxdesign/core\ndescription: Symmetrical centered stack (headline, short blurb, paired call-to-action buttons) resting on one wide full-bleed picture, with nothing on either flank competing.\ncommand:     npx @astryxdesign/cli@0.7.12 template centered-hero --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        table-grouped\npackage:     @astryxdesign/core\ndescription: Row collection bundled into collapsible sections with per-group counts, so a long list reads as a handful of blocks that expand and collapse.\ncommand:     npx @astryxdesign/cli@0.7.12 template table-grouped --type page <path>\n\nname:        ai-chat-landing\npackage:     @astryxdesign/core\ndescription: Zero-state entry surface centered on a single composer with suggestion chips instead of history, sized for the moment before any content exists.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat-landing --type page <path>\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        AppShellTopNavOnly\npackage:     @astryxdesign/core\ndescription: Simple layout with TopNav and no side navigation, suitable for landing pages.\n\nname:        AppShellWithBanner\npackage:     @astryxdesign/core\ndescription: Full layout with TopNav, SideNav, and a dismissable info banner between the nav and content.\n\nname:        useOverlayHookUsage\npackage:     @astryxdesign/core\ndescription: A product card that is its own overlay container: useOverlay returns the ref and props to spread on the Card and a...\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Banner\npackage:     @astryxdesign/core\ndescription: Banner shows a persistent message at the top of a page or section.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

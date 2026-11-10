@@ -1,0 +1,20 @@
+{
+ "id": "ex_doctor_integration_validate_@integration",
+ "args": [
+  "doctor",
+  "integration",
+  "validate"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "Nothing was validated: no astryx.integration.* found next to package.json. To validate an installed integration: npx @astryxdesign/cli@0.7.12 doctor integration validate <package>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

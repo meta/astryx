@@ -1,0 +1,16 @@
+export default {
+  // components live here
+  components: './c',
+
+  /* the docs */
+  // inline
+  docs: './d',
+
+  templates: './t' /* after */,
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

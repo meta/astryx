@@ -1,0 +1,16 @@
+{
+ "id": "ex_discover_dashboard_--type_template_--available_@integration",
+ "args": [
+  "discover",
+  "dashboard",
+  "--type",
+  "template",
+  "--available"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: \"dashboard\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

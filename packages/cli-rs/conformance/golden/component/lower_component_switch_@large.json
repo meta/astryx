@@ -1,0 +1,13 @@
+{
+ "id": "lower_component_switch_@large",
+ "args": [
+  "component",
+  "switch"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"switch\"\n\n  Switch  (same name)\n  SegmentedControl  (keyword \"switch\")\n",
+ "exit": 1,
+ "files": []
+}

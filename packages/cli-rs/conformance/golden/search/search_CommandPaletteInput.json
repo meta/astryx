@@ -1,0 +1,19 @@
+{
+ "id": "search_CommandPaletteInput",
+ "args": [
+  "search",
+  "CommandPaletteInput"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"CommandPaletteInput\" (4)\n\nname:        CommandPaletteInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/CommandPalette\ndescription: Use CommandPaletteInput inside CommandPalette for a popup-backed command query, or as an independent search field when no result popup is present.\ncommand:     npx @astryxdesign/cli@0.7.12 component CommandPaletteInput\n\nname:        CommandPaletteAsyncSearch\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPalette - Async Search\nkind:        block\ndescription: Server-side search with loading spinner and custom empty states.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteAsyncSearch --type block\n\nname:        CommandPaletteInputBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteInput - With End Content\nkind:        block\ndescription: Custom placeholder and a keyboard shortcut badge in the trailing slot via endContent.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteInputBasic --type block\n\nname:        CommandPaletteInputShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteInput\nkind:        block\ndescription: Command palette search input with a custom placeholder and a keyboard shortcut hint in the endContent slot.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteInputShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover CommandPaletteInput\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

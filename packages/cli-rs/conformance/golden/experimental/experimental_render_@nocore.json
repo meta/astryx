@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_@nocore",
+ "args": [
+  "experimental",
+  "render"
+ ],
+ "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: A page file is required\n\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx  (render a page to one HTML file)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "argv_swizzle_-",
+ "args": [
+  "swizzle",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"ü中文\": only letters, digits, '.', '_', and '-' are allowed.\n",
+ "exit": 1,
+ "files": []
+}

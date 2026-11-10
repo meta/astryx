@@ -1,0 +1,15 @@
+{
+ "id": "component_BreadcrumbItem_--props_--json_@large",
+ "args": [
+  "component",
+  "BreadcrumbItem",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Label content for the breadcrumb item.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"href\",\n      \"type\": \"string\",\n      \"description\": \"URL the breadcrumb links to; omit for non-navigable items.\"\n    },\n    {\n      \"name\": \"onClick\",\n      \"type\": \"(e: MouseEvent) => void\",\n      \"description\": \"Click handler for the breadcrumb item.\"\n    },\n    {\n      \"name\": \"isCurrent\",\n      \"type\": \"boolean\",\n      \"description\": \"Marks this item as the current page, applying aria-current=\\\"page\\\". When omitted, the last item is auto-detected if no item is explicitly current; pass false to opt out.\"\n    },\n    {\n      \"name\": \"startIcon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Icon rendered before the item label.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"menu\",\n      \"type\": \"DropdownMenuOption[] | ReactNode\",\n      \"description\": \"Menu opened when the item is activated, using the same item API as DropdownMenu/MoreMenu/ContextMenu (a DropdownMenuOption[] array or composed DropdownMenuItem children). Renders a link-styled menu trigger with a chevron and aria-haspopup=\\\"menu\\\". Takes precedence over href/onClick.\"\n    },\n    {\n      \"name\": \"menuSize\",\n      \"type\": \"'sm' | 'md' | 'lg'\",\n      \"description\": \"Size passed to the menu items. Defaults from the breadcrumb variant ('supporting' → 'sm', otherwise 'md').\"\n    },\n    {\n      \"name\": \"as\",\n      \"type\": \"LinkComponentType\",\n      \"description\": \"Custom link component to render instead of <a>. Overrides the provider-level default from LinkProvider. Only applies to non-current items.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "lower_component_selectablecardgroup_@large",
+ "args": [
+  "component",
+  "selectablecardgroup"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"selectablecardgroup\"\n\n  SelectableCard  (keyword \"selectable\")\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_ToastAction_--json_@large",
+ "args": [
+  "template",
+  "ToastAction",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ToastAction\",\n    \"description\": \"Persistent toasts with a trailing button or link so the user can act on the notification, like undoing a delete or viewing a report.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Toast\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\n// In production, use useToast() hook for proper positioning, stacking, and lifecycle.\\n\\nimport {Toast} from '@astryxdesign/core/Toast';\\nimport {useToast} from '@astryxdesign/core/Toast';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Link} from '@astryxdesign/core/Link';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function ToastAction() {\\n  const toast = useToast();\\n\\n  return (\\n    <VStack gap={3}>\\n      <Toast\\n        type=\\\"info\\\"\\n        body=\\\"Item deleted\\\"\\n        endContent={\\n          <Button\\n            label=\\\"Undo\\\"\\n            variant=\\\"secondary\\\"\\n            size=\\\"sm\\\"\\n            onClick={() => toast({body: 'Undo successful', type: 'info'})}\\n          />\\n        }\\n        isAutoHide={false}\\n        autoHideDuration={5000}\\n        isExiting={false}\\n        onDismiss={() => {}}\\n      />\\n      <Toast\\n        type=\\\"info\\\"\\n        body=\\\"Your report is ready.\\\"\\n        endContent={\\n          <Link href=\\\"#\\\" hasUnderline>\\n            View report\\n          </Link>\\n        }\\n        isAutoHide={false}\\n        autoHideDuration={5000}\\n        isExiting={false}\\n        onDismiss={() => {}}\\n      />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "env-ua-npm-exec_template_blank_src-p.tsx_@empty",
+ "args": [
+  "template",
+  "blank",
+  "src/p.tsx"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "Copied template to src/p.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "empty/src/p.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Layout, LayoutContent} from '@astryxdesign/core';\nimport {Text} from '@astryxdesign/core';\n\nexport default function Page() {\n  return (\n    <Layout\n      content={\n        <LayoutContent>\n          <Text type=\"large\">New Page</Text>\n        </LayoutContent>\n      }\n    />\n  );\n}\n"
+  }
+ ]
+}

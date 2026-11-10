@@ -1,0 +1,36 @@
+{
+ "id": "swizzle_AcmeCard_--package_-acme-kit_@integration",
+ "args": [
+  "swizzle",
+  "AcmeCard",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/AcmeCard/\n\nWhat @acme/kit exports is imported from @acme/kit; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "integration/components/astryx/AcmeCard/AcmeBadge.tsx",
+   "status": "created",
+   "text": "export function AcmeBadge() { return null; }\n"
+  },
+  {
+   "path": "integration/components/astryx/AcmeCard/AcmeCard.tsx",
+   "status": "created",
+   "text": "export function AcmeCard() { return null; }\n"
+  },
+  {
+   "path": "integration/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@acme/kit\": \"1.2.3\"\n  }\n}\n"
+  }
+ ]
+}

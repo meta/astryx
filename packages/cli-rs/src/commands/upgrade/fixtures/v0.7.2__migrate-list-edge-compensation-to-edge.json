@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List, ListItem} from '@astryxdesign/core/List';\nconst a = <List edgeCompensation=\"inline\"><ListItem label=\"a\" /></List>;\nconst b = <List hasDividers edgeCompensation={'inline'} />;",
+  "output": "import {List, ListItem} from '@astryxdesign/core/List';\nconst a = <List edge='outset'><ListItem label=\"a\" /></List>;\nconst b = <List hasDividers edge='outset' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List as Rows} from '@astryxdesign/core';\nconst a = <Rows edgeCompensation=\"inline\" />;",
+  "output": "import {List as Rows} from '@astryxdesign/core';\nconst a = <Rows edge='outset' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge=\"bleed\" edgeCompensation=\"inline\" />;\nconst b = <List edge={'flush'} edgeCompensation={mode} />;\nconst c = <List {...rest} edge=\"padded\" edgeCompensation=\"inline\" />;",
+  "output": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge=\"bleed\" />;\nconst b = <List edge={'flush'} />;\nconst c = <List {...rest} edge=\"padded\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge={edge} edgeCompensation=\"inline\" />;\nconst b = <List edge=\"flush\" {...rest} edgeCompensation=\"inline\" />;\nconst c = <List edge={props.edge} edgeCompensation={mode} />;",
+  "output": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge={edge} /* TODO(astryx upgrade): edgeCompensation is deprecated. edge is also set here, but it may be undefined, and then edgeCompensation still applies. Make edge default to \"outset\" where edgeCompensation is \"inline\", then remove edgeCompensation. */\nedgeCompensation=\"inline\" />;\nconst b = <List edge=\"flush\" {...rest} /* TODO(astryx upgrade): edgeCompensation is deprecated. edge is also set here, but it may be undefined, and then edgeCompensation still applies. Make edge default to \"outset\" where edgeCompensation is \"inline\", then remove edgeCompensation. */\nedgeCompensation=\"inline\" />;\nconst c = <List edge={props.edge} /* TODO(astryx upgrade): edgeCompensation is deprecated. edge is also set here, but it may be undefined, and then edgeCompensation still applies. Make edge default to \"outset\" where edgeCompensation is \"inline\", then remove edgeCompensation. */\nedgeCompensation={mode} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List edgeCompensation={mode} />;\nconst b = <List edgeCompensation={flag ? 'inline' : undefined} />;",
+  "output": "import {List} from '@astryxdesign/core/List';\nconst a = <List /* TODO(astryx upgrade): edgeCompensation is deprecated. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand; this value is computed. */\nedgeCompensation={mode} />;\nconst b = <List /* TODO(astryx upgrade): edgeCompensation is deprecated. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand; this value is computed. */\nedgeCompensation={flag ? 'inline' : undefined} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List {...rest} edgeCompensation=\"inline\" />;\nconst b = <List edgeCompensation=\"inline\" {...rest} />;\nconst c = <List {...rest} edgeCompensation={mode} />;\nconst d = <List {...props} />;\nconst e = <List {...rest} edge=\"padded\" />;",
+  "output": "import {List} from '@astryxdesign/core/List';\nconst a = <List {...rest} /* TODO(astryx upgrade): edgeCompensation is deprecated, but this List also spreads props that may set edge, so it was left unchanged. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand, after checking which edge the spread passes. */\nedgeCompensation=\"inline\" />;\nconst b = <List /* TODO(astryx upgrade): edgeCompensation is deprecated, but this List also spreads props that may set edge, so it was left unchanged. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand, after checking which edge the spread passes. */\nedgeCompensation=\"inline\" {...rest} />;\nconst c = <List {...rest} /* TODO(astryx upgrade): edgeCompensation is deprecated, but this List also spreads props that may set edge, so it was left unchanged. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand, after checking which edge the spread passes. */\nedgeCompensation={mode} />;\nconst d = <List {...props} />;\nconst e = <List {...rest} edge=\"padded\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nimport {TabList} from '@astryxdesign/core/TabList';\nimport {List as Other} from 'some-other-package';\nconst a = <TabList edgeCompensation=\"inline\" {...props} />;\nconst b = <Other edgeCompensation=\"inline\" {...props} />;\nconst c = <div {...props} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List edgeCompensation=\"inline\" />;\nconst b = <List edgeCompensation={mode} />;\nconst c = <List {...props} edgeCompensation=\"inline\" />;\nconst d = <List edge=\"flush\" edgeCompensation=\"inline\" />;\nconst e = <List edge={edge} edgeCompensation=\"inline\" />;",
+  "output": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge='outset' />;\nconst b = <List /* TODO(astryx upgrade): edgeCompensation is deprecated. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand; this value is computed. */\nedgeCompensation={mode} />;\nconst c = <List {...props} /* TODO(astryx upgrade): edgeCompensation is deprecated, but this List also spreads props that may set edge, so it was left unchanged. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand, after checking which edge the spread passes. */\nedgeCompensation=\"inline\" />;\nconst d = <List edge=\"flush\" />;\nconst e = <List edge={edge} /* TODO(astryx upgrade): edgeCompensation is deprecated. edge is also set here, but it may be undefined, and then edgeCompensation still applies. Make edge default to \"outset\" where edgeCompensation is \"inline\", then remove edgeCompensation. */\nedgeCompensation=\"inline\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.2/migrate-list-edge-compensation-to-edge",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {List} from '@astryxdesign/core/List';\nconst a = <List edge='outset' />;\nconst b = <List /* TODO(astryx upgrade): edgeCompensation is deprecated. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand; this value is computed. */\nedgeCompensation={mode} />;\nconst c = <List {...props} /* TODO(astryx upgrade): edgeCompensation is deprecated, but this List also spreads props that may set edge, so it was left unchanged. Replace edgeCompensation=\"inline\" with edge=\"outset\" by hand, after checking which edge the spread passes. */\nedgeCompensation=\"inline\" />;\nconst d = <List edge=\"flush\" />;\nconst e = <List edge={edge} /* TODO(astryx upgrade): edgeCompensation is deprecated. edge is also set here, but it may be undefined, and then edgeCompensation still applies. Make edge default to \"outset\" where edgeCompensation is \"inline\", then remove edgeCompensation. */\nedgeCompensation=\"inline\" />;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,6 @@
+const k = 'docs';
+export default {
+  [k]: './x',
+  ['agentDocs']: {append: []},
+  components: './components'
+};

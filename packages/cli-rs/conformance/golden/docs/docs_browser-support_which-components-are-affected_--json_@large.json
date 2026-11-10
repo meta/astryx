@@ -1,0 +1,15 @@
+{
+ "id": "docs_browser-support_which-components-are-affected_--json_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "which-components-are-affected",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Which Components Are Affected\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Any component that opens a menu, popover, tooltip, or dropdown carries the browser requirement: it renders that surface in an overlay positioned against its trigger. That includes:\"\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"unordered\",\n        \"items\": [\n          \"Tooltip, HoverCard, and Popover, and any prop that shows one (such as the Button `tooltip`)\",\n          \"DropdownMenu, MoreMenu, and ContextMenu\",\n          \"Selector, MultiSelector, ComplexSelector, Typeahead, and PowerSearch (dropdown surfaces)\",\n          \"DateInput, DateRangeInput, and DateTimeInput (calendar popovers)\",\n          \"Tokenizer (suggestion menu)\",\n          \"The overflow and flyout menus in Breadcrumbs, TabList, TopNav, and SideNav\",\n          \"Carousel (anchored controls)\"\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"If your product opens no menus, popovers, tooltips, or dropdowns, it has no anchor-positioning requirement; it needs only `light-dark()` (Tier 2 and up) for correct theme colors. Page layout, typography, forms, buttons, cards, and tables work down to Tier 2 with no special handling.\"\n      }\n    ],\n    \"id\": \"which-components-are-affected\",\n    \"links\": {\n      \"up\": \"astryx docs browser-support --index\",\n      \"previous\": \"astryx docs browser-support which-features-set-the-floor\",\n      \"next\": \"astryx docs browser-support what-astryx-guarantees\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

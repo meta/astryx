@@ -1,0 +1,17 @@
+{
+ "id": "ex_integration_add_doc_releasing_--parent_acme_@empty",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "releasing",
+  "--parent",
+  "acme"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No package.json found. Run this command inside an integration package.\n",
+ "exit": 1,
+ "files": []
+}

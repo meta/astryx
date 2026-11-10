@@ -1,0 +1,15 @@
+{
+ "id": "w_render_reverse_plain",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "page.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: page.html is not an Astryx page: it has no embedded source and no Astryx components to rebuild from. To start an Astryx page like it, run astryx build \"<what the page is>\".\n\n  npx @astryxdesign/cli@0.7.12 build \"<what the page is>\"  (start an Astryx page from a description of it instead)\n",
+ "exit": 1,
+ "files": []
+}

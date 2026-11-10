@@ -1,0 +1,66 @@
+[
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {PropDoc} from '@astryxdesign/cli/authoring';\nconst p: PropDoc = {name: 'x', type: 'string', description: 'y'};\n",
+  "output": "import type {ComponentPropDoc} from '@astryxdesign/cli/authoring';\nconst p: ComponentPropDoc = {name: 'x', type: 'string', description: 'y'};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {ThemingTarget} from '@astryxdesign/core';\n",
+  "output": "import type {ComponentThemingTarget} from '@astryxdesign/core';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "/** @type {import('@astryxdesign/cli/authoring').TranslationDoc} */\nexport const docsZh = {};\n",
+  "output": "/** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */\nexport const docsZh = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {DerivedVar as DV} from '@astryxdesign/cli/authoring';\nconst d: DV = {property: 'padding'};\n",
+  "output": "import type {ComponentThemingDerivedVar as DV} from '@astryxdesign/cli/authoring';\nconst d: DV = {property: 'padding'};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "export type {ContentBlock} from '@astryxdesign/core';\n",
+  "output": "export type {ReferenceContentBlock} from '@astryxdesign/core';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {ComponentDoc, HookDoc} from '@astryxdesign/cli/authoring';\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {ComponentVar} from './themeEditor/constants';\nconst v: ComponentVar = {};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-authoring-doctypes",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\n",
+  "output": null,
+  "error": null
+ }
+]

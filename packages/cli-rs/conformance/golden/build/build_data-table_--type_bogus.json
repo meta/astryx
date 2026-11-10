@@ -1,0 +1,15 @@
+{
+ "id": "build_data-table_--type_bogus",
+ "args": [
+  "build",
+  "data table",
+  "--type",
+  "bogus"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown --type \"bogus\"\n\n  component  (valid type)\n  hook  (valid type)\n  doc  (valid type)\n  template  (valid type)\n  theme  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

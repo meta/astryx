@@ -1,0 +1,13 @@
+{
+ "id": "w3_verify_theme_fresh",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/fresh@1.0.0\n\n5 packed files; 3/3 required files present.\n\n- [fail] Theme \"ocean\" from @acme/fresh has no resolvable built module and stylesheet. Missing module export @acme/fresh/themes/ocean, stylesheet export @acme/fresh/themes/ocean.css, or the single-theme exports @acme/fresh/built and @acme/fresh/theme.css. The package must build and export them before it can be added. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

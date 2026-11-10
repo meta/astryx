@@ -1,0 +1,14 @@
+{
+ "id": "template_HeadingPageLayout_--json_@large",
+ "args": [
+  "template",
+  "HeadingPageLayout",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"HeadingPageLayout\",\n    \"description\": \"Real-world page layout demonstrating heading levels h1 through h3 with supporting text\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Heading, Text} from '@astryxdesign/core/Text';\\n\\nexport default function HeadingPageLayout() {\\n  return (\\n    <VStack gap={6} width=\\\"100%\\\" style={{maxWidth: 400}}>\\n      <VStack>\\n        <Heading level={1}>Dashboard Overview</Heading>\\n        <Text type=\\\"supporting\\\" display=\\\"block\\\">\\n          Last updated 5 minutes ago\\n        </Text>\\n      </VStack>\\n      <VStack>\\n        <Heading level={2}>Recent Activity</Heading>\\n        <Text type=\\\"body\\\" display=\\\"block\\\">\\n          Here's what's been happening in your workspace.\\n        </Text>\\n      </VStack>\\n      <VStack>\\n        <Heading level={3}>Today</Heading>\\n        <Text type=\\\"body\\\" display=\\\"block\\\">\\n          • Project Alpha updated\\n          <br />\\n          • 3 new comments\\n          <br />• Task completed\\n        </Text>\\n      </VStack>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

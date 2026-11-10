@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatTypingIndicator_@large",
+ "args": [
+  "component",
+  "ChatTypingIndicator"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatTypingIndicator\n\nAnimated three-dot typing hint with a localized, grammar-aware label: \"Ana is typing...\", \"Ana and Ben are typing...\", or \"Ana and 2 others are typing...\". Dots bounce with staggered stylex.keyframes delays, disabled under prefers-reduced-motion. Each new label is announced once, politely, through the shared announcement channel (useAnnounce); inside a chat log the log announces it instead. The indicator itself carries no live role, so it can mount conditionally without being skipped or heard twice.\n\n**Import:** `import {ChatTypingIndicator} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `names` | `string[]` | - | Names of people currently typing. One name renders \"is typing\", two render both names, more collapse to \"and N others\". The sentence comes from the i18n catalog and the names are joined with Intl.ListFormat, so the wording and conjunction follow the active locale. When omitted or empty, only the animated dots render. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

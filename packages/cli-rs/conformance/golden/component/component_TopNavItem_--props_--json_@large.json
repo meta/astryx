@@ -1,0 +1,15 @@
+{
+ "id": "component_TopNavItem_--props_--json_@large",
+ "args": [
+  "component",
+  "TopNavItem",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the nav item. Rendered as visible text by default. When isIconOnly is true, used as aria-label instead.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"href\",\n      \"type\": \"string\",\n      \"description\": \"Navigation target URL.\"\n    },\n    {\n      \"name\": \"isSelected\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether this nav item is currently selected. Sets aria-current=\\\"page\\\" and applies highlighted styles.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"isDisabled\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether the nav item is disabled. Sets aria-disabled, drops href/target so the item cannot navigate, and prevents interaction.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"isIconOnly\",\n      \"type\": \"boolean\",\n      \"description\": \"Renders the item as a square icon-only element. When true, label becomes the aria-label and visible text is hidden. Requires icon to be set.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional icon to display before the label.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Custom content to render instead of the label text.\"\n    },\n    {\n      \"name\": \"as\",\n      \"type\": \"LinkComponentType\",\n      \"description\": \"Custom component to render instead of <a>. Overrides the provider-level default set by LinkProvider. Must accept href, className, style, and children props.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

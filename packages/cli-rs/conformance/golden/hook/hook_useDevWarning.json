@@ -1,0 +1,19 @@
+{
+ "id": "hook_useDevWarning",
+ "args": [
+  "hook",
+  "useDevWarning"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useDevWarning\n\nFires a dev-only \"Component: message\" console warning once per mount while the condition holds. It is the render-safe way for a component to flag misuse: warning straight from the render body repeats on every render, and gating it with state adds a re-render, so this uses a ref and an effect instead. For a warning outside a component, use the imperative devWarn utility.\n\n## Best Practices\n\n- **Do:** Say what is wrong and what the builder should do instead; the message is the whole value of the warning.\n- **Do:** Warn about combinations the types cannot express, such as two mutually exclusive props being set together.\n- **Don't:** Use it for anything a user could see or for runtime error handling; it is stripped from production builds.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `component` | `string` | - | Component or hook name, used as the message prefix. **(required)** |\n| `message` | `string` | - | What went wrong and how to fix it. **(required)** |\n| `condition` | `boolean` | `true` | Whether to warn. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

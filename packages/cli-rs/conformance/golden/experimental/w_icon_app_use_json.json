@@ -1,0 +1,22 @@
+{
+ "id": "w_icon_app_use_json",
+ "args": [
+  "--json",
+  "experimental",
+  "icon",
+  "use",
+  "outline"
+ ],
+ "fixture": "iconapp",
+ "fixtureHash": "16b85bc0821a8935+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.use\",\n  \"data\": {\n    \"iconSet\": \"outline\",\n    \"set\": \"@acme/outline/outline\",\n    \"config\": \"astryx.config.mjs\",\n    \"created\": false,\n    \"previous\": null,\n    \"changed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "iconapp/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {\n  integrations: ['@acme/glyphs', '@acme/outline'],\n\n  experimental: {\n    iconSet: 'outline'\n  }\n};\n"
+  }
+ ]
+}

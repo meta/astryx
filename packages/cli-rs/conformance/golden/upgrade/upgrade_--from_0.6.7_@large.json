@@ -1,0 +1,20 @@
+{
+ "id": "upgrade_--from_0.6.7_@large",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.6.7"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.6.7\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/large/src for source files...\nFound 1 source file\nApplying v0.7.0 codemods...\n  Migrate removed component theme aliases and selectors\n  Validate data-token ownership\n  Migrate input root styling to container/control parts\n  Preserve BottomSheet content padding\n  Rename emptySearchResultsText to emptySearchText\nApplying v0.7.2 codemods...\n  Migrate List edgeCompensation to edge\nApplying v0.7.5 codemods...\n  Migrate CodeBlock tokenizer to a custom language\nApplying v0.7.8 codemods...\n  Move Tokenizer's removed experimental presentation to presentation\n\n[ok] No changes needed - your code is already up to date!\n8 codemods to run (dry run)\nDry run complete\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

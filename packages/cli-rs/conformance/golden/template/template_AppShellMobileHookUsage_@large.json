@@ -1,0 +1,19 @@
+{
+ "id": "template_AppShellMobileHookUsage_@large",
+ "args": [
+  "template",
+  "AppShellMobileHookUsage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useAppShellMobile} from '@astryxdesign/core/AppShell';\nimport {Button} from '@astryxdesign/core/Button';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function AppShellMobileHookUsage() {\n  const {\n    closeMobileNav,\n    isMobile,\n    isMobileNavEnabled,\n    isMobileNavOpen,\n    openMobileNav,\n  } = useAppShellMobile();\n\n  if (!isMobileNavEnabled) {\n    return (\n      <VStack gap={2}>\n        <Button label=\"Open navigation\" variant=\"secondary\" isDisabled />\n        <Text type=\"body\" color=\"secondary\">\n          No active AppShell mobile navigation context was detected. This hook\n          returns safe defaults outside AppShell, or when the surrounding\n          AppShell has mobile navigation disabled.\n        </Text>\n      </VStack>\n    );\n  }\n\n  if (!isMobile) {\n    return (\n      <VStack gap={2}>\n        <Button label=\"Open navigation\" variant=\"secondary\" isDisabled />\n        <Text type=\"body\" color=\"secondary\">\n          AppShell mobile navigation context is available. Narrow the viewport\n          below the AppShell mobile breakpoint to make the custom trigger\n          active.\n        </Text>\n      </VStack>\n    );\n  }\n\n  return (\n    <VStack gap={2}>\n      <HStack gap={2} vAlign=\"center\">\n        <Button\n          label={isMobileNavOpen ? 'Close navigation' : 'Open navigation'}\n          variant=\"secondary\"\n          onClick={isMobileNavOpen ? closeMobileNav : openMobileNav}\n        />\n        <Text type=\"body\" color=\"secondary\">\n          {isMobileNavOpen ? 'Mobile nav is open' : 'Mobile nav is closed'}\n        </Text>\n      </HStack>\n      <Text type=\"body\" color=\"secondary\">\n        This button controls the nearest AppShell mobile nav from context; in\n        the docsite it opens and closes the surrounding page navigation.\n      </Text>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

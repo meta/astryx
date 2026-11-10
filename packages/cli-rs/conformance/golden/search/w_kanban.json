@@ -1,0 +1,19 @@
+{
+ "id": "w_kanban",
+ "args": [
+  "search",
+  "kanban"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"kanban\" (1)\n\nname:        kanban-board\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Kanban Board\nkind:        page\ndescription: Horizontal lanes of draggable cards where the column itself is the status, so drag and drop between lanes is the state change. Fixed columns, variable-height cards.\ncommand:     npx @astryxdesign/cli@0.7.12 template kanban-board --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover kanban\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

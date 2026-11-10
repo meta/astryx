@@ -1,0 +1,21 @@
+{
+ "id": "w_-test-charts---installed---json_@discover-sources",
+ "args": [
+  "discover",
+  "@test/charts",
+  "--installed",
+  "--json"
+ ],
+ "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@test/charts\",\n  \"data\": {\n    \"name\": \"@test/charts\",\n    \"package\": \"@test/charts\",\n    \"category\": \"@test/charts\",\n    \"components\": [\n      \"Chart\"\n    ],\n    \"version\": \"2.0.0\",\n    \"templates\": [\n      \"pages/Report\"\n    ],\n    \"installed\": false,\n    \"latest\": \"2.0.0\",\n    \"source\": \"Test catalog\",\n    \"install\": \"npm install @test/charts\",\n    \"versions\": [\n      {\n        \"version\": \"2.1.0-beta.1\",\n        \"publishedAt\": \"2026-09-25T00:00:00.000Z\",\n        \"prerelease\": true,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"2.0.0\",\n        \"publishedAt\": \"2026-09-20T00:00:00.000Z\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/834a3f313d8f05a68ca5b774e066c120.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/charts\",\"integration\":\"test-charts\",\"aliases\":[],\"latest\":\"2.0.0\",\"versions\":[{\"version\":\"2.1.0-beta.1\",\"publishedAt\":\"2026-09-25T00:00:00.000Z\",\"prerelease\":true,\"status\":\"ok\"},{\"version\":\"2.0.0\",\"publishedAt\":\"2026-09-20T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Chart\"},{\"kind\":\"template\",\"name\":\"pages/Report\"}]}]}}"
+  }
+ ]
+}

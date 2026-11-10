@@ -1,0 +1,17 @@
+{
+ "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@empty",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "rename-widget",
+  "--to",
+  "1.2.0"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No package.json found. Run this command inside an integration package.\n",
+ "exit": 1,
+ "files": []
+}

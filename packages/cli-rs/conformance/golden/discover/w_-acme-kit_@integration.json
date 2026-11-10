@@ -1,0 +1,19 @@
+{
+ "id": "w_-acme-kit_@integration",
+ "args": [
+  "discover",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "name:       @acme/kit\npackage:    @acme/kit\ncategory:   @acme/kit\ncomponents: AcmeCard\nversion:    1.2.3\ntemplates:  hero\ndocs:       acme-guide\nthemes:     ocean\ninstalled:  true\n\nUsage: npx @astryxdesign/cli@0.7.12 discover @acme/kit/<ComponentName>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

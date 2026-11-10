@@ -1,0 +1,14 @@
+{
+ "id": "template_ContextMenuBottomSheet_--json_@large",
+ "args": [
+  "template",
+  "ContextMenuBottomSheet",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ContextMenuBottomSheet\",\n    \"description\": \"A ContextMenu using the explicit BottomSheet presentation. Long-press the target on touch devices or right-click it with a pointer. Keep a visible menu trigger for important mobile actions.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ContextMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  DocumentDuplicateIcon,\\n  PencilIcon,\\n  ShareIcon,\\n  TrashIcon,\\n} from '@heroicons/react/24/outline';\\nimport {ContextMenu} from '@astryxdesign/core/ContextMenu';\\n\\nexport default function ContextMenuBottomSheet() {\\n  return (\\n    <ContextMenu\\n      presentation=\\\"bottom-sheet\\\"\\n      label=\\\"Document actions\\\"\\n      items={[\\n        {\\n          label: 'Rename document',\\n          description: 'Change the title shown to collaborators.',\\n          icon: PencilIcon,\\n          onClick: () => {},\\n        },\\n        {\\n          label: 'Duplicate document',\\n          description: 'Create a copy in the same workspace.',\\n          icon: DocumentDuplicateIcon,\\n          onClick: () => {},\\n        },\\n        {\\n          label: 'Share document',\\n          description: 'Invite people or copy a share link.',\\n          icon: ShareIcon,\\n          onClick: () => {},\\n        },\\n        {\\n          label: 'Delete document',\\n          description: 'Move this document to the trash.',\\n          icon: TrashIcon,\\n          variant: 'destructive',\\n          onClick: () => {},\\n        },\\n      ]}>\\n      <div\\n        style={{\\n          display: 'flex',\\n          flexDirection: 'column',\\n          gap: '8px',\\n          padding: '32px',\\n          border: '1px solid #d1d5db',\\n          borderRadius: '12px',\\n        }}>\\n        <strong>Quarterly plan</strong>\\n        <span>Long-press on touch or right-click for document actions.</span>\\n      </div>\\n    </ContextMenu>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

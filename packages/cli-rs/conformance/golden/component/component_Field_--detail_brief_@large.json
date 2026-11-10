@@ -1,0 +1,21 @@
+{
+ "id": "component_Field_--detail_brief_@large",
+ "args": [
+  "component",
+  "Field",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nField(status: {type: warning|error|success, message?: string, messageID?: string}, statusVariant: attached|detached|tooltip)  <- from '@astryxdesign/core/Field'\n  Field is a low-level wrapper for custom, native, or third-party controls that...\n  Derived: borderRadius -> --_field-radius\n  Targets: astryx-field preferred attrs: data-layout variants: layout | astryx-field-label | astryx-field-status preferred attrs: data-type, data-variant variants: type, variant | astryx-input-status-icon preferred attrs: data-size, data-status variants: size, status | astryx-input-clear-button | astryx-input-clear-icon\n  children: ReactNode, inputID: string, label: string, labelID, isGroupLabel, isLabelHidden, isDisabled, description, descriptionID, isOptional, isRequired, labelIcon, labelTooltip, width, ref, xstyle, className, style\n  \n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

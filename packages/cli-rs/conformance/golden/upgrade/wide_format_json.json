@@ -1,0 +1,15 @@
+{
+ "id": "wide_format_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--json"
+ ],
+ "fixture": "upgrade-format",
+ "fixtureHash": "f614334bb3681487+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Upgrade completed with 1 codemod error.\",\n  \"code\": \"ERR_CODEMOD_FAILED\",\n  \"receipt\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 74,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"current\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"none\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 5,\n    \"transformsApplied\": 18,\n    \"modifiedFiles\": [\n      \"src/crlf.tsx\",\n      \"src/noeol.tsx\",\n      \"src/tabs.jsx\",\n      \"src/bom.ts\",\n      \"src/mixed.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": false,\n    \"errorCode\": \"ERR_CODEMOD_FAILED\",\n    \"errors\": [\n      {\n        \"file\": \"src/tabs.jsx\",\n        \"codemod\": \"core:drop-xds-prefix-imports\",\n        \"error\": \"transform produced unparseable output: Unexpected token (5:18)\"\n      }\n    ]\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

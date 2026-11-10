@@ -1,0 +1,20 @@
+{
+ "id": "template_GridSpanShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "GridSpanShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# GridSpanShowcase - GridSpan lets a grid item span multiple columns or rows within an Grid, enabling masonry-style and asymmetric layouts.\n# Components: Card, Grid, GridSpan\n\n<Grid gap={3} columns={4} width={400}>\n  <GridSpan columns={3}>\n    <Card height={80}>\n      <Text />\n    </Card>\n  </GridSpan>\n  <Card height={80}>\n    <Text />\n  </Card>\n  <GridSpan>\n    <Card>\n      <Text />\n    </Card>\n  </GridSpan>\n  <GridSpan columns={3}>\n    <Card height={80}>\n      <Text />\n    </Card>\n  </GridSpan>\n  <Card height={80}>\n    <Text />\n  </Card>\n  <GridSpan columns={2}>\n    <Card height={80}>\n      <Text />\n    </Card>\n  </GridSpan>\n</Grid>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

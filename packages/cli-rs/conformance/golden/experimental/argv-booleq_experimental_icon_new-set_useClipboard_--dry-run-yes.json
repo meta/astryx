@@ -1,0 +1,16 @@
+{
+ "id": "argv-booleq_experimental_icon_new-set_useClipboard_--dry-run-yes",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--dry-run=yes"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--dry-run=yes'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,34 @@
+[
+ {
+  "transform": "v0.0.6/migrate-badge-children-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core';\nexport const A = () => <XDSBadge variant=\"success\">Active</XDSBadge>;",
+  "output": "import {XDSBadge} from '@xds/core';\nexport const A = () => <XDSBadge variant=\"success\" label='Active' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-badge-children-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core';\nexport const B = () => <XDSBadge>{count}</XDSBadge>;",
+  "output": "import {XDSBadge} from '@xds/core';\nexport const B = () => <XDSBadge label={count} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-badge-children-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core';\nexport const C = () => <XDSBadge label=\"x\">Active</XDSBadge>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-badge-children-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core';\nexport const D = () => <XDSBadge><span>x</span></XDSBadge>;",
+  "output": null,
+  "error": null
+ }
+]

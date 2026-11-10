@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_top-nav-menu_--json",
+ "args": [
+  "theme",
+  "targets",
+  "top-nav-menu",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"top-nav-menu\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"top-nav-menu\",\n        \"className\": \"astryx-top-nav-menu\",\n        \"component\": \"TopNav\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

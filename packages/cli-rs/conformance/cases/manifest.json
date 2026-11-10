@@ -1,0 +1,595 @@
+[
+  {
+    "id": "manifest_--help",
+    "args": [
+      "manifest",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_-h",
+    "args": [
+      "manifest",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_manifest",
+    "args": [
+      "help",
+      "manifest"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_--bogus-flag",
+    "args": [
+      "manifest",
+      "--bogus-flag"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_--bogus-flag_--json",
+    "args": [
+      "manifest",
+      "--bogus-flag",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_extra1_extra2_extra3",
+    "args": [
+      "manifest",
+      "extra1",
+      "extra2",
+      "extra3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_extra1_extra2_extra3_--json",
+    "args": [
+      "manifest",
+      "extra1",
+      "extra2",
+      "extra3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_@empty",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@empty",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "manifest_@nocore",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@nocore",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "manifest_@brokencore",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@brokencore",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "manifest_@plain",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@plain",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "manifest_@large",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@large",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "manifest_@integration",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "manifest_--json_@integration",
+    "args": [
+      "manifest",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_--json",
+    "args": [
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_--json_@empty",
+    "args": [
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_--json_@integration",
+    "args": [
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_--json_@large",
+    "args": [
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--json_--json",
+    "args": [
+      "manifest",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--help_--json",
+    "args": [
+      "manifest",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--json_--help",
+    "args": [
+      "manifest",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-h_--bogus",
+    "args": [
+      "manifest",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--bogus_-h",
+    "args": [
+      "manifest",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-V",
+    "args": [
+      "manifest",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--version",
+    "args": [
+      "manifest",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--JSON",
+    "args": [
+      "manifest",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--jso",
+    "args": [
+      "manifest",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--no-json",
+    "args": [
+      "manifest",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--json-1",
+    "args": [
+      "manifest",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-x",
+    "args": [
+      "manifest",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-hV",
+    "args": [
+      "manifest",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--_--json",
+    "args": [
+      "manifest",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_--_-h",
+    "args": [
+      "manifest",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_x",
+    "args": [
+      "manifest",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-",
+    "args": [
+      "manifest",
+      "ü中文"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_-5",
+    "args": [
+      "manifest",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_---x",
+    "args": [
+      "manifest",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_manifest_---json",
+    "args": [
+      "manifest",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_nosuchsub",
+    "args": [
+      "manifest",
+      "nosuchsub"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "manifest_@pm-npm",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "manifest_@pm-pnpm",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "manifest_@pm-yarn",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "manifest_@pm-yarnberry",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "manifest_@pm-bun",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "manifest_@monorepo",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_manifest_@monorepo",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_manifest_@monorepo",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_manifest_@monorepo",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "manifest_@monorepo-local",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_manifest_@monorepo-local",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "manifest_@configured",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "manifest_@configts",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "manifest_@badconfig",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "manifest_@syntaxconfig",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "manifest_@unknownint",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_manifest",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_manifest",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_manifest_@large",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_manifest_@integration",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._manifest_@empty",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  }
+]

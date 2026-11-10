@@ -1,0 +1,20 @@
+{
+ "id": "template_useOverlayHookUsage_--skeleton_@large",
+ "args": [
+  "template",
+  "useOverlayHookUsage",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useOverlayHookUsage - A product card that is its own overlay container: useOverlay returns the ref and props to spread on the Card and a bottom strip to render once over the image. Hovering the card, or moving keyboard focus into it, slides in a Quick view button along the bottom of the image, and leaving hides it again. The image is a link that the strip leaves clickable above it, and Tab lands on it first so the next Tab reaches Quick view.\n# Components: AspectRatio, Card\n\n<Card padding={0} width={280}>\n  <AspectRatio />\n  <VStack padding={3} gap={1}>\n    <Text />\n    <Text />\n  </VStack>\n</Card>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

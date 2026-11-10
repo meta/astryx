@@ -1,0 +1,21 @@
+{
+ "id": "component_Card_--detail_brief_@large",
+ "args": [
+  "component",
+  "Card",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nCard(elevation: none|low|med|high)  <- from '@astryxdesign/core/Card'\n  Card is a bordered, elevated container for discrete, self-contained items: th...\n  Derived: borderRadius -> --_card-radius; padding -> container tokens\n  Targets: astryx-card preferred attrs: data-variant, data-elevation variants: variant, elevation\n  width, height, maxWidth, minHeight, children, padding, variant\n  \n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

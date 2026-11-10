@@ -1,0 +1,12 @@
+{
+ "id": "oldcore_--version_@core-0.7.11",
+ "args": [
+  "--version"
+ ],
+ "fixture": "core-0.7.11",
+ "fixtureHash": "a77beea787bca06f+4e418a0c2575d9ce",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

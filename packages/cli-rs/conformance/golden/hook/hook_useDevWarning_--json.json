@@ -1,0 +1,14 @@
+{
+ "id": "hook_useDevWarning_--json",
+ "args": [
+  "hook",
+  "useDevWarning",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useDevWarning\",\n    \"displayName\": \"useDevWarning\",\n    \"keywords\": [\n      \"warning\",\n      \"dev\",\n      \"development\",\n      \"console\",\n      \"guardrail\",\n      \"misuse\",\n      \"invariant\",\n      \"debug\",\n      \"devWarn\"\n    ],\n    \"params\": [\n      {\n        \"name\": \"component\",\n        \"type\": \"string\",\n        \"description\": \"Component or hook name, used as the message prefix.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"message\",\n        \"type\": \"string\",\n        \"description\": \"What went wrong and how to fix it.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"condition\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether to warn.\",\n        \"default\": \"true\"\n      }\n    ],\n    \"returns\": [],\n    \"usage\": {\n      \"description\": \"Fires a dev-only \\\"Component: message\\\" console warning once per mount while the condition holds. It is the render-safe way for a component to flag misuse: warning straight from the render body repeats on every render, and gating it with state adds a re-render, so this uses a ref and an effect instead. For a warning outside a component, use the imperative devWarn utility.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Say what is wrong and what the builder should do instead; the message is the whole value of the warning.\"\n        },\n        {\n          \"guidance\": true,\n          \"description\": \"Warn about combinations the types cannot express, such as two mutually exclusive props being set together.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Use it for anything a user could see or for runtime error handling; it is stripped from production builds.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [],\n    \"relatedHooks\": [],\n    \"importPath\": \"@astryxdesign/core/hooks\",\n    \"category\": \"utility\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

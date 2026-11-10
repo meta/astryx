@@ -1,0 +1,13 @@
+{
+ "id": "w_-acme-glyphs-nope_@discover-iconsets",
+ "args": [
+  "discover",
+  "@acme/glyphs/nope"
+ ],
+ "fixture": "discover-iconsets",
+ "fixtureHash": "214fcf2cdc8216c2+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Component \"nope\" not found in @acme/glyphs\n",
+ "exit": 1,
+ "files": []
+}

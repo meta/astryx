@@ -1,0 +1,290 @@
+[
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core';\nexport const App = () => <XDSButton label=\"Hi\" />;",
+  "output": "import {Button} from '@xds/core';\nexport const App = () => <Button label=\"Hi\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';",
+  "output": "import {Button} from '@xds/core/Button';",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSTheme} from '@xds/core';\nconst t = useXDSTheme();",
+  "output": "import {useTheme} from '@xds/core';\nconst t = useTheme();",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {XDSButtonProps} from '@xds/core';\ntype Props = XDSButtonProps & {extra: true};",
+  "output": "import type {ButtonProps} from '@xds/core';\ntype Props = ButtonProps & {extra: true};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSTableColumn} from '@xds/core/Table';\nconst cols = useMemo<XDSTableColumn<Issue>[]>(() => [], []);",
+  "output": "import {TableColumn} from '@xds/core/Table';\nconst cols = useMemo<TableColumn<Issue>[]>(() => [], []);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSTheme} from '@xds/core/theme';\n\nfunction App() {\n  const theme = useXDSTheme();\n  return theme;\n}",
+  "output": "import {useTheme} from '@xds/core/theme';\n\nfunction App() {\n  const theme = useTheme();\n  return theme;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton as Btn} from '@xds/core';\nexport const App = () => <Btn />;",
+  "output": "import {Button as Btn} from '@xds/core';\nexport const App = () => <Btn />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@my/other-lib';\nconst XDSCustomThing = 1;\nexport const App = () => <XDSButton />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core';\nconst label = 'XDSButton is great';\nexport const App = () => <XDSButton label={label} />;",
+  "output": "import {Button} from '@xds/core';\nconst label = 'XDSButton is great';\nexport const App = () => <Button label={label} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton, XDSIconRegistry} from '@xds/core';\n\nconst registry = new XDSIconRegistry();\nconst el = <XDSButton />;",
+  "output": "import {Button, IconRegistry} from '@xds/core';\n\nconst registry = new IconRegistry();\nconst el = <Button />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton, XDSCard, useXDSToast} from '@xds/core';\nimport type {XDSCardProps} from '@xds/core';\nexport function App() {\n  const toast = useXDSToast();\n  const p: XDSCardProps = {};\n  return <XDSCard><XDSButton /></XDSCard>;\n}",
+  "output": "import {Button, Card, useToast} from '@xds/core';\nimport type {CardProps} from '@xds/core';\nexport function App() {\n  const toast = useToast();\n  const p: CardProps = {};\n  return <Card><Button /></Card>;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "export {XDSButton} from '@xds/core/Button';",
+  "output": "export {Button} from '@xds/core/Button';",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useState} from 'react';\nconst x = 1;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSCodeBlock} from '@xds/core/CodeBlock';\nexport function CodeBlock({code}: {code: string}) {\n  return <XDSCodeBlock code={code} />;\n}",
+  "output": "import {CodeBlock as AstryxCodeBlock} from '@xds/core/CodeBlock';\nexport function CodeBlock({code}: {code: string}) {\n  return <AstryxCodeBlock code={code} />;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSCard} from '@xds/core';\nconst Card = 42;\nexport const value = <XDSCard />;\nexport const other = Card;",
+  "output": "import {Card as AstryxCard} from '@xds/core';\nconst Card = 42;\nexport const value = <AstryxCard />;\nexport const other = Card;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "vi.mock('@xds/core/Text', async orig => ({\n  ...(await orig<typeof import('@xds/core/Text')>()),\n  useXDSTruncation: () => ({ref: vi.fn(), isTruncated: true, fullText: ''}),\n}));",
+  "output": "vi.mock('@xds/core/Text', async orig => ({\n  ...(await orig<typeof import('@xds/core/Text')>()),\n  useTruncation: () => ({ref: vi.fn(), isTruncated: true, fullText: ''}),\n}));",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "jest.mock('@xds/core', () => ({\n  XDSButton: () => null,\n  useXDSToast: () => ({}),\n}));",
+  "output": "jest.mock('@xds/core', () => ({\n  Button: () => null,\n  useToast: () => ({}),\n}));",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "vi.mock('some-other-pkg', () => ({\n  useXDSFoo: () => 1,\n}));",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const config = {\n  useXDSWhatever: true,\n};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSLinkProvider} from '@xds/core/Link';\nexport default function LinkProvider({children}) {\n  return <XDSLinkProvider component={NextLink}>{children}</XDSLinkProvider>;\n}",
+  "output": "import {LinkProvider as AstryxLinkProvider} from '@xds/core/Link';\nexport default function LinkProvider({children}) {\n  return <AstryxLinkProvider component={NextLink}>{children}</AstryxLinkProvider>;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSToast} from '@xds/core';\nfunction useToast() {\n  return useXDSToast();\n}",
+  "output": "import {useToast as useAstryxToast} from '@xds/core';\nfunction useToast() {\n  return useAstryxToast();\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import Link from 'next/link';\nimport {XDSLink} from '@xds/core';\nexport const a = <XDSLink href=\"/\" />;\nexport const b = <Link href=\"/\" />;",
+  "output": "import Link from 'next/link';\nimport {Link as AstryxLink} from '@xds/core';\nexport const a = <AstryxLink href=\"/\" />;\nexport const b = <Link href=\"/\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {XDSTab} from '@xds/core';\ntype Tab = {id: string};\nconst active: XDSTab = null as any;\nconst local: Tab = {id: '1'};",
+  "output": "import type {Tab as AstryxTab} from '@xds/core';\ntype Tab = {id: string};\nconst active: AstryxTab = null as any;\nconst local: Tab = {id: '1'};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {XDSTheme} from '@xds/core';\ninterface Theme {}\nconst t: XDSTheme = null as any;\nconst local: Theme = {};",
+  "output": "import type {Theme as AstryxTheme} from '@xds/core';\ninterface Theme {}\nconst t: AstryxTheme = null as any;\nconst local: Theme = {};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSText} from '@xds/core';\nexport function App({name}) {\n  return (\n    <XDSText>hello {name} world</XDSText>\n  );\n}",
+  "output": "import {Text} from '@xds/core';\nexport function App({name}) {\n  return (\n    <Text>hello {name} world</Text>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSText} from '@xds/core';\nexport function App({a, b}) {\n  return (\n    <XDSText>involving {a} in the {b} dataset</XDSText>\n  );\n}",
+  "output": "import {Text} from '@xds/core';\nexport function App({a, b}) {\n  return (\n    <Text>involving {a} in the {b} dataset</Text>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSText} from '@xds/core';\nexport function App({a, b}) {\n  return (\n    <XDSText>\n      involving {a} in the {b} dataset\n    </XDSText>\n  );\n}",
+  "output": "import {Text} from '@xds/core';\nexport function App({a, b}) {\n  return (\n    <Text>\n      involving {a} in the {b} dataset\n    </Text>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSCard} from '@xds/core';\nexport const App = ({n}) => (<XDSCard>value {n} here</XDSCard>);",
+  "output": "import {Card} from '@xds/core';\nexport const App = ({n}) => (<Card>value {n} here</Card>);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSCard, XDSText, XDSButton} from '@xds/core';\nexport const App = ({n}) => (\n  <XDSCard>\n    <XDSText>hello {n} world</XDSText>\n    <XDSButton>click {n} here</XDSButton>\n  </XDSCard>\n);",
+  "output": "import {Card, Text, Button} from '@xds/core';\nexport const App = ({n}) => (\n  <Card>\n    <Text>hello {n} world</Text>\n    <Button>click {n} here</Button>\n  </Card>\n);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSMenu} from '@xds/core';\nexport const App = ({x}) => (<XDSMenu.Item>pick {x} now</XDSMenu.Item>);",
+  "output": "import {Menu} from '@xds/core';\nexport const App = ({x}) => (<Menu.Item>pick {x} now</Menu.Item>);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core';\nexport const App = () => <XDSButton label=\"x\" onClick={fn} />;",
+  "output": "import {Button} from '@xds/core';\nexport const App = () => <Button label=\"x\" onClick={fn} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core';\nexport const App = ({label}) => <XDSButton>{label}</XDSButton>;",
+  "output": "import {Button} from '@xds/core';\nexport const App = ({label}) => <Button>{label}</Button>;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSCodeBlock} from '@xds/core/CodeBlock';\nexport function CodeBlock({code}) {\n  return (<XDSCodeBlock>run {code} now</XDSCodeBlock>);\n}",
+  "output": "import {CodeBlock as AstryxCodeBlock} from '@xds/core/CodeBlock';\nexport function CodeBlock({code}) {\n  return (<AstryxCodeBlock>run {code} now</AstryxCodeBlock>);\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSText as Txt} from '@xds/core';\nexport const App = ({n}) => (<Txt>hello {n} world</Txt>);",
+  "output": "import {Text as Txt} from '@xds/core';\nexport const App = ({n}) => (<Txt>hello {n} world</Txt>);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSText} from '@xds/core';\nexport const App = ({n}) => (<XDSText>a {n} b</XDSText>);",
+  "output": "import {Text} from '@xds/core';\nexport const App = ({n}) => (<Text>a {n} b</Text>);",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/drop-xds-prefix-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Text} from '@xds/core';\nexport const App = ({n}) => (<Text>a {n} b</Text>);",
+  "output": null,
+  "error": null
+ }
+]

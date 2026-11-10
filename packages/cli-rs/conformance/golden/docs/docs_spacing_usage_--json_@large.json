@@ -1,0 +1,15 @@
+{
+ "id": "docs_spacing_usage_--json_@large",
+ "args": [
+  "docs",
+  "spacing",
+  "usage",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Usage\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Stack, HStack, VStack, Grid, Toolbar, OverflowList, and ChatMessageList take a `gap` step: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, or 10 (×4px). Carousel takes the steps from 0 to 4. For custom layouts, use the spacing tokens in StyleX.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"// Via component props (preferred)\\n<Stack gap={4}>{/* 16px gap */}</Stack>\\n\\n// Via StyleX tokens (custom layouts)\\nimport {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';\\n\\nconst styles = stylex.create({\\n  custom: {\\n    padding: spacingVars['--spacing-4'],\\n    gap: spacingVars['--spacing-3'],\\n  },\\n});\",\n        \"label\": \"Spacing via component props vs StyleX\"\n      }\n    ],\n    \"id\": \"usage\",\n    \"links\": {\n      \"up\": \"astryx docs spacing --index\",\n      \"previous\": \"astryx docs spacing scale\",\n      \"next\": \"astryx docs spacing best-practices\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

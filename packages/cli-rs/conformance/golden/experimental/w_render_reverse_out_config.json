@@ -1,0 +1,17 @@
+{
+ "id": "w_render_reverse_out_config",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "page.html",
+  "--out",
+  "vite.config.ts"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --out for --reverse must name a page module, not a project or tool configuration file (vite.config.ts)\n",
+ "exit": 1,
+ "files": []
+}

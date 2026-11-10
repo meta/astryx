@@ -1,0 +1,14 @@
+{
+ "id": "ex_gap-report_--list-categories_--json",
+ "args": [
+  "gap-report",
+  "--list-categories",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"gap-report.categories\",\n  \"data\": [\n    {\n      \"value\": \"missing_component\",\n      \"label\": \"Missing component\"\n    },\n    {\n      \"value\": \"missing_variant\",\n      \"label\": \"Missing variant or prop\"\n    },\n    {\n      \"value\": \"layout_gap\",\n      \"label\": \"Layout gap\"\n    },\n    {\n      \"value\": \"styling_gap\",\n      \"label\": \"Styling gap\"\n    },\n    {\n      \"value\": \"a11y_gap\",\n      \"label\": \"Accessibility gap\"\n    },\n    {\n      \"value\": \"api_friction\",\n      \"label\": \"API friction\"\n    },\n    {\n      \"value\": \"docs_gap\",\n      \"label\": \"Documentation gap\"\n    },\n    {\n      \"value\": \"other\",\n      \"label\": \"Other\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_@empty",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "Gap report route\n\nstatus:          consent_required\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      consent_required\nmessage:     Rerun with --confirm-public to file this report.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

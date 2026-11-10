@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-theme-gothic-0.1.0_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-gothic@0.1.0"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: @astryxdesign/theme-gothic@0.1.0 is not a version discover knows here: it knows 0.7.12. Other versions are on the package registry.\n\n  @astryxdesign/theme-gothic@0.7.12  (version discover knows)\n",
+ "exit": 1,
+ "files": []
+}

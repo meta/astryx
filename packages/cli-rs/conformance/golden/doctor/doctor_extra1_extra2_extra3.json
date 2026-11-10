@@ -1,0 +1,15 @@
+{
+ "id": "doctor_extra1_extra2_extra3",
+ "args": [
+  "doctor",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor extra1'\n\n  integration  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

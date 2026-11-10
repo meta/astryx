@@ -1,0 +1,19 @@
+{
+ "id": "template_LayoutContentShowcase_@large",
+ "args": [
+  "template",
+  "LayoutContentShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutContent,\n  LayoutHeader,\n  LayoutFooter,\n  LayoutPanel,\n  Card,\n  VStack,\n} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nexport default function LayoutContentShowcase() {\n  return (\n    <Center width={500}>\n      <Layout\n        style={{width: '100%'}}\n        height=\"fill\"\n        header={\n          <LayoutHeader hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutHeader>\n        }\n        start={\n          <LayoutPanel hasDivider width={140}>\n            <Card variant=\"muted\" />\n          </LayoutPanel>\n        }\n        content={\n          <LayoutContent role=\"main\">\n            <VStack gap={3}>\n              <Heading level={5}>Main Content Area</Heading>\n              <Text type=\"body\" color=\"secondary\">\n                LayoutContent provides automatic padding and scroll containment.\n                It fills the remaining space between the header and footer.\n              </Text>\n              <Text type=\"body\" color=\"secondary\">\n                Content that overflows will scroll within this area while the\n                header and footer remain fixed.\n              </Text>\n            </VStack>\n          </LayoutContent>\n        }\n        footer={\n          <LayoutFooter hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutFooter>\n        }\n      />\n    </Center>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

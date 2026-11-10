@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_add_ocean_@integration",
+ "args": [
+  "theme",
+  "add",
+  "ocean"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme \"ocean\" from @acme/kit has no resolvable built module and stylesheet. Missing module export @acme/kit/themes/ocean, stylesheet export @acme/kit/themes/ocean.css, or the single-theme exports @acme/kit/built and @acme/kit/theme.css. The package must build and export them before it can be added.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,6 @@
+export default {
+  agentDocs: {
+    append: [// why
+    'First line.', 'Second.', 'Run acme verify before finishing.'],
+  },
+};

@@ -1,0 +1,19 @@
+{
+ "id": "sweep_theme_good_from_bundled",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "copy",
+  "--from",
+  "neutral",
+  "--dry-run",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"theme\",\n    \"name\": \"copy\",\n    \"root\": {\n      \"path\": \"./themes\",\n      \"created\": false\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"themes/copy/copyTheme.ts\",\n      \"themes/copy/icons.tsx\",\n      \"themes/copy/copyPalettes.ts\",\n      \"themes/copy/copyPalettes.generated.ts\",\n      \"themes/copy/copyPaletteRefs.generated.ts\",\n      \"themes/copy/copyPalettes.generated.receipt.json\",\n      \"themes/copy/palette.config.json\",\n      \"themes/copy/copyTheme.doc.mjs\",\n      \"package.json\"\n    ],\n    \"written\": false,\n    \"dryRun\": true,\n    \"from\": \"neutral\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

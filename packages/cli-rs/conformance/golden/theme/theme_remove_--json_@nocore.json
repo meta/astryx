@@ -1,0 +1,14 @@
+{
+ "id": "theme_remove_--json_@nocore",
+ "args": [
+  "theme",
+  "remove",
+  "--json"
+ ],
+ "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"missing required argument 'slug'\",\n  \"code\": \"ERR_MISSING_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

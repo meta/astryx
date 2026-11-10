@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_author_components_badmanifest",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/bad@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_manifest\nmessage:  Integration manifest (astryx.integration.mjs) has no default export (it exports `notDefault`). Fix: export the manifest object as the default export: `export default {components: './components'}`, naming the roots the package has.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

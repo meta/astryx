@@ -1,0 +1,8 @@
+const d = {};
+export default {
+  agentDocs: d,
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

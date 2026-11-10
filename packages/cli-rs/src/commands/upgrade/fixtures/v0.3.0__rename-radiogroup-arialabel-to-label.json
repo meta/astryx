@@ -1,0 +1,66 @@
+[
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenuRadioGroup} from '@astryxdesign/core';\nconst t = <DropdownMenuRadioGroup value=\"a\" onChange={fn} aria-label=\"Sort by\"><Item /></DropdownMenuRadioGroup>;",
+  "output": "import {DropdownMenuRadioGroup} from '@astryxdesign/core';\nconst t = <DropdownMenuRadioGroup value=\"a\" onChange={fn} label=\"Sort by\"><Item /></DropdownMenuRadioGroup>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ContextMenuRadioGroup} from '@astryxdesign/core';\nconst t = <ContextMenuRadioGroup value=\"a\" onChange={fn} aria-label=\"View\"><Item /></ContextMenuRadioGroup>;",
+  "output": "import {ContextMenuRadioGroup} from '@astryxdesign/core';\nconst t = <ContextMenuRadioGroup value=\"a\" onChange={fn} label=\"View\"><Item /></ContextMenuRadioGroup>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BreadcrumbMenuRadioGroup} from '@astryxdesign/core';\nconst t = <BreadcrumbMenuRadioGroup value=\"a\" onChange={fn} aria-label=\"Path\"><Item /></BreadcrumbMenuRadioGroup>;",
+  "output": "import {BreadcrumbMenuRadioGroup} from '@astryxdesign/core';\nconst t = <BreadcrumbMenuRadioGroup value=\"a\" onChange={fn} label=\"Path\"><Item /></BreadcrumbMenuRadioGroup>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenuRadioGroup} from '@astryxdesign/core/DropdownMenu';\nconst t = <DropdownMenuRadioGroup value=\"a\" onChange={fn} aria-label=\"Sort by\"><Item /></DropdownMenuRadioGroup>;",
+  "output": "import {DropdownMenuRadioGroup} from '@astryxdesign/core/DropdownMenu';\nconst t = <DropdownMenuRadioGroup value=\"a\" onChange={fn} label=\"Sort by\"><Item /></DropdownMenuRadioGroup>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenuRadioGroup as RG} from '@astryxdesign/core';\nconst t = <RG value=\"a\" onChange={fn} aria-label=\"Sort by\"><Item /></RG>;",
+  "output": "import {DropdownMenuRadioGroup as RG} from '@astryxdesign/core';\nconst t = <RG value=\"a\" onChange={fn} label=\"Sort by\"><Item /></RG>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenuRadioGroup} from '@astryxdesign/core';\nconst t = <DropdownMenuRadioGroup value=\"a\" onChange={fn} aria-labelledby=\"sort-heading\"><Item /></DropdownMenuRadioGroup>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenuRadioGroup} from '@astryxdesign/core';\nconst t = <SomeOtherComponent aria-label=\"untouched\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/rename-radiogroup-arialabel-to-label",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nconst t = <Button aria-label=\"Click\" />;",
+  "output": null,
+  "error": null
+ }
+]

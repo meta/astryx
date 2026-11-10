@@ -1,0 +1,19 @@
+{
+ "id": "template_PopoverBottomSheetAlternative_@large",
+ "args": [
+  "template",
+  "PopoverBottomSheetAlternative"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport * as stylex from '@stylexjs/stylex';\nimport {CalendarIcon, TagIcon, UserIcon} from '@heroicons/react/24/outline';\nimport {BottomSheet} from '@astryxdesign/core/BottomSheet';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {List, ListItem} from '@astryxdesign/core/List';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Section} from '@astryxdesign/core/Section';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  header: {\n    // Match the unchanged spacious ListItem inset so the title and description\n    // align with the action icons.\n    marginInlineStart: spacingVars['--spacing-3'],\n  },\n});\n\nconst PROJECT_ACTIONS = [\n  [UserIcon, 'Assign owner', 'Route follow-up to a teammate.'],\n  [TagIcon, 'Add label', 'Group this item with related work.'],\n  [CalendarIcon, 'Set due date', 'Pick a reminder for review.'],\n] as const;\n\nexport default function PopoverBottomSheetAlternative() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <>\n      <Button label=\"Open project actions\" onClick={() => setIsOpen(true)}>\n        Open project actions\n      </Button>\n      <BottomSheet\n        isOpen={isOpen}\n        onOpenChange={setIsOpen}\n        label=\"Project actions\"\n        height=\"hug\">\n        <Section paddingBlock={4} paddingInline={1}>\n          <VStack gap={3}>\n            <VStack gap={1} xstyle={styles.header}>\n              <Heading level={3}>Project actions</Heading>\n              <Text type=\"supporting\" color=\"secondary\">\n                Use this modal touch surface when the task should move away from\n                its trigger and stay close to the bottom edge.\n              </Text>\n            </VStack>\n            <List density=\"spacious\">\n              {PROJECT_ACTIONS.map(([icon, label, description]) => (\n                <ListItem\n                  key={label}\n                  label={label}\n                  description={description}\n                  startContent={\n                    <Icon icon={icon} size=\"md\" color=\"secondary\" />\n                  }\n                  onClick={() => setIsOpen(false)}\n                />\n              ))}\n            </List>\n          </VStack>\n        </Section>\n      </BottomSheet>\n    </>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

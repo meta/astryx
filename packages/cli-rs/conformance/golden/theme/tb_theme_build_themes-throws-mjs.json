@@ -1,0 +1,14 @@
+{
+ "id": "tb_theme_build_themes-throws-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/throws.mjs"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/themes/themes/throws.mjs: theme module exploded\nMake sure all imports in the theme file are resolvable.\n",
+ "exit": 1,
+ "files": []
+}

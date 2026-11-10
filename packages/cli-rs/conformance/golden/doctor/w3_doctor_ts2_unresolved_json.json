@@ -1,0 +1,15 @@
+{
+ "id": "w3_doctor_ts2_unresolved_json",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--json"
+ ],
+ "fixture": "doctor-ts2",
+ "fixtureHash": "393cf73e5070f1dd+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.component-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/unresolved\",\n    \"version\": \"1.0.0\",\n    \"conflicts\": [],\n    \"issues\": [],\n    \"propDrift\": {\n      \"status\": \"checked\",\n      \"typescript\": \"6.0.3\",\n      \"components\": 0,\n      \"typesCompared\": 0,\n      \"findings\": [],\n      \"unchecked\": [\n        {\n          \"component\": \"Chip\",\n          \"doc\": \"src/Chip/Chip.doc.mjs\",\n          \"reason\": \"Chip depends on `missing-pkg` (imported in Chip.tsx), which the compiler could not resolve, usually a dependency that is not installed. Install the package's dependencies and run this check again\"\n        },\n        {\n          \"component\": \"Tag\",\n          \"doc\": \"src/Tag/Tag.doc.mjs\",\n          \"reason\": \"Tag depends on `typeof base.nope` (used in Tag.tsx), a type the compiler can't work out, so its props would be a guess. Check that the package's dependencies are installed and its types compile, then run this check again\"\n        }\n      ],\n      \"typesNotCompared\": []\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "lower_component_collapsiblegroup_@large",
+ "args": [
+  "component",
+  "collapsiblegroup"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# CollapsibleGroup\n\nCoordinates multiple Collapsible instances so only one (single mode) or any number (multiple mode) can be open at a time. Renders no wrapper DOM element unless dividers are enabled.\n\n**Import:** `import {CollapsibleGroup} from '@astryxdesign/core/Collapsible';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `type` | `'single' \\| 'multiple'` | `'single'` | Whether one or many items can be open simultaneously. |\n| `defaultValue` | `string \\| string[]` | - | Default open item(s) for uncontrolled usage. Use a string for single mode and an array for multiple mode. |\n| `value` | `string \\| string[]` | - | Controlled open item(s). |\n| `onChange` | `(value: string \\| string[]) => void` | - | Callback invoked when the set of open items changes. |\n| `hasDividers` | `boolean` | `false` | Whether to draw hairline dividers between the group's items. When set, the group renders a wrapper div and items default to 'balanced' density. Pair with bare Collapsible children; Card-wrapped items provide their own separation. |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | - | Row density controlling trigger and content block padding on the group's items. Defaults to 'balanced' when dividers are shown; otherwise items keep their default unpadded look. |\n| `chevronPosition` | `'start' \\| 'end'` | `'end'` | Logical position shared by the group's direct Collapsible items. `end` is the default trailing indicator; `start` is a leading disclosure arrow that points inward when collapsed (mirrored under RTL) and down when expanded. An individual Collapsible can still override it. |\n| `children` | `ReactNode` | - | Collapsible instances to coordinate. **(required)** |\n| `ref` | `React.Ref<HTMLElement>` | - | Ref forwarded to the group wrapper when hasDividers renders one. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for the group wrapper when hasDividers renders one. Must be a stylex.create() value. |\n| `className` | `string` | - | CSS class name for the group wrapper when hasDividers renders one. Prefer xstyle for styling. |\n| `style` | `CSSProperties` | - | Inline styles for the group wrapper when hasDividers renders one. Prefer xstyle for StyleX-optimized styling. |\n| `data-testid` | `string` | - | Test selector forwarded to the group wrapper when hasDividers renders one. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

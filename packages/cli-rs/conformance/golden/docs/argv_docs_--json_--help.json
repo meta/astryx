@@ -1,0 +1,14 @@
+{
+ "id": "argv_docs_--json_--help",
+ "args": [
+  "docs",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx docs\",\n    \"description\": \"Print reference docs\",\n    \"usage\": \"astryx docs [options] [topic] [section]\",\n    \"options\": [\n      {\n        \"flags\": \"--index\",\n        \"description\": \"List the topic's sections and their keys, even for a topic with one section\"\n      },\n      {\n        \"flags\": \"--full\",\n        \"description\": \"Print the whole topic instead of its sections (text; `--json` returns the whole topic unless --index). Cannot be set with --index\"\n      },\n      {\n        \"flags\": \"--depth <levels>\",\n        \"description\": \"How many levels of the docs tree to read below a namespace: 0 for the namespace alone, 1 for its children (what a read without --depth shows), all for everything below it. On the topic list, where a namespace otherwise lists alone, it names the docs below each one by the route that opens them, one line each. With it on a namespace read, --detail sets how much of each doc below shows: brief (one line each, the default), compact (with its sections), or full; the topic list is one line per doc whatever the detail\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

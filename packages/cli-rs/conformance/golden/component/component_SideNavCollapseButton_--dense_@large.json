@@ -1,0 +1,20 @@
+{
+ "id": "component_SideNavCollapseButton_--dense_@large",
+ "args": [
+  "component",
+  "SideNavCollapseButton",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# SideNavCollapseButton\n\nToggle button for sidenav collapse. Place inside SideNav (reads context) or outside (pass the same controlled collapsible config both get). Icon-only ghost button by default.\n\n**Import:** `import {SideNavCollapseButton} from '@astryxdesign/core/SideNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `collapsible` | `{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void, defaultIsCollapsed?: boolean, hasButton?: boolean, buttonLabel?: string}` | - | Controlled collapsible config, same object SideNav gets, all keys allowed. Only needed when button rendered outside sidenav. |\n| `handleRef` | `RefObject<SideNavImperativeCollapseHandle \\| null>` | - | Deprecated. Pass collapsible instead. |\n| `label` | `string` | - | Custom label. Text button w/ chevron when provided, icon-only when omitted. |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | - | Button size. Inherits from the container ('sm' in a SideNav footer), else 'md'. |\n| `children` | `ReactNode` | - | Custom content. Overrides default chevron icon + label. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

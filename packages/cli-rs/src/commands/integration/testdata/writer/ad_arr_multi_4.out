@@ -1,0 +1,6 @@
+export default {
+  agentDocs: {
+    append: [// why
+    'First line.', 'Second.', 'It\'s "quoted" \\ back'],
+  },
+};

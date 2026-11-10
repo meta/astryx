@@ -1,0 +1,14 @@
+{
+ "id": "w4_verify_packjson_oddversion_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/oddversion\",\n    \"version\": \"v2\",\n    \"packable\": true,\n    \"tarball\": {\n      \"filename\": \"acme-oddversion-v2.tgz\",\n      \"fileCount\": 3,\n      \"size\": 325,\n      \"unpackedSize\": 247\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"docs\",\n          \"path\": \"docs\",\n          \"expectedFiles\": 1,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 2,\n      \"packedFiles\": 2\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"guide\"\n        ],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"guide\"\n        ],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

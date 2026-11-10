@@ -1,0 +1,4 @@
+export default {
+  name: 'acme',
+  components: './components'
+};

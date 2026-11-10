@@ -1,0 +1,14 @@
+{
+ "id": "template_TableResizableTable_--json_@large",
+ "args": [
+  "template",
+  "TableResizableTable",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TableResizableTable\",\n    \"description\": \"Table with draggable column resize handles. Drag the right edge of any header to resize.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Table\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {\\n  Table,\\n  useTableColumnResize,\\n  proportional,\\n  pixel,\\n} from '@astryxdesign/core/Table';\\n\\ninterface User extends Record<string, unknown> {\\n  id: string;\\n  name: string;\\n  email: string;\\n  role: string;\\n}\\n\\nconst users: User[] = [\\n  {\\n    id: '1',\\n    name: 'Alice Johnson',\\n    email: 'alice@example.com',\\n    role: 'Engineer',\\n  },\\n  {id: '2', name: 'Bob Smith', email: 'bob@example.com', role: 'Designer'},\\n  {id: '3', name: 'Charlie Brown', email: 'charlie@example.com', role: 'PM'},\\n  {id: '4', name: 'Diana Prince', email: 'diana@example.com', role: 'Engineer'},\\n  {id: '5', name: 'Eve Davis', email: 'eve@example.com', role: 'Analyst'},\\n];\\n\\nconst columns = [\\n  {key: 'name', header: 'Name'},\\n  {key: 'email', header: 'Email', width: proportional(2)},\\n  {key: 'role', header: 'Role', width: pixel(120)},\\n];\\n\\nexport default function TableResizableTable() {\\n  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});\\n\\n  const resizePlugin = useTableColumnResize({\\n    columnWidths,\\n    columns,\\n    onColumnResizeEnd: updates => {\\n      setColumnWidths(prev => ({...prev, ...updates}));\\n    },\\n  });\\n\\n  return (\\n    <Table\\n      data={users}\\n      columns={columns}\\n      idKey=\\\"id\\\"\\n      hasHover\\n      plugins={{columnResize: resizePlugin}}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

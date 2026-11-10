@@ -1,0 +1,21 @@
+{
+ "id": "component_--list_--category_Chat_@large",
+ "args": [
+  "component",
+  "--list",
+  "--category",
+  "Chat"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "Chat\n\nname:   ChatComposer\nimport: @astryxdesign/core/Chat\n\nname:   ChatComposerDrawer\nimport: @astryxdesign/core/Chat\n\nname:   ChatComposerInput\nimport: @astryxdesign/core/Chat\n\nname:   ChatDictationButton\nimport: @astryxdesign/core/Chat\n\nname:   ChatLayout\nimport: @astryxdesign/core/Chat\n\nname:   ChatLayoutScrollButton\nimport: @astryxdesign/core/Chat\n\nname:   ChatMessage\nimport: @astryxdesign/core/Chat\n\nname:   ChatMessageBubble\nimport: @astryxdesign/core/Chat\n\nname:   ChatMessageList\nimport: @astryxdesign/core/Chat\n\nname:   ChatMessageMetadata\nimport: @astryxdesign/core/Chat\n\nname:   ChatSendButton\nimport: @astryxdesign/core/Chat\n\nname:   ChatSystemMessage\nimport: @astryxdesign/core/Chat\n\nname:   ChatTokenizedText\nimport: @astryxdesign/core/Chat\n\nname:   ChatToolCalls\nimport: @astryxdesign/core/Chat\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

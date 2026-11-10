@@ -1,0 +1,21 @@
+{
+ "id": "component_TopNavMegaMenuFeaturedCard_--detail_brief_@large",
+ "args": [
+  "component",
+  "TopNavMegaMenuFeaturedCard",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nTopNavMegaMenuFeaturedCard  <- from '@astryxdesign/core/TopNav'\n  Standard featured card for the TopNavMegaMenu featured slot. Provides a consi...\n  title: string, description, image, imageAlt, linkLabel, linkHref, children\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

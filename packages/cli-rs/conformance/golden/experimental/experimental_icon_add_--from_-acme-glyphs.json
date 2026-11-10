@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_add_--from_-acme-glyphs",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--from",
+  "@acme/glyphs"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

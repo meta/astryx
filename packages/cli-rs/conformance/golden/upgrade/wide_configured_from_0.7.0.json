@@ -1,0 +1,20 @@
+{
+ "id": "wide_configured_from_0.7.0",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.0"
+ ],
+ "fixture": "upgrade-configured",
+ "fixtureHash": "a8870efa976f6547+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.7.0\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-configured/src for source files...\nFound 1 source file\nApplying v0.7.2 codemods...\n  Migrate List edgeCompensation to edge\nApplying v0.7.5 codemods...\n  Migrate CodeBlock tokenizer to a custom language\nApplying v0.7.8 codemods...\n  Move Tokenizer's removed experimental presentation to presentation\n\n[ok] No changes needed - your code is already up to date!\nIntegrations: @acme/kit, @acme/bad\n4 codemods to run (dry run)\nApplying integration codemods...\n  Rename thing (v0.7.10, @acme/bad)\nDry run complete\n\n",
+ "stderr": "Warning: @acme/bad has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor integration validate @acme/bad\nNo Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/upgrade-configured\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

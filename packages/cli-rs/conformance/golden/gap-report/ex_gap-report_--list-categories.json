@@ -1,0 +1,19 @@
+{
+ "id": "ex_gap-report_--list-categories",
+ "args": [
+  "gap-report",
+  "--list-categories"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Gap report categories\n\nvalue: missing_component\nlabel: Missing component\n\nvalue: missing_variant\nlabel: Missing variant or prop\n\nvalue: layout_gap\nlabel: Layout gap\n\nvalue: styling_gap\nlabel: Styling gap\n\nvalue: a11y_gap\nlabel: Accessibility gap\n\nvalue: api_friction\nlabel: API friction\n\nvalue: docs_gap\nlabel: Documentation gap\n\nvalue: other\nlabel: Other\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

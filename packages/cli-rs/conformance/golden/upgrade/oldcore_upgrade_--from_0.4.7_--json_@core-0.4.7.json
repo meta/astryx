@@ -1,0 +1,15 @@
+{
+ "id": "oldcore_upgrade_--from_0.4.7_--json_@core-0.4.7",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.4.7",
+  "--json"
+ ],
+ "fixture": "core-0.4.7",
+ "fixtureHash": "8198fefbb18714e1+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.status\",\n  \"data\": {\n    \"status\": \"up_to_date\",\n    \"from\": \"0.4.7\",\n    \"to\": \"0.4.7\",\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.4.7\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.4.7\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

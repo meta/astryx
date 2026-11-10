@@ -1,0 +1,20 @@
+{
+ "id": "ex_theme_palette_generate_themes-ocean-palette.config.json_--out_themes-ocean-tokens-ocean.palette.ts_--preview_themes-o~5",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "themes/ocean/palette.config.json",
+  "--out",
+  "themes/ocean/tokens/ocean.palette.ts",
+  "--preview",
+  "themes/ocean/tokens/ocean.palette.html",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Palette config not found: themes/ocean/palette.config.json\",\n  \"code\": \"ERR_FILE_NOT_FOUND\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

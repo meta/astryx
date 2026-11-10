@@ -1,0 +1,17 @@
+{
+ "id": "w_icon_glyphs_add_data_export",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "themeIcons",
+  "--from",
+  "./theme.js"
+ ],
+ "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"themeIcons\" in \"./theme.js\" is not a component, so this set needs an adapter: a function in your package that turns it into one. Declare \"adapter\": {\"module\": \"./src/adapt.js\", \"export\": \"adapt\"} in glyphs.icons.json (astryx docs cli/experimental/icon-sets library-shapes).\n",
+ "exit": 1,
+ "files": []
+}

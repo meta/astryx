@@ -1,0 +1,15 @@
+{
+ "id": "w_tpl_skeleton_overwrite",
+ "args": [
+  "template",
+  "login",
+  "--skeleton",
+  "--overwrite"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: `--skeleton` cannot be combined with --overwrite: it prints the skeleton and does not write files.\n",
+ "exit": 1,
+ "files": []
+}

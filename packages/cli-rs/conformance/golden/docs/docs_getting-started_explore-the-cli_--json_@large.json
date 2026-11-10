@@ -1,0 +1,15 @@
+{
+ "id": "docs_getting-started_explore-the-cli_--json_@large",
+ "args": [
+  "docs",
+  "getting-started",
+  "explore-the-cli",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Explore the CLI\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"The CLI is your reference for components, tokens, templates, and docs. For reliable invocation (especially with AI assistants), add this script to your package.json:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"json\",\n        \"code\": \"\\\"scripts\\\": {\\n  \\\"astryx\\\": \\\"node node_modules/@astryxdesign/cli/clients/cli/bin/astryx.mjs\\\"\\n}\",\n        \"label\": \"package.json\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Then discover what's available:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx component          # list all components\\nastryx component Button   # props, usage, theming for Button\\nastryx docs               # list all doc topics\\nastryx template --list    # available page templates\\nastryx docs tokens        # spacing, color, radius reference\",\n        \"label\": \"Terminal\"\n      }\n    ],\n    \"id\": \"explore-the-cli\",\n    \"links\": {\n      \"up\": \"astryx docs getting-started --index\",\n      \"previous\": \"astryx docs getting-started example-apps\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

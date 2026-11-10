@@ -1,0 +1,6235 @@
+[
+  {
+    "id": "discover_--help",
+    "args": [
+      "discover",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover",
+    "args": [
+      "discover"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--json",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_-h",
+    "args": [
+      "discover",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_discover",
+    "args": [
+      "help",
+      "discover"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--bogus-flag",
+    "args": [
+      "discover",
+      "--bogus-flag"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--bogus-flag_--json",
+    "args": [
+      "discover",
+      "--bogus-flag",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_extra1_extra2_extra3",
+    "args": [
+      "discover",
+      "extra1",
+      "extra2",
+      "extra3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_extra1_extra2_extra3_--json",
+    "args": [
+      "discover",
+      "extra1",
+      "extra2",
+      "extra3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_@empty",
+    "args": [
+      "discover"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@empty",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "discover_@nocore",
+    "args": [
+      "discover"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@nocore",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "discover_@brokencore",
+    "args": [
+      "discover"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@brokencore",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "discover_@plain",
+    "args": [
+      "discover"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@plain",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "discover_@large",
+    "args": [
+      "discover"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@large",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_@integration",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "discover_--json_@integration",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--components",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--components_@empty",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--components_@integration",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--components_@large",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--components_--json",
+    "args": [
+      "discover",
+      "--components",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--type_theme",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--type_theme_@empty",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--type_theme_@integration",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--type_theme_@large",
+    "args": [
+      "discover",
+      "--type",
+      "theme"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_--type_theme_--json",
+    "args": [
+      "discover",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui",
+    "args": [
+      "discover",
+      "@acme/ui"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui_@empty",
+    "args": [
+      "discover",
+      "@acme/ui"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui_@integration",
+    "args": [
+      "discover",
+      "@acme/ui"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui_@large",
+    "args": [
+      "discover",
+      "@acme/ui"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui_--json",
+    "args": [
+      "discover",
+      "@acme/ui",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui-2.1.0",
+    "args": [
+      "discover",
+      "@acme/ui@2.1.0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui-2.1.0_@empty",
+    "args": [
+      "discover",
+      "@acme/ui@2.1.0"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui-2.1.0_@integration",
+    "args": [
+      "discover",
+      "@acme/ui@2.1.0"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui-2.1.0_@large",
+    "args": [
+      "discover",
+      "@acme/ui@2.1.0"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_-acme-ui-2.1.0_--json",
+    "args": [
+      "discover",
+      "@acme/ui@2.1.0",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_dashboard_--type_template_--available",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_dashboard_--type_template_--available_@empty",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template",
+      "--available"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_dashboard_--type_template_--available_@integration",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template",
+      "--available"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_dashboard_--type_template_--available_@large",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template",
+      "--available"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_discover_dashboard_--type_template_--available_--json",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template",
+      "--available",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--components",
+    "args": [
+      "discover",
+      "table",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--components_--help",
+    "args": [
+      "discover",
+      "--components",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_component",
+    "args": [
+      "discover",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_component_--json",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type-component",
+    "args": [
+      "discover",
+      "--type=component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_template",
+    "args": [
+      "discover",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_template_--json",
+    "args": [
+      "discover",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type-template",
+    "args": [
+      "discover",
+      "--type=template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_bogus",
+    "args": [
+      "discover",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_bogus_--json",
+    "args": [
+      "discover",
+      "--type",
+      "bogus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type-bogus",
+    "args": [
+      "discover",
+      "--type=bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type",
+    "args": [
+      "discover",
+      "--type"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_--json",
+    "args": [
+      "discover",
+      "--type",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_component",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--type_component_--help",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--installed",
+    "args": [
+      "discover",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--installed_--json",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--installed",
+    "args": [
+      "discover",
+      "table",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--installed_--help",
+    "args": [
+      "discover",
+      "--installed",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--available",
+    "args": [
+      "discover",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--available_--json",
+    "args": [
+      "discover",
+      "--available",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--available",
+    "args": [
+      "discover",
+      "table",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--available_--help",
+    "args": [
+      "discover",
+      "--available",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_3",
+    "args": [
+      "discover",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_3_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit-3",
+    "args": [
+      "discover",
+      "--limit=3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_0",
+    "args": [
+      "discover",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_0_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "0",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit-0",
+    "args": [
+      "discover",
+      "--limit=0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_-1",
+    "args": [
+      "discover",
+      "--limit",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_-1_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "-1",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit--1",
+    "args": [
+      "discover",
+      "--limit=-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_abc",
+    "args": [
+      "discover",
+      "--limit",
+      "abc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_abc_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "abc",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit-abc",
+    "args": [
+      "discover",
+      "--limit=abc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_1.5",
+    "args": [
+      "discover",
+      "--limit",
+      "1.5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_1.5_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "1.5",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit-1.5",
+    "args": [
+      "discover",
+      "--limit=1.5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit",
+    "args": [
+      "discover",
+      "--limit"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_--json",
+    "args": [
+      "discover",
+      "--limit",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--limit_3",
+    "args": [
+      "discover",
+      "table",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_--limit_3_--help",
+    "args": [
+      "discover",
+      "--limit",
+      "3",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--json_--json",
+    "args": [
+      "discover",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--help_--json",
+    "args": [
+      "discover",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--json_--help",
+    "args": [
+      "discover",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-h_--bogus",
+    "args": [
+      "discover",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--bogus_-h",
+    "args": [
+      "discover",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-V",
+    "args": [
+      "discover",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--version",
+    "args": [
+      "discover",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--JSON",
+    "args": [
+      "discover",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--jso",
+    "args": [
+      "discover",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--no-json",
+    "args": [
+      "discover",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--json-1",
+    "args": [
+      "discover",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-x",
+    "args": [
+      "discover",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-hV",
+    "args": [
+      "discover",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--_--json",
+    "args": [
+      "discover",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_--_-h",
+    "args": [
+      "discover",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_x",
+    "args": [
+      "discover",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-",
+    "args": [
+      "discover",
+      "ü中文"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_-5",
+    "args": [
+      "discover",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_---x",
+    "args": [
+      "discover",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_discover_---json",
+    "args": [
+      "discover",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_discover_--components_table",
+    "args": [
+      "discover",
+      "--components",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_discover_--components_--components",
+    "args": [
+      "discover",
+      "--components",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_discover_--components-yes",
+    "args": [
+      "discover",
+      "--components=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_discover_--no-components",
+    "args": [
+      "discover",
+      "--no-components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_discover_--type_component_table",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_discover_--type_component_--type_component",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_discover_--type_component_--type_template",
+    "args": [
+      "discover",
+      "--type",
+      "component",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_discover_--type_x",
+    "args": [
+      "discover",
+      "--type",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_discover_--type-",
+    "args": [
+      "discover",
+      "--type="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_discover_--type_-1",
+    "args": [
+      "discover",
+      "--type",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_discover_--installed_table",
+    "args": [
+      "discover",
+      "--installed",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_discover_--installed_--installed",
+    "args": [
+      "discover",
+      "--installed",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_discover_--installed-yes",
+    "args": [
+      "discover",
+      "--installed=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_discover_--no-installed",
+    "args": [
+      "discover",
+      "--no-installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_discover_--available_table",
+    "args": [
+      "discover",
+      "--available",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_discover_--available_--available",
+    "args": [
+      "discover",
+      "--available",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_discover_--available-yes",
+    "args": [
+      "discover",
+      "--available=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_discover_--no-available",
+    "args": [
+      "discover",
+      "--no-available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_discover_--limit_3_table",
+    "args": [
+      "discover",
+      "--limit",
+      "3",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_discover_--limit_3_--limit_3",
+    "args": [
+      "discover",
+      "--limit",
+      "3",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_discover_--limit_3_--limit_0",
+    "args": [
+      "discover",
+      "--limit",
+      "3",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_discover_--limit_x",
+    "args": [
+      "discover",
+      "--limit",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_discover_--limit-",
+    "args": [
+      "discover",
+      "--limit="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_nosuchsub",
+    "args": [
+      "discover",
+      "nosuchsub"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button",
+    "args": [
+      "discover",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--json",
+    "args": [
+      "discover",
+      "button",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table",
+    "args": [
+      "discover",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--json",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table",
+    "args": [
+      "discover",
+      "data table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--json",
+    "args": [
+      "discover",
+      "data table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard",
+    "args": [
+      "discover",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--json",
+    "args": [
+      "discover",
+      "dashboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation",
+    "args": [
+      "discover",
+      "form validation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--json",
+    "args": [
+      "discover",
+      "form validation",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker",
+    "args": [
+      "discover",
+      "date picker"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--json",
+    "args": [
+      "discover",
+      "date picker",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode",
+    "args": [
+      "discover",
+      "dark mode"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--json",
+    "args": [
+      "discover",
+      "dark mode",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens",
+    "args": [
+      "discover",
+      "color tokens"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--json",
+    "args": [
+      "discover",
+      "color tokens",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing",
+    "args": [
+      "discover",
+      "spacing"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--json",
+    "args": [
+      "discover",
+      "spacing",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog",
+    "args": [
+      "discover",
+      "modal dialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--json",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar",
+    "args": [
+      "discover",
+      "navigation sidebar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--json",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page",
+    "args": [
+      "discover",
+      "login page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--json",
+    "args": [
+      "discover",
+      "login page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page",
+    "args": [
+      "discover",
+      "settings page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--json",
+    "args": [
+      "discover",
+      "settings page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--json",
+    "args": [
+      "discover",
+      "chart",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon",
+    "args": [
+      "discover",
+      "icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--json",
+    "args": [
+      "discover",
+      "icon",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme",
+    "args": [
+      "discover",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--json",
+    "args": [
+      "discover",
+      "theme",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography",
+    "args": [
+      "discover",
+      "typography"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--json",
+    "args": [
+      "discover",
+      "typography",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast",
+    "args": [
+      "discover",
+      "toast"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--json",
+    "args": [
+      "discover",
+      "toast",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton",
+    "args": [
+      "discover",
+      "buton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--json",
+    "args": [
+      "discover",
+      "buton",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel",
+    "args": [
+      "discover",
+      "tabel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--json",
+    "args": [
+      "discover",
+      "tabel",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashbord",
+    "args": [
+      "discover",
+      "dashbord"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashbord_--json",
+    "args": [
+      "discover",
+      "dashbord",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_zorblax",
+    "args": [
+      "discover",
+      "zorblax"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_zorblax_--json",
+    "args": [
+      "discover",
+      "zorblax",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_xyzzy",
+    "args": [
+      "discover",
+      "xyzzy"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_xyzzy_--json",
+    "args": [
+      "discover",
+      "xyzzy",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ai-chat",
+    "args": [
+      "discover",
+      "ai chat"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ai-chat_--json",
+    "args": [
+      "discover",
+      "ai chat",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_file-upload",
+    "args": [
+      "discover",
+      "file upload"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_file-upload_--json",
+    "args": [
+      "discover",
+      "file upload",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_avatar-group",
+    "args": [
+      "discover",
+      "avatar group"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_avatar-group_--json",
+    "args": [
+      "discover",
+      "avatar group",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_empty-state",
+    "args": [
+      "discover",
+      "empty state"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_empty-state_--json",
+    "args": [
+      "discover",
+      "empty state",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tooltip",
+    "args": [
+      "discover",
+      "tooltip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tooltip_--json",
+    "args": [
+      "discover",
+      "tooltip",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_accessibility",
+    "args": [
+      "discover",
+      "accessibility"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_accessibility_--json",
+    "args": [
+      "discover",
+      "accessibility",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_keyboard-shortcuts",
+    "args": [
+      "discover",
+      "keyboard shortcuts"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_keyboard-shortcuts_--json",
+    "args": [
+      "discover",
+      "keyboard shortcuts",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_useClipboard",
+    "args": [
+      "discover",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_useClipboard_--json",
+    "args": [
+      "discover",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Card",
+    "args": [
+      "discover",
+      "Card"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Card_--json",
+    "args": [
+      "discover",
+      "Card",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_how-do-I-make-a-landing-page",
+    "args": [
+      "discover",
+      "how do I make a landing page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_how-do-I-make-a-landing-page_--json",
+    "args": [
+      "discover",
+      "how do I make a landing page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_pricing-table",
+    "args": [
+      "discover",
+      "pricing table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_pricing-table_--json",
+    "args": [
+      "discover",
+      "pricing table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_kanban-board",
+    "args": [
+      "discover",
+      "kanban board"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_kanban-board_--json",
+    "args": [
+      "discover",
+      "kanban board",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_calendar",
+    "args": [
+      "discover",
+      "calendar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_calendar_--json",
+    "args": [
+      "discover",
+      "calendar",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_search-input",
+    "args": [
+      "discover",
+      "search input"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_search-input_--json",
+    "args": [
+      "discover",
+      "search input",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_responsive-layout",
+    "args": [
+      "discover",
+      "responsive layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_responsive-layout_--json",
+    "args": [
+      "discover",
+      "responsive layout",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_grid",
+    "args": [
+      "discover",
+      "grid"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_grid_--json",
+    "args": [
+      "discover",
+      "grid",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_stylex",
+    "args": [
+      "discover",
+      "stylex"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_stylex_--json",
+    "args": [
+      "discover",
+      "stylex",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tailwind",
+    "args": [
+      "discover",
+      "tailwind"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tailwind_--json",
+    "args": [
+      "discover",
+      "tailwind",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_a",
+    "args": [
+      "discover",
+      "a"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_a_--json",
+    "args": [
+      "discover",
+      "a",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_-",
+    "args": [
+      "discover",
+      "中文"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_-_--json",
+    "args": [
+      "discover",
+      "中文",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button-",
+    "args": [
+      "discover",
+      "button   "
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button-_--json",
+    "args": [
+      "discover",
+      "button   ",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_zorblax_@integration",
+    "args": [
+      "discover",
+      "zorblax"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "discover_acme-card_@integration",
+    "args": [
+      "discover",
+      "acme card"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "discover_zorblax-hero_@integration",
+    "args": [
+      "discover",
+      "zorblax hero"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell",
+    "args": [
+      "discover",
+      "AppShell"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio",
+    "args": [
+      "discover",
+      "AspectRatio"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar",
+    "args": [
+      "discover",
+      "Avatar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarGroup",
+    "args": [
+      "discover",
+      "AvatarGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarGroupOverflow",
+    "args": [
+      "discover",
+      "AvatarGroupOverflow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarStatusDot",
+    "args": [
+      "discover",
+      "AvatarStatusDot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Badge",
+    "args": [
+      "discover",
+      "Badge"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner",
+    "args": [
+      "discover",
+      "Banner"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Blockquote",
+    "args": [
+      "discover",
+      "Blockquote"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BottomSheet",
+    "args": [
+      "discover",
+      "BottomSheet"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BottomSheetSwitcher",
+    "args": [
+      "discover",
+      "BottomSheetSwitcher"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BreadcrumbItem",
+    "args": [
+      "discover",
+      "BreadcrumbItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs",
+    "args": [
+      "discover",
+      "Breadcrumbs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button",
+    "args": [
+      "discover",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ButtonGroup",
+    "args": [
+      "discover",
+      "ButtonGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_IconButton",
+    "args": [
+      "discover",
+      "IconButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ToggleButton",
+    "args": [
+      "discover",
+      "ToggleButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ToggleButtonGroup",
+    "args": [
+      "discover",
+      "ToggleButtonGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Calendar",
+    "args": [
+      "discover",
+      "Calendar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ClickableCard",
+    "args": [
+      "discover",
+      "ClickableCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SelectableCard",
+    "args": [
+      "discover",
+      "SelectableCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Carousel",
+    "args": [
+      "discover",
+      "Carousel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatComposer",
+    "args": [
+      "discover",
+      "ChatComposer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatComposerDrawer",
+    "args": [
+      "discover",
+      "ChatComposerDrawer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatComposerInput",
+    "args": [
+      "discover",
+      "ChatComposerInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatDictationButton",
+    "args": [
+      "discover",
+      "ChatDictationButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatLayout",
+    "args": [
+      "discover",
+      "ChatLayout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatLayoutScrollButton",
+    "args": [
+      "discover",
+      "ChatLayoutScrollButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatMessage",
+    "args": [
+      "discover",
+      "ChatMessage"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatMessageBubble",
+    "args": [
+      "discover",
+      "ChatMessageBubble"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatMessageList",
+    "args": [
+      "discover",
+      "ChatMessageList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatMessageMetadata",
+    "args": [
+      "discover",
+      "ChatMessageMetadata"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatSendButton",
+    "args": [
+      "discover",
+      "ChatSendButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatSystemMessage",
+    "args": [
+      "discover",
+      "ChatSystemMessage"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatTokenizedText",
+    "args": [
+      "discover",
+      "ChatTokenizedText"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ChatToolCalls",
+    "args": [
+      "discover",
+      "ChatToolCalls"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CheckboxInput",
+    "args": [
+      "discover",
+      "CheckboxInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CheckboxList",
+    "args": [
+      "discover",
+      "CheckboxList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CheckboxListItem",
+    "args": [
+      "discover",
+      "CheckboxListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Citation",
+    "args": [
+      "discover",
+      "Citation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Code",
+    "args": [
+      "discover",
+      "Code"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CodeBlock",
+    "args": [
+      "discover",
+      "CodeBlock"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Collapsible",
+    "args": [
+      "discover",
+      "Collapsible"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CollapsibleGroup",
+    "args": [
+      "discover",
+      "CollapsibleGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPalette",
+    "args": [
+      "discover",
+      "CommandPalette"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteEmpty",
+    "args": [
+      "discover",
+      "CommandPaletteEmpty"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteFooter",
+    "args": [
+      "discover",
+      "CommandPaletteFooter"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteGroup",
+    "args": [
+      "discover",
+      "CommandPaletteGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteInput",
+    "args": [
+      "discover",
+      "CommandPaletteInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteItem",
+    "args": [
+      "discover",
+      "CommandPaletteItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_CommandPaletteList",
+    "args": [
+      "discover",
+      "CommandPaletteList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ContextMenu",
+    "args": [
+      "discover",
+      "ContextMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DateInput",
+    "args": [
+      "discover",
+      "DateInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DateRangeInput",
+    "args": [
+      "discover",
+      "DateRangeInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DateTimeInput",
+    "args": [
+      "discover",
+      "DateTimeInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AlertDialog",
+    "args": [
+      "discover",
+      "AlertDialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Dialog",
+    "args": [
+      "discover",
+      "Dialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DialogHeader",
+    "args": [
+      "discover",
+      "DialogHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Divider",
+    "args": [
+      "discover",
+      "Divider"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Drawer",
+    "args": [
+      "discover",
+      "Drawer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DrawerHeader",
+    "args": [
+      "discover",
+      "DrawerHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenu",
+    "args": [
+      "discover",
+      "DropdownMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuCheckboxItem",
+    "args": [
+      "discover",
+      "DropdownMenuCheckboxItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuDivider",
+    "args": [
+      "discover",
+      "DropdownMenuDivider"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuGroup",
+    "args": [
+      "discover",
+      "DropdownMenuGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuItem",
+    "args": [
+      "discover",
+      "DropdownMenuItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuRadioGroup",
+    "args": [
+      "discover",
+      "DropdownMenuRadioGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuRadioItem",
+    "args": [
+      "discover",
+      "DropdownMenuRadioItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_DropdownMenuSubMenu",
+    "args": [
+      "discover",
+      "DropdownMenuSubMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_EmptyState",
+    "args": [
+      "discover",
+      "EmptyState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Field",
+    "args": [
+      "discover",
+      "Field"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_FieldLabel",
+    "args": [
+      "discover",
+      "FieldLabel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_FieldStatus",
+    "args": [
+      "discover",
+      "FieldStatus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_InputGroup",
+    "args": [
+      "discover",
+      "InputGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_InputGroupText",
+    "args": [
+      "discover",
+      "InputGroupText"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_FileInput",
+    "args": [
+      "discover",
+      "FileInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Heading",
+    "args": [
+      "discover",
+      "Heading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_HoverCard",
+    "args": [
+      "discover",
+      "HoverCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Icon",
+    "args": [
+      "discover",
+      "Icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_InfoTip",
+    "args": [
+      "discover",
+      "InfoTip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Item",
+    "args": [
+      "discover",
+      "Item"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Kbd",
+    "args": [
+      "discover",
+      "Kbd"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Center",
+    "args": [
+      "discover",
+      "Center"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_FormLayout",
+    "args": [
+      "discover",
+      "FormLayout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Grid",
+    "args": [
+      "discover",
+      "Grid"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_GridSpan",
+    "args": [
+      "discover",
+      "GridSpan"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_HStack",
+    "args": [
+      "discover",
+      "HStack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Layout",
+    "args": [
+      "discover",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_LayoutContent",
+    "args": [
+      "discover",
+      "LayoutContent"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_LayoutFooter",
+    "args": [
+      "discover",
+      "LayoutFooter"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_LayoutHeader",
+    "args": [
+      "discover",
+      "LayoutHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_LayoutPanel",
+    "args": [
+      "discover",
+      "LayoutPanel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Section",
+    "args": [
+      "discover",
+      "Section"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Stack",
+    "args": [
+      "discover",
+      "Stack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_VStack",
+    "args": [
+      "discover",
+      "VStack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Lightbox",
+    "args": [
+      "discover",
+      "Lightbox"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Link",
+    "args": [
+      "discover",
+      "Link"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_List",
+    "args": [
+      "discover",
+      "List"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ListItem",
+    "args": [
+      "discover",
+      "ListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Markdown",
+    "args": [
+      "discover",
+      "Markdown"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_MetadataList",
+    "args": [
+      "discover",
+      "MetadataList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_MetadataListItem",
+    "args": [
+      "discover",
+      "MetadataListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_MoreMenu",
+    "args": [
+      "discover",
+      "MoreMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_MobileNav",
+    "args": [
+      "discover",
+      "MobileNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_NavIcon",
+    "args": [
+      "discover",
+      "NavIcon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SideNav",
+    "args": [
+      "discover",
+      "SideNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SideNavCollapseButton",
+    "args": [
+      "discover",
+      "SideNavCollapseButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SideNavHeading",
+    "args": [
+      "discover",
+      "SideNavHeading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SideNavItem",
+    "args": [
+      "discover",
+      "SideNavItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_SideNavSection",
+    "args": [
+      "discover",
+      "SideNavSection"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNav",
+    "args": [
+      "discover",
+      "TopNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavHeading",
+    "args": [
+      "discover",
+      "TopNavHeading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavItem",
+    "args": [
+      "discover",
+      "TopNavItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavMegaMenu",
+    "args": [
+      "discover",
+      "TopNavMegaMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavMegaMenuFeaturedCard",
+    "args": [
+      "discover",
+      "TopNavMegaMenuFeaturedCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavMegaMenuItem",
+    "args": [
+      "discover",
+      "TopNavMegaMenuItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_TopNavMenu",
+    "args": [
+      "discover",
+      "TopNavMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_NumberInput",
+    "args": [
+      "discover",
+      "NumberInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Outline",
+    "args": [
+      "discover",
+      "Outline"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AI-Chat-Conversation",
+    "args": [
+      "discover",
+      "AI Chat Conversation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AI-Chat-Landing",
+    "args": [
+      "discover",
+      "AI Chat Landing"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AlertDialog-Delete",
+    "args": [
+      "discover",
+      "AlertDialog — Delete"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AlertDialog-Loading",
+    "args": [
+      "discover",
+      "AlertDialog — Loading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Analytics-Dashboard",
+    "args": [
+      "discover",
+      "Analytics Dashboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell-Content-Only",
+    "args": [
+      "discover",
+      "AppShell — Content Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell-Side-Nav-Only",
+    "args": [
+      "discover",
+      "AppShell — Side Nav Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell-Top-Nav-Only",
+    "args": [
+      "discover",
+      "AppShell — Top Nav Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell-Top-Nav-with-Side-Nav",
+    "args": [
+      "discover",
+      "AppShell — Top Nav with Side Nav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AppShell-With-Banner",
+    "args": [
+      "discover",
+      "AppShell — With Banner"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio-16-9-Widescreen-Image",
+    "args": [
+      "discover",
+      "AspectRatio — 16:9 Widescreen Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio-Circle-Image",
+    "args": [
+      "discover",
+      "AspectRatio — Circle Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio-Image-Gallery",
+    "args": [
+      "discover",
+      "AspectRatio — Image Gallery"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio-Loading-Skeleton",
+    "args": [
+      "discover",
+      "AspectRatio — Loading Skeleton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AspectRatio-Square-Image",
+    "args": [
+      "discover",
+      "AspectRatio — Square Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Fallback-Chain",
+    "args": [
+      "discover",
+      "Avatar — Fallback Chain"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Group",
+    "args": [
+      "discover",
+      "Avatar — Group"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Initials",
+    "args": [
+      "discover",
+      "Avatar — Initials"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Interactive",
+    "args": [
+      "discover",
+      "Avatar — Interactive"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Photo",
+    "args": [
+      "discover",
+      "Avatar — Photo"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Status-Dot",
+    "args": [
+      "discover",
+      "Avatar — Status Dot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-Tooltip",
+    "args": [
+      "discover",
+      "Avatar — Tooltip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-User-Card",
+    "args": [
+      "discover",
+      "Avatar — User Card"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Avatar-first-annotations",
+    "args": [
+      "discover",
+      "Avatar-first annotations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarGroup-Interactive",
+    "args": [
+      "discover",
+      "AvatarGroup — Interactive"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarGroupOverflow-Custom-Text",
+    "args": [
+      "discover",
+      "AvatarGroupOverflow — Custom Text"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarGroupOverflow-Default-Count",
+    "args": [
+      "discover",
+      "AvatarGroupOverflow — Default Count"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_AvatarStatusDot-Variants",
+    "args": [
+      "discover",
+      "AvatarStatusDot — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Badge-Colors",
+    "args": [
+      "discover",
+      "Badge — Colors"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Badge-Counts",
+    "args": [
+      "discover",
+      "Badge — Counts"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Badge-Status",
+    "args": [
+      "discover",
+      "Badge — Status"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Badge-Variants",
+    "args": [
+      "discover",
+      "Badge — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Action",
+    "args": [
+      "discover",
+      "Banner — Action"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Collapsible",
+    "args": [
+      "discover",
+      "Banner — Collapsible"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Dismiss",
+    "args": [
+      "discover",
+      "Banner — Dismiss"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Floating",
+    "args": [
+      "discover",
+      "Banner — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Full-Width",
+    "args": [
+      "discover",
+      "Banner — Full Width"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Banner-Statuses",
+    "args": [
+      "discover",
+      "Banner — Statuses"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BaseTypeahead",
+    "args": [
+      "discover",
+      "BaseTypeahead"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BaseTypeahead-Custom-Search-Bar",
+    "args": [
+      "discover",
+      "BaseTypeahead — Custom Search Bar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Basic",
+    "args": [
+      "discover",
+      "Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Basic-Login",
+    "args": [
+      "discover",
+      "Basic Login"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Blank",
+    "args": [
+      "discover",
+      "Blank"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Blockquote-Showcase",
+    "args": [
+      "discover",
+      "Blockquote — Showcase"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Blockquote-Testimonials",
+    "args": [
+      "discover",
+      "Blockquote — Testimonials"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Blockquote-With-Attribution",
+    "args": [
+      "discover",
+      "Blockquote — With Attribution"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet",
+    "args": [
+      "discover",
+      "Bottom Sheet"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-Height-variants",
+    "args": [
+      "discover",
+      "Bottom Sheet — Height variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-Mobile-keyboard",
+    "args": [
+      "discover",
+      "Bottom Sheet — Mobile keyboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-Multi-step-flow",
+    "args": [
+      "discover",
+      "Bottom Sheet — Multi-step flow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-No-scrim",
+    "args": [
+      "discover",
+      "Bottom Sheet — No scrim"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-Review-flow",
+    "args": [
+      "discover",
+      "Bottom Sheet — Review flow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Bottom-Sheet-Snap-points",
+    "args": [
+      "discover",
+      "Bottom Sheet — Snap points"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_BreadcrumbItem-Basic",
+    "args": [
+      "discover",
+      "BreadcrumbItem — Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs-Deep-Path",
+    "args": [
+      "discover",
+      "Breadcrumbs — Deep Path"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs-Icons",
+    "args": [
+      "discover",
+      "Breadcrumbs — Icons"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs-Menu-item",
+    "args": [
+      "discover",
+      "Breadcrumbs — Menu item"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs-Separators",
+    "args": [
+      "discover",
+      "Breadcrumbs — Separators"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Breadcrumbs-Variants",
+    "args": [
+      "discover",
+      "Breadcrumbs — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Budget-allocation",
+    "args": [
+      "discover",
+      "Budget allocation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button-End-Slot",
+    "args": [
+      "discover",
+      "Button — End Slot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button-Floating",
+    "args": [
+      "discover",
+      "Button — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button-Icon",
+    "args": [
+      "discover",
+      "Button — Icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button-Sizes",
+    "args": [
+      "discover",
+      "Button — Sizes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Button-Variants",
+    "args": [
+      "discover",
+      "Button — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ButtonGroup-Basic",
+    "args": [
+      "discover",
+      "ButtonGroup — Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_ButtonGroup-Floating",
+    "args": [
+      "discover",
+      "ButtonGroup — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_Calendar-Constraints",
+    "args": [
+      "discover",
+      "Calendar — Constraints"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_author-a-theme",
+    "args": [
+      "discover",
+      "author-a-theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_browser-support",
+    "args": [
+      "discover",
+      "browser-support"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color",
+    "args": [
+      "discover",
+      "color"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_elevation",
+    "args": [
+      "discover",
+      "elevation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_getting-started",
+    "args": [
+      "discover",
+      "getting-started"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icons",
+    "args": [
+      "discover",
+      "icons"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_illustrations",
+    "args": [
+      "discover",
+      "illustrations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_is-my-code-good",
+    "args": [
+      "discover",
+      "is-my-code-good"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_motion",
+    "args": [
+      "discover",
+      "motion"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_principles",
+    "args": [
+      "discover",
+      "principles"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_shape",
+    "args": [
+      "discover",
+      "shape"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_styling-overview",
+    "args": [
+      "discover",
+      "styling-overview"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_use-a-theme",
+    "args": [
+      "discover",
+      "use-a-theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_use-integrations",
+    "args": [
+      "discover",
+      "use-integrations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_working-with-ai",
+    "args": [
+      "discover",
+      "working-with-ai"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_component",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_hook",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_doc",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_template",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_theme",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--type_bogus",
+    "args": [
+      "discover",
+      "button",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--components",
+    "args": [
+      "discover",
+      "button",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--installed",
+    "args": [
+      "discover",
+      "button",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_--available",
+    "args": [
+      "discover",
+      "button",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_button_@large",
+    "args": [
+      "discover",
+      "button"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_hook",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_doc",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_template",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_theme",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_--type_bogus",
+    "args": [
+      "discover",
+      "table",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_table_@large",
+    "args": [
+      "discover",
+      "table"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_component",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_hook",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_doc",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_template",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_theme",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--type_bogus",
+    "args": [
+      "discover",
+      "data table",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--components",
+    "args": [
+      "discover",
+      "data table",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--installed",
+    "args": [
+      "discover",
+      "data table",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_--available",
+    "args": [
+      "discover",
+      "data table",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_data-table_@large",
+    "args": [
+      "discover",
+      "data table"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_component",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_hook",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_doc",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_template",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_theme",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--type_bogus",
+    "args": [
+      "discover",
+      "dashboard",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--components",
+    "args": [
+      "discover",
+      "dashboard",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--installed",
+    "args": [
+      "discover",
+      "dashboard",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_--available",
+    "args": [
+      "discover",
+      "dashboard",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dashboard_@large",
+    "args": [
+      "discover",
+      "dashboard"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_component",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_hook",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_doc",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_template",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_theme",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--type_bogus",
+    "args": [
+      "discover",
+      "form validation",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--components",
+    "args": [
+      "discover",
+      "form validation",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--installed",
+    "args": [
+      "discover",
+      "form validation",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_--available",
+    "args": [
+      "discover",
+      "form validation",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_form-validation_@large",
+    "args": [
+      "discover",
+      "form validation"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_component",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_hook",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_doc",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_template",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_theme",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--type_bogus",
+    "args": [
+      "discover",
+      "date picker",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--components",
+    "args": [
+      "discover",
+      "date picker",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--installed",
+    "args": [
+      "discover",
+      "date picker",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_--available",
+    "args": [
+      "discover",
+      "date picker",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_date-picker_@large",
+    "args": [
+      "discover",
+      "date picker"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_component",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_hook",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_doc",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_template",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_theme",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--type_bogus",
+    "args": [
+      "discover",
+      "dark mode",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--components",
+    "args": [
+      "discover",
+      "dark mode",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--installed",
+    "args": [
+      "discover",
+      "dark mode",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_--available",
+    "args": [
+      "discover",
+      "dark mode",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_dark-mode_@large",
+    "args": [
+      "discover",
+      "dark mode"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_component",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_hook",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_doc",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_template",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_theme",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--type_bogus",
+    "args": [
+      "discover",
+      "color tokens",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--components",
+    "args": [
+      "discover",
+      "color tokens",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--installed",
+    "args": [
+      "discover",
+      "color tokens",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_--available",
+    "args": [
+      "discover",
+      "color tokens",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_color-tokens_@large",
+    "args": [
+      "discover",
+      "color tokens"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_component",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_hook",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_doc",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_template",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_theme",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--type_bogus",
+    "args": [
+      "discover",
+      "spacing",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--components",
+    "args": [
+      "discover",
+      "spacing",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--installed",
+    "args": [
+      "discover",
+      "spacing",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_--available",
+    "args": [
+      "discover",
+      "spacing",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_spacing_@large",
+    "args": [
+      "discover",
+      "spacing"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_component",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_hook",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_doc",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_template",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_theme",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--type_bogus",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--components",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--installed",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_--available",
+    "args": [
+      "discover",
+      "modal dialog",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_modal-dialog_@large",
+    "args": [
+      "discover",
+      "modal dialog"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_component",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_hook",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_doc",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_template",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_theme",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--type_bogus",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--components",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--installed",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_--available",
+    "args": [
+      "discover",
+      "navigation sidebar",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_navigation-sidebar_@large",
+    "args": [
+      "discover",
+      "navigation sidebar"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_component",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_hook",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_doc",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_template",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_theme",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--type_bogus",
+    "args": [
+      "discover",
+      "login page",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--components",
+    "args": [
+      "discover",
+      "login page",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--installed",
+    "args": [
+      "discover",
+      "login page",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_--available",
+    "args": [
+      "discover",
+      "login page",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_login-page_@large",
+    "args": [
+      "discover",
+      "login page"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_component",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_hook",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_doc",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_template",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_theme",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--type_bogus",
+    "args": [
+      "discover",
+      "settings page",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--components",
+    "args": [
+      "discover",
+      "settings page",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--installed",
+    "args": [
+      "discover",
+      "settings page",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_--available",
+    "args": [
+      "discover",
+      "settings page",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_settings-page_@large",
+    "args": [
+      "discover",
+      "settings page"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_component",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_hook",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_doc",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_template",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_theme",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--type_bogus",
+    "args": [
+      "discover",
+      "chart",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--components",
+    "args": [
+      "discover",
+      "chart",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--installed",
+    "args": [
+      "discover",
+      "chart",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_--available",
+    "args": [
+      "discover",
+      "chart",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@large",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_component",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_hook",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_doc",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_template",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_theme",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--type_bogus",
+    "args": [
+      "discover",
+      "icon",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--components",
+    "args": [
+      "discover",
+      "icon",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--installed",
+    "args": [
+      "discover",
+      "icon",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_--available",
+    "args": [
+      "discover",
+      "icon",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_icon_@large",
+    "args": [
+      "discover",
+      "icon"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_component",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_hook",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_doc",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_template",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_theme",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--type_bogus",
+    "args": [
+      "discover",
+      "theme",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--components",
+    "args": [
+      "discover",
+      "theme",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--installed",
+    "args": [
+      "discover",
+      "theme",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_--available",
+    "args": [
+      "discover",
+      "theme",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_theme_@large",
+    "args": [
+      "discover",
+      "theme"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_component",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_hook",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_doc",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_template",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_theme",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--type_bogus",
+    "args": [
+      "discover",
+      "typography",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--components",
+    "args": [
+      "discover",
+      "typography",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--installed",
+    "args": [
+      "discover",
+      "typography",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_--available",
+    "args": [
+      "discover",
+      "typography",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_typography_@large",
+    "args": [
+      "discover",
+      "typography"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_component",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_hook",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_doc",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_template",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_theme",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--type_bogus",
+    "args": [
+      "discover",
+      "toast",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--components",
+    "args": [
+      "discover",
+      "toast",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--installed",
+    "args": [
+      "discover",
+      "toast",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_--available",
+    "args": [
+      "discover",
+      "toast",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_toast_@large",
+    "args": [
+      "discover",
+      "toast"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_component",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_hook",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_doc",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_template",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_theme",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--type_bogus",
+    "args": [
+      "discover",
+      "buton",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--components",
+    "args": [
+      "discover",
+      "buton",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--installed",
+    "args": [
+      "discover",
+      "buton",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_--available",
+    "args": [
+      "discover",
+      "buton",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_buton_@large",
+    "args": [
+      "discover",
+      "buton"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_component",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_hook",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_doc",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_template",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_theme",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--type_bogus",
+    "args": [
+      "discover",
+      "tabel",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--components",
+    "args": [
+      "discover",
+      "tabel",
+      "--components"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--installed",
+    "args": [
+      "discover",
+      "tabel",
+      "--installed"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_--available",
+    "args": [
+      "discover",
+      "tabel",
+      "--available"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "discover_tabel_@large",
+    "args": [
+      "discover",
+      "tabel"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@pm-npm",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@pm-pnpm",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@pm-yarn",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@pm-yarnberry",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@pm-bun",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@monorepo",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_discover_chart_@monorepo",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_discover_chart_@monorepo",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_discover_chart_@monorepo",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "discover_chart_@monorepo-local",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_discover_chart_@monorepo-local",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "discover_chart_@configured",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@configts",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@badconfig",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@syntaxconfig",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "discover_chart_@unknownint",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_discover_chart",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_discover_chart",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_discover_chart_@large",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_discover_chart_@integration",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._discover_chart_@empty",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "discover_icon_@icons",
+    "args": [
+      "discover",
+      "icon"
+    ],
+    "fixture": "icons",
+    "gen": true
+  }
+]

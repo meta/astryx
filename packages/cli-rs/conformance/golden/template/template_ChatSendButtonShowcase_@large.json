@@ -1,0 +1,19 @@
+{
+ "id": "template_ChatSendButtonShowcase_@large",
+ "args": [
+  "template",
+  "ChatSendButtonShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatSendButton} from '@astryxdesign/core/Chat';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {SparklesIcon} from '@heroicons/react/24/solid';\n\nexport default function ChatSendButtonShowcase() {\n  return (\n    <Stack direction=\"horizontal\" gap={3} vAlign=\"center\">\n      <ChatSendButton isDisabled={false} onSend={() => {}} />\n      <ChatSendButton\n        isDisabled={false}\n        onSend={() => {}}\n        sendIcon={<Icon icon={SparklesIcon} size=\"sm\" />}\n      />\n      <ChatSendButton isStopShown onStop={() => {}} />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,191 @@
+[
+  {
+    "id": "w_hook_useFocusTrap_--detail_compact",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--detail_brief",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_focustrap",
+    "args": [
+      "hook",
+      "focustrap"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_FocusTrap",
+    "args": [
+      "hook",
+      "FocusTrap"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrp",
+    "args": [
+      "hook",
+      "useFocusTrp"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useNope",
+    "args": [
+      "hook",
+      "useNope"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_zzzzzzzzzzzz",
+    "args": [
+      "hook",
+      "zzzzzzzzzzzz"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--params_--json",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--params",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useAnnounce_--params",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--params"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_focus_--detail_compact",
+    "args": [
+      "hook",
+      "--category",
+      "focus",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_focus_--detail_full",
+    "args": [
+      "hook",
+      "--category",
+      "focus",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_nope_--json",
+    "args": [
+      "hook",
+      "--category",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--detail_compact",
+    "args": [
+      "hook",
+      "--list",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--detail_full",
+    "args": [
+      "hook",
+      "--list",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--zh",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--zh"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTooltip_--lang_dense",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--lang",
+      "dense"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTooltip_--detail_bogus",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--detail",
+      "bogus"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_createReorderable",
+    "args": [
+      "hook",
+      "createReorderable"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTableSortable_--detail_compact",
+    "args": [
+      "hook",
+      "useTableSortable",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--json_--detail_compact",
+    "args": [
+      "hook",
+      "--list",
+      "--json",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  }
+]

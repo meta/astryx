@@ -1,0 +1,19 @@
+{
+ "id": "template_TokenizerStates_@large",
+ "args": [
+  "template",
+  "TokenizerStates"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Tokenizer} from '@astryxdesign/core/Tokenizer';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst users: SearchableItem[] = [\n  {id: '1', label: 'Alice Johnson'},\n  {id: '2', label: 'Bob Smith'},\n  {id: '3', label: 'Charlie Brown'},\n  {id: '4', label: 'Diana Prince'},\n  {id: '5', label: 'Eve Williams'},\n];\n\nconst userSource: SearchSource = {\n  search: (query: string) =>\n    users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),\n  bootstrap: () => users,\n};\n\nexport default function TokenizerStates() {\n  const [errorValue, setErrorValue] = useState<SearchableItem[]>([]);\n  const [warningValue, setWarningValue] = useState<SearchableItem[]>([\n    users[0],\n  ]);\n  const [successValue, setSuccessValue] = useState<SearchableItem[]>([\n    users[1],\n    users[3],\n  ]);\n\n  return (\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\n      <Stack direction=\"vertical\" gap={4}>\n        <Tokenizer\n          label=\"Disabled field\"\n          searchSource={userSource}\n          value={[users[0], users[2]]}\n          onChange={() => {}}\n          isDisabled\n        />\n        <Tokenizer\n          label=\"Error message\"\n          placeholder=\"Search people...\"\n          searchSource={userSource}\n          value={errorValue}\n          onChange={items => setErrorValue(items)}\n          isRequired\n          status={{type: 'error', message: 'At least one reviewer is required'}}\n        />\n        <Tokenizer\n          label=\"Warning message\"\n          placeholder=\"Search people...\"\n          searchSource={userSource}\n          value={warningValue}\n          onChange={items => setWarningValue(items)}\n          status={{\n            type: 'warning',\n            message: 'Consider adding at least 2 approvers',\n          }}\n        />\n        <Tokenizer\n          label=\"Success message\"\n          placeholder=\"Search people...\"\n          searchSource={userSource}\n          value={successValue}\n          onChange={items => setSuccessValue(items)}\n          status={{type: 'success', message: 'All required reviewers added'}}\n        />\n      </Stack>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

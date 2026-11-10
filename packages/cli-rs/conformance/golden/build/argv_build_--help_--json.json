@@ -1,0 +1,14 @@
+{
+ "id": "argv_build_--help_--json",
+ "args": [
+  "build",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx build\",\n    \"description\": \"Build a page: the template to start from, or the workflow playbook (no query)\",\n    \"usage\": \"astryx build [options] [query]\",\n    \"options\": [\n      {\n        \"flags\": \"--type <domain>\",\n        \"description\": \"Filter the kit to one domain (component|hook|doc|template|theme); doc and theme give an empty kit\"\n      },\n      {\n        \"flags\": \"--limit <n>\",\n        \"description\": \"Max candidates to draw from (default 60)\"\n      },\n      {\n        \"flags\": \"--verbose\",\n        \"description\": \"Verbose output (every block and component, full descriptions, import paths and match reason)\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

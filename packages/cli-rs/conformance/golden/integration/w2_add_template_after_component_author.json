@@ -1,0 +1,42 @@
+{
+ "id": "w2_add_template_after_component_author",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "fancy-page",
+  "--json"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"template\",\n    \"name\": \"fancy-page\",\n    \"root\": {\n      \"path\": \"./templates\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"templates/fancy-page.doc.mjs\",\n      \"templates/fancy-page.tsx\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "author/src/components/Fancy.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Fancy',\n  displayName: 'Fancy',\n  import: \"@acme/widgets/src/components/Fancy\",\n  usage: {description: 'Fancy component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/Fancy.tsx",
+   "status": "created",
+   "text": "export function Fancy() {\n  return <div>Fancy</div>;\n}\n"
+  },
+  {
+   "path": "author/templates/fancy-page.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'fancy-page',\n  displayName: 'Fancy Page',\n  description: 'Fancy Page template.',\n};\n"
+  },
+  {
+   "path": "author/templates/fancy-page.tsx",
+   "status": "created",
+   "text": "export default function FancyPage() {\n  return <div>Fancy Page</div>;\n}\n"
+  }
+ ]
+}

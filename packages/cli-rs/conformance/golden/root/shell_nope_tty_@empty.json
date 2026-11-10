@@ -1,0 +1,12 @@
+{
+ "id": "shell_nope_tty_@empty",
+ "args": [
+  "nope"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\r\nError: unknown command 'nope'\r\n\r\n  docs  (did you mean this?)\r\n  hook  (did you mean this?)\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

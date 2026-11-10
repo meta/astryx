@@ -1,0 +1,26 @@
+{
+ "id": "integration_add_component_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "Thing"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "component contribution added\n\n[ok] Thing\n\nUse component root ./src/components in astryx.integration.mjs.\n\n- src/components/Thing.doc.mjs\n- src/components/Thing.tsx\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/src/components/Thing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Thing',\n  displayName: 'Thing',\n  import: \"@acme/widgets/src/components/Thing\",\n  usage: {description: 'Thing component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/Thing.tsx",
+   "status": "created",
+   "text": "export function Thing() {\n  return <div>Thing</div>;\n}\n"
+  }
+ ]
+}

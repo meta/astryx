@@ -1,0 +1,13 @@
+{
+ "id": "u3_registry_dry",
+ "args": [
+  "upgrade",
+  "--registry"
+ ],
+ "fixture": "upgrade-registry",
+ "fixtureHash": "9610d6e18a60f803+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\n11 ShadCN composition receipts checked.\nRegistry upgrade finished with unresolved items\n\n",
+ "stderr": "0 conflict(s), 0 missing file(s), 6 invalid receipt(s), 5 failed item(s).\n  block-broken: Invalid receipt components/astryx/blocks/.astryx/block-broken.json: Expected double-quoted property name in JSON at position 21 (line 2 column 1)\n  block-schema: Invalid receipt components/astryx/blocks/.astryx/block-schema.json: [\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"showcase\",\n      \"example\",\n      \"block\",\n      \"page\"\n    ],\n    \"path\": [\n      \"item\",\n      \"kind\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"showcase\\\"|\\\"example\\\"|\\\"block\\\"|\\\"page\\\"\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"regex\",\n    \"pattern\": \"/^\\\\.\\\\.\\\\/[^/\\\\\\\\]+$/\",\n    \"path\": [\n      \"files\",\n      0,\n      \"target\"\n    ],\n    \"message\": \"must point to one adjacent source file\"\n  },\n  {\n    \"code\": \"unrecognized_keys\",\n    \"keys\": [\n      \"extra\"\n    ],\n    \"path\": [],\n    \"message\": \"Unrecognized key: \\\"extra\\\"\"\n  }\n]\n  block-tampered: Invalid receipt components/astryx/blocks/.astryx/block-tampered.json: stored hash does not match registry/block-tampered/Hero.tsx (typescript)\n  wrong-name: Invalid receipt components/astryx/blocks/.astryx/wrong-name.json: receipt filename does not match its item identity\n  example-both: Invalid receipt components/astryx/examples/.astryx/example-both.json: multiple install variants exist for registry/example-both/Both.tsx\n  example-button-basic: Could not fetch https://astryx.atmeta.com/shadcn/examples/button/basic.json: fetch failed\n  example-compiled: Could not fetch https://astryx.atmeta.com/shadcn/examples/compiled.json: fetch failed\n  example-escape: Invalid receipt components/astryx/examples/.astryx/example-escape.json: Invalid registry composition source \"/tmp/astryx-conformance/work/upgrade-registry/src/components/astryx/examples/Escape.tsx\": resolves outside the project root (/tmp/astryx-conformance/work/upgrade-registry/src) via a symlink. Path traversal is not allowed.\n  example-linked: Could not fetch https://astryx.atmeta.com/shadcn/examples/linked.json: fetch failed\n  example-modified: Could not fetch https://astryx.atmeta.com/shadcn/examples/modified.json: fetch failed\n  page-home: Could not fetch https://astryx.atmeta.com/shadcn/pages/home.json: fetch failed\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "argv-repeat2_integration_add_component_useClipboard_--replaces_principles_--replaces_nope",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--replaces",
+  "principles",
+  "--replaces",
+  "nope"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Option \"replaces\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

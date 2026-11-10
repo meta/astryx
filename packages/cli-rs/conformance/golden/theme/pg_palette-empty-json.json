@@ -1,0 +1,15 @@
+{
+ "id": "pg_palette-empty-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/empty.json"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette generation requires at least one family.\n",
+ "exit": 1,
+ "files": []
+}

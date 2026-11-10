@@ -1,0 +1,20 @@
+{
+ "id": "docs_use-integrations_check-for-problems_@large",
+ "args": [
+  "docs",
+  "use-integrations",
+  "check-for-problems"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Check for problems\n\nRun `npx @astryxdesign/cli@0.7.12 doctor` to see integration issues: missing roots, invalid contributions, or a CLI version mismatch. The doctor check is the one place every issue for every package is listed.\n\n```bash\nnpx @astryxdesign/cli@0.7.12 doctor\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-integrations --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-integrations use-what-it-adds\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "docs_elevation_best-practices_@large",
+ "args": [
+  "docs",
+  "elevation",
+  "best-practices"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Best Practices\n\n+ Reach for the `elevation` prop on a configurable surface before writing any custom shadow.\n+ Choose the level by how far the surface sits from the page: `none` when flat/embedded, `low` when in-flow but distinct, `med` when over page content, `high` when over the whole UI. See \"Choosing a level\".\n+ Use inset shadows for input focus/selection states; they compose better than outlines.\n\nx Hand-write a `box-shadow` in app code; set the `elevation` prop or read `shadowVars` instead.\nx Raise a surface that does not sit above other content; a non-overlapping surface is `none` or `low`, never `med` or `high`.\nx Stack multiple elevation levels on the same element.\nx Use elevation shadows for decorative borders. Use --color-border tokens instead.\n\nUp: npx @astryxdesign/cli@0.7.12 docs elevation --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs elevation usage\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

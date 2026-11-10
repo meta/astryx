@@ -1,0 +1,39 @@
+{
+ "id": "w2_verify_after_parent_doc_app",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Integration package ready\n\n[ok] app@1.0.0\n\n5 packed files; 3/3 required files present.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "app/docs/acme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: 'acme',\n  title: 'Acme',\n  summary: 'Guides for Acme.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n"
+  },
+  {
+   "path": "app/docs/releasing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'releasing',\n  title: 'Releasing',\n  description: 'Releasing documentation.',\n  placement: {parent: 'namespace:acme', slot: 'guides'},\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Releasing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  },
+  {
+   "path": "app/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"dependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"@stylexjs/stylex\": \"^0.19.0\"\n  },\n  \"peerDependencies\": {\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

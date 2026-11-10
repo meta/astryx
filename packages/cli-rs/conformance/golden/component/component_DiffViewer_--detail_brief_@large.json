@@ -1,0 +1,21 @@
+{
+ "id": "component_DiffViewer_--detail_brief_@large",
+ "args": [
+  "component",
+  "DiffViewer",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/lab\n\nDiffViewer(viewMode: unified|split, language: string|CodeLanguage, changeIndicator: classic|bars|none, inlineHighlight: word|char|none, maxHeight: number|string)  <- from '@astryxdesign/lab'\n  Read-only, syntax-highlighted diff of one file for code review surfaces. Rend...\n  Targets: astryx-diff-viewer preferred attrs: data-view-mode variants: viewMode | astryx-diff-viewer-header | astryx-diff-viewer-path\n  file: DiffViewerFile, codeLanguages, hasLineNumbers, isWrapped, hasChangeBackground, isCollapsible, isCollapsed, defaultIsCollapsed, onCollapsedChange, headerEnd, renderLineAnnotation, onLineNumberClick, syntaxTheme, ref, xstyle\n  const [file] = parseUnifiedDiff(patch);\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

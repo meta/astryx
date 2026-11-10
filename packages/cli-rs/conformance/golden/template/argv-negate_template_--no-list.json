@@ -1,0 +1,13 @@
+{
+ "id": "argv-negate_template_--no-list",
+ "args": [
+  "template",
+  "--no-list"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-list'\n(Did you mean --list?)\n",
+ "exit": 1,
+ "files": []
+}

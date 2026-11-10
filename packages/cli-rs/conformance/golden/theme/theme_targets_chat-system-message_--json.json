@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_chat-system-message_--json",
+ "args": [
+  "theme",
+  "targets",
+  "chat-system-message",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"chat-system-message\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"chat-system-message\",\n        \"className\": \"astryx-chat-system-message\",\n        \"component\": \"Chat\",\n        \"props\": [\n          \"variant\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

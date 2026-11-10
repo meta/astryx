@@ -1,0 +1,19 @@
+{
+ "id": "template_TimestampRelativeFormat_@large",
+ "args": [
+  "template",
+  "TimestampRelativeFormat"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Timestamp} from '@astryxdesign/core/Timestamp';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TimestampRelativeFormat() {\n  const now = Date.now() / 1000;\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Relative timestamps (hover for full date)\n      </Text>\n      <Stack direction=\"vertical\" gap={2}>\n        <Timestamp value={now - 5} format=\"relative\" color=\"primary\" />\n        <Timestamp value={now - 120} format=\"relative\" color=\"primary\" />\n        <Timestamp value={now - 3600} format=\"relative\" color=\"primary\" />\n        <Timestamp value={now - 86400} format=\"relative\" color=\"primary\" />\n        <Timestamp value={now - 259200} format=\"relative\" color=\"primary\" />\n        <Timestamp value={now - 90 * 86400} format=\"relative\" color=\"primary\" />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

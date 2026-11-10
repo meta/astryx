@@ -1,0 +1,65 @@
+[
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChatComposer isStreaming={isStreaming} onSubmit={handleSubmit} />",
+  "output": "<XDSChatComposer isStopShown={isStreaming} onSubmit={handleSubmit} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChatSendButton isStreaming onStop={() => {}} />",
+  "output": "<XDSChatSendButton isStopShown onStop={() => {}} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChatComposer isStreaming={state.active} onSubmit={fn} />",
+  "output": "<XDSChatComposer isStopShown={state.active} onSubmit={fn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSMarkdown isStreaming={true} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChatReasoning isStreaming label=\"Thinking\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "\n      <XDSChatComposer isStreaming={streaming} onSubmit={fn}>\n        <XDSChatSendButton isStreaming={streaming} />\n      </XDSChatComposer>\n    ",
+  "output": "\n      <XDSChatComposer isStopShown={streaming} onSubmit={fn}>\n        <XDSChatSendButton isStopShown={streaming} />\n      </XDSChatComposer>\n    ",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-isStreaming-to-isStopShown",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "const isStreaming = true;",
+  "output": null,
+  "error": null
+ }
+]

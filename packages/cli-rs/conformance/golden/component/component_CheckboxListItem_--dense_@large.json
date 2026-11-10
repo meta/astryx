@@ -1,0 +1,20 @@
+{
+ "id": "component_CheckboxListItem_--dense_@large",
+ "args": [
+  "component",
+  "CheckboxListItem",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# CheckboxListItem\n\nIndividual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value. On a touch screen a toggleable row presses as one target, box included; with a fine primary pointer the box keeps its own press.\n\n**Import:** `import {CheckboxListItem} from '@astryxdesign/core/CheckboxList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | Primary label. String or ReactNode; nested controls keep their behavior. A ReactNode names the checkbox from its visible text. **(required)** |\n| `aria-label` | `string` | - | Plain-text checkbox name replacing the one derived from label. Use when visible text is absent; otherwise retain every visible label word. |\n| `value` | `string` | - | Identity key. Required when parent CheckboxList has a value array (throws without it). |\n| `description` | `ReactNode` | - | Secondary content below label. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby. |\n| `endContent` | `ReactNode` | - | Content rendered after label area. |\n| `align` | `'center' \\| 'start' \\| 'first-line'` | `'center'` | Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line). |\n| `isDisabled` | `boolean` | `false` | Whether this individual item is disabled. |\n| `isLoading` | `boolean` | `false` | Item loading: spinner inside checkbox + blocks interaction. Auto-set on toggled item while parent changeAction pending. |\n| `isChecked` | `boolean \\| 'indeterminate'` | - | Direct checked state in standalone mode (inside List, or CheckboxList without value). Ignored when parent CheckboxList has a value array. |\n| `onCheck` | `(checked: boolean) => void` | - | Direct check handler in standalone mode (inside List, or CheckboxList without value). Ignored when parent CheckboxList has a value array; its onChange gets the change. |\n\n## Examples\n\n### Rich label with an overriding aria-label\n\n```tsx\n<CheckboxListItem\n  label={<span>Pro plan <Badge label=\"Recommended\" /></span>}\n  aria-label=\"Pro plan Recommended option\"\n  value=\"pro\"\n/>\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

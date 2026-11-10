@@ -1,0 +1,15 @@
+{
+ "id": "w_agent_doc_toolong",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: agentDocs is invalid: append.0: must contain at most 240 Unicode code points (received 241)\n",
+ "exit": 1,
+ "files": []
+}

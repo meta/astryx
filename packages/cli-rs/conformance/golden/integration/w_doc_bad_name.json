@@ -1,0 +1,15 @@
+{
+ "id": "w_doc_bad_name",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "my doc"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid topic name \"my doc\": use letters, digits, _ and - only.\n",
+ "exit": 1,
+ "files": []
+}

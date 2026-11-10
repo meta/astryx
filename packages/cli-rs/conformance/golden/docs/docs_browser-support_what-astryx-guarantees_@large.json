@@ -1,0 +1,20 @@
+{
+ "id": "docs_browser-support_what-astryx-guarantees_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "what-astryx-guarantees"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## What Astryx Guarantees\n\n+ Components never throw on missing platform APIs. Where a browser lacks the `Popover` API, layers fall back to plain visibility instead of crashing.\n+ Tier 1 and Tier 2 are officially supported and tested.\n+ Non-layered components render correctly down to Tier 2.\n\nx Astryx does not guarantee correct layer positioning below Tier 1 (anchor positioning). Closing that gap for a Tier 2 audience is a consumer choice; see below.\nx Astryx does not ship a `light-dark()` fallback, so theme colors are not guaranteed below Tier 2.\n\nUp: npx @astryxdesign/cli@0.7.12 docs browser-support --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs browser-support which-components-are-affected\nNext: npx @astryxdesign/cli@0.7.12 docs browser-support the-on-screen-keyboard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

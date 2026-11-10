@@ -1,0 +1,9 @@
+export default {
+  name: 'acme',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

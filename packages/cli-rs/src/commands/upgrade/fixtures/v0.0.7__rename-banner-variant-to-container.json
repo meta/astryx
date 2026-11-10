@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner variant=\"card\" status=\"info\" title=\"Test\" />",
+  "output": "<XDSBanner container=\"card\" status=\"info\" title=\"Test\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner variant=\"section\" status=\"warning\" title=\"Alert\" />",
+  "output": "<XDSBanner container=\"section\" status=\"warning\" title=\"Alert\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner variant={myVariant} status=\"info\" title=\"Test\" />",
+  "output": "<XDSBanner container={myVariant} status=\"info\" title=\"Test\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton variant=\"primary\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Banner variant=\"card\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.ts",
+  "options": null,
+  "source": "const v: XDSBannerVariant = \"card\";",
+  "output": "const v: XDSBannerContainer = \"card\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.ts",
+  "options": null,
+  "source": "type T = XDSBannerVariantMap;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner variant=\"card\" status=\"error\" title=\"Oops\" isDismissable />",
+  "output": "<XDSBanner container=\"card\" status=\"error\" title=\"Oops\" isDismissable />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.7/rename-banner-variant-to-container",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner container=\"card\" status=\"info\" title=\"Test\" />",
+  "output": null,
+  "error": null
+ }
+]

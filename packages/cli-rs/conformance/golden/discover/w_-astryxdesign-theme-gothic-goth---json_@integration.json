@@ -1,0 +1,14 @@
+{
+ "id": "w_-astryxdesign-theme-gothic-goth---json_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-gothic/goth",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"\\\"goth\\\" not found in @astryxdesign/theme-gothic\",\n  \"code\": \"ERR_UNKNOWN_PACKAGE\",\n  \"suggestions\": [\n    {\n      \"name\": \"@astryxdesign/theme-gothic/gothic\",\n      \"reason\": \"similar name\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

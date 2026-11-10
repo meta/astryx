@@ -1,0 +1,24 @@
+{
+ "id": "w_-test-kit_@discover-sources",
+ "args": [
+  "discover",
+  "@test/kit"
+ ],
+ "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
+ "stdout": "name:       @test/kit\npackage:    @test/kit\ncategory:   @test/kit\ncomponents: Dial\nversion:    3.1.4\ninstalled:  true\nlatest:     3.2.0\nsource:     Test catalog\n\nVersions\n2 known, newest first\n\n- 3.2.0  2026-09-29  latest\n- 3.1.4  2026-09-01  installed\n\nUsage: npx @astryxdesign/cli@0.7.12 discover @test/kit/<ComponentName>\n",
+ "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/17c2fbfcafce3ac633f5a73498a18ef1.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/kit\",\"integration\":\"test-kit\",\"aliases\":[],\"latest\":\"3.2.0\",\"versions\":[{\"version\":\"3.2.0\",\"publishedAt\":\"2026-09-29T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"3.1.4\",\"publishedAt\":\"2026-09-01T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Dial\"}]}]}}"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/discover-sources\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

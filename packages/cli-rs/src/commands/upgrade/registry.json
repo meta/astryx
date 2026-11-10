@@ -1,0 +1,716 @@
+{
+ "latest": "0.7.8",
+ "versions": [
+  {
+   "version": "0.0.2",
+   "transforms": [
+    {
+     "name": "rename-selector-items-to-options",
+     "title": "Rename Selector items → options",
+     "description": "Renames the `items` prop on XDSSelector to `options`.",
+     "pr": "#479",
+     "optional": false
+    },
+    {
+     "name": "unify-visibility-to-onOpenChange",
+     "title": "Unify visibility callbacks → onOpenChange",
+     "description": "Renames onHide, onClose, onShow, onToggle, onMenuToggle to onOpenChange across dialog, menu, popover, and tooltip components.",
+     "pr": "#473",
+     "optional": false
+    },
+    {
+     "name": "unify-uncontrolled-to-defaultX",
+     "title": "Unify uncontrolled state → defaultX pattern",
+     "description": "Renames initialIsSideNavCollapsed, initialIsOpen, initialIsExpanded to their defaultX equivalents.",
+     "pr": "#470",
+     "optional": false
+    },
+    {
+     "name": "rename-banner-endButton-to-endContent",
+     "title": "Rename Banner endButton → endContent",
+     "description": "Renames the `endButton` prop on XDSBanner to `endContent`.",
+     "pr": "#437",
+     "optional": false
+    },
+    {
+     "name": "rename-form-tooltip-startIcon",
+     "title": "Rename form tooltip → labelTooltip, startIcon → labelIcon",
+     "description": "Renames `tooltip` to `labelTooltip` and `startIcon` to `labelIcon` on form field components.",
+     "pr": "#375",
+     "optional": false
+    },
+    {
+     "name": "rename-isShown-to-isOpen",
+     "title": "Rename isShown → isOpen",
+     "description": "Renames the `isShown` prop to `isOpen` on XDSDialog and XDSPopover for consistency.",
+     "pr": "#472",
+     "optional": false
+    },
+    {
+     "name": "rename-topnav-title-to-heading",
+     "title": "Rename TopNav title → heading, XDSTopNavTitle → XDSTopNavHeading",
+     "description": "Renames the `title` prop to `heading` on XDSTopNav and XDSTopNavTitle/XDSTopNavHeading, renames the XDSTopNavTitle component to XDSTopNavHeading, and updates import specifiers.",
+     "pr": "#527",
+     "optional": false
+    },
+    {
+     "name": "rename-sidenav-header-to-heading",
+     "title": "Rename SideNav header → heading, XDSSideNavHeader → XDSSideNavHeading",
+     "description": "Renames props (title → heading, titleHref → headingHref, supertitle → superheading, etc.) on XDSSideNavHeader/XDSSideNavHeading, renames the component, and updates import specifiers.",
+     "pr": "#527",
+     "optional": false
+    },
+    {
+     "name": "migrate-useXDSIcon-to-getIcon",
+     "title": "Migrate useXDSIcon → getIcon, remove IconRegistryContext",
+     "description": "Renames useXDSIcon() to getIcon(), updates import sources from IconRegistry to globalIconRegistry, and removes IconRegistryContext usage.",
+     "pr": "#531",
+     "optional": false
+    },
+    {
+     "name": "migrate-gap-to-numeric",
+     "title": "Migrate gap to numeric scale",
+     "description": "Migrates gap, rowGap, and columnGap props from string tokens (e.g. \"space4\") to numeric values (e.g. 4).",
+     "optional": false
+    },
+    {
+     "name": "migrate-isFullBleed-to-padding",
+     "title": "Migrate isFullBleed to padding={0}",
+     "description": "Replaces `isFullBleed` with `padding={0}` on layout components. Does not touch XDSDivider.",
+     "optional": false
+    },
+    {
+     "name": "migrate-badge-dot-to-statusdot",
+     "title": "Migrate Badge dot → StatusDot",
+     "description": "Converts XDSBadge shape=\"dot\" to XDSStatusDot.",
+     "pr": "#945",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.6",
+   "transforms": [
+    {
+     "name": "migrate-collapse-to-collapsible",
+     "title": "Migrate collapse props to collapsible",
+     "description": "Replaces `isCollapsible` + related props on XDSSideNav with the unified `collapsible` prop. Removes deprecated AppShell collapse props.",
+     "optional": false
+    },
+    {
+     "name": "migrate-radius-tokens",
+     "title": "Migrate semantic radius tokens to numeric scale",
+     "description": "Renames --radius-inner/content/element/container/page to --radius-0/1/2/3/4.",
+     "optional": false
+    },
+    {
+     "name": "migrate-skeleton-radius",
+     "title": "Migrate XDSSkeleton radius prop to numeric scale",
+     "description": "Replaces semantic radius prop values (inner, content, element, container) with numeric equivalents (0, 1, 2, 3).",
+     "optional": false
+    },
+    {
+     "name": "migrate-shadow-tokens",
+     "title": "Migrate elevation tokens to shadow semantic naming",
+     "description": "Renames --elevation-* to --shadow-base/menu/hover/dialog and --inset-shadow-border-*. Also migrates --shadow-1/2/3/4 from the brief numeric naming period.",
+     "optional": false
+    },
+    {
+     "name": "migrate-token-names",
+     "title": "Migrate renamed design tokens",
+     "description": "Renames color tokens from the v0.0.6 naming audit (positive→success, negative→error, divider→border, etc.).",
+     "optional": false
+    },
+    {
+     "name": "migrate-badge-children-to-label",
+     "title": "Migrate XDSBadge children to label prop",
+     "description": "Converts <XDSBadge>content</XDSBadge> to <XDSBadge label={content} />.",
+     "pr": "#706",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.7",
+   "transforms": [
+    {
+     "name": "rename-banner-variant-to-container",
+     "title": "Rename Banner variant → container",
+     "description": "Renames the `variant` prop on XDSBanner to `container`, and updates type references from XDSBannerVariant to XDSBannerContainer.",
+     "pr": "#814",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.8",
+   "transforms": [
+    {
+     "name": "rename-endslot-to-endcontent",
+     "title": "Rename Button endSlot → endContent",
+     "description": "Renames the `endSlot` prop on XDSButton to `endContent`. Also renames `endSlot` in object literals passed to components that forward props to XDSButton (e.g., XDSDropdownMenu button prop).",
+     "pr": "#895",
+     "optional": false
+    },
+    {
+     "name": "migrate-token-renames",
+     "title": "Migrate token names to v0.0.8 naming convention",
+     "description": "Renames tokens from v0.0.6 intermediate names to final v0.0.8 names per the token spec.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.10",
+   "transforms": [
+    {
+     "name": "remove-size-props",
+     "title": "Remove size prop from StatusDot and ProgressBar",
+     "description": "StatusDot and ProgressBar now have a single fixed size (8px). Removes the `size` prop from JSX, object literals, destructuring patterns, and cleans up size type imports.",
+     "pr": "#966",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.12",
+   "transforms": [
+    {
+     "name": "add-is-icon-only",
+     "title": "Migrate pre-v0.0.12 icon-only buttons to XDSIconButton",
+     "description": "Converts implicit icon-only <XDSButton icon={...} label=\"...\" /> (v0.0.11 pattern) to the explicit <XDSIconButton> component introduced in v0.0.12. Also adds isIconOnly to forwarding component object configs.",
+     "pr": "#1321",
+     "optional": true
+    }
+   ]
+  },
+  {
+   "version": "0.0.13",
+   "transforms": [
+    {
+     "name": "toolbar-density-to-size",
+     "title": "Migrate XDSToolbar density to size",
+     "description": "Replaces `density=\"compact\"` with `size=\"sm\"` and removes `density=\"default\"` (md is the new default) on XDSToolbar components. Also handles Storybook args/argTypes objects that reference the density prop.",
+     "pr": "#1448",
+     "optional": false
+    },
+    {
+     "name": "icon-name-deprecations",
+     "title": "Rename icon names (checkCircle → success, xCircle → error)",
+     "description": "Replaces \"checkCircle\" and \"xCircle\" with their preferred equivalents \"success\" and \"error\".",
+     "pr": "#1503",
+     "optional": false
+    },
+    {
+     "name": "rename-attachments-to-drawer",
+     "title": "Rename XDSChatComposerAttachments to XDSChatComposerDrawer",
+     "description": "Renames `XDSChatComposerAttachments` component and type to `XDSChatComposerDrawer`, renames the `attachments` prop to `drawer` on `XDSChatComposer`, and updates CSS class references from `xds-chat-composer-attachments` to `xds-chat-composer-drawer`.",
+     "pr": "#1714",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.14",
+   "transforms": [
+    {
+     "name": "rename-action-props",
+     "title": "Rename on*Action props to *Action",
+     "description": "Renames `onChangeAction` → `changeAction`, `onClickAction` → `clickAction`, `onPressedChangeAction` → `pressedChangeAction`, and `onScrollToTopAction` → `scrollToTopAction` to align with the React 19 Action prop naming convention.",
+     "optional": false
+    },
+    {
+     "name": "rename-section-wash-to-muted",
+     "title": "Rename Section/Toolbar variant \"wash\" to \"muted\"",
+     "description": "Renames `variant=\"wash\"` to `variant=\"muted\"` on XDSSection and XDSToolbar to align with XDSCard which already uses `muted` for the same background token.",
+     "pr": "#2063",
+     "optional": false
+    },
+    {
+     "name": "rename-status-variants",
+     "title": "Rename status variants positive/negative → success/error",
+     "description": "Renames static status values written directly on imported StatusDot, AvatarStatusDot, Icon, SVGIcon, ProgressBar, and Badge JSX elements. Indirect values are left unchanged for manual migration.",
+     "pr": "#996",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.0.15",
+   "transforms": [
+    {
+     "name": "rename-date-picker-to-input",
+     "title": "Rename DateTimePicker/DateRangePicker → DateTimeInput/DateRangeInput",
+     "description": "Renames `XDSDateTimePicker` to `XDSDateTimeInput` and `XDSDateRangePicker` to `XDSDateRangeInput`, including props types, import paths, and JSX usage.",
+     "optional": false
+    },
+    {
+     "name": "rename-isStreaming-to-isStopShown",
+     "title": "Rename ChatComposer/ChatSendButton isStreaming to isStopShown",
+     "description": "Renames the `isStreaming` prop to `isStopShown` on `XDSChatComposer` and `XDSChatSendButton`. The prop controls whether the stop button is shown — the new name describes the affordance rather than implying a streaming state.",
+     "optional": false
+    },
+    {
+     "name": "rename-imperative-ref-to-handleRef",
+     "title": "Rename imperative ref props to handleRef",
+     "description": "Renames imperative `ref` usages to `handleRef` on components whose `ref` prop now points at the root DOM element. Also renames `XDSSideNavCollapseButton` `sideNavRef` to `handleRef`.",
+     "optional": false
+    },
+    {
+     "name": "rename-stack-element-to-as",
+     "title": "Rename element → as on Stack components",
+     "description": "Renames the `element` prop to `as` on XDSStack, XDSHStack, XDSVStack, and XDSStackItem for consistency with other polymorphic components.",
+     "optional": false
+    },
+    {
+     "name": "migrate-item-children-to-endcontent",
+     "title": "Migrate item children → endContent",
+     "description": "Moves trailing content on `XDSDropdownMenuItem`, `XDSContextMenuItem`, and `XDSSelectorOption` from deprecated `children` usage to the `endContent` prop.",
+     "optional": false
+    },
+    {
+     "name": "migrate-theme-selectors-to-data-attrs",
+     "title": "Migrate XDS theme selectors to data attributes",
+     "description": "Rewrites legacy bare prop/state class selectors such as `.xds-button.primary` to preferred data-attribute selectors such as `.xds-button[data-variant=\"primary\"]`.",
+     "fileExtensions": [
+      ".css",
+      ".scss",
+      ".sass",
+      ".less",
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": true
+    },
+    {
+     "name": "migrate-selector-children-to-render-option",
+     "title": "Migrate selector children → renderOption",
+     "description": "Moves custom option renderers on `XDSSelector` and `XDSMultiSelector` from function-as-children to the `renderOption` prop.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.0",
+   "transforms": [
+    {
+     "name": "drop-xds-prefix-imports",
+     "title": "Drop XDS prefix from @xds/core imports (XDSButton -> Button)",
+     "description": "Rewrites @xds/core imports and their usages from the prefixed names (XDSButton, useXDSTheme, XDSIconRegistry, XDSButtonProps) to their bare names (Button, useTheme, IconRegistry, ButtonProps), including override keys in a vi.mock/jest.mock factory for an @xds/core module. Only renames bindings imported from @xds/core, leaving unrelated identifiers untouched.",
+     "pr": "#2880",
+     "optional": false
+    },
+    {
+     "name": "migrate-xds-module-specifiers",
+     "title": "Migrate module specifiers from @xds/* to @astryxdesign/*",
+     "description": "Updates JS/TS import, export, dynamic import, require, TS import-type, and test-framework mock (vi.mock / jest.mock) module specifiers from @xds/* to the @astryxdesign/* packages used by Astryx v0.1.0.",
+     "pr": "#3092",
+     "fileExtensions": [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": false
+    },
+    {
+     "name": "migrate-xds-declare-module",
+     "title": "Migrate declare-module augmentations from @xds/* to @astryxdesign/*",
+     "description": "Rewrites the module specifier on TypeScript `declare module \"@xds/...\"` augmentations to the @astryxdesign/* packages used by Astryx v0.1.0. Only the augmented module path is changed; identifiers inside the augmentation are left untouched.",
+     "pr": "#3092",
+     "fileExtensions": [
+      ".ts",
+      ".d.ts",
+      ".tsx"
+     ],
+     "optional": false
+    },
+    {
+     "name": "migrate-xds-css-surfaces",
+     "title": "Migrate .xds-* / [data-xds-*] / @layer xds-* CSS surfaces to astryx",
+     "description": "Rewrites the documented XDS CSS surfaces to their Astryx equivalents: the `.xds-*` class-selector prefix, `[data-xds-theme]` / `[data-xds-theme-prose]` / `[data-xds-media]` attribute selectors, `@layer xds-theme` / `@layer xds-base` cascade-layer names, and `@import` of @xds/* package stylesheets (scope rewrite, xds.css->astryx.css, theme-daily->theme-neutral) all become their Astryx forms.",
+     "pr": "#3092",
+     "fileExtensions": [
+      ".css",
+      ".scss"
+     ],
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.2",
+   "transforms": [
+    {
+     "name": "rename-text-color-active-to-accent",
+     "title": "Rename Text/Heading/Link/Timestamp color \"active\" to \"accent\"",
+     "description": "Renames the `color=\"active\"` value to `color=\"accent\"` on Text, Heading, Link, and Timestamp. The `accent` value maps to `--color-text-accent` (the dedicated accent text ink). Also updates Storybook color argTypes options and object-literal `color` props in files that import a target component.",
+     "pr": "#2863",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.3",
+   "transforms": [
+    {
+     "name": "migrate-layout-components-to-experimental",
+     "title": "Migrate astryx.config layout.components to experimental.xle.components",
+     "description": "Relocates XLE app-component registration from the legacy `layout.components` config key to `experimental.xle.components`. String entries (`Name: \"@/path\"`) are normalized to `{ from: \"@/path\" }` (named import, key = export name); object entries are carried over unchanged (from/description/default preserved). Bails with a clear migrate-manually error when the config cannot be statically analyzed or when merging would be unsafe.",
+     "codemodType": "config",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.5",
+   "transforms": [
+    {
+     "name": "rename-switch-label-spacing-default-to-hug",
+     "title": "Rename Switch labelSpacing \"default\" to \"hug\"",
+     "description": "Renames the `labelSpacing=\"default\"` value to `labelSpacing=\"hug\"` on Switch. The old value keeps working as a deprecated alias. Also updates Storybook labelSpacing argTypes options and object-literal `labelSpacing` props in files that import Switch.",
+     "pr": "#2889",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.7",
+   "transforms": [
+    {
+     "name": "migrate-table-tableprops-to-direct-props",
+     "title": "Migrate Table tableProps to direct root props",
+     "description": "Lifts object-literal `tableProps` keys on <Table> into sibling JSX props (className, style, id, aria-*, data-*, event handlers). Dynamic or colliding entries are kept and annotated with a TODO comment.",
+     "pr": "#3679",
+     "optional": false
+    },
+    {
+     "name": "rename-table-renderprops-styles-to-xstyle",
+     "title": "Rename Table render-prop `styles` field to `xstyle`",
+     "description": "Renames the `styles` StyleX-array field to `xstyle` on Table plugin render-prop objects (TableRenderProps, HeaderRowRenderProps, HeaderCellRenderProps, BodyRowRenderProps, BodyCellRenderProps, ScrollWrapperRenderProps) inside plugin transform functions. Reads (`props.styles`) and writes (`styles: [...]`) are renamed; unrelated `styles` bindings (e.g. from stylex.create) are left untouched.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.1.8",
+   "transforms": [
+    {
+     "name": "rename-avatar-size-scale",
+     "title": "Rename Avatar named sizes tiny/xsmall/small/medium/large → xsm/sm/md/lg/xl",
+     "description": "Renames static sizes written directly on imported Avatar and AvatarGroup JSX elements. Indirect values are left unchanged for manual migration.",
+     "pr": "#2672",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.2.0",
+   "transforms": [
+    {
+     "name": "remove-tablist-orientation",
+     "title": "Remove TabList orientation prop (misleading no-op)",
+     "description": "The `orientation` prop is removed from TabList in v0.2.0. It did not produce a vertical tab strip; it only changed the keyboard-hint arrow badge. Arrow navigation already accepted both axes regardless. This codemod strips the prop from all <TabList> usages. No behavior change.",
+     "pr": "#4231",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.2.1",
+   "transforms": [
+    {
+     "name": "migrate-dialog-position-to-logical",
+     "title": "Migrate Dialog position left/right to logical start/end",
+     "description": "Rewrites <Dialog position={{left, right}}> to {{start, end}}. start/end map to inset-inline-start/end and mirror under RTL; the physical left/right are deprecated (still work, removed in a future major). Optional — adopt at your own pace.",
+     "pr": "#4568",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.3.0",
+   "transforms": [
+    {
+     "name": "unwrap-authoring-factories",
+     "title": "Unwrap authoring create* factories into plain stamped objects",
+     "description": "Rewrites createConfig/createIntegration/createComponentDoc/createFunctionDoc/createDoc/createPageTemplate/createBlockTemplate/createCodemod/createConfigCodemod calls to the plain object they returned (stamping the doc/template/codemod `type` discriminant), and removes the now-dead factory imports. Authoring is types + parsers in v0.3.0 — there are no factories.",
+     "pr": "#4612",
+     "fileExtensions": [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": false
+    },
+    {
+     "name": "migrate-authoring-imports",
+     "title": "Repoint authoring imports to @astryxdesign/cli/authoring",
+     "description": "Rewrites imports/exports (incl. dynamic import and TS import-type) from the removed authoring surfaces — @astryxdesign/cli/{config,doc,integration,template,codemod} and @astryxdesign/core/{authoring,config} — to the unified @astryxdesign/cli/authoring entrypoint. Bindings are unchanged; only the module specifier moves.",
+     "pr": "#4612",
+     "fileExtensions": [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": false
+    },
+    {
+     "name": "rename-authoring-doctypes",
+     "title": "Rename authoring doc field types to explicit domain-prefixed names",
+     "description": "Renames the doc field types (PropDoc, ThemingTarget, ComponentVar, DerivedVar, ElementDescriptor, GroupDoc, TranslationDoc, ExampleDoc, AnatomyElement, BestPractice, PlaygroundConfig, ContentBlock, TokenPreviewType) to their Component*/Reference* equivalents in imports, type references, and JSDoc import() type refs. The authorable entry types (ComponentDoc/HookDoc/ReferenceDoc/TemplateDoc) are unchanged.",
+     "pr": "#4612",
+     "fileExtensions": [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": false
+    },
+    {
+     "name": "rename-radiogroup-arialabel-to-label",
+     "title": "Rename aria-label → label on RadioGroup menu components",
+     "description": "DropdownMenuRadioGroup, ContextMenuRadioGroup, and BreadcrumbMenuRadioGroup now take a required `label` prop (applied as aria-label) in place of the old optional `aria-label` passthrough. This codemod renames `aria-label` to `label` on those three components only. `aria-labelledby` is left as-is — pass it via base props when a visible label already exists.",
+     "optional": false
+    },
+    {
+     "name": "rename-topnavheading-href-to-headinghref",
+     "title": "Rename TopNavHeading href to headingHref",
+     "description": "Renames the removed TopNavHeading href alias to headingHref.",
+     "pr": "#4657",
+     "optional": false
+    },
+    {
+     "name": "migrate-grid-minchildwidth-to-columns",
+     "title": "Migrate Grid minChildWidth to columns.minWidth",
+     "description": "Rewrites <Grid minChildWidth={n}> to <Grid columns={{minWidth: n, repeat: \"fit\"}}> where safe.",
+     "pr": "#4657",
+     "optional": false
+    },
+    {
+     "name": "migrate-navmenuitem-to-navheadingmenuitem",
+     "title": "Rename NavMenuItem to NavHeadingMenuItem",
+     "description": "Rewrites the removed NavMenuItem alias and its props type to NavHeadingMenuItem.",
+     "pr": "#4657",
+     "optional": false
+    },
+    {
+     "name": "migrate-lab-codeblock-imports",
+     "title": "Repoint lab CodeBlock imports to core",
+     "description": "Moves CodeBlock imports from @astryxdesign/lab to @astryxdesign/core/CodeBlock.",
+     "pr": "#4657",
+     "optional": false
+    },
+    {
+     "name": "remove-theme-transition-token-imports",
+     "title": "Remove deprecated transition token imports",
+     "description": "Removes import specifiers for transitionDefaults, transitionRaw, transitionVars, and TransitionVarName.",
+     "pr": "#4657",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.4.0",
+   "transforms": [
+    {
+     "name": "rename-dropdown-menu-radio-dot-target",
+     "title": "Rename the removed dropdown-menu-radio-dot theme target",
+     "description": "Renames the `dropdown-menu-radio-dot` theme target (and the `astryx-dropdown-menu-radio-dot` class it rendered) to `radio-indicator-dot` / `astryx-radio-indicator-dot`. Menu radios draw the shared radio indicator now, so the menu-specific dot target no longer exists. The new target is app-wide rather than menu-only, so each rewritten site gets a TODO comment to confirm that widening is intended.",
+     "pr": "#4712",
+     "optional": false
+    },
+    {
+     "name": "migrate-table-rowexpansion-to-tree",
+     "title": "Migrate tree-mode useTableRowExpansion to the tree plugin",
+     "description": "Rewrites the removed useTableRowExpansionState tree pattern to useTableTreeState + useTableTreeData. Detail-panel usage (renderExpanded) is left untouched.",
+     "pr": "#4612",
+     "optional": false
+    },
+    {
+     "name": "rename-menu-divider-data-types",
+     "title": "Rename the menu divider data types to *DividerData",
+     "description": "Renames `DropdownMenuDivider`, `ContextMenuDivider`, and `BreadcrumbMenuDivider` — the `{type: \"divider\"}` option types — to `DropdownMenuDividerData`, `ContextMenuDividerData`, and `BreadcrumbMenuDividerData`. The bare names now belong to the new compound divider components. Imports used as values are left untouched.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.5.0",
+   "transforms": [
+    {
+     "name": "banner-collapsible-content",
+     "title": "Rename Banner's `defaultIsExpanded` to the `collapsible` config",
+     "description": "Banner's collapse axis is now a single `collapsible?: boolean | CollapsibleConfig` prop. Rewrites `defaultIsExpanded` to the equivalent config (`{defaultIsOpen: true}`), and drops `defaultIsExpanded={false}`, which is the default. Banners that never set the prop are untouched — the default is unchanged. Pass `collapsible={false}` for content that is always visible.",
+     "pr": "#5255",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.6.0",
+   "transforms": [
+    {
+     "name": "migrate-astryx-theme-selectors-to-data-attrs",
+     "title": "Migrate Astryx theme selectors to data attributes",
+     "description": "Rewrites known v0.5.4 `.astryx-<target>.<value>` selectors to behavior-preserving class/data-attribute unions.",
+     "fileExtensions": [
+      ".css"
+     ],
+     "optional": false
+    },
+    {
+     "name": "move-ime-helper-import",
+     "title": "Move isImeKeyEvent imports to core utilities",
+     "description": "Moves `isImeKeyEvent` from the deprecated client-only hooks barrel to the canonical `@astryxdesign/core/utils` path.",
+     "optional": false
+    },
+    {
+     "name": "remove-focus-isrtl-option",
+     "title": "Remove explicit RTL options from focus hooks",
+     "description": "Removes deprecated `isRtl` properties from inline useGridFocus and useListFocus option objects. Direction is detected from the container.",
+     "optional": false
+    },
+    {
+     "name": "rename-resizable-pixel-bounds",
+     "title": "Rename useResizable pixel bounds",
+     "description": "Renames deprecated `minSizePx`/`maxSizePx` properties to `minSize`/`maxSize` in static inline useResizable configurations and marks objects with spreads or computed properties for manual migration.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.6.4",
+   "transforms": [
+    {
+     "name": "migrate-theme-catalog-to-descriptors",
+     "title": "Give each integration theme a typed descriptor instead of the manifest.json catalog",
+     "description": "Writes <name>Theme.doc.mjs beside each theme the catalog lists, then removes the catalog.",
+     "codemodType": "project",
+     "optional": false
+    },
+    {
+     "name": "migrate-native-picker-to-presentation",
+     "title": "Migrate nativePicker to presentation",
+     "description": "Renames `nativePicker` to `presentation` on DateInput, DateTimeInput, and TimeInput, mapping touch→adaptive-native, always→native, and never→adaptive-bottom-sheet (text-input for TimeInput). Dynamic values are left for manual migration; the deprecated prop still works.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.6.7",
+   "transforms": [
+    {
+     "name": "migrate-copied-themes-to-descriptors",
+     "title": "Give copied app themes their local descriptors",
+     "description": "Writes one unmaintained same-stem descriptor beside each earlier theme copy in src/themes.",
+     "codemodType": "project",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.7.0",
+   "transforms": [
+    {
+     "name": "migrate-deprecated-theme-surface",
+     "title": "Migrate removed component theme aliases and selectors",
+     "description": "Renames all 21 removed component target aliases in static theme maps and CSS, and replaces target-qualified bare prop/state classes with reflected data attributes.",
+     "fileExtensions": [
+      ".tsx",
+      ".ts",
+      ".jsx",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".css"
+     ],
+     "optional": false
+    },
+    {
+     "name": "validate-data-token-ownership",
+     "title": "Validate data-token ownership",
+     "description": "Reports generated theme CSS that still emits the canonical data-color defaults at :root, so it can be rebuilt with `astryx theme build`.",
+     "fileExtensions": [
+      ".css"
+     ],
+     "optional": false
+    },
+    {
+     "name": "migrate-field-input-styling",
+     "title": "Migrate input root styling to container/control parts",
+     "description": "Renames root `xstyle`/`className`/`style` on Field-composed inputs to the `control*` or `container*` part they styled before.",
+     "fileExtensions": [
+      ".tsx",
+      ".jsx",
+      ".ts",
+      ".js",
+      ".mjs",
+      ".cjs"
+     ],
+     "optional": false
+    },
+    {
+     "name": "preserve-bottom-sheet-content-padding",
+     "title": "Preserve BottomSheet content padding",
+     "description": "BottomSheet now pads its content like Dialog. Adds `padding={0}` to BottomSheet elements that do not set `padding`, keeping their previous unpadded content box. Sheets whose only child is a Section or Layout are left unchanged; they render identically. A sheet with a nested Layout anywhere in its content also gets a TODO comment, because padding={0} removes the inset between that Layout's regions and the Layout's own padding restores only its outer edges. Remove `padding={0}` and your own inset to adopt the theme padding. An app whose theme already sets `bottom-sheet` padding on every edge is not affected by the new default; the transform cannot see the theme, so remove the added `padding={0}` there to keep the theme inset.",
+     "optional": false
+    },
+    {
+     "name": "rename-empty-search-results-text",
+     "title": "Rename emptySearchResultsText to emptySearchText",
+     "description": "Renames the removed `emptySearchResultsText` prop to `emptySearchText` on imported Tokenizer, Typeahead, and BaseTypeahead elements, and the same key on trigger objects written inline in ChatComposerInput's `triggers`. Leaves a TODO where the new name is already set, on every spread onto these elements, where the triggers value is not written inline, and on a trigger object with a spread or computed key.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.7.2",
+   "transforms": [
+    {
+     "name": "migrate-list-edge-compensation-to-edge",
+     "title": "Migrate List edgeCompensation to edge",
+     "description": "Renames `edgeCompensation=\"inline\"` to `edge=\"outset\"` on List, and drops `edgeCompensation` beside an `edge` string. Keeps the old prop with a TODO where `edge` is computed or a later spread may override it, on a dynamic value, and where the List also spreads props; the deprecated prop still works there.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.7.5",
+   "transforms": [
+    {
+     "name": "migrate-codeblock-tokenizer-to-language",
+     "title": "Migrate CodeBlock tokenizer to a custom language",
+     "description": "Replaces `tokenizer={fn}` beside a static `language=\"x\"` with `language={createCodeLanguage({name: 'x', identifiers: ['x'], tokenize: fn})}`. Keeps the old prop with a TODO where the language is computed, missing, or `plaintext`, and where the CodeBlock also spreads props; the deprecated prop still works there.",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "version": "0.7.8",
+   "transforms": [
+    {
+     "name": "promote-tokenizer-presentation",
+     "title": "Move Tokenizer's removed experimental presentation to presentation",
+     "description": "Rewrites `experimental={{presentation: x}}` on Tokenizer to `presentation={x}`; Tokenizer no longer reads `experimental`. Leaves a TODO where the experimental value is not an object literal, where the Tokenizer already passes presentation, and where it spreads props.",
+     "optional": false
+    }
+   ]
+  }
+ ]
+}

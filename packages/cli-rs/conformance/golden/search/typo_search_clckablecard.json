@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_clckablecard",
+ "args": [
+  "search",
+  "clckablecard"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"clckablecard\" (5)\n\nname:        ClickableCard\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ClickableCard\ndescription: An interactive card for navigation or action targets. Nested interactive elements work independently.\ncommand:     npx @astryxdesign/cli@0.7.12 component ClickableCard\n\nname:        ClickableCardElevated\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ClickableCard - Elevated\nkind:        block\ndescription: A clickable card raised with `elevation=\"med\"` so the shadow signals the whole surface is interactive.\ncommand:     npx @astryxdesign/cli@0.7.12 template ClickableCardElevated --type block\n\nname:        ClickableCardShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ClickableCard\nkind:        block\ndescription: A clickable card that navigates on click. Nested interactive elements work independently.\ncommand:     npx @astryxdesign/cli@0.7.12 template ClickableCardShowcase --type block\n\nname:        ChatMessageBubbleCustomContent\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageBubble - Custom Content\nkind:        block\ndescription: Custom in-message content aligned to the bubble text column. An artifact card is wrapped in a ghost bubble with width=\"100%\", so its left edge matches the bubble text and it spans the full message column instead of the default bubble width cap; the timestamp rides the bubble metadata slot.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageBubbleCustomContent --type block\n\nname:        ClickableCardWithNestedButton\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ClickableCardWithNestedButton\nkind:        block\ndescription: A product card that navigates on click but has an independent \"Add to cart\" button inside.\ncommand:     npx @astryxdesign/cli@0.7.12 template ClickableCardWithNestedButton --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover clckablecard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

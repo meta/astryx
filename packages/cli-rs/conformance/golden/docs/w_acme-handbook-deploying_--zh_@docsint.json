@@ -1,0 +1,20 @@
+{
+ "id": "w_acme-handbook-deploying_--zh_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook/deploying",
+  "--zh"
+ ],
+ "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
+ "stdout": "Deploying\n中文描述\n\npackage: @acme/docs\n\noverview     概述 - 中文正文\nrollback     Rolling back - one {@link generic:nope}\ncross-links  Cross links - See `npx @astryxdesign/cli@0.7.12 docs theme`, `npx @astryxdesign/cli@0.7.12 docs\n             cli/commands/docs`, `npx @astryxdesign/cli@0.7.12 docs authoring component-doc`, `npx\n             @astryxdesign/cli@0.7.12 docs acme-handbook`, `npx @astryxdesign/cli@0.7.12 component Button`, `npx\n             @astryxdesign/cli@0.7.12 template dashboard --type page` and `{@link generic:theme}`.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying --full\nUp: npx @astryxdesign/cli@0.7.12 docs acme-handbook\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

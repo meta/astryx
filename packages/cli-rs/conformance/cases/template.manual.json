@@ -1,0 +1,434 @@
+[
+  {
+    "id": "w_tpl_copy_file",
+    "args": [
+      "template",
+      "login",
+      "./src/login.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_trailing_slash",
+    "args": [
+      "template",
+      "login",
+      "src/pages/"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_block_dir",
+    "args": [
+      "template",
+      "AspectRatioCircleImage",
+      "src/blocks"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_block_dir_json",
+    "args": [
+      "template",
+      "AspectRatioCircleImage",
+      "src/blocks",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_abs",
+    "args": [
+      "template",
+      "login",
+      "/tmp/x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_traversal",
+    "args": [
+      "template",
+      "login",
+      "../outside"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_traversal_json",
+    "args": [
+      "--json",
+      "template",
+      "login",
+      "../outside"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_exists",
+    "args": [
+      "template",
+      "login",
+      "src/app"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "login",
+        "src/app"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_copy_exists_overwrite",
+    "args": [
+      "template",
+      "login",
+      "src/app",
+      "--overwrite"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "login",
+        "src/app"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_copy_exists_f_json",
+    "args": [
+      "template",
+      "login",
+      "src/app",
+      "-f",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "login",
+        "src/app"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_empty_name",
+    "args": [
+      "template",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_empty_path",
+    "args": [
+      "template",
+      "login",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_empty_path_json",
+    "args": [
+      "template",
+      "login",
+      "",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_skeleton_path",
+    "args": [
+      "template",
+      "login",
+      "src",
+      "--skeleton"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_skeleton_overwrite",
+    "args": [
+      "template",
+      "login",
+      "--skeleton",
+      "--overwrite"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_list_name",
+    "args": [
+      "template",
+      "login",
+      "--list"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_list_path_overwrite",
+    "args": [
+      "template",
+      "--list",
+      "--overwrite"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_type",
+    "args": [
+      "template",
+      "--cdn",
+      "--type",
+      "page"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_list_json",
+    "args": [
+      "template",
+      "--cdn",
+      "--list",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_abs",
+    "args": [
+      "template",
+      "--cdn",
+      "/tmp/x.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_traversal",
+    "args": [
+      "template",
+      "--cdn",
+      "../x.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_exists",
+    "args": [
+      "template",
+      "--cdn"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "--cdn"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_cdn_exists_overwrite",
+    "args": [
+      "template",
+      "--cdn",
+      "--overwrite"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "--cdn"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_cdn_positional",
+    "args": [
+      "template",
+      "--cdn",
+      "nested/dir/page.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_typo",
+    "args": [
+      "template",
+      "dashbord"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_typo_json",
+    "args": [
+      "template",
+      "loginn",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_wrong_type",
+    "args": [
+      "template",
+      "login",
+      "--type",
+      "block"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_type_lookup",
+    "args": [
+      "template",
+      "AspectRatioCircleImage",
+      "--type",
+      "block",
+      "--skeleton"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_pkg_lookup_lab",
+    "args": [
+      "template",
+      "CommentsShowcase",
+      "--package",
+      "@astryxdesign/lab",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_tpl_pkg_lookup_wrong",
+    "args": [
+      "template",
+      "login",
+      "--package",
+      "@astryxdesign/lab"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_tpl_demo_content_copy",
+    "args": [
+      "template",
+      "usePressFeedbackHookUsage",
+      "src"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_tpl_media_copy",
+    "args": [
+      "template",
+      "AspectRatioImageGallery",
+      "src/g.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_media_show",
+    "args": [
+      "template",
+      "AspectRatioShowcase"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_stylex_plain",
+    "args": [
+      "template",
+      "canvas-editor",
+      "src"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_tpl_stylex_plain_json",
+    "args": [
+      "template",
+      "canvas-editor",
+      "src",
+      "--json"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_tpl_copy_empty",
+    "args": [
+      "template",
+      "login",
+      "out"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_tpl_copy_integration_block",
+    "args": [
+      "template",
+      "AspectRatioCircleImage",
+      "src",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_tpl_list_type_page_pkg_core",
+    "args": [
+      "template",
+      "--list",
+      "--type",
+      "page",
+      "--package",
+      "@astryxdesign/core"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_list_pkg_lab",
+    "args": [
+      "template",
+      "--list",
+      "--package",
+      "@astryxdesign/lab"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_tpl_list_type_block_large_json",
+    "args": [
+      "template",
+      "--list",
+      "--type",
+      "block",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_tpl_missing_deps",
+    "args": [
+      "template",
+      "dashboard-alert-rail",
+      "src"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_missing_deps_json",
+    "args": [
+      "template",
+      "dashboard-alert-rail",
+      "src",
+      "--json"
+    ],
+    "fixture": "plain"
+  }
+]

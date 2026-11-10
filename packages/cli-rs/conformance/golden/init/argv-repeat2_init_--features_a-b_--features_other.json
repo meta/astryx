@@ -1,0 +1,16 @@
+{
+ "id": "argv-repeat2_init_--features_a-b_--features_other",
+ "args": [
+  "init",
+  "--features",
+  "a,b",
+  "--features",
+  "other"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown features: other. Valid features: agents, theme, template\n",
+ "exit": 1,
+ "files": []
+}

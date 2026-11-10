@@ -1,0 +1,15 @@
+{
+ "id": "w_component_Button_--package_@nope-pkg",
+ "args": [
+  "component",
+  "Button",
+  "--package",
+  "@nope/pkg"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: External package \"@nope/pkg\" not found\n",
+ "exit": 1,
+ "files": []
+}

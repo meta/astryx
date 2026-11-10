@@ -1,0 +1,19 @@
+{
+ "id": "component_Citation_@large",
+ "args": [
+  "component",
+  "Citation"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Citation\n\nCitations display inline references to external sources. Use them to attribute information within AI-generated responses, articles, or anywhere provenance and source links are needed.\n\n**Import:** `import {Citation} from '@astryxdesign/core/Citation';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Container | Yes | The root wrapper. Accepted source URLs render an anchor; missing or rejected URLs render an inert span. |\n| Icon | No | An optional source icon shown before the label text. Accepts a favicon/logo image URL (via source.src) or a React node such as an Astryx <Icon>. Only available in the label variant. |\n| Label text | No | The source title, truncated with ellipsis when it exceeds the max width. Shown in the label variant. |\n| Number | No | The citation index displayed as a superscript badge. Shown in the number variant. |\n\n## Best Practices\n\n- **Do:** Use the label variant when the source title adds meaningful context for the reader.\n- **Do:** Use the number variant for compact inline references within body text, like footnotes.\n- **Don't:** Mix label and number variants in the same paragraph. Pick one style per context for visual consistency.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `source` | `CitationSource` | - | The citation source object containing title, url, an optional image src, and an optional icon node. The url follows the shared navigation rule described on the Link `href` prop; rejected destinations leave the citation visible without navigation. Image src uses separate resource handling. **(required)** |\n| `number` | `number` | - | The display index for this citation. **(required)** |\n| `variant` | `'label' \\| 'number'` | `'label'` | Display style: a label chip showing the source title or a compact numbered badge. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-citation` | `data-variant` | label, number | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'citation': {\n    base: { /* CSS properties */ },\n    'variant:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

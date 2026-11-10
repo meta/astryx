@@ -1,0 +1,19 @@
+{
+ "id": "template_TableRowExpansionTable_@large",
+ "args": [
+  "template",
+  "TableRowExpansionTable"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {\n  Table,\n  useTableRowExpansion,\n  proportional,\n  pixel,\n} from '@astryxdesign/core/Table';\nimport {VStack, HStack} from '@astryxdesign/core/Stack';\nimport {Text, Heading} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\ninterface Order extends Record<string, unknown> {\n  id: string;\n  customer: string;\n  status: string;\n  total: string;\n  items: {name: string; qty: number; price: string}[];\n}\n\nconst orders: Order[] = [\n  {\n    id: 'ord-1001',\n    customer: 'Ada Lovelace',\n    status: 'Shipped',\n    total: '$248.00',\n    items: [\n      {name: 'Mechanical keyboard', qty: 1, price: '$180.00'},\n      {name: 'Wrist rest', qty: 2, price: '$34.00'},\n    ],\n  },\n  {\n    id: 'ord-1002',\n    customer: 'Alan Turing',\n    status: 'Processing',\n    total: '$52.00',\n    items: [{name: 'USB-C cable', qty: 4, price: '$13.00'}],\n  },\n  {\n    id: 'ord-1003',\n    customer: 'Grace Hopper',\n    status: 'Delivered',\n    total: '$1,200.00',\n    items: [{name: 'Standing desk', qty: 1, price: '$1,200.00'}],\n  },\n];\n\nconst columns = [\n  {key: 'customer', header: 'Customer', width: proportional(2)},\n  {key: 'status', header: 'Status', width: pixel(130)},\n  {key: 'total', header: 'Total', width: pixel(110)},\n];\n\nexport default function TableRowExpansionTable() {\n  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(\n    new Set(['ord-1001']),\n  );\n\n  const expansion = useTableRowExpansion<Order>({\n    expandedKeys,\n    onToggle: key =>\n      setExpandedKeys(prev => {\n        const next = new Set(prev);\n        if (next.has(key)) {\n          next.delete(key);\n        } else {\n          next.add(key);\n        }\n        return next;\n      }),\n    getRowKey: item => item.id,\n    // The detail panel renders arbitrary content below the row: here, the\n    // order's line items. Any component composes here (charts, forms, tables).\n    renderExpanded: item => (\n      <VStack gap={2}>\n        <Heading level={4}>Line items</Heading>\n        {item.items.map(line => (\n          <HStack key={line.name} gap={3}>\n            <Badge label={`x${line.qty}`} variant=\"info\" />\n            <Text type=\"body\">{line.name}</Text>\n            <Text type=\"body\" color=\"secondary\">\n              {line.price}\n            </Text>\n          </HStack>\n        ))}\n      </VStack>\n    ),\n  });\n\n  return (\n    <Table\n      data={orders}\n      columns={columns}\n      idKey=\"id\"\n      hasHover\n      plugins={{expansion}}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,170 @@
+[
+  {
+    "id": "oldcore_hook_--list_@core-0.7.11",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.7.11",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.7.11",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_--list_@core-0.7.5",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.7.5",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.7.5",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_--list_@core-0.6.8",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.6.8",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.6.8",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_--list_@core-0.5.4",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.5.4",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.5.4",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_--list_@core-0.4.7",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.4.7",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.4.7",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_--list_@core-0.3.0",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_@core-0.3.0",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_hook_useClipboard_--json_@core-0.3.0",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

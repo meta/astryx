@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_author_validate_twomanifests",
+ "args": [
+  "doctor",
+  "integration",
+  "validate"
+ ],
+ "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
+ "stdout": "Validating integration: @acme/two@1.0.0\n\nseverity: [fail]\ncode:     multiple_manifests\nmessage:  Multiple root manifests present (astryx.integration.mjs, astryx.integration.js). Keep exactly one.\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

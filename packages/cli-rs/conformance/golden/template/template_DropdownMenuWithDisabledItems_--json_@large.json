@@ -1,0 +1,14 @@
+{
+ "id": "template_DropdownMenuWithDisabledItems_--json_@large",
+ "args": [
+  "template",
+  "DropdownMenuWithDisabledItems",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DropdownMenuWithDisabledItems\",\n    \"description\": \"Menu with selectively disabled items based on permissions. Use when some actions require higher privileges, like admin-only operations.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"DropdownMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {DropdownMenu} from '@astryxdesign/core/DropdownMenu';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function DropdownMenuWithDisabledItems() {\\n  const [lastAction, setLastAction] = useState<string | null>(null);\\n\\n  return (\\n    <VStack gap={3}>\\n      <DropdownMenu\\n        button={{label: 'Manage team'}}\\n        items={[\\n          {label: 'Invite member', onClick: () => setLastAction('Invite')},\\n          {label: 'Edit roles', onClick: () => setLastAction('Edit roles')},\\n          {type: 'divider'},\\n          {label: 'Transfer ownership', isDisabled: true},\\n          {label: 'Delete team', isDisabled: true},\\n        ]}\\n      />\\n      {lastAction && (\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Last action: {lastAction}\\n        </Text>\\n      )}\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Destructive actions are disabled for non-admin users\\n      </Text>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

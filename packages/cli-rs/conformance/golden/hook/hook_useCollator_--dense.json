@@ -1,0 +1,20 @@
+{
+ "id": "hook_useCollator_--dense",
+ "args": [
+  "hook",
+  "useCollator",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useCollator\n\nReturns the sanctioned locale-aware comparator for custom sorting. The collator is recreated when the provider locale or an option changes.\n\n## Best Practices\n\n- **Do:** Reuse collator.compare in custom Table comparators and other user-visible string ordering.\n- **Don't:** Construct Intl.Collator directly or call localeCompare; those bypass the provider-backed locale contract.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `Intl.CollatorOptions` | - | Optional collation behavior such as numeric ordering, sensitivity, punctuation handling, and case order. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `collator` | `Intl.Collator` | A memoized collator bound to the active InternationalizationProvider locale. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for InternationalizationProvider, Table\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

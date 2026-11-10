@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_chat-layout-scroll-button_--json",
+ "args": [
+  "theme",
+  "targets",
+  "chat-layout-scroll-button",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"chat-layout-scroll-button\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"chat-layout-scroll-button\",\n        \"className\": \"astryx-chat-layout-scroll-button\",\n        \"component\": \"Chat\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

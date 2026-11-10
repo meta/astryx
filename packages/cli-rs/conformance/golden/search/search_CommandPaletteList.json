@@ -1,0 +1,19 @@
+{
+ "id": "search_CommandPaletteList",
+ "args": [
+  "search",
+  "CommandPaletteList"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"CommandPaletteList\" (8)\n\nname:        CommandPaletteList\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/CommandPalette\ndescription: Scrollable results container. Renders as a listbox standalone, and inside CommandPalette while selectable results exist. Contains CommandPaletteItem and CommandPaletteGroup children.\ncommand:     npx @astryxdesign/cli@0.7.12 component CommandPaletteList\n\nname:        CommandPaletteGroupBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteGroup - Basic\nkind:        block\ndescription: Command palette items organized under group headings using the composed CommandPaletteGroup form. Use to separate related commands into labeled sections.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteGroupBasic --type block\n\nname:        CommandPaletteGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteGroup\nkind:        block\ndescription: Command palette groups in both data-driven (auxiliaryData.group) and composed (CommandPaletteGroup + CommandPaletteItem) forms.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteGroupShowcase --type block\n\nname:        CommandPaletteItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteItem - Basic\nkind:        block\ndescription: Selectable command palette items inside a CommandPaletteList, including highlighted and disabled states. Use when composing a palette manually instead of a search source.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteItemBasic --type block\n\nname:        CommandPaletteListBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteList - Item States\nkind:        block\ndescription: Flat list showing the highlighted, selected, and disabled item states. Use CommandPaletteGroup to add section headings.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteListBasic --type block\n\nname:        CommandPaletteListShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: CommandPaletteList\nkind:        block\ndescription: Scrollable command palette list with grouped items, including a highlighted item, composed without a full CommandPalette.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommandPaletteListShowcase --type block\n\nname:        CommandPaletteGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/CommandPalette\ndescription: Visual grouping with a heading label. Place inside CommandPaletteList.\ncommand:     npx @astryxdesign/cli@0.7.12 component CommandPaletteGroup\n\nname:        CommandPaletteItem\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/CommandPalette\ndescription: Use CommandPaletteItem for one non-interactive result row inside CommandPaletteList or CommandPaletteGroup. CommandPalette owns the composite keyboard model; standalone items expose only their explicit visual state and pointer activation.\ncommand:     npx @astryxdesign/cli@0.7.12 component CommandPaletteItem\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover CommandPaletteList\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

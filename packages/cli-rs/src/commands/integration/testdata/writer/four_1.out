@@ -1,0 +1,9 @@
+export default {
+    name: 'acme',
+
+    nested: {
+        a: 1,
+    },
+
+    docs: './docs'
+};

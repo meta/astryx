@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_gap-report_--list-categories_Button",
+ "args": [
+  "gap-report",
+  "--list-categories",
+  "Button"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: `--list-categories` cannot be combined with component: it lists categories and ignores submission options.\n",
+ "exit": 1,
+ "files": []
+}

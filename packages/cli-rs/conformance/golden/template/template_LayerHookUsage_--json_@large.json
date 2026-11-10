@@ -1,0 +1,14 @@
+{
+ "id": "template_LayerHookUsage_--json_@large",
+ "args": [
+  "template",
+  "LayerHookUsage",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"LayerHookUsage\",\n    \"description\": \"Low-level anchored overlay rendered with useLayer and a custom surface.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Center\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useLayer} from '@astryxdesign/core/Layer';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Center} from '@astryxdesign/core/Center';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function LayerHookUsage() {\\n  const layer = useLayer({mode: 'context', lightDismiss: true});\\n\\n  return (\\n    <Center height={220}>\\n      <Button\\n        label={layer.isOpen ? 'Hide layer' : 'Show layer'}\\n        ref={layer.ref}\\n        onClick={layer.isOpen ? layer.hide : layer.show}\\n      />\\n      {layer.render(\\n        <Card padding={3}>\\n          <VStack gap={1}>\\n            <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n              Anchored content\\n            </Text>\\n            <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n              useLayer provides positioning; you own semantics and surface.\\n            </Text>\\n          </VStack>\\n        </Card>,\\n        {placement: 'below', alignment: 'center'},\\n      )}\\n    </Center>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

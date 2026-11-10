@@ -1,0 +1,19 @@
+{
+ "id": "template_--type-page",
+ "args": [
+  "template",
+  "--type=page"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Page Templates (58)\n\nAI Chat - Conversation: ai-chat\nAI Chat - Landing: ai-chat-landing\nDashboard - Analytics: dashboard\nLogin - Basic: login\nShell - Blank: blank\nTools - Canvas Editor: canvas-editor\nContent - Card Grid: library\nGallery - Hero: centered-hero, gallery-hero\nForm - Checkout: payment-form, checkout-wizard\nGallery - Basic: classic-gallery\nTable - Grouped: table-collapsible, table-grouped\nTable - Comparison: table-comparison\nForm - Basic: contact-form\nContent - Course Detail: course-detail\nDashboard - Comparison: dashboard-comparison\nForm - Wizard Dialog: form-wizard-dialog\nContent - Documentation Catalog: documentation\nContent - Documentation Design: documentation-design\nContent - Documentation Technical: documentation-technical\nDashboard - Scorecard: dashboard-scorecard\nTools - File Explorer: file-explorer\nTable - Filtering: table-filter\nForm - Wizard: form-wizard\nDashboard - Funnel & Cohort: dashboard-cohort-funnel\nTools - IDE: ide\nTable - Split Pane: table-inbox\nTools - Incident Console: incident-console\nForm - Wizard Inline: form-wizard-inline\nTools - Kanban Board: kanban-board\nLogin - Card: login-card\nLogin - Split: login-split\nLogin - SSO: login-sso\nShell - Messaging: messaging-shell\nGallery - Mixed: mixed-gallery\nContent - Order Detail: detail-page\nTools - Page Editor: editor\nDashboard - Portfolio: dashboard-composition\nContent - Product Detail: product-detail\nGallery - Product: product-gallery\nDashboard - Project Status: dashboard-progress\nTable - Basic: table-page, table\nDashboard - Monitoring: dashboard-alert-rail\nSettings - Dialog: settings-dialog\nSettings - Form: settings\nSettings - Panels: settings-sidebar\nShell - Top Nav + Left Sidebar: shell-nav\nGallery - Side: side-gallery\nShell - Left Sidebar: shell-side-nav\nShell - Top Nav: theme-showcase, shell-top-nav\nTable - Tree/Hierarchical List: table-tree\nForm - Two-column: form-two-column\nForm - Wizard Vertical: form-wizard-vertical\nContent - Work Item Detail: work-item-detail\n\nUsage\n\nnpx @astryxdesign/cli@0.7.12 template <id>                  Show full source\nnpx @astryxdesign/cli@0.7.12 template <id> [target-path]     Scaffold page or block\nnpx @astryxdesign/cli@0.7.12 template <id> --skeleton        Layout reference\nnpx @astryxdesign/cli@0.7.12 template --list                 Full catalog with descriptions\nnpx @astryxdesign/cli@0.7.12 template --list --type block    List only blocks\nnpx @astryxdesign/cli@0.7.12 template --list --package <pkg> List from one package\nnpx @astryxdesign/cli@0.7.12 template --cdn                 CDN starter page, no build step\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

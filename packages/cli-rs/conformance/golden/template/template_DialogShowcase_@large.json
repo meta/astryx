@@ -1,0 +1,19 @@
+{
+ "id": "template_DialogShowcase_@large",
+ "args": [
+  "template",
+  "DialogShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\n// Remove isInline for production — dialogs should be modal.\nexport default function DialogShowcase() {\n  return (\n    <Dialog isOpen isInline onOpenChange={() => {}}>\n      <Layout\n        header={<DialogHeader title=\"Modal Title\" onOpenChange={() => {}} />}\n        content={\n          <LayoutContent>\n            <Text type=\"body\">Dialog content goes here.</Text>\n          </LayoutContent>\n        }\n      />\n    </Dialog>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

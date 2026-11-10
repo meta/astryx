@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatMessage_--props_@large",
+ "args": [
+  "component",
+  "ChatMessage",
+  "--props"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `sender` | `'user' \\| 'assistant' \\| 'system'` | - | Who sent this message: controls alignment and layout. **(required)** |\n| `children` | `ReactNode` | - | Free-form content: bubbles, asset lists, tool calls, images. Custom (non-bubble) children render flush with the message edge; wrap them in a ghost ChatMessageBubble to align them with the bubble text column. **(required)** |\n| `avatar` | `ReactNode` | - | Avatar element rendered beside the message. Typically Avatar. `null`, booleans, and empty strings create no slot; any other content that renders nothing collapses its slot. |\n| `name` | `ReactNode` | - | Sender name rendered above the message body; it labels the message. `null`, booleans, and empty strings create no slot, and any other content that renders nothing collapses its slot; either way the message is labelled by the translated sender fallback. Use when the first child is raw content (not a bubble). If the first child is a bubble, put the name on the bubble's `name` prop instead. |\n| `metadata` | `ReactNode` | - | Metadata rendered below the message body. `null`, booleans, and empty strings create no slot; any other content that renders nothing collapses its slot. Use when the last child is raw content (not a bubble). If the last child is a bubble, put metadata on the bubble's `metadata` prop instead. |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | Visual density. Inherited from list context if not set. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

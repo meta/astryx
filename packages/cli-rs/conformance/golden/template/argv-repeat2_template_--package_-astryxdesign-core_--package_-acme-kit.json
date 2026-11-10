@@ -1,0 +1,16 @@
+{
+ "id": "argv-repeat2_template_--package_-astryxdesign-core_--package_-acme-kit",
+ "args": [
+  "template",
+  "--package",
+  "@astryxdesign/core",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No templates found in package \"@acme/kit\".\n\n  @astryxdesign/core  (has templates)\n",
+ "exit": 1,
+ "files": []
+}

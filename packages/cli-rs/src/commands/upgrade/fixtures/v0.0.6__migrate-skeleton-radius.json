@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"container\" />",
+  "output": "<XDSSkeleton radius={3} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"element\" />",
+  "output": "<XDSSkeleton radius={2} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"content\" />",
+  "output": "<XDSSkeleton radius={1} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"inner\" />",
+  "output": "<XDSSkeleton radius={0} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius={\"container\"} />",
+  "output": "<XDSSkeleton radius={3} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"none\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius=\"rounded\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSkeleton radius={3} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-skeleton-radius",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard radius=\"container\" />",
+  "output": null,
+  "error": null
+ }
+]

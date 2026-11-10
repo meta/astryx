@@ -1,0 +1,30 @@
+{
+ "id": "w_integration_AcmeCard_json",
+ "args": [
+  "swizzle",
+  "AcmeCard",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"swizzle.copy\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"component\": \"AcmeCard\",\n    \"package\": \"@acme/kit\",\n    \"outputDir\": \"components/astryx/AcmeCard\",\n    \"filesCopied\": 2,\n    \"files\": [\n      \"AcmeBadge.tsx\",\n      \"AcmeCard.tsx\"\n    ],\n    \"usesStyleX\": false,\n    \"dependencies\": {},\n    \"marker\": {\n      \"path\": \"components/astryx/astryx-swizzle.json\",\n      \"written\": true\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "integration/components/astryx/AcmeCard/AcmeBadge.tsx",
+   "status": "created",
+   "text": "export function AcmeBadge() { return null; }\n"
+  },
+  {
+   "path": "integration/components/astryx/AcmeCard/AcmeCard.tsx",
+   "status": "created",
+   "text": "export function AcmeCard() { return null; }\n"
+  },
+  {
+   "path": "integration/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@acme/kit\": \"1.2.3\"\n  }\n}\n"
+  }
+ ]
+}

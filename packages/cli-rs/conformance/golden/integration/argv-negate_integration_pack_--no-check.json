@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_integration_pack_--no-check",
+ "args": [
+  "integration",
+  "pack",
+  "--no-check"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-check'\n(Did you mean --check?)\n",
+ "exit": 1,
+ "files": []
+}

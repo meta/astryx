@@ -1,0 +1,15 @@
+{
+ "id": "docs_browser-support_supporting-older-browsers_--json_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "supporting-older-browsers",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Supporting Older Browsers\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"If your audience includes Tier 2 browsers and you need correct layer positioning, you have three options, cheapest first. All of them are decisions you make for your audience; Astryx does not impose one.\"\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"ordered\",\n        \"items\": [\n          \"Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; polyfills may not cover every position-fallback feature.\",\n          \"Provide a JS positioning fallback. Detect missing support with `CSS.supports(\\\"anchor-name\\\", \\\"--x\\\")` and position layers with a measurement-based library (e.g. a floating-element positioner) when it returns false. More code, full control.\",\n          \"Accept degraded positioning. Document for your users that on Tier 2 browsers, layered surfaces open correctly but may not sit next to their trigger. Cheapest, and often fine for internal tools on evergreen browsers.\"\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Feature-detect at runtime rather than sniffing user agents:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"js\",\n        \"code\": \"// Popover API (Tier 2 and up)\\nconst hasPopover = typeof HTMLElement !== 'undefined'\\n  && typeof HTMLElement.prototype.showPopover === 'function';\\n\\n// CSS anchor positioning (Tier 1)\\nconst hasAnchorPositioning = CSS.supports('anchor-name', '--x');\\n\\n// CSS light-dark() (Tier 2 and up)\\nconst hasLightDark = CSS.supports('color', 'light-dark(#000, #fff)');\",\n        \"label\": \"Feature detection\"\n      }\n    ],\n    \"id\": \"supporting-older-browsers\",\n    \"links\": {\n      \"up\": \"astryx docs browser-support --index\",\n      \"previous\": \"astryx docs browser-support the-on-screen-keyboard\",\n      \"next\": \"astryx docs browser-support how-these-tiers-move-over-time\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

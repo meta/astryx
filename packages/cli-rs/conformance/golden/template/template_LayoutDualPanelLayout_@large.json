@@ -1,0 +1,19 @@
+{
+ "id": "template_LayoutDualPanelLayout_@large",
+ "args": [
+  "template",
+  "LayoutDualPanelLayout"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutHeader,\n  LayoutContent,\n  LayoutPanel,\n  VStack,\n} from '@astryxdesign/core/Layout';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {List, ListItem} from '@astryxdesign/core/List';\n\nexport default function LayoutDualPanelLayout() {\n  return (\n    <Card width=\"100%\" style={{maxWidth: 500}}>\n      <Layout\n        header={\n          <LayoutHeader hasDivider>\n            <Heading level={4}>File Browser</Heading>\n          </LayoutHeader>\n        }\n        start={\n          <LayoutPanel width={120} hasDivider>\n            <VStack gap={1}>\n              <Text type=\"label\" color=\"secondary\">\n                Folders\n              </Text>\n              <List>\n                <ListItem label=\"Documents\" />\n                <ListItem label=\"Projects\" isSelected />\n                <ListItem label=\"Downloads\" />\n              </List>\n            </VStack>\n          </LayoutPanel>\n        }\n        content={\n          <LayoutContent>\n            <VStack gap={2}>\n              <Text type=\"label\" color=\"secondary\">\n                Files\n              </Text>\n              <Card variant=\"muted\">\n                <Text type=\"body\">Select a folder to view its contents</Text>\n              </Card>\n            </VStack>\n          </LayoutContent>\n        }\n        end={\n          <LayoutPanel width={120} hasDivider>\n            <VStack gap={2}>\n              <Text type=\"label\" color=\"secondary\">\n                Details\n              </Text>\n              <Text type=\"body\">Select a file to view details</Text>\n            </VStack>\n          </LayoutPanel>\n        }\n      />\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

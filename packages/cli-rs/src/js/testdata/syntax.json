@@ -1,0 +1,789 @@
+[
+ {
+  "name": "brace_eof",
+  "source": "export default {a: 1,\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected end of input"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  }
+ },
+ {
+  "name": "bad_token",
+  "source": "export default {a: 1 @@};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Invalid or unexpected token"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "unterminated",
+  "source": "export default {name: 'abc,\n b: 1};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Invalid or unexpected token"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unterminated string constant.  \n <file>:1:22"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated string constant.  \n <file>:1:22"
+  }
+ },
+ {
+  "name": "jsx",
+  "source": "export const x = <div className=\"a\">hi</div>;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:22"
+  },
+  "jiti_tsx": {
+   "name": "ReferenceError",
+   "message": "React is not defined"
+  }
+ },
+ {
+  "name": "ts_const",
+  "source": "const n: number = 1;\nexport default n;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Missing initializer in const declaration"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ },
+ {
+  "name": "ts_let",
+  "source": "let n: number = 1;\nexport default n;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ':'"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ },
+ {
+  "name": "ts_param",
+  "source": "export function f(a: string) { return a; }\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ':'"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ },
+ {
+  "name": "ts_interface",
+  "source": "interface A { a: string }\nexport default 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected strict mode reserved word"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ },
+ {
+  "name": "ts_as",
+  "source": "export default ({a: 1} as const);\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected identifier 'as'"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ },
+ {
+  "name": "missing_comma_obj",
+  "source": "export default {a: 1 b: 2};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected identifier 'b'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "missing_comma_arr",
+  "source": "export default [1 2];\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected number"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "missing_paren_call",
+  "source": "foo(1, 2;\nexport default 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "missing ) after argument list"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:8"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:8"
+  }
+ },
+ {
+  "name": "extra_close",
+  "source": "export default {a: 1}};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '}'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "extra_paren",
+  "source": "export default (1));\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ')'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "ident_after",
+  "source": "export default {a: 1} foo;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected identifier 'foo'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "string_after",
+  "source": "export default 1 'x';\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected string"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:16"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:16"
+  }
+ },
+ {
+  "name": "number_after",
+  "source": "export default 1 2;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected number"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:16"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Missing semicolon.  \n <file>:1:16"
+  }
+ },
+ {
+  "name": "template_unterminated",
+  "source": "export default `abc;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected end of input"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unterminated template.  \n <file>:1:16"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated template.  \n <file>:1:16"
+  }
+ },
+ {
+  "name": "regex_unterminated",
+  "source": "export const r = /abc;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Invalid regular expression: missing /"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unterminated regular expression.  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated regular expression.  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "keyword_bad",
+  "source": "export default if;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token 'if'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:15"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:15"
+  }
+ },
+ {
+  "name": "dup_export",
+  "source": "export const a = 1;\nexport const a = 2;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Identifier 'a' has already been declared"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Identifier 'a' has already been declared.  \n <file>:2:13"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Identifier 'a' has already been declared.  \n <file>:2:13"
+  }
+ },
+ {
+  "name": "redeclare",
+  "source": "const a = 1;\nconst a = 2;\nexport default a;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Identifier 'a' has already been declared"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Identifier 'a' has already been declared.  \n <file>:2:6"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Identifier 'a' has already been declared.  \n <file>:2:6"
+  }
+ },
+ {
+  "name": "await_top_fn",
+  "source": "function f() { await 1; }\nexport default 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected reserved word"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected reserved word 'await'.  \n <file>:1:15"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected reserved word 'await'.  \n <file>:1:15"
+  }
+ },
+ {
+  "name": "return_top",
+  "source": "return 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Illegal return statement"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: 'return' outside of function.  \n <file>:1:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: 'return' outside of function.  \n <file>:1:0"
+  }
+ },
+ {
+  "name": "arrow_bad",
+  "source": "export default (a, b => a;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ';'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:25"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:25"
+  }
+ },
+ {
+  "name": "colon_missing",
+  "source": "export default {a 1};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected number"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "equals_obj",
+  "source": "export default {a = 1};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Invalid shorthand property initializer"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Invalid shorthand property initializer.  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Invalid shorthand property initializer.  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "trailing_dot",
+  "source": "export default a.;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ';'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:17"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:17"
+  }
+ },
+ {
+  "name": "unicode_char",
+  "source": "export default {a: 1 §};\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Invalid or unexpected token"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected character '§'.  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected character '§'.  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "class_bad",
+  "source": "export class A { foo bar() {} }\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected identifier 'bar'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:21"
+  }
+ },
+ {
+  "name": "import_bad",
+  "source": "import {a from './x.mjs';\nexport default a;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected identifier 'from'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:10"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:1:10"
+  }
+ },
+ {
+  "name": "eof_in_fn",
+  "source": "export function f() {\n  return 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected end of input"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:3:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:3:0"
+  }
+ },
+ {
+  "name": "eof_in_arr",
+  "source": "export default [1, 2,\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected end of input"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  }
+ },
+ {
+  "name": "eof_in_paren",
+  "source": "export default (1 + \n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected end of input"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:0"
+  }
+ },
+ {
+  "name": "octal_strict",
+  "source": "export default 017;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Octal literals are not allowed in strict mode."
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Legacy octal literals are not allowed in strict mode.  \n <file>:1:15"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Legacy octal literals are not allowed in strict mode.  \n <file>:1:15"
+  }
+ },
+ {
+  "name": "with_stmt",
+  "source": "with (a) {}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Strict mode code may not include a with statement"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: 'with' in strict mode.  \n <file>:1:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: 'with' in strict mode.  \n <file>:1:0"
+  }
+ },
+ {
+  "name": "delete_ident",
+  "source": "let a; delete a;\nexport default 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Delete of an unqualified identifier in strict mode."
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Deleting local variable in strict mode.  \n <file>:1:7"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Deleting local variable in strict mode.  \n <file>:1:7"
+  }
+ },
+ {
+  "name": "html_comment",
+  "source": "<!-- x -->\nexport default 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "HTML comments are not allowed in modules"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:1"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:0"
+  }
+ },
+ {
+  "name": "optional_bad",
+  "source": "export default a?.;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token ';'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:18"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:18"
+  }
+ },
+ {
+  "name": "unclosed_jsx",
+  "source": "export const x = <div>;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:1:22"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated JSX contents.  \n <file>:1:22"
+  }
+ },
+ {
+  "name": "jsx_unclosed_text",
+  "source": "export default function Page() {\n  return <p>unclosed;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated JSX contents.  \n <file>:2:12"
+  }
+ },
+ {
+  "name": "jsx_mismatch",
+  "source": "export default function Page() {\n  return <div><span></div>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:21"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated JSX contents.  \n <file>:2:26"
+  }
+ },
+ {
+  "name": "jsx_brace_text",
+  "source": "export default function Page() {\n  return <p>a } b</p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unterminated regular expression.  \n <file>:2:19"
+  },
+  "jiti_tsx": null
+ },
+ {
+  "name": "jsx_gt_text",
+  "source": "export default function Page() {\n  return <p>a > b</p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unterminated regular expression.  \n <file>:2:19"
+  },
+  "jiti_tsx": null
+ },
+ {
+  "name": "jsx_attr_noquote",
+  "source": "export default function Page() {\n  return <p className=foo>x</p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:2:12"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: JSX value should be either an expression or a quoted JSX text.  \n <file>:2:22"
+  }
+ },
+ {
+  "name": "jsx_expr_unclosed",
+  "source": "export default function Page() {\n  return <p>{1 + </p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:15"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:18"
+  }
+ },
+ {
+  "name": "jsx_adjacent",
+  "source": "export default function Page() {\n  return <p>a</p><p>b</p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Invalid regular expression flag.  \n <file>:2:24"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>?  \n <file>:2:17"
+  }
+ },
+ {
+  "name": "jsx_unclosed_tag",
+  "source": "export default function Page() {\n  return <div className=\"a\";\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token, expected \",\"  \n <file>:2:14"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:2:27"
+  }
+ },
+ {
+  "name": "jsx_eof",
+  "source": "export default function Page() {\n  return <div>\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected token  \n <file>:3:0"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unterminated JSX contents.  \n <file>:2:14"
+  }
+ },
+ {
+  "name": "jsx_bad_attr",
+  "source": "export default function Page() {\n  return <p 1a=\"x\">x</p>;\n}\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Identifier directly after number.  \n <file>:2:13"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Identifier directly after number.  \n <file>:2:13"
+  }
+ },
+ {
+  "name": "keyword_binding",
+  "source": "export const class = 1;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token 'class'"
+  },
+  "jiti_ts": {
+   "name": "Error",
+   "message": "ParseError: Unexpected keyword 'class'.  \n <file>:1:13"
+  },
+  "jiti_tsx": {
+   "name": "Error",
+   "message": "ParseError: Unexpected keyword 'class'.  \n <file>:1:13"
+  }
+ },
+ {
+  "name": "tsx_generic_arrow",
+  "source": "export const f = <T>(x: T) => x;\n",
+  "esm": {
+   "name": "SyntaxError",
+   "message": "Unexpected token '<'"
+  },
+  "jiti_ts": null,
+  "jiti_tsx": null
+ }
+]

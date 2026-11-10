@@ -1,0 +1,18 @@
+{
+ "id": "experimental_icon_map_extra1_extra2_extra3_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"This package ships no icon set. Add one first.\",\n  \"code\": \"ERR_NOT_FOUND\",\n  \"suggestions\": [\n    {\n      \"name\": \"astryx experimental icon new-set <name>\",\n      \"reason\": \"add an icon set\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "argv-emptyeq_experimental_icon_add_--words-",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--words="
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --words describes a new definition, so it needs --new-definition\n\n  --new-definition <name> --description '<what it is for>' --words a,b  (add your own definition)\n",
+ "exit": 1,
+ "files": []
+}

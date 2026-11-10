@@ -1,0 +1,15 @@
+{
+ "id": "component_Stepper_--props_--json_@large",
+ "args": [
+  "component",
+  "Stepper",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"activeStep\",\n      \"type\": \"number\",\n      \"description\": \"Zero-based index of the currently active step. Steps before this index are marked as completed.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Step elements to render in the stepper.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"orientation\",\n      \"type\": \"'horizontal' | 'vertical'\",\n      \"description\": \"Layout direction of the stepper.\",\n      \"default\": \"'horizontal'\"\n    },\n    {\n      \"name\": \"onStepClick\",\n      \"type\": \"(index: number) => void\",\n      \"description\": \"Called when a step is clicked or a compact summary control is used. Enables non-linear navigation. Every step becomes a button until a horizontal Stepper collapses: enabled steps activate, and disabled steps stay focusable and are announced as unavailable but do not activate. When collapsed, navigation moves to summary controls that skip disabled steps.\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label describing the set of steps (applied to the ordered list). Defaults to a localized \\\"Progress\\\".\",\n      \"default\": \"'Progress' (localized)\"\n    },\n    {\n      \"name\": \"density\",\n      \"type\": \"'compact' | 'balanced' | 'spacious'\",\n      \"description\": \"Controls the padding of all steps.\",\n      \"default\": \"'balanced'\"\n    },\n    {\n      \"name\": \"indicatorPosition\",\n      \"type\": \"'separated' | 'on-track'\",\n      \"description\": \"Position of step indicators relative to the connector track.\",\n      \"default\": \"'separated'\"\n    },\n    {\n      \"name\": \"horizontalOptions\",\n      \"type\": \"{ minimumStepWidth: number; collapsedVariant: 'withLabelAndControls' | 'withLabel' | 'hiddenLabel' }\",\n      \"description\": \"Options for horizontal collapse. minimumStepWidth is the per-step threshold in pixels. collapsedVariant selects a label with controls, the label alone, or a bare progress track with no compact row. Controls appear only for withLabelAndControls when onStepClick is set, and every step keeps its accessible name.\",\n      \"default\": \"{ minimumStepWidth: 112, collapsedVariant: 'withLabelAndControls' }\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

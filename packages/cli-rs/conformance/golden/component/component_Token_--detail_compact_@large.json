@@ -1,0 +1,21 @@
+{
+ "id": "component_Token_--detail_compact_@large",
+ "args": [
+  "component",
+  "Token",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Token\n\nToken is a small, inline element for representing discrete pieces of associated data, like tags, categories, or selections. Use it to label content, show active filters, or represent removable items like selected recipients in a compose field.\n\nAnatomy: Icon (optional), Label, End content (optional), Remove button (optional)\n\n## Import\n\n```tsx\nimport { Token } from '@astryxdesign/core/Token';\n```\n\n## Best Practices\n\n- **Do:** Use color to distinguish categories (for example, green for \"Active\", red for \"Blocked\", blue for \"In Review\") so users can scan status at a glance.\n- **Do:** Provide an onRemove callback when tokens represent user selections that can be undone, like filters or multi-select values.\n- **Do:** Add a leading icon when it helps identify the token type faster, like a person icon for user tokens or a tag icon for labels.\n- **Do:** Keep labels short: one to three words. Tokens truncate with ellipsis when the text overflows.\n- **Don't:** Don't use tokens for primary actions or navigation; use Button or Link instead. Tokens are for displaying metadata, not triggering workflows.\n- **Don't:** Don't hide the label unless the icon alone is universally understood. A color dot without text is ambiguous.\n- **Don't:** Don't mix too many colors in one token group. Stick to two or three meaningful colors so the palette stays scannable.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Text label displayed inside the token. **(required)** |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | The size of the token. |\n| `color` | `'default' \\| 'red' \\| 'orange' \\| 'yellow' \\| 'green' \\| 'teal' \\| 'cyan' \\| 'blue' \\| 'purple' \\| 'pink' \\| 'gray'` | `'default'` | Color variant of the token. |\n| `icon` | `ReactNode` | - | Optional icon rendered before the label. |\n| `isDisabled` | `boolean` | `false` | Whether the token is disabled; reduces opacity and blocks interactions. |\n| `onRemove` | `(e: React.MouseEvent) => void` | - | Callback fired when the remove button is clicked. When provided, an X button is rendered inside the token. |\n| `onClick` | `(e: React.MouseEvent) => void` | - | Click handler. When provided, the token renders as a <span> container with an invisible <button> inside for accessibility. |\n| `href` | `string` | - | Link URL. When provided, the token renders as an <a> element. The destination follows the shared navigation rule described on the Link `href` prop. |\n| `description` | `string` | - | Accessible description applied via aria-description on the root element. |\n| `endContent` | `ReactNode` | - | Content rendered after the label and before the remove button. |\n| `isLabelHidden` | `boolean` | `false` | Visually hides the label using a screen-reader-only clip technique; the label remains accessible. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

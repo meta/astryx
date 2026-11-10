@@ -1,0 +1,20 @@
+{
+ "id": "component_Tooltip_--dense_@large",
+ "args": [
+  "component",
+  "Tooltip",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Tooltip\n\nA short text hint that appears on hover or focus, anchored to a trigger element. Use it to describe icon-only buttons, show the full text of truncated labels, or provide supplementary context without cluttering the UI.\n\n**Import:** `import {Tooltip} from '@astryxdesign/core/Tooltip';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Tooltip surface | Yes | Painted overlay surface that presents the tooltip. |\n| Tooltip text | Yes | Tooltip content rendered within the surface. |\n\n## Best Practices\n\n- **Do:** Keep tooltip content concise: aim for under 140 characters of plain text.\n- **Do:** Add a tooltip to icon-only buttons and controls that lack a visible label.\n- **Do:** Set touchTrigger to tap when the trigger is a button whose only job is revealing the tooltip: touch has no hover, and auto keeps the tap for triggers that perform an action. For an info icon, use InfoTip, which also pins its help on a press.\n- **Don't:** Place interactive elements like links or buttons inside a tooltip; use HoverCard or Popover instead.\n- **Don't:** Use tooltips for essential information that users must see to complete a task.\n\n## Components\n\n### Tooltip\n\nComponent wrapper for tooltip display on hover/focus.\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Trigger element(s) that activate tooltip. |\n| `anchorRef` | `RefObject<HTMLElement>` | - | External anchor ref for sibling mode. |\n| `content` | `ReactNode` | - | Tooltip content, typically short text. |\n| `placement` | `'above' \\| 'below' \\| 'start' \\| 'end'` | `'above'` | Position relative to anchor. Logical: start/end follow the popover's inherited direction (RTL mirrors). |\n| `alignment` | `'start' \\| 'center' \\| 'end'` | `'center'` | Alignment along placement axis. Logical: start/end follow the popover's inherited direction (RTL mirrors). |\n| `delay` | `number` | `200` | Show delay in ms. |\n| `hideDelay` | `number` | `0` | Hide delay in ms. |\n| `focusTrigger` | `'auto' \\| 'always' \\| 'never'` | `'auto'` | Controls when focus events trigger tooltip. |\n| `touchTrigger` | `'auto' \\| 'tap' \\| 'none'` | `'auto'` | Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (a button whose only job is the tooltip; for an info icon use InfoTip); none = never on touch. |\n| `isEnabled` | `boolean` | `true` | Enables/disables tooltip triggers. |\n| `onOpenChange` | `(isOpen: boolean) => void` | - | Callback when visibility changes; true=shown, false=hidden. |\n| `hasHoverIndication` | `'auto' \\| boolean` | `'auto'` | Dashed underline on trigger element. |\n| `isDefaultOpen` | `boolean` | - | Show tooltip on mount. Still dismissible. |\n| `isOpen` | `boolean` | - | Controlled open state for the tooltip. Held closed, focus that would open it calls onOpenChange(true) and shows nothing; held open, Escape calls onOpenChange(false) and it stays. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-tooltip` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'tooltip': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

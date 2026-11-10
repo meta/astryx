@@ -1,0 +1,14 @@
+{
+ "id": "component_CommandPaletteEmpty_--json_@large",
+ "args": [
+  "component",
+  "CommandPaletteEmpty",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"CommandPaletteEmpty\",\n    \"subComponentOf\": \"CommandPalette\",\n    \"displayName\": \"Command Palette Empty\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"Empty state display for the results area. CommandPalette renders it automatically when a search returns no results, or when there is no query and bootstrap() returns nothing.\",\n    \"props\": [\n      {\n        \"name\": \"children\",\n        \"type\": \"ReactNode\",\n        \"description\": \"Message or content to display.\",\n        \"required\": true\n      }\n    ],\n    \"playground\": {\n      \"defaults\": {\n        \"children\": \"No results found. Try a different search.\"\n      }\n    },\n    \"package\": \"@astryxdesign/core\",\n    \"import\": \"@astryxdesign/core/CommandPalette\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

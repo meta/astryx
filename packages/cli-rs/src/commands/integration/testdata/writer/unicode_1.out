@@ -1,0 +1,5 @@
+export default {
+  title: 'Café ☕ 😀',
+  name: 'x',
+  docs: './docs'
+};

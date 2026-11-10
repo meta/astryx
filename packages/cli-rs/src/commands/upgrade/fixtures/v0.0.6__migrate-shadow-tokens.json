@@ -1,0 +1,186 @@
+[
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-base';",
+  "output": "const x = \"--shadow-base\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-menu';",
+  "output": "const x = \"--shadow-menu\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-hover';",
+  "output": "const x = \"--shadow-hover\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-dialog';",
+  "output": "const x = \"--shadow-dialog\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--shadow-1';",
+  "output": "const x = \"--shadow-base\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--shadow-2';",
+  "output": "const x = \"--shadow-menu\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--shadow-3';",
+  "output": "const x = \"--shadow-hover\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--shadow-4';",
+  "output": "const x = \"--shadow-dialog\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-input-hover';",
+  "output": "const x = \"--inset-shadow-border-hover\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-input-hover-success';",
+  "output": "const x = \"--inset-shadow-border-positive\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-input-hover-warning';",
+  "output": "const x = \"--inset-shadow-border-warning\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--elevation-input-hover-error';",
+  "output": "const x = \"--inset-shadow-border-negative\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { elevationVars } from '@xds/core';",
+  "output": "import { shadowVars } from '@xds/core';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { elevationDefaults } from '@xds/core';",
+  "output": "import { shadowDefaults } from '@xds/core';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { ElevationVarName } from '@xds/core';",
+  "output": "import type { ShadowVarName } from '@xds/core';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const s = 'var(--elevation-menu)';",
+  "output": "const s = \"var(--shadow-menu)\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const s = `box-shadow: var(--elevation-dialog)`;",
+  "output": "const s = `box-shadow: var(--shadow-dialog)`;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const t = defineTheme({ tokens: { '--elevation-base': 'x', '--elevation-input-hover': 'y' } })",
+  "output": "const t = defineTheme({ tokens: { \"--shadow-base\": 'x', \"--inset-shadow-border-hover\": 'y' } })",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-shadow-elevation';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--shadow-base';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {elevationVars} from '../theme/tokens.stylex';\nconst s = stylex.create({ c: { boxShadow: elevationVars['--elevation-menu'] } });",
+  "output": "import {shadowVars} from '../theme/tokens.stylex';\nconst s = stylex.create({ c: { boxShadow: shadowVars[\"--shadow-menu\"] } });",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"var(--shadow-10)\";",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-shadow-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"--elevation-baseX\";",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_icon_new-set_outline_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "outline"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon new-set works only in a project. Run it in the integration package.\n",
+ "exit": 1,
+ "files": []
+}

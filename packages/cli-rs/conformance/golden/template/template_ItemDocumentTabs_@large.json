@@ -1,0 +1,19 @@
+{
+ "id": "template_ItemDocumentTabs_@large",
+ "args": [
+  "template",
+  "ItemDocumentTabs"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Fragment} from 'react';\nimport * as stylex from '@stylexjs/stylex';\n\nimport {Divider} from '@astryxdesign/core/Divider';\nimport {useContainerReveal} from '@astryxdesign/core/hooks';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {IconButton} from '@astryxdesign/core/IconButton';\nimport {Item} from '@astryxdesign/core/Item';\nimport {HStack} from '@astryxdesign/core/Layout';\nimport {mergeProps} from '@astryxdesign/core/utils';\nimport {DocumentIcon, PlusIcon, XMarkIcon} from '@heroicons/react/24/outline';\n\nconst TABS = [\n  {name: 'Project brief', isActive: true},\n  {name: 'Research notes', isActive: false},\n  {name: 'Interaction prototype', isActive: false},\n];\n\nconst styles = stylex.create({\n  strip: {minWidth: 0, flexShrink: 1, scrollbarWidth: 'none'},\n  rule: {height: 16},\n  hidden: {visibility: 'hidden'},\n  tab: {flexShrink: 1, width: 164, minWidth: 96},\n  action: {margin: 'calc(-1 * var(--spacing-1))', transitionProperty: 'none'},\n});\nfunction DocumentTab({name, isActive}: (typeof TABS)[number]) {\n  const {getContainerProps, getContentRevealProps} = useContainerReveal();\n  const revealProps = getContentRevealProps({\n    forceVisibility: isActive ? 'shown' : undefined,\n    isLayoutPreserved: true,\n  });\n  return (\n    <Item\n      label={name}\n      density=\"compact\"\n      isSelected={isActive}\n      onClick={() => {}}\n      aria-current={isActive ? 'true' : undefined}\n      {...getContainerProps()}\n      startContent={\n        <Icon\n          icon={DocumentIcon}\n          size=\"sm\"\n          color={isActive ? 'primary' : 'secondary'}\n        />\n      }\n      endContent={\n        <IconButton\n          label={`Close ${name}`}\n          variant=\"ghost\"\n          size=\"sm\"\n          icon={<Icon icon={XMarkIcon} size=\"sm\" />}\n          {...mergeProps(revealProps, stylex.props(styles.action))}\n        />\n      }\n      xstyle={styles.tab}\n    />\n  );\n}\n\nexport default function ItemDocumentTabs() {\n  return (\n    <HStack width=\"100%\" maxWidth={600} gap={0.5} vAlign=\"center\">\n      <HStack\n        role=\"group\"\n        aria-label=\"Open documents\"\n        vAlign=\"center\"\n        paddingInline={2}\n        paddingBlock={1}\n        isScrollable\n        xstyle={styles.strip}>\n        {TABS.map((tab, index) => (\n          <Fragment key={tab.name}>\n            {index > 0 ? (\n              <Divider\n                orientation=\"vertical\"\n                xstyle={[\n                  styles.rule,\n                  (TABS[index - 1]?.isActive || tab.isActive) && styles.hidden,\n                ]}\n              />\n            ) : null}\n            <DocumentTab {...tab} />\n          </Fragment>\n        ))}\n      </HStack>\n      <IconButton\n        label=\"New document\"\n        tooltip=\"New document\"\n        variant=\"ghost\"\n        size=\"sm\"\n        icon={<Icon icon={PlusIcon} size=\"sm\" color=\"secondary\" />}\n      />\n    </HStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "w_handlers_list",
+ "args": [
+  "gap-report",
+  "--list-categories"
+ ],
+ "fixture": "gapreport",
+ "fixtureHash": "8ac8fa7f5cb78280+4e418a0c2575d9ce",
+ "stdout": "Gap report categories\n\nvalue: missing_component\nlabel: Missing component\n\nvalue: missing_variant\nlabel: Missing variant or prop\n\nvalue: layout_gap\nlabel: Layout gap\n\nvalue: styling_gap\nlabel: Styling gap\n\nvalue: a11y_gap\nlabel: Accessibility gap\n\nvalue: api_friction\nlabel: API friction\n\nvalue: docs_gap\nlabel: Documentation gap\n\nvalue: other\nlabel: Other\nDestinations\n\ndefault: true\n\nto:        @acme/hooks\ndefault:   false\nissuesUrl: https://example.com/hooks/issues\n\nto:        @acme/broken\ndefault:   false\nissuesUrl: https://github.com/acme/broken/issues\n\nAsk the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/gapreport\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "hook_useToast_--json",
+ "args": [
+  "hook",
+  "useToast",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useToast\",\n    \"displayName\": \"useToast\",\n    \"group\": \"Toast\",\n    \"keywords\": [\n      \"toast\",\n      \"notification\",\n      \"snackbar\",\n      \"alert\",\n      \"message\",\n      \"feedback\",\n      \"flash\"\n    ],\n    \"params\": [],\n    \"returns\": [\n      {\n        \"name\": \"showToast\",\n        \"type\": \"(options: ToastOptions) => () => void\",\n        \"description\": \"Show a toast notification. Returns a dismiss function. Options include body (ReactNode), type (\\\"info\\\" | \\\"error\\\"), isAutoHide, autoHideDuration, endContent, uniqueID, and collisionBehavior.\"\n      }\n    ],\n    \"usage\": {\n      \"description\": \"Hook for showing toast notifications from anywhere in your component tree. Returns a function that accepts toast options and shows the notification. Works automatically with LayerProvider or self-mounts a fallback viewport.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Use for transient success/error feedback that does not require user action.\"\n        },\n        {\n          \"guidance\": true,\n          \"description\": \"Set uniqueID to deduplicate toasts from rapid user actions.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Use for critical errors that require acknowledgment; use AlertDialog instead.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Call useToast in the same component that renders LayerProvider; it must be called from a child component inside the provider.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [\n      \"Toast\",\n      \"Banner\",\n      \"AlertDialog\"\n    ],\n    \"relatedHooks\": [],\n    \"importPath\": \"@astryxdesign/core/Toast\",\n    \"category\": \"interaction\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

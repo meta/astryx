@@ -1,0 +1,58 @@
+[
+  {
+    "id": "pnp_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_doctor_--json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_doctor_no_pnp_process",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "yarnpnp"
+  },
+  {
+    "id": "pnpzip_doctor",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_doctor_--json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_doctor_no_pnp_process",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "yarnpnpzip"
+  }
+]

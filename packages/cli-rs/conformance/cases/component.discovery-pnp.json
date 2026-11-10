@@ -1,0 +1,169 @@
+[
+  {
+    "id": "pnp_component_--list",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_component_Button_--json",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_component_Button",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_component_--list_from_src",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    },
+    "cwd": "yarnpnp/src"
+  },
+  {
+    "id": "pnp_component_--list_nested_project",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    },
+    "cwd": "yarnpnp/tools/other"
+  },
+  {
+    "id": "pnp_component_--list_nested_runtime",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/tools/other/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_component_--list_no_pnp_process",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp"
+  },
+  {
+    "id": "pnp_component_--list_sdks_ignored",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    },
+    "cwd": "yarnpnp/.yarn/sdks"
+  },
+  {
+    "id": "pnpzip_component_--list",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_component_--list_--json",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_component_Button_--json",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_component_Button",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_component_Card_--dense",
+    "args": [
+      "component",
+      "Card",
+      "--dense"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_component_--list_from_src",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    },
+    "cwd": "yarnpnpzip/src"
+  },
+  {
+    "id": "pnpzip_component_--list_no_pnp_process",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "yarnpnpzip"
+  }
+]

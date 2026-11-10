@@ -1,0 +1,16 @@
+{
+ "id": "argv-before_experimental_icon_add_--all_Dice5",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--all",
+  "Dice5"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --all and an export name cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

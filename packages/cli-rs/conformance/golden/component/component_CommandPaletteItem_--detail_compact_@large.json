@@ -1,0 +1,21 @@
+{
+ "id": "component_CommandPaletteItem_--detail_compact_@large",
+ "args": [
+  "component",
+  "CommandPaletteItem",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# CommandPaletteItem\n\nUse CommandPaletteItem for one non-interactive result row inside CommandPaletteList or CommandPaletteGroup. CommandPalette owns the composite keyboard model; standalone items expose only their explicit visual state and pointer activation.\n\nAnatomy: Item, Content\n\n## Import\n\n```tsx\nimport { CommandPaletteItem } from '@astryxdesign/core/CommandPalette';\n```\n\n## Best Practices\n\n- **Do:** Keep each value unique within the result list so highlight, active-descendant identity, and selection resolve to the same item.\n- **Do:** Inside CommandPalette, each item is an option in the listbox popup of the WAI-ARIA combobox pattern: keyboard focus stays in the query field, arrow keys move the highlight through aria-activedescendant, and Enter selects the highlighted item.\n- **Don't:** Nest buttons, links, or other interactive controls inside an item. Option semantics make descendants presentational, so use non-interactive content such as icons, descriptions, and shortcut hints, and activate the option itself.\n- **Don't:** Treat isHighlighted as selection. Highlight is the active keyboard result; isSelected represents the chosen value.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `value` | `string` | - | Unique value used for item identity, highlight lookup, and selection. **(required)** |\n| `children` | `ReactNode` | - | Non-interactive item content such as a label, icon, description, or keyboard shortcut. **(required)** |\n| `onSelect` | `(value: string) => void` | - | Called after this item is activated by pointer. Keyboard selection in CommandPalette reports through CommandPalette onValueChange. |\n| `isHighlighted` | `boolean` | `false` | Whether this item is the active keyboard result. Derived from context when omitted inside CommandPalette. |\n| `isSelected` | `boolean` | `false` | Whether this item represents the selected value in picker mode. Derived from the CommandPalette value when omitted inside CommandPalette. |\n| `isDisabled` | `boolean` | `false` | Whether the item is unavailable and suppresses pointer activation. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. Must be a stylex.create() value. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

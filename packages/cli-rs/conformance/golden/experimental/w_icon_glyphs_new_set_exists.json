@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_glyphs_new_set_exists",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "glyphs"
+ ],
+ "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Refusing to overwrite existing file icon-sets/glyphs/glyphs.doc.mjs.\n",
+ "exit": 1,
+ "files": []
+}

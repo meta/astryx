@@ -1,0 +1,14 @@
+{
+ "id": "argv-negval_docs_--depth_-1",
+ "args": [
+  "docs",
+  "--depth",
+  "-1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --depth takes a number of levels (0, 1, 2, ...) or all, not \"-1\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_LayoutHeader_--zh_@large",
+ "args": [
+  "component",
+  "LayoutHeader",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# LayoutHeader\n\n用于页面标题、应用栏和工具栏的顶部栏。\n\n**Import:** `import {LayoutHeader} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 页眉内容。 |\n| `hasDivider` | `boolean` | `false` | 底部边缘的边框。未设置时，由父级 Layout 的 defaultHasDividers 决定。 |\n| `height` | `SizeValue` | - | 页眉高度。数字类型会被解释为像素值，字符串类型按原样使用。 |\n| `label` | `string` | - | 地标元素的无障碍标签。 |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 所有边的内边距，使用间距刻度。替换布局提供的内边距；0 表示全出血。 |\n| `paddingBlockEnd` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 块结束（底部）内边距，使用间距刻度。仅在该边上覆盖 padding；paddingBlockEnd={0} 将最后一个子元素停靠在页眉底边。 |\n| `role` | `AriaRole` | - | ARIA 地标角色。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到页眉元素的 ref。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

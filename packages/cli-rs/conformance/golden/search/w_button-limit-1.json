@@ -1,0 +1,21 @@
+{
+ "id": "w_button-limit-1",
+ "args": [
+  "search",
+  "button",
+  "--limit",
+  "1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"button\" (1 of 354)\n\nname:        Button\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Button\ndescription: Button triggers an action when clicked. Use it for form submissions, confirmations, navigation, or any interaction that needs a clear call to action.\ncommand:     npx @astryxdesign/cli@0.7.12 component Button\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover button\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

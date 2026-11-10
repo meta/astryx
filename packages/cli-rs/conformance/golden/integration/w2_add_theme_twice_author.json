@@ -1,0 +1,36 @@
+{
+ "id": "w2_add_theme_twice_author",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "ocean"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Refusing to overwrite existing file themes/ocean/oceanTheme.ts.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  themes: './themes'\n};\n"
+  },
+  {
+   "path": "author/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@acme/widgets\",\n  \"version\": \"0.1.0\",\n  \"peerDependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"exports\": {\n    \"./themes/ocean\": \"./themes/ocean/ocean.js\",\n    \"./themes/ocean.css\": \"./themes/ocean/ocean.css\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "author/themes/ocean/oceanTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'ocean',\n  displayName: 'Ocean',\n  description: 'Ocean theme.',\n  maintained: true,\n};\n"
+  },
+  {
+   "path": "author/themes/ocean/oceanTheme.ts",
+   "status": "created",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  name: 'ocean',\n});\n"
+  }
+ ]
+}

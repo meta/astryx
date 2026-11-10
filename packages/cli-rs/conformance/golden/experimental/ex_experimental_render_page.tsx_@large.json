@@ -1,0 +1,14 @@
+{
+ "id": "ex_experimental_render_page.tsx_@large",
+ "args": [
+  "experimental",
+  "render",
+  "page.tsx"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

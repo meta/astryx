@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "add"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "ex_theme_eject_ocean_src-themes-my-ocean_--package_-acme-themes_@integration",
+ "args": [
+  "theme",
+  "eject",
+  "ocean",
+  "src/themes/my-ocean",
+  "--package",
+  "@acme/themes"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown theme \"ocean\" in package \"@acme/themes\"\n\n  butter --package @astryxdesign/cli  (bundled theme)\n  chocolate --package @astryxdesign/cli  (bundled theme)\n  gothic --package @astryxdesign/cli  (bundled theme)\n  matcha --package @astryxdesign/cli  (bundled theme)\n  neutral --package @astryxdesign/cli  (bundled theme)\n  stone --package @astryxdesign/cli  (bundled theme)\n  y2k --package @astryxdesign/cli  (bundled theme)\n  ocean --package @acme/kit  (provided by @acme/kit)\n",
+ "exit": 1,
+ "files": []
+}

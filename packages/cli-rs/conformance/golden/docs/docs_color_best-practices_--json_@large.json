@@ -1,0 +1,15 @@
+{
+ "id": "docs_color_best-practices_--json_@large",
+ "args": [
+  "docs",
+  "color",
+  "best-practices",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Best Practices\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Use semantic tokens (--color-text-primary) instead of raw hex values.\",\n          \"Rely on the surface hierarchy (body → surface → card → popover) for layering.\",\n          \"Use status colors (success, error, warning) only for their semantic meaning.\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Hardcode hex values, since they won't adapt to dark mode or custom themes.\",\n          \"Mix accent colors with status colors in the same context.\",\n          \"Use --color-on-accent on non-accent backgrounds.\"\n        ]\n      }\n    ],\n    \"id\": \"best-practices\",\n    \"links\": {\n      \"up\": \"astryx docs color --index\",\n      \"previous\": \"astryx docs color usage\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

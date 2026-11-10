@@ -1,0 +1,8 @@
+export default {
+  "name": "x",
+  'q': `t`,
+
+  agentDocs: {
+    append: ['It\'s "quoted" \\ back']
+  }
+};

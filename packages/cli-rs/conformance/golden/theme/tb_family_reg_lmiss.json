@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_reg_lmiss",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "reg/lmiss.mjs",
+  "reg/lmiss-child.mjs",
+  "--family-key",
+  "fam-lmiss"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from reg/lmiss.mjs...\n\nBuilding theme from reg/lmiss-child.mjs...\n",
+ "stderr": "Error: Family registry /tmp/astryx-conformance/work/themes/reg/local-missing-icons.mjs does not export \"icons\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,22 @@
+{
+ "id": "w_theme_quick-start_--detail_compact",
+ "args": [
+  "docs",
+  "theme",
+  "quick-start",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n[Wrap your app in a theme]\n\nInstall a theme, import it with the CLI, and wire the generated module once. For the full guide — available themes, integration themes, dark mode, nested themes, and production builds — see `npx @astryxdesign/cli@0.7.12 docs use-a-theme`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nNext: npx @astryxdesign/cli@0.7.12 docs theme creating-a-custom-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

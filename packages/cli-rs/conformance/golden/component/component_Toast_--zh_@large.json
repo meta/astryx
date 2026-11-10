@@ -1,0 +1,20 @@
+{
+ "id": "component_Toast_--zh_@large",
+ "args": [
+  "component",
+  "Toast",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Toast\n\nToast 显示简短的非阻塞通知，用于确认操作或呈现临时信息。适用于用户需要反馈但不需要做决定的场景，如保存、删除或状态变更。\n\n生产环境中推荐使用 `useToast()` hook，它通过 `ToastViewport` 处理定位、堆叠、自动关闭和去重。Toast 会保持在视口和安全区域边距内，较长的消息会换行，并根据配置的顶部或底部边缘进入、退出或滑动关闭。垂直滑动与位置动效使用同一空间模型：顶部 Toast 向上离开，底部 Toast 向下离开。只有在动作明确朝向关闭边缘时才会接管原生触摸移动，滑动关闭继续报告现有的 manual 原因。触控笔属于直接接触输入，因此支持相同手势；鼠标拖动会与桌面文本选择冲突，所以不启用，关闭按钮始终可用。当操作或消息必须持续可用时，请显式设置 `isAutoHide: false`。`Toast` 组件以内联方式渲染 toast 视觉元素，适用于不需要视口生命周期的预览、文档和静态展示。\n\n**Import:** `import {Toast} from '@astryxdesign/core/Toast';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Body | Yes | The primary message text describing what happened or what the user should know. |\n| End content | No | A trailing action like an Undo button or a link, placed after the body text. |\n| Dismiss button | Yes | A close button that lets the user manually dismiss the toast before auto-hide. |\n\n## Best Practices\n\n- **Do:** 保持消息简短，只需几个词告诉用户发生了什么，如\"更改已保存\"或\"消息已发送\"。\n- **Do:** 在 endContent 插槽中添加简短的撤销操作，用于可逆操作。当操作必须持续可用时，将 isAutoHide 设置为 false。\n- **Do:** 使用 uniqueID 去重重复操作触发的 toast，如多次点击保存按钮。\n- **Do:** 对需要关注但不需要立即操作的错误使用 error 类型，它会持续显示直到关闭。\n- **Don't:** 不要对阻塞用户的严重错误使用 toast，使用 Banner 进行持久的上下文消息传递。\n- **Don't:** 不要在 toast 中放置长内容或多行内容，它会在5秒后消失，用户可能来不及阅读。\n- **Don't:** 不要将表单验证错误显示为 toast，使用内联字段验证让用户看到具体哪个字段需要修复。\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `body` | `ReactNode` | - | 主要消息内容。 **(required)** |\n| `type` | `'info' \\| 'error'` | `'info'` | Toast 类型，控制背景颜色。error toast 持续显示直到关闭。 |\n| `isAutoHide` | `boolean` | - | 是否自动关闭。info 默认为 true，error 默认为 false。 |\n| `autoHideDuration` | `number` | `5000` | 自动关闭前的持续时间（毫秒）。定时内容必须符合 WCAG 2.2.1。 |\n| `endContent` | `ReactNode` | - | 尾部渲染的内容（如撤销按钮、链接）。操作标签应保持简短。 |\n| `uniqueID` | `string` | - | 用于去重的唯一标识符。 |\n| `collisionBehavior` | `'overwrite' \\| 'ignore'` | `'overwrite'` | 当已存在相同 uniqueID 的 toast 时的行为。 |\n| `onHide` | `(reason: \"auto\" \\| \"manual\") => void` | - | 当 toast 被移除时触发的回调。 |\n| `onDismiss` | `(reason: \"auto\" \\| \"manual\") => void` | - | Callback fired when the toast is dismissed. **(required)** |\n| `renderContent` | `(toast: ToastContentRenderProps) => ReactNode` | - | 用你自己的布局替换该 toast 卡片内部的内容。Astryx 保留卡片本身、astryx-toast 主题目标和自动关闭行为（在 ToastViewport 中由视口播报该 toast；当模态框承载视口时由卡片自行播报），并把消息、endContent、解析后的 toast 设置和 dismiss 回调交给渲染函数。自定义渲染函数完全拥有布局中的控件：请组合所需的控件并通过它调用 dismiss。Astryx 不会向自定义内容注入后备关闭按钮。按 toast 单独设置：应用可通过封装 useToast 并在每次调用时传入来共享同一套布局；而由库代码发起、从不传入该参数的 toast 会渲染为普通的 Astryx toast。传入参数为 {body, endContent, type, isAutoHide, autoHideDuration, dismiss}，其中 type 为 'info' \\| 'error'。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-toast` | `data-type` | type | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'toast': {\n    base: { /* CSS properties */ },\n    'type:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

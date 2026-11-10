@@ -1,0 +1,21 @@
+{
+ "id": "w_icon_looks_new_second_unknown_default",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "second",
+  "--from",
+  "./lib/looks.js",
+  "--variants",
+  "outline,bold",
+  "--default-variant",
+  "bold"
+ ],
+ "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"bold\" is no look of ./lib/looks.js: its exports name their looks with outline or solid. Name one of these words, so each icon's export draws that look.\n\n  --default-variant outline  (a look ./lib/looks.js names)\n  --default-variant solid  (a look ./lib/looks.js names)\n",
+ "exit": 1,
+ "files": []
+}

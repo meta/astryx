@@ -1,0 +1,14 @@
+{
+ "id": "template_TimeInputShowcase_--json_@large",
+ "args": [
+  "template",
+  "TimeInputShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TimeInputShowcase\",\n    \"description\": \"A time input that uses the browser/OS picker on touch by default and Astryx typed entry on fine pointers.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"TimeInput\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {TimeInput, type ISOTimeString} from '@astryxdesign/core/TimeInput';\\nimport {Stack} from '@astryxdesign/core/Layout';\\n\\nexport default function TimeInputShowcase() {\\n  const [time, setTime] = useState<ISOTimeString | undefined>(undefined);\\n  return (\\n    <Stack\\n      direction=\\\"vertical\\\"\\n      width=\\\"100%\\\"\\n      style={{minWidth: 240, maxWidth: 400}}>\\n      <TimeInput\\n        label=\\\"Time\\\"\\n        placeholder=\\\"Select a time\\\"\\n        value={time}\\n        onChange={setTime}\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

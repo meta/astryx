@@ -1,0 +1,16 @@
+{
+ "id": "w_render_stylex_reassigned",
+ "args": [
+  "experimental",
+  "render",
+  "stylex/reassigned.tsx",
+  "--out",
+  "stylex/reassigned.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page does not compile: Referenced value is not a constant.\n",
+ "exit": 1,
+ "files": []
+}

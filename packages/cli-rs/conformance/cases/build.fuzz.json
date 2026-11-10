@@ -1,0 +1,29 @@
+[
+  {
+    "id": "fuzz_build_TOKEN-WITH-H@doctor-integrations_1875d6",
+    "args": [
+      "build",
+      "TOKEN-WITH-H"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "fuzz_build_a-ContextMen@doctor-env_d0d27f",
+    "args": [
+      "build",
+      "a-ContextMen"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/ambiguous"
+  },
+  {
+    "id": "fuzz_build_table-date-C@doctor-env_630bf1",
+    "args": [
+      "build",
+      "table,date,C"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/evidence"
+  }
+]

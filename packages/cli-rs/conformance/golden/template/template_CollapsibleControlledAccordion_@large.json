@@ -1,0 +1,19 @@
+{
+ "id": "template_CollapsibleControlledAccordion_@large",
+ "args": [
+  "template",
+  "CollapsibleControlledAccordion"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Stack} from '@astryxdesign/core/Stack';\n\n/**\n * Controlled: the parent owns which section is open, so something other than\n * a click can move it — a URL parameter, a validation failure jumping to the\n * offending step, or the buttons here.\n *\n * `onChange` gives back the whole open value, `string` for type=\"single\" and\n * `string[]` for type=\"multiple\".\n */\nconst STEPS = ['profile', 'security', 'billing'] as const;\ntype Step = (typeof STEPS)[number];\n\nexport default function CollapsibleControlledAccordion() {\n  const [open, setOpen] = useState<Step>('profile');\n  const index = STEPS.indexOf(open);\n  const handleOpenChange = (value: string | string[]) => {\n    if (typeof value === 'string' && STEPS.includes(value as Step)) {\n      setOpen(value as Step);\n    }\n  };\n\n  return (\n    <Stack gap={3} maxWidth={440}>\n      <Stack direction=\"horizontal\" gap={2} vAlign=\"center\">\n        <Button\n          label=\"Previous\"\n          variant=\"secondary\"\n          size=\"sm\"\n          isDisabled={index <= 0}\n          onClick={() => setOpen(STEPS[Math.max(0, index - 1)])}\n        />\n        <Button\n          label=\"Next\"\n          variant=\"secondary\"\n          size=\"sm\"\n          isDisabled={index >= STEPS.length - 1}\n          onClick={() => setOpen(STEPS[Math.min(STEPS.length - 1, index + 1)])}\n        />\n        <Text type=\"supporting\">\n          Step {index + 1} of {STEPS.length}\n        </Text>\n      </Stack>\n\n      <CollapsibleGroup type=\"single\" value={open} onChange={handleOpenChange}>\n        <Stack gap={2}>\n          <Card>\n            <Collapsible trigger=\"Profile\" value=\"profile\">\n              <Text type=\"body\" color=\"secondary\">\n                Name, email, and photo. Changes save as you type; the email\n                address needs confirmation from the new inbox before it takes\n                effect.\n              </Text>\n            </Collapsible>\n          </Card>\n\n          <Card>\n            <Collapsible trigger=\"Security\" value=\"security\">\n              <Text type=\"body\" color=\"secondary\">\n                Two-factor authentication, active sessions, and recent login\n                history. Signing out of a session revokes its token immediately.\n              </Text>\n            </Collapsible>\n          </Card>\n\n          <Card>\n            <Collapsible trigger=\"Billing\" value=\"billing\">\n              <Text type=\"body\" color=\"secondary\">\n                Invoices, payment method, and plan. Invoices stay downloadable\n                for seven years, including after a downgrade.\n              </Text>\n            </Collapsible>\n          </Card>\n        </Stack>\n      </CollapsibleGroup>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

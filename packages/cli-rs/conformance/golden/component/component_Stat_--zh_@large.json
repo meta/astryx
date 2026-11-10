@@ -1,0 +1,20 @@
+{
+ "id": "component_Stat_--zh_@large",
+ "args": [
+  "component",
+  "Stat",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/lab\n\n# Stat\n\nA KPI/metric display for dashboards and summary rows: metric name, large tabular-nums value, an optional sentiment-aware delta, a supporting description, and a media slot for a sparkline or mini chart. Compose several in a Grid for a KPI row.\n\n**Import:** `import {Stat} from '@astryxdesign/lab';`\n\n## Best Practices\n\n- **Do:** Pass pre-formatted strings for value and delta (\"1.2M\", \"+12.4%\"); Stat does not format numbers.\n- **Do:** Set `sentiment` explicitly for inverted metrics where down is good, like error rate or latency.\n- **Do:** Wrap Stat in a Card and lay out KPI rows with Grid columns={{minWidth: 240, max: 4}}.\n- **Don't:** Put a full-size chart in the media slot; it is meant for compact sparklines or trend glyphs.\n- **Don't:** Rely on delta color alone to convey meaning; the direction glyph and screen-reader text carry it too.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 显示在数值上方的指标名称，例如 \"Total requests\"。 **(required)** |\n| `value` | `ReactNode` | - | 大号显示的核心指标，使用等宽数字。请传入预先格式化的字符串，如 \"1.2M\"。 **(required)** |\n| `delta` | `{value: string, direction: 'up' \\| 'down' \\| 'flat', sentiment?: 'positive' \\| 'negative' \\| 'neutral'}` | - | 数值旁的变化指示：上升/下降/持平图标加彩色文本。sentiment 可覆盖默认的方向颜色映射（up=positive、down=negative、flat=neutral），用于错误率等反向指标。 |\n| `description` | `string` | - | 数值下方的弱化辅助说明，例如 \"vs. previous 30 days\"。 |\n| `media` | `ReactNode` | - | 渲染在文本内容下方的趋势插槽，例如迷你折线图。Stat 本身不渲染图表。 |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | 控制数值字号的尺寸变体。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式（外边距、定位、尺寸）。必须是 stylex.create() 的值，而非内联样式对象如 style={{}}。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-stat` | `data-size` | size | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'stat': {\n    base: { /* CSS properties */ },\n    'size:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_TabWithSelectedIcon_@large",
+ "args": [
+  "template",
+  "TabWithSelectedIcon"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TabList, Tab} from '@astryxdesign/core/TabList';\n\nconst StarIcon = (\n  <svg\n    viewBox=\"0 0 16 16\"\n    fill=\"none\"\n    stroke=\"currentColor\"\n    width=\"100%\"\n    height=\"100%\">\n    <path d=\"m8 1.5 2 4.1 4.5.7-3.3 3.2.8 4.5-4-2.1L4 14l.8-4.5-3.3-3.2 4.5-.7L8 1.5Z\" />\n  </svg>\n);\n\nconst SelectedStarIcon = (\n  <svg viewBox=\"0 0 16 16\" fill=\"currentColor\" width=\"100%\" height=\"100%\">\n    <path d=\"m8 1.5 2 4.1 4.5.7-3.3 3.2.8 4.5-4-2.1L4 14l.8-4.5-3.3-3.2 4.5-.7L8 1.5Z\" />\n  </svg>\n);\n\nexport default function TabWithSelectedIcon() {\n  const [value, setValue] = useState('favorites');\n\n  return (\n    <TabList value={value} onChange={setValue}>\n      <Tab\n        value=\"favorites\"\n        label=\"Favorites\"\n        icon={StarIcon}\n        selectedIcon={SelectedStarIcon}\n      />\n      <Tab value=\"recent\" label=\"Recent\" />\n    </TabList>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

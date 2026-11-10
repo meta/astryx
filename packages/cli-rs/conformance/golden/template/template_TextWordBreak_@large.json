@@ -1,0 +1,19 @@
+{
+ "id": "template_TextWordBreak_@large",
+ "args": [
+  "template",
+  "TextWordBreak"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TextWordBreak() {\n  return (\n    <div\n      style={{\n        display: 'flex',\n        flexDirection: 'column',\n        gap: 16,\n        maxWidth: 400,\n      }}>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Break-word (default for multi-line)\n        </Text>\n        <div style={{width: 200, border: '1px solid #ccc', padding: 8}}>\n          <Text type=\"body\" maxLines={2} wordBreak=\"break-word\">\n            This is a verylongunbreakableword for a break-word example\n          </Text>\n        </div>\n      </div>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Break-all (default for single-line)\n        </Text>\n        <div style={{width: 200, border: '1px solid #ccc', padding: 8}}>\n          <Text type=\"body\" maxLines={2} wordBreak=\"break-all\">\n            Breaks anywhere: abcdefghijklmnopqrstuvwxyz0123456789\n          </Text>\n        </div>\n      </div>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

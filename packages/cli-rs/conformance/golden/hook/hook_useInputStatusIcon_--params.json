@@ -1,0 +1,20 @@
+{
+ "id": "hook_useInputStatusIcon_--params",
+ "args": [
+  "hook",
+  "useInputStatusIcon",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInputStatusIconOptions` | - | Configuration object. **(required)** |\n| `options.status` | `InputStatus` | - | The input's status (type plus message), or undefined when there is none. |\n| `options.statusVariant` | `'attached' \\| 'detached' \\| 'tooltip'` | `'attached'` | How the status is presented relative to the input. |\n| `options.isInGroup` | `boolean` | `false` | Whether the input sits inside an InputGroup, which owns status rendering itself. |\n| `options.size` | `IconSize` | `'md'` | Size of the on-field icon. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

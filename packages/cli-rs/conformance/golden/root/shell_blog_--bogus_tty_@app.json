@@ -1,0 +1,13 @@
+{
+ "id": "shell_blog_--bogus_tty_@app",
+ "args": [
+  "blog",
+  "--bogus"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Error: unknown option '--bogus'\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

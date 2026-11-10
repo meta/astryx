@@ -1,0 +1,20 @@
+{
+ "id": "docs_acme-guide_--index_@integration",
+ "args": [
+  "docs",
+  "acme-guide",
+  "--index"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "Acme guide\nHow zorblax cards fit together.\n\npackage: @acme/kit\n\nstart   Start - Install the kit.\ncolors  Colors - Cards use the core tokens.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs acme-guide <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs acme-guide --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

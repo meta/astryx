@@ -1,0 +1,15 @@
+{
+ "id": "component_MetadataList_--props_--json_@large",
+ "args": [
+  "component",
+  "MetadataList",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Metadata items (MetadataListItem components).\",\n      \"slotElements\": [\n        {\n          \"__element\": \"MetadataListItem\",\n          \"props\": {\n            \"label\": \"Key\"\n          },\n          \"children\": \"Value\"\n        }\n      ],\n      \"required\": true\n    },\n    {\n      \"name\": \"columns\",\n      \"type\": \"'multi' | 'single' | number\",\n      \"description\": \"Column layout mode.\",\n      \"default\": \"'single'\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"{ position?: 'start' | 'top', width?: number | string }\",\n      \"description\": \"Label display configuration. position controls label placement, width sets a custom label column width. Defaults to { position: 'top' } for multi-column layouts. Position is ignored in horizontal mode, which always uses { position: 'top' }.\",\n      \"default\": \"{ position: 'start' } (vertical single-column) / { position: 'top' } (multi-column or horizontal)\"\n    },\n    {\n      \"name\": \"maxNumOfItems\",\n      \"type\": \"number\",\n      \"description\": \"Maximum items to show before collapsing with a show more/less toggle.\"\n    },\n    {\n      \"name\": \"orientation\",\n      \"type\": \"'vertical' | 'horizontal'\",\n      \"description\": \"Layout orientation. Horizontal mode flows items in a row with flex-wrap.\",\n      \"default\": \"'vertical'\"\n    },\n    {\n      \"name\": \"title\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional title or heading above the list.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,21 @@
+{
+ "id": "w_render_rebuild_nocore",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "stripped.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "Rebuilt stripped-restored/page.tsx\n\ninput:      stripped.html\nmode:       rebuilt\nexact:      false\noutput:     stripped-restored/page.tsx\nfiles:      stripped-restored/page.tsx\ncomponents: none\nelements:   0\nunknown:    badge, button, card, divider, field, field-label, heading, link, stack, text, text-input\n\nThe file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "renderpages/stripped-restored/page.tsx",
+   "status": "created",
+   "text": "// Rebuilt by astryx experimental render --reverse from rendered markup: Dash {x} & co.\n// Text and layout come from the markup; styling, state and behavior do not,\n// so review it before use.\n\n\nexport default function Page() {\n  return (\n    <>\n      <h1>Dash {'{'}x{'}'}</h1>\n      <span>New</span>\n      <span>Hello \"q\" bold</span>\n      <span>In card</span>\n      <span>Save</span>\n      <span>Go</span>\n      <label>Name</label>\n      <p>plain</p>\n      <img src=\"data:image/png;base64,AA\" alt=\"i\" />\n    </>\n  );\n}\n"
+  }
+ ]
+}

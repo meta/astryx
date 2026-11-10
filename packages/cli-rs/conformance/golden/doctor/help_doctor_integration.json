@@ -1,0 +1,14 @@
+{
+ "id": "help_doctor_integration",
+ "args": [
+  "help",
+  "doctor",
+  "integration"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx doctor [options] [command]\n\nDiagnose Astryx projects and integration packages\n\nOptions:\n  --built <path>  Also check a finished build before you deliver it: a project folder, a build output folder, or one built HTML file. Fails when it does not use Astryx at all, and warns with each raw element, icon or custom style in its source.\n  -h, --help      display help for command\n\nCommands:\n  integration     Check an integration package while authoring it\n\nExit codes:\n  0  no checks failed (warnings are allowed)\n  1  one or more checks failed\n\nExamples:\n  # Run project diagnostics\n  npx @astryxdesign/cli@0.7.12 doctor\n  # Machine-readable project report\n  npx @astryxdesign/cli@0.7.12 doctor --json\n  # Before you deliver a build: check that it uses Astryx\n  npx @astryxdesign/cli@0.7.12 doctor --built dist\n  # Validate an integration\n  npx @astryxdesign/cli@0.7.12 doctor integration validate @acme/widgets\n  # Check template ids against Core\n  npx @astryxdesign/cli@0.7.12 doctor integration templates @acme/widgets\n  # Check component names against Core\n  npx @astryxdesign/cli@0.7.12 doctor integration components @acme/widgets\n  # Classify doc overlaps with Core\n  npx @astryxdesign/cli@0.7.12 doctor integration docs @acme/widgets\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

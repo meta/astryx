@@ -1,0 +1,20 @@
+{
+ "id": "w_-test-kit-3.2.0-Dial---json_@discover-sources",
+ "args": [
+  "discover",
+  "@test/kit@3.2.0/Dial",
+  "--json"
+ ],
+ "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@test/kit\",\n  \"data\": {\n    \"package\": \"@test/kit\",\n    \"version\": \"3.2.0\",\n    \"kind\": \"component\",\n    \"name\": \"Dial\",\n    \"installed\": true,\n    \"source\": \"Test catalog\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/65396234c296fac296bd8715038c1f14.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/kit\",\"integration\":\"test-kit\",\"aliases\":[],\"latest\":\"3.2.0\",\"versions\":[{\"version\":\"3.2.0\",\"publishedAt\":\"2026-09-29T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"3.1.4\",\"publishedAt\":\"2026-09-01T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Dial\"}]}]}}"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+[
+  {
+    "id": "fuzz_experimental_icon_--json_spacing-dial@badconfig_d54c38",
+    "args": [
+      "experimental",
+      "icon",
+      "--json",
+      "spacing dial"
+    ],
+    "fixture": "badconfig"
+  },
+  {
+    "id": "fuzz_experimental_icon_add_SearchIcon_--from_-acme-icons@doctor-author_39420d",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "SearchIcon",
+      "--from",
+      "@acme/icons"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "fuzz_experimental_icon_new-set_search@fuzzodd_563674",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "search"
+    ],
+    "fixture": "fuzzodd",
+    "cwd": "fuzzodd/spaced \u00fc"
+  }
+]

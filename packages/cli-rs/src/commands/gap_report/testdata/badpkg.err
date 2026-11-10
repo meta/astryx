@@ -1,0 +1,4 @@
+Error: No loaded integration package named "@x/y".
+
+  @astryxdesign/charts  (loaded integration)
+  @astryxdesign/lab  (loaded integration)

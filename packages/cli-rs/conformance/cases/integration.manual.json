@@ -1,0 +1,699 @@
+[
+  {
+    "id": "w_agent_doc_author",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Run acme verify before finishing."
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_long_author",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Always run the acme verification suite and the full lint pass before you hand any change back for review."
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_quotes_author_json",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Use the team's \"acme\" CLI \\ wrapper.",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_template_block_author",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "account-card",
+      "--type",
+      "block"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_template_page_dry_author",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "acme-dashboard",
+      "--dry-run"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_theme_author_json",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_theme_dry_author",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--dry-run"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_doc_parent_author_json",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "releasing",
+      "--parent",
+      "acme",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_codemod_author",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "rename-widget",
+      "--to",
+      "1.2.0-beta.1"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_component_author_dry",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "AcmeWidget",
+      "--dry-run"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_app",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Run acme verify before finishing."
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_agent_doc_long_app",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Always run the acme verification suite and the full lint pass before you hand any change back for review."
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_agent_doc_quotes_app_json",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Use the team's \"acme\" CLI \\ wrapper.",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_template_block_app",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "account-card",
+      "--type",
+      "block"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_template_page_dry_app",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "acme-dashboard",
+      "--dry-run"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_app_json",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_dry_app",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--dry-run"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_parent_app_json",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "releasing",
+      "--parent",
+      "acme",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_codemod_app",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "rename-widget",
+      "--to",
+      "1.2.0-beta.1"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_app_dry",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "AcmeWidget",
+      "--dry-run"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_exists_author",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "WidgetCard"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_component_exists_author_json",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "WidgetCard",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_doc_exists_author",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "widgets"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_component_from_subdir_author",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "AcmeWidget"
+    ],
+    "fixture": "author",
+    "cwd": "author/src"
+  },
+  {
+    "id": "w_component_from_subdir_app",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "AcmeWidget"
+    ],
+    "fixture": "app",
+    "cwd": "app/src"
+  },
+  {
+    "id": "w_agent_doc_twice_marker",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "<!-- ASTRYX:START -->"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_blank",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "   "
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_padded",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      " padded "
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_agent_doc_toolong",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_component_lower",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "acmeWidget"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_component_bad_chars",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "Acme-Widget",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_template_bad_name",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "Acme_Dash"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_template_bad_type_json",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "acme",
+      "--type",
+      "grid",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_bad_name",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "my doc"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_both",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "topic",
+      "--replaces",
+      "a",
+      "--extends",
+      "b"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_parent_and_replaces",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "topic",
+      "--parent",
+      "acme",
+      "--replaces",
+      "a"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_parent_bad",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "topic",
+      "--parent",
+      "Acme"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doc_replaces_bad",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "topic",
+      "--replaces",
+      "a b"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_codemod_no_to",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "rename-widget"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_codemod_bad_to",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "rename-widget",
+      "--to",
+      "1.2"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_codemod_bad_name",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "Rename",
+      "--to",
+      "1.0.0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_bad_name",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "Ocean"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_from_self",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--from",
+      "ocean"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_from_unknown",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--from",
+      "nope"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_from_unknown_json",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean",
+      "--from",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_from_stone_author",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "sea-glass",
+      "--from",
+      "stone"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_theme_from_y2k_json",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "retro",
+      "--from",
+      "y2k",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_y2k_name",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "y2k-neon",
+      "--dry-run",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_kind_unknown",
+    "args": [
+      "integration",
+      "add",
+      "widget",
+      "Foo"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_kind_unknown_json",
+    "args": [
+      "integration",
+      "add",
+      "widget",
+      "Foo",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_opt_wrong_kind_to",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "topic",
+      "--to",
+      "1.0.0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_opt_wrong_kind_from",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "Foo",
+      "--from",
+      "neutral",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_opt_wrong_kind_type",
+    "args": [
+      "integration",
+      "add",
+      "codemod",
+      "x",
+      "--type",
+      "page"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_empty_dir_theme",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_plain_component",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "AcmeWidget",
+      "--json"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_integration_template",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "acme-dash"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_check_strict_next_author",
+    "args": [
+      "integration",
+      "check",
+      "--strict",
+      "--next"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_check_next_author_json",
+    "args": [
+      "integration",
+      "check",
+      "--next",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "w_check_strict_json_app",
+    "args": [
+      "integration",
+      "check",
+      "--strict",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_check_subdir_author",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "author",
+    "cwd": "author/src"
+  },
+  {
+    "id": "w_verify_subdir_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "cwd": "author/src"
+  },
+  {
+    "id": "w_verify_plain_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_pack_check_json_author",
+    "args": [
+      "integration",
+      "pack",
+      "--check",
+      "--json"
+    ],
+    "fixture": "author"
+  }
+]

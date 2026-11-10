@@ -1,0 +1,21 @@
+// Test oracle only: olderCliNotes and templateIconNotes on a crafted package.
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import {pathToFileURL} from 'node:url';
+const [cliRoot, out] = process.argv.slice(2);
+const imp = rel => import(pathToFileURL(path.join(cliRoot, rel)).href);
+const ds = await imp('foundation/discovery/doc-stability.mjs');
+const ti = await imp('foundation/discovery/template-icon-notes.mjs');
+const pkg = path.join(os.tmpdir(), 'astryx-stability-pkg');
+fs.rmSync(pkg, {recursive: true, force: true});
+const w = (rel, text) => { const f = path.join(pkg, rel); fs.mkdirSync(path.dirname(f), {recursive: true}); fs.writeFileSync(f, text); };
+w('package.json', '{"name":"@x/stab","version":"1.0.0","peerDependencies":{"@astryxdesign/cli":">=0.6.0"}}');
+w('templates/hero.doc.mjs', "export default {type: 'block', name: 'Hero', description: 'A hero.', stability: 'experimental', icons: {ArrowIcon: 'arrowRight', Missing: 'close', Star: 'star'}};\n");
+w('templates/hero.tsx', "import {ArrowIcon} from 'icons';\nimport Star from 'star-icon';\nexport default function Hero() { return <div><ArrowIcon/><Star/></div>; }\n");
+w('templates/broken.doc.mjs', "export default {type: 'block', name: 'Broken', description: 'B.', icons: {X: 'close'}};\n");
+w('templates/broken.tsx', "export default function ( {\n");
+w('docs/ns.doc.mjs', "export default {type: 'namespace', name: 'ns', title: 'NS', summary: 'S', stability: 'experimental', slots: {a: {title: 'A', accepts: {kinds: ['generic']}}}};\n");
+const loaded = {name: '@x/stab', templates: path.join(pkg, 'templates'), docs: path.join(pkg, 'docs'), __packageDir: pkg};
+const pj = JSON.parse(fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'));
+fs.writeFileSync(out, JSON.stringify({loaded, pkg: pj, older: await ds.olderCliNotes(loaded, pj, pkg), icons: await ti.templateIconNotes(loaded, pkg)}, null, 1));

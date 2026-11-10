@@ -1,0 +1,19 @@
+{
+ "id": "template_LayoutHeaderShowcase_@large",
+ "args": [
+  "template",
+  "LayoutHeaderShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutHeader,\n  LayoutContent,\n  LayoutFooter,\n  LayoutPanel,\n  Card,\n  HStack,\n} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Heading} from '@astryxdesign/core/Text';\nimport {Button} from '@astryxdesign/core/Button';\n\nexport default function LayoutHeaderShowcase() {\n  return (\n    <Center width={400}>\n      <Layout\n        style={{width: '100%'}}\n        height=\"fill\"\n        header={\n          <LayoutHeader hasDivider>\n            <HStack gap={2} vAlign=\"center\" hAlign=\"between\">\n              <Heading level={4}>Dashboard</Heading>\n              <HStack gap={2}>\n                <Button label=\"Export\" variant=\"secondary\">\n                  Export\n                </Button>\n                <Button label=\"New Item\" variant=\"primary\">\n                  New Item\n                </Button>\n              </HStack>\n            </HStack>\n          </LayoutHeader>\n        }\n        start={\n          <LayoutPanel hasDivider width={140}>\n            <Card variant=\"muted\" />\n          </LayoutPanel>\n        }\n        content={\n          <LayoutContent>\n            <Card variant=\"muted\" />\n          </LayoutContent>\n        }\n        footer={\n          <LayoutFooter hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutFooter>\n        }\n      />\n    </Center>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

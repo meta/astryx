@@ -1,0 +1,15 @@
+{
+ "id": "search_login-page_--limit_0",
+ "args": [
+  "search",
+  "login page",
+  "--limit",
+  "0"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"0\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

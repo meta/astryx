@@ -1,0 +1,20 @@
+{
+ "id": "template_canvas-editor_--skeleton_@large",
+ "args": [
+  "template",
+  "canvas-editor",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# canvas-editor - Layered artboard workspace: document tabs over a layer rail, a fixed-size frame you zoom on a muted backdrop, and an inspector of position, type, and filter fields that retargets to the selected layer. Objects hold a coordinate rather than reflowing, so moving one never moves another.\n# Components: AspectRatio, Card, Center, Divider, DropdownMenu, DropdownMenuCheckbox, DropdownMenuDivider, DropdownMenuRadio, DropdownMenuSubMenu, Fragment, IconButton, Item, Layout, List, NumberInput, Popover, ResizeHandle, Section, SegmentedControl, Selector, Slider, TextArea, TextInput, Thumbnail, Toolbar, TreeList\n\n<Theme />\n<Section padding={0} variant=\"section\" height=\"100%\">\n  <Layout padding={0} hasDivider height=\"fill\">\n    /* header: */\n    <LayoutHeader padding={1} hasDivider>\n      <HStack gap={0.5}>\n        <HStack gap={0.5}>\n          <DropdownMenu />\n          <DropdownMenuSubMenu />\n          <DropdownMenuItem />\n          <DropdownMenuItem />\n          <DropdownMenuDivider />\n          <DropdownMenuItem />\n          <DropdownMenuItem />\n          <DropdownMenuSubMenu />\n          <DropdownMenuItem />\n          <DropdownMenuDivider />\n          <DropdownMenuItem />\n          <DropdownMenuSubMenu />\n          <DropdownMenuItem />\n          <DropdownMenuItem />\n          <DropdownMenuDivider />\n          <DropdownMenuItem />\n          <DropdownMenuItem />\n          <DropdownMenuItem />\n          <DropdownMenuDivider />\n          <DropdownMenuItem />\n          <DropdownMenuItem variant=\"destructive\" />\n          <DropdownMenuSubMenu />\n          <DropdownMenuCheckboxItem />\n          <DropdownMenuCheckboxItem />\n          <DropdownMenuCheckboxItem />\n          <DropdownMenuDivider />\n          <DropdownMenuSubMenu />\n          <DropdownMenuRadioGroup />\n          ...\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,1426 @@
+[
+  {
+    "id": "tb_theme_build_themes-alpha-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-ocean-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/ocean.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-ocean-ts_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/ocean.ts",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-variants-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/variants.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-variants-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/variants.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-nonaug-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/nonaug.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-nonaug-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/nonaug.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-heading-combo-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/heading-combo.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-heading-combo-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/heading-combo.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-heading-blank-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/heading-blank.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-heading-blank-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/heading-blank.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-private-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/private.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-private-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/private.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-nameless-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/nameless.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-nameless-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/nameless.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-traversal-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/traversal.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-traversal-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/traversal.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-slash-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/slash.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-slash-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/slash.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-spaces-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/spaces.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-spaces-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/spaces.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-notheme-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/notheme.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-notheme-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/notheme.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-throws-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/throws.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-throws-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/throws.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-missing-import-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/missing-import.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-missing-import-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/missing-import.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-named-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/named.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-named-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/named.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fonts-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/fonts.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fonts-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/fonts.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-system-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/system.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-system-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/system.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-scheme-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/scheme.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-scheme-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/scheme.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-ordered-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/ordered.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-ordered-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/ordered.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-surface-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/surface.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-surface-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/surface.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-enroll-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/enroll.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-enroll-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/enroll.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-dropped-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/dropped.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-dropped-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/dropped.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-local-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/local.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-local-ts_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/local.ts",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-extends-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/extends.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-extends-ts_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/extends.ts",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-raw-input-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/raw-input.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-raw-input-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/raw-input.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fail-define-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/fail-define.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fail-define-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/fail-define.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-ocean-ts",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/ocean.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_compact_theme_build_themes-ocean-ts",
+    "args": [
+      "--detail",
+      "compact",
+      "theme",
+      "build",
+      "themes/ocean.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-fonts-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/fonts.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_compact_theme_build_themes-fonts-mjs",
+    "args": [
+      "--detail",
+      "compact",
+      "theme",
+      "build",
+      "themes/fonts.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-variants-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/variants.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_compact_theme_build_themes-variants-mjs",
+    "args": [
+      "--detail",
+      "compact",
+      "theme",
+      "build",
+      "themes/variants.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-private-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/private.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_compact_theme_build_themes-private-mjs",
+    "args": [
+      "--detail",
+      "compact",
+      "theme",
+      "build",
+      "themes/private.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-system-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/system.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_compact_theme_build_themes-system-mjs",
+    "args": [
+      "--detail",
+      "compact",
+      "theme",
+      "build",
+      "themes/system.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_themes-gamma-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "themes/gamma.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_themes-gamma-mjs_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "themes/gamma.mjs",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-alpha-mjs_themes-fonts-mjs_themes-ocean-ts",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/fonts.mjs",
+      "themes/ocean.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fonts-mjs_themes-ocean-ts",
+    "args": [
+      "theme",
+      "build",
+      "themes/fonts.mjs",
+      "themes/ocean.ts"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-throws-mjs_themes-beta-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/throws.mjs",
+      "themes/beta.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-fonts-mjs_themes-nameless-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/fonts.mjs",
+      "themes/nameless.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_themes-fonts-mjs_themes-nameless-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "themes/fonts.mjs",
+      "themes/nameless.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-private-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/private.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_--out_x-css",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "--out",
+      "x.css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-STAR-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/*.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_'themes-STAR-mjs'",
+    "args": [
+      "theme",
+      "build",
+      "'themes/*.mjs'"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_stale-alpha-mjs_--check",
+    "args": [
+      "theme",
+      "build",
+      "stale/alpha.mjs",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_stale-alpha-mjs_--check_--json",
+    "args": [
+      "theme",
+      "build",
+      "stale/alpha.mjs",
+      "--check",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--check",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_--check",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "themes/beta.mjs",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_stale-alpha-mjs_themes-beta-mjs_--check_--json",
+    "args": [
+      "theme",
+      "build",
+      "stale/alpha.mjs",
+      "themes/beta.mjs",
+      "--check",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_dist-alpha-css",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "dist/alpha.css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_dist-custom-css_--json",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "dist/custom.css",
+      "--json"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_---outside-css",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "../outside.css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_---outside-css_--check",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "../outside.css",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_-tmp-abs-outside-css",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "/tmp/abs-outside.css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--out_-tmp-abs-outside-css_--check",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--out",
+      "/tmp/abs-outside.css",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_src-themes-brand-mjs",
+    "args": [
+      "theme",
+      "build",
+      "src/themes/brand.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_src-themes-brand-mjs",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "src/themes/brand.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_--detail_full_theme_build_alpha-mjs@themes",
+    "args": [
+      "--detail",
+      "full",
+      "theme",
+      "build",
+      "alpha.mjs"
+    ],
+    "fixture": "themes",
+    "cwd": "themes"
+  },
+  {
+    "id": "tb_theme_build_alpha-mjs_--out_---dist-a-css@themes",
+    "args": [
+      "theme",
+      "build",
+      "alpha.mjs",
+      "--out",
+      "../dist/a.css"
+    ],
+    "fixture": "themes",
+    "cwd": "themes"
+  },
+  {
+    "id": "tb_theme_build_---themes-alpha-mjs@src",
+    "args": [
+      "theme",
+      "build",
+      "../themes/alpha.mjs"
+    ],
+    "fixture": "themes",
+    "cwd": "src"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--watch_--check",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--watch",
+      "--check"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--family",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--family"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--family_--family-key_k_--out_o-css",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--family",
+      "--family-key",
+      "k",
+      "--out",
+      "o.css"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "tb_theme_build_themes-alpha-mjs_--icons-specifier_--icons-mjs",
+    "args": [
+      "theme",
+      "build",
+      "themes/alpha.mjs",
+      "--icons-specifier",
+      "./icons.mjs"
+    ],
+    "fixture": "themes"
+  },
+  {
+    "id": "w_th_add_pkg",
+    "args": [
+      "theme",
+      "add",
+      "neutral",
+      "--package",
+      "@astryxdesign/cli"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_th_add_twice",
+    "args": [
+      "theme",
+      "add",
+      "butter"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_add_upper",
+    "args": [
+      "theme",
+      "add",
+      "BUTTER",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_th_add_unknown",
+    "args": [
+      "theme",
+      "add",
+      "nopetheme"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_th_add_not_installed",
+    "args": [
+      "theme",
+      "add",
+      "butter"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_add_empty",
+    "args": [
+      "theme",
+      "add",
+      "neutral"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_th_add_second",
+    "args": [
+      "theme",
+      "add",
+      "stone"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_use_second",
+    "args": [
+      "theme",
+      "use",
+      "stone"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_use_second_json",
+    "args": [
+      "theme",
+      "use",
+      "Stone",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_remove_default",
+    "args": [
+      "theme",
+      "remove",
+      "butter"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_remove_second",
+    "args": [
+      "theme",
+      "remove",
+      "stone",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_remove_not_added",
+    "args": [
+      "theme",
+      "remove",
+      "stone"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_use_not_configured",
+    "args": [
+      "theme",
+      "use",
+      "butter"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_th_list_after_add",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_list_after_add_json",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_list_empty",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_th_list_pkg",
+    "args": [
+      "theme",
+      "list",
+      "--package",
+      "@astryxdesign/cli",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_addlist_pkg",
+    "args": [
+      "theme",
+      "add",
+      "--list",
+      "--package",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_th_eject_target",
+    "args": [
+      "theme",
+      "eject",
+      "stone",
+      "themes/mine"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_abs",
+    "args": [
+      "theme",
+      "eject",
+      "stone",
+      "/tmp/x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_traversal",
+    "args": [
+      "theme",
+      "eject",
+      "stone",
+      "../x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_exists",
+    "args": [
+      "theme",
+      "eject",
+      "stone"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_eject_exists_f",
+    "args": [
+      "theme",
+      "eject",
+      "stone",
+      "-f",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_eject_wrong_pkg",
+    "args": [
+      "theme",
+      "eject",
+      "stone",
+      "--package",
+      "@acme/kit"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_unknown_json",
+    "args": [
+      "theme",
+      "eject",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_then_list",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_eject_then_add",
+    "args": [
+      "theme",
+      "add",
+      "stone"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_targets_mixed",
+    "args": [
+      "theme",
+      "targets",
+      "switch"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_targets_thumb",
+    "args": [
+      "theme",
+      "targets",
+      "thumb",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_targets_empty",
+    "args": [
+      "theme",
+      "targets"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_th_targets_nocore",
+    "args": [
+      "theme",
+      "targets"
+    ],
+    "fixture": "nocore"
+  },
+  {
+    "id": "w_th_template_nested",
+    "args": [
+      "theme",
+      "template",
+      "a/b/c.ts"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_template_traversal",
+    "args": [
+      "theme",
+      "template",
+      "../c.ts"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_template_overwrite",
+    "args": [
+      "theme",
+      "template",
+      "--overwrite"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "template"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_template_abs_json",
+    "args": [
+      "theme",
+      "template",
+      "/tmp/t.ts",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_add_broken_module",
+    "args": [
+      "theme",
+      "add",
+      "butter"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/astryx-themes.js"
+      ]
+    ]
+  },
+  {
+    "id": "w_th_list_broken_module",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/astryx-themes.ts"
+      ]
+    ]
+  }
+]

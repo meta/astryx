@@ -1,0 +1,15 @@
+{
+ "id": "docs_use-integrations_discover-integrations_--json_@large",
+ "args": [
+  "docs",
+  "use-integrations",
+  "discover-integrations",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Discover integrations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Integration packages extend Astryx with extra components, templates, themes, docs, and codemods. They are published as regular npm packages.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Search for what you need:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx search carousel\\nastryx discover\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"`search` looks across everything the CLI knows (components, docs, templates, themes, and hooks), so a word like \\\"carousel\\\" finds it whether it is a component, a template, or a doc page. `discover` lists every integration the project has, and, with a discover source, packages it could add.\"\n      }\n    ],\n    \"id\": \"discover-integrations\",\n    \"links\": {\n      \"up\": \"astryx docs use-integrations --index\",\n      \"next\": \"astryx docs use-integrations install-an-integration\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

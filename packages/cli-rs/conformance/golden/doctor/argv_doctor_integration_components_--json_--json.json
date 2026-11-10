@@ -1,0 +1,16 @@
+{
+ "id": "argv_doctor_integration_components_--json_--json",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--json",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.component-conflicts\",\n  \"data\": {\n    \"validated\": false,\n    \"name\": null,\n    \"version\": null,\n    \"conflicts\": [],\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

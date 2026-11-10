@@ -1,0 +1,17 @@
+{
+ "id": "argv-negval_integration_add_component_useClipboard_--type_-1",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--type",
+  "-1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Option \"templateType\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

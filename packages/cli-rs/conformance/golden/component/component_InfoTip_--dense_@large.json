@@ -1,0 +1,20 @@
+{
+ "id": "component_InfoTip_--dense_@large",
+ "args": [
+  "component",
+  "InfoTip",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# InfoTip\n\nA small \"i\" button: hover and keyboard focus preview the help; a click, tap, Enter, or Space pins it open. Use next to labels, values, and metrics for permission notes, metric definitions, and field help. Pre-wired accessible trigger: real button, aria-label, Tab-reachable, tooltip on hover AND focus AND tap, Escape dismissal. Toggletip pattern: aria-expanded=\"true\" while pinned; the help is announced once when it pins.\n\n**Import:** `import {InfoTip} from '@astryxdesign/core/InfoTip';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Trigger button | Yes | Small round native button, named by `label`, that previews and pins the help. |\n| Info icon | Yes | The icon registry's `info` artwork at `size`; a theme may replace it. |\n| Help surface | Yes | Tooltip surface that shows `content` while the help is shown. |\n\n## Best Practices\n\n- **Do:** Keep tooltip content concise, plain, and non-interactive; use Popover or HoverCard for links and buttons.\n- **Do:** Override label when \"More information\" is too generic, e.g. \"About this metric\".\n- **Do:** Rely on InfoTip rather than a hand-rolled info button on touch: it pins its help on a press, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.\n- **Don't:** Hand-compose Icon inside Tooltip for info affordances; the bare Icon is aria-hidden and unfocusable.\n- **Don't:** Use InfoTip for essential information users must see to complete a task; put that text inline instead.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `content` | `ReactNode` | - | Tooltip content. Short, non-interactive text. Mirrors Tooltip content prop. **(required)** |\n| `label` | `string` | `'More information'` | Accessible name for the trigger button. Default: the translated 'More information'. |\n| `size` | `'xsm' \\| 'sm' \\| 'md' \\| 'lg'` | `'sm'` | Info icon size (12/16/20/24px). Maps 1:1 to Icon sizes. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

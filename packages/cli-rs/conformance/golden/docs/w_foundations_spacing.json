@@ -1,0 +1,14 @@
+{
+ "id": "w_foundations_spacing",
+ "args": [
+  "docs",
+  "foundations",
+  "spacing"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: \"foundations\" has no sections. Open one of its children instead.\n\n  color  (Semantic color tokens for surfaces, text, icons, borders, and status indicators.)\n  elevation  (Shadow tokens for visual elevation and inset state rings.)\n  icons  (Semantic icon names available in the design system. These adapt to the active theme's icon registry.)\n  illustrations  (Illustration guidelines for empty states, onboarding flows, and feature highlights.)\n  motion  (Duration and easing tokens for animations and transitions.)\n  shape  (Border radius tokens for consistent component rounding, from sharp corners to full pills.)\n  spacing  (Spacing scale tokens for padding, gap, and margin: the rhythmic foundation of design system layouts.)\n",
+ "exit": 1,
+ "files": []
+}

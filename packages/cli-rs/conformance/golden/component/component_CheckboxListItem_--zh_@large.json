@@ -1,0 +1,20 @@
+{
+ "id": "component_CheckboxListItem_--zh_@large",
+ "args": [
+  "component",
+  "CheckboxListItem",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# CheckboxListItem\n\n单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。在触摸屏上，可切换的行是一个整体的按压目标：手指按在标签、描述或复选框本身上，行与其复选框会一起显示按下状态。主指针为精细指针时，复选框保留自己的按下效果。\n\n**Import:** `import {CheckboxListItem} from '@astryxdesign/core/CheckboxList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | 选项的主标签。富内容标签可包含链接或按钮，它们保留自身行为且不会切换该选项。ReactNode 标签会以其可见文本为复选框命名；仅当可见文本缺失时使用 aria-label，否则覆盖值必须保留全部可见文字。 **(required)** |\n| `aria-label` | `string` | - | 复选框的纯文本无障碍名称，会替换由 label 推导出的名称。仅当富标签没有可见文本时才完全替代；否则必须保留全部可见文字。 |\n| `value` | `string` | - | 标识键。当父级 CheckboxList 带有 value 数组时为必填；缺少时该选项会抛出错误。 |\n| `description` | `ReactNode` | - | 标签下方的辅助内容。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。 |\n| `endContent` | `ReactNode` | - | 在标签区域后渲染的内容。 |\n| `align` | `'center' \\| 'start' \\| 'first-line'` | `'center'` | 起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（复选框）与换行标签的第一行保持水平。参见 Item.align。 |\n| `isDisabled` | `boolean` | `false` | 是否禁用此单个选项。 |\n| `isLoading` | `boolean` | `false` | 此选项是否处于加载状态。在复选框内显示加载旋转器并阻止该选项的交互。在集合模式下，当父级 changeAction 处于待定状态时，被切换的选项会自动显示此状态。 |\n| `isChecked` | `boolean \\| 'indeterminate'` | - | 独立模式下的直接选中状态：位于 List 内，或位于不带 value 的 CheckboxList 内（例如“全选”选项）。当父级 CheckboxList 带有 value 数组时忽略。 |\n| `onCheck` | `(checked: boolean) => void` | - | 独立模式下的直接选中处理函数：位于 List 内，或位于不带 value 的 CheckboxList 内。当父级 CheckboxList 带有 value 数组时忽略，改由该列表的 onChange 接收变更。 |\n\n## Examples\n\n### Rich label with an overriding aria-label\n\n```tsx\n<CheckboxListItem\n  label={<span>Pro plan <Badge label=\"Recommended\" /></span>}\n  aria-label=\"Pro plan Recommended option\"\n  value=\"pro\"\n/>\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

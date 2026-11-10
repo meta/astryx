@@ -1,0 +1,31 @@
+{
+ "id": "ex_integration_add_template_acme-dashboard_@author",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "acme-dashboard"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "template contribution added\n\n[ok] acme-dashboard\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dashboard.doc.mjs\n- templates/acme-dashboard.tsx\n- astryx.integration.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "author/templates/acme-dashboard.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'acme-dashboard',\n  displayName: 'Acme Dashboard',\n  description: 'Acme Dashboard template.',\n};\n"
+  },
+  {
+   "path": "author/templates/acme-dashboard.tsx",
+   "status": "created",
+   "text": "export default function AcmeDashboard() {\n  return <div>Acme Dashboard</div>;\n}\n"
+  }
+ ]
+}

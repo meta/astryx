@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_grid_--json",
+ "args": [
+  "theme",
+  "targets",
+  "grid",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"grid\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"grid\",\n        \"className\": \"astryx-grid\",\n        \"component\": \"Grid\",\n        \"props\": [\n          \"align\",\n          \"columns\",\n          \"gap\",\n          \"justify\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"grid-span\",\n        \"className\": \"astryx-grid-span\",\n        \"component\": \"Grid\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

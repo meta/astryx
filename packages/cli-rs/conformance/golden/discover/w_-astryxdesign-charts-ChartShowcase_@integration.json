@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-charts-ChartShowcase_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/charts/ChartShowcase"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/charts\" not found\n",
+ "exit": 1,
+ "files": []
+}

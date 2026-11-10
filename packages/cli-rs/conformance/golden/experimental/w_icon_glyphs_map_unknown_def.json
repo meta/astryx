@@ -1,0 +1,16 @@
+{
+ "id": "w_icon_glyphs_map_unknown_def",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "nope",
+  "home"
+ ],
+ "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"nope\" is not an icon definition.\n\n  code  (a known icon definition)\n  copy  (a known icon definition)\n  home  (a known icon definition)\n  npx @astryxdesign/cli@0.7.12 experimental icon new-definition nope --set glyphs  (add it as your own definition)\n",
+ "exit": 1,
+ "files": []
+}

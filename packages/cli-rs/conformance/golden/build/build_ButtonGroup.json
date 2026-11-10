@@ -1,0 +1,19 @@
+{
+ "id": "build_ButtonGroup",
+ "args": [
+  "build",
+  "ButtonGroup"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"ButtonGroup\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nNo template matched, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nBLOCKS\nReady-made sections for parts the template lacks. Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        ButtonGroupBasic\npackage:     @astryxdesign/core\ndescription: Three related actions joined into a single connected control.\n\nname:        ButtonGroupFloating\npackage:     @astryxdesign/core\ndescription: A grouped action bar raised with `elevation=\"med\"`.\n\nname:    ButtonGroupShowcase\npackage: @astryxdesign/core\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        ButtonGroup\npackage:     @astryxdesign/core\ndescription: ButtonGroup joins related actions into a single connected control.\n\nname:        SegmentedControl\npackage:     @astryxdesign/core\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options.\n\nname:        ToggleButton\npackage:     @astryxdesign/core\ndescription: ToggleButton switches between selected and unselected states to represent a persistent on/off choice.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

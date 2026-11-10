@@ -1,0 +1,13 @@
+{
+ "id": "fuzz_integration_verify@doctor-ts_a91be1",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "doctor-ts",
+ "fixtureHash": "41036cd7bea63afd+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/tskit@1.0.0\n\n8 packed files; 6/6 required files present.\n\n- [fail] guide.doc.mjs: guide.doc.mjs is invalid: sections.0.content.0.text: Invalid input: expected string, received undefined; sections.0.content.0: Unrecognized key: \"txt\"\n- [fail] docs: guide.doc.mjs: guide.doc.mjs is invalid: sections.0.content.0.text: Invalid input: expected string, received undefined; sections.0.content.0: Unrecognized key: \"txt\"\n- [fail] Packed: guide.doc.mjs: guide.doc.mjs is invalid: sections.0.content.0.text: Invalid input: expected string, received undefined; sections.0.content.0: Unrecognized key: \"txt\"\n- [fail] docs: guide.doc.mjs: guide.doc.mjs is invalid: sections.0.content.0.text: Invalid input: expected string, received undefined; sections.0.content.0: Unrecognized key: \"txt\"\n- [fail] Component \"Dial\" advertises import \"@acme/tskit\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\n- [fail] Component \"Gauge\" advertises import \"@acme/tskit\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

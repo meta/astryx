@@ -1,0 +1,42 @@
+[
+ {
+  "transform": "v0.4.0/migrate-table-rowexpansion-to-tree",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table, useTableRowExpansion, useTableRowExpansionState} from '@astryxdesign/core';\nfunction C() {\n  const {data, expansionConfig} = useTableRowExpansionState({\n    baseData: tree,\n    getChildren: item => item.children ?? [],\n    getRowKey: item => item.id,\n    expandedKeys,\n    setExpandedKeys,\n  });\n  const expansion = useTableRowExpansion(expansionConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "output": "import {Table, useTableTreeState, useTableTreeData} from '@astryxdesign/core';\nfunction C() {\n  // astryx-migration: verify tree expansion state. useTableTreeState\n  // is uncontrolled by default; pass defaultExpandedIds, or\n  // expandedIds + onExpandedIdsChange for the old controlled set.\n  const {visibleData: data, treeConfig} = useTableTreeState({\n    data: tree,\n    childrenKey: 'children',\n    idKey: item => item.id\n  });\n  const expansion = useTableTreeData(treeConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/migrate-table-rowexpansion-to-tree",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table, useTableRowExpansion, useTableRowExpansionState} from '@astryxdesign/core';\nfunction C() {\n  const {data, expansionConfig} = useTableRowExpansionState({\n    baseData: tree,\n    getChildren: item => item.children ?? [],\n    getRowKey: item => item.id,\n    getIsItemExpandable: item => item.type === 'folder',\n    expandedKeys,\n    setExpandedKeys,\n  });\n  const expansion = useTableRowExpansion(expansionConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "output": "import {Table, useTableTreeState, useTableTreeData} from '@astryxdesign/core';\nfunction C() {\n  // astryx-migration: verify tree expansion state. useTableTreeState\n  // is uncontrolled by default; pass defaultExpandedIds, or\n  // expandedIds + onExpandedIdsChange for the old controlled set.\n  const {visibleData: data, treeConfig} = useTableTreeState({\n    data: tree,\n    childrenKey: 'children',\n    idKey: item => item.id,\n    isItemExpandable: item => item.type === 'folder'\n  });\n  const expansion = useTableTreeData(treeConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/migrate-table-rowexpansion-to-tree",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table, useTableRowExpansion} from '@astryxdesign/core';\nfunction C() {\n  const expansion = useTableRowExpansion({\n    expandedKeys,\n    onToggle,\n    getRowKey: item => item.id,\n    renderExpanded: item => <Details item={item} />,\n  });\n  return <Table data={rows} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/migrate-table-rowexpansion-to-tree",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table, useTableSelection} from '@astryxdesign/core';\nconst t = <Table data={rows} columns={cols} idKey=\"id\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/migrate-table-rowexpansion-to-tree",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table, useTableRowExpansion, useTableRowExpansionState} from '@xds/core';\nfunction C() {\n  const {data, expansionConfig} = useTableRowExpansionState({\n    baseData: tree,\n    getChildren: item => item.children ?? [],\n    getRowKey: item => item.id,\n    expandedKeys,\n    setExpandedKeys,\n  });\n  const expansion = useTableRowExpansion(expansionConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "output": "import {Table, useTableTreeState, useTableTreeData} from '@xds/core';\nfunction C() {\n  // astryx-migration: verify tree expansion state. useTableTreeState\n  // is uncontrolled by default; pass defaultExpandedIds, or\n  // expandedIds + onExpandedIdsChange for the old controlled set.\n  const {visibleData: data, treeConfig} = useTableTreeState({\n    data: tree,\n    childrenKey: 'children',\n    idKey: item => item.id\n  });\n  const expansion = useTableTreeData(treeConfig);\n  return <Table data={data} columns={cols} idKey=\"id\" plugins={{expansion}} />;\n}",
+  "error": null
+ }
+]

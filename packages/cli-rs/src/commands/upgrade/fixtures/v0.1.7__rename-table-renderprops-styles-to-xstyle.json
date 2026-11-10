@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function transformTable(props: TableRenderProps) {\n  return {...props, styles: [...props.styles, tableStyles.base]};\n}",
+  "output": "function transformTable(props: TableRenderProps) {\n  return {...props, xstyle: [...props.xstyle, tableStyles.base]};\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const transformBodyCell = (props: BodyCellRenderProps) => ({\n  ...props,\n  styles: [...props.styles, cellStyles.padded],\n});",
+  "output": "const transformBodyCell = (props: BodyCellRenderProps) => ({\n  ...props,\n  xstyle: [...props.xstyle, cellStyles.padded],\n});",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: TableRenderProps) { return p.styles; }",
+  "output": "function t(p: TableRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: HeaderRowRenderProps) { return p.styles; }",
+  "output": "function t(p: HeaderRowRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: HeaderCellRenderProps) { return p.styles; }",
+  "output": "function t(p: HeaderCellRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: BodyRowRenderProps) { return p.styles; }",
+  "output": "function t(p: BodyRowRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: BodyCellRenderProps) { return p.styles; }",
+  "output": "function t(p: BodyCellRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function t(p: ScrollWrapperRenderProps) { return p.styles; }",
+  "output": "function t(p: ScrollWrapperRenderProps) { return p.xstyle; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const rp = {htmlProps: {}, styles: []};",
+  "output": "const rp = {htmlProps: {}, xstyle: []};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({base: {color: 'red'}});\nfunction useStuff() {\n  return stylex.props(styles.base);\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function transformTable(props: TableRenderProps) {\n  const theme = getTheme();\n  return {...props, styles: [...props.styles, theme.styles.base]};\n}",
+  "output": "function transformTable(props: TableRenderProps) {\n  const theme = getTheme();\n  return {...props, xstyle: [...props.xstyle, theme.styles.base]};\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const styles = {a: 1};\nconst x = styles.a;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/rename-table-renderprops-styles-to-xstyle",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function transformTable(props: TableRenderProps) {\n  return {...props, xstyle: [...props.xstyle]};\n}",
+  "output": null,
+  "error": null
+ }
+]

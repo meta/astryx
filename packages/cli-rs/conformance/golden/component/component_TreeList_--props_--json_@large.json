@@ -1,0 +1,15 @@
+{
+ "id": "component_TreeList_--props_--json_@large",
+ "args": [
+  "component",
+  "TreeList",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"items\",\n      \"type\": \"TreeListItemData[]\",\n      \"description\": \"Recursive tree item data with id, label, optional children and isExpanded, plus optional xstyle, className, and style applied to that item row.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"density\",\n      \"type\": \"'compact' | 'balanced' | 'spacious'\",\n      \"description\": \"Spacing density for items.\",\n      \"default\": \"'balanced'\"\n    },\n    {\n      \"name\": \"variant\",\n      \"type\": \"'lineGuides' | 'noGuides'\",\n      \"description\": \"Visual treatment of the hierarchy guide lines. lineGuides shows connector lines; noGuides hides them, keeping indentation. Orthogonal to density.\",\n      \"default\": \"'lineGuides'\"\n    },\n    {\n      \"name\": \"animatedLayout\",\n      \"type\": \"AnimatedLayout\",\n      \"description\": \"The handle from useAnimatedLayout({containerRef}). With it, expanding or collapsing a row glides the rows and content after it, up to that container, on one shared motion role instead of jumping, and the shown rows and the chevron move on the same motion. Without it, the content after the row takes its place at once.\"\n    },\n    {\n      \"name\": \"header\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Header content, associated with the tree via aria-labelledby.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Text\",\n          \"props\": {\n            \"type\": \"body\"\n          },\n          \"children\": \"Header\"\n        }\n      ]\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,50 @@
+[
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {DropdownMenuOption, DropdownMenuDivider} from '@astryxdesign/core/DropdownMenu';\n\nconst rule: DropdownMenuDivider = {type: 'divider'};\nconst options: DropdownMenuOption[] = [rule];",
+  "output": "import type {DropdownMenuOption, DropdownMenuDividerData} from '@astryxdesign/core/DropdownMenu';\n\nconst rule: DropdownMenuDividerData = {type: 'divider'};\nconst options: DropdownMenuOption[] = [rule];",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {ContextMenuDivider} from '@astryxdesign/core/ContextMenu';\nimport type {BreadcrumbMenuDivider} from '@astryxdesign/core/Breadcrumbs';\nconst a: ContextMenuDivider = {type: 'divider'};\nconst b: BreadcrumbMenuDivider = {type: 'divider'};",
+  "output": "import type {ContextMenuDividerData} from '@astryxdesign/core/ContextMenu';\nimport type {BreadcrumbMenuDividerData} from '@astryxdesign/core/Breadcrumbs';\nconst a: ContextMenuDividerData = {type: 'divider'};\nconst b: BreadcrumbMenuDividerData = {type: 'divider'};",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenu, DropdownMenuItem, DropdownMenuDivider} from '@astryxdesign/core/DropdownMenu';\n\nexport const Menu = () => (\n  <DropdownMenu button={{label: 'Actions'}}>\n    <DropdownMenuItem label=\"Edit\" />\n    <DropdownMenuDivider />\n  </DropdownMenu>\n);",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DropdownMenu, type DropdownMenuDivider} from '@astryxdesign/core/DropdownMenu';\nconst d: DropdownMenuDivider = {type: 'divider'};\nexport const M = () => <DropdownMenu button={{label: 'A'}} items={[d]} />;",
+  "output": "import {DropdownMenu, type DropdownMenuDividerData} from '@astryxdesign/core/DropdownMenu';\nconst d: DropdownMenuDividerData = {type: 'divider'};\nexport const M = () => <DropdownMenu button={{label: 'A'}} items={[d]} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {DropdownMenuDivider as MenuRule} from '@astryxdesign/core/DropdownMenu';\nconst d: MenuRule = {type: 'divider'};",
+  "output": "import type {DropdownMenuDividerData as MenuRule} from '@astryxdesign/core/DropdownMenu';\nconst d: MenuRule = {type: 'divider'};",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-menu-divider-data-types",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {DropdownMenuDivider} from 'some-other-ui';\nconst d: DropdownMenuDivider = {type: 'divider'};",
+  "output": null,
+  "error": null
+ }
+]

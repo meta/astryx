@@ -1,0 +1,20 @@
+{
+ "id": "hook_useTreeFocus_--zh",
+ "args": [
+  "hook",
+  "useTreeFocus",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useTreeFocus\n\nManages roving-tabindex focus and the WAI-ARIA tree keyboard model. ArrowUp/ArrowDown/Home/End roam linearly over the visible treeitems (skipping disabled ones), while ArrowRight/ArrowLeft carry tree semantics (expand/collapse, move to first-child/parent). Enter/Space activate, and printable characters trigger typeahead.\n\n## Best Practices\n\n- **Do:** Use for hierarchical tree widgets: wire onToggleExpand to your expansion state and onActiveChange to a single roving tab stop.\n- **Do:** Attach both treeRef and handleKeyDown to the role=\"tree\" container element.\n- **Don't:** Use for linear lists (prefer useListFocus) or 2D grids (prefer useGridFocus); those traversals differ from a tree.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseTreeFocusOptions` | - | Configuration object for tree focus behavior. |\n| `options.itemSelector` | `string` | `'[role=\"treeitem\"]'` | Selector for visible treeitems within the tree, in DOM order. |\n| `options.isItemDisabled` | `(item: HTMLElement) => boolean` | - | Predicate for whether a treeitem is disabled and must be skipped during navigation. Defaults to reading `data-tree-disabled` / `aria-disabled`. |\n| `options.getLevel` | `(item: HTMLElement) => number` | - | Reads the 1-based nesting level of a treeitem. Defaults to the `aria-level` attribute. |\n| `options.onToggleExpand` | `(id: string) => void` | - | Called to expand/collapse the treeitem with the given id (ArrowRight on a collapsed parent, ArrowLeft on an expanded parent, Enter/Space on a parent without its own action). |\n| `options.onActivate` | `(item: HTMLElement, id: string \\| undefined) => boolean \\| void` | - | Called when Enter/Space activates a treeitem. Return true when handled; return false/undefined to let the hook fall back to toggling expansion. |\n| `options.onActiveChange` | `(id: string \\| undefined) => void` | - | Notified when the hook moves focus to a treeitem. Consumers use this to move a single roving tab stop. |\n| `options.hasRovingTabIndex` | `boolean` | `false` | When true, the hook owns a single roving tab stop across the visible treeitems (stamps tabindex 0/-1, repairs on mount, moves with navigation). Preserves an existing tabindex=\"0\" seed on mount. Attach the returned `handleFocus` to keep the stop in sync after clicks. |\n| `options.typeahead` | `boolean` | `true` | Whether typeahead (jump to next item whose text starts with the typed characters, ignoring case, accents, the stroked letters đ ł ø ħ ŧ ƀ and Turkish ı/İ in every locale) is enabled. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `treeRef` | `React.RefObject<HTMLElement \\| null>` | Ref to attach to the tree container element (role=\"tree\"). |\n| `handleKeyDown` | `(e: React.KeyboardEvent) => void` | Key down handler to attach to the tree container. |\n| `handleFocus` | `(e: React.FocusEvent) => void` | Focus handler to attach to the container's onFocus. Keeps the roving tab stop in sync when hasRovingTabIndex is enabled; a no-op otherwise, so always safe to attach. |\n| `focusFirst` | `() => void` | Focus the first enabled visible treeitem. |\n| `focusLast` | `() => void` | Focus the last enabled visible treeitem. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for TreeList\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

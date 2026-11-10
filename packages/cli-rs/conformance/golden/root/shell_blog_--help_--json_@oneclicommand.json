@@ -1,0 +1,14 @@
+{
+ "id": "shell_blog_--help_--json_@oneclicommand",
+ "args": [
+  "blog",
+  "--help",
+  "--json"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx blog\",\n    \"description\": \"Read the Astryx blog from the published feed\",\n    \"usage\": \"astryx blog [options] [slug]\",\n    \"options\": [],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

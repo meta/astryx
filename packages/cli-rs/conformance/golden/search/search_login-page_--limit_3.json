@@ -1,0 +1,21 @@
+{
+ "id": "search_login-page_--limit_3",
+ "args": [
+  "search",
+  "login page",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"login page\" (3 of 36)\n\nname:        login\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Basic Login\nkind:        page\ndescription: Minimal centered credential form on a plain ground: two fields and a submit, nothing competing for attention. The least-chrome entry surface.\ncommand:     npx @astryxdesign/cli@0.7.12 template login --type page\n\nname:        login-card\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Login Card\nkind:        page\ndescription: Credential form inside an elevated centered card, third-party provider buttons separated from the fields by a divider, secondary sign-up and legal links beneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-card --type page\n\nname:        login-split\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Login Split\nkind:        page\ndescription: Credential form filling one half of a two-pane split, full-bleed media holding the other. Same fields as the card variant, but the layout carries brand imagery.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-split --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'login page'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

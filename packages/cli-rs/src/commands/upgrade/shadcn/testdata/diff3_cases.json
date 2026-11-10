@@ -1,0 +1,186 @@
+[
+ {
+  "a": "a\nb\nc\n",
+  "o": "a\nb\nc\n",
+  "b": "a\nb\nc\n",
+  "conflict": false,
+  "result": [
+   "a",
+   "b",
+   "c",
+   ""
+  ]
+ },
+ {
+  "a": "x\nb\nc\n",
+  "o": "a\nb\nc\n",
+  "b": "a\nb\ny\n",
+  "conflict": false,
+  "result": [
+   "x",
+   "b",
+   "y",
+   ""
+  ]
+ },
+ {
+  "a": "x\nb\nc\n",
+  "o": "a\nb\nc\n",
+  "b": "y\nb\nc\n",
+  "conflict": true,
+  "result": [
+   "<<<<<<< current project",
+   "x",
+   "||||||| installed 1",
+   "a",
+   "=======",
+   "y",
+   ">>>>>>> latest 2",
+   "b",
+   "c",
+   ""
+  ]
+ },
+ {
+  "a": "x\nb\nc\n",
+  "o": "a\nb\nc\n",
+  "b": "x\nb\nc\n",
+  "conflict": false,
+  "result": [
+   "x",
+   "b",
+   "c",
+   ""
+  ]
+ },
+ {
+  "a": "a\nb\n",
+  "o": "a\nb\nc\nd\n",
+  "b": "a\nb\nc\nd\ne\n",
+  "conflict": true,
+  "result": [
+   "a",
+   "b",
+   "<<<<<<< current project",
+   "||||||| installed 1",
+   "c",
+   "d",
+   "=======",
+   "c",
+   "d",
+   "e",
+   ">>>>>>> latest 2",
+   ""
+  ]
+ },
+ {
+  "a": "",
+  "o": "a\n",
+  "b": "b\n",
+  "conflict": true,
+  "result": [
+   "<<<<<<< current project",
+   "||||||| installed 1",
+   "a",
+   "=======",
+   "b",
+   ">>>>>>> latest 2",
+   ""
+  ]
+ },
+ {
+  "a": "1\n2\n3\n4\n5\n6\n",
+  "o": "1\n3\n4\n6\n",
+  "b": "1\n2\n4\n5\n6\n7\n",
+  "conflict": true,
+  "result": [
+   "1",
+   "<<<<<<< current project",
+   "2",
+   "3",
+   "||||||| installed 1",
+   "3",
+   "=======",
+   "2",
+   ">>>>>>> latest 2",
+   "4",
+   "5",
+   "6",
+   "7",
+   ""
+  ]
+ },
+ {
+  "a": "a\na\na\nb\n",
+  "o": "a\nb\na\n",
+  "b": "b\na\na\n",
+  "conflict": true,
+  "result": [
+   "<<<<<<< current project",
+   "a",
+   "||||||| installed 1",
+   "a",
+   "b",
+   "=======",
+   "b",
+   ">>>>>>> latest 2",
+   "a",
+   "<<<<<<< current project",
+   "a",
+   "b",
+   "||||||| installed 1",
+   "=======",
+   "a",
+   ">>>>>>> latest 2",
+   ""
+  ]
+ },
+ {
+  "a": "constructor\n__proto__\nx\n",
+  "o": "toString\n__proto__\n",
+  "b": "__proto__\ny\n",
+  "conflict": true,
+  "result": [
+   "<<<<<<< current project",
+   "constructor",
+   "||||||| installed 1",
+   "toString",
+   "=======",
+   ">>>>>>> latest 2",
+   "__proto__",
+   "<<<<<<< current project",
+   "x",
+   "||||||| installed 1",
+   "=======",
+   "y",
+   ">>>>>>> latest 2",
+   ""
+  ]
+ },
+ {
+  "a": "p\nq\nr\ns\nt\n",
+  "o": "p\nr\nt\n",
+  "b": "q\nr\ns\n",
+  "conflict": true,
+  "result": [
+   "<<<<<<< current project",
+   "p",
+   "q",
+   "||||||| installed 1",
+   "p",
+   "=======",
+   "q",
+   ">>>>>>> latest 2",
+   "r",
+   "<<<<<<< current project",
+   "s",
+   "t",
+   "||||||| installed 1",
+   "t",
+   "=======",
+   "s",
+   ">>>>>>> latest 2",
+   ""
+  ]
+ }
+]

@@ -1,0 +1,16 @@
+{
+ "id": "argv_experimental_icon_new-set_-h_--bogus",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "-h",
+  "--bogus"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx experimental icon new-set [options] <name>\n\n[experimental] Start an icon set in your integration package\n\nArguments:\n  name                         The set name, in lowercase kebab-case (outline)\n\nOptions:\n  --dry-run                    Validate and show planned writes without changing files\n  --from <module>              A module whose every icon component the set wraps (a package, a subpath, or a ./ path); run again to refresh\n  --exclude <names>            With --from: comma-separated export names of the library that are not icons\n  --variants <list>            Comma-separated variants the set supplies, such as outline,solid\n  --default-variant <variant>  With --variants: the variant each icon's own export draws. When omitted: in a library whose export names encode looks, the look the icons draw (the library's usual default for a new set), which --variants must list; otherwise the set's current default, which --variants must list when the set has icons, else, on a set without icons, the first variant. A set with icons changes it only with --from, and only in a library whose export names encode looks\n  --display-name <text>        The set's display name (the name in title case when omitted)\n  --description <text>         The set's one-line description\n  -h, --help                   display help for command\n\nExit codes:\n  0  the set is written or the dry run succeeds\n  1  the name, options, package, or target files are invalid or conflict\n\nExamples:\n  # Start an icon set\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set outline\n  # Wrap a whole icon library\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set outline --from @acme/glyph-library\n  # Wrap a library with two variants\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,solid --default-variant outline\n  # Preview the files\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set outline --dry-run --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon-new-set\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

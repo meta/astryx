@@ -1,0 +1,13 @@
+{
+ "id": "integration_pack_@plain",
+ "args": [
+  "integration",
+  "pack"
+ ],
+ "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: `integration pack` is now `integration verify`: run `npx @astryxdesign/cli@0.7.12 integration verify` to check the package the way npm will publish it. To build the tarball, run `npm pack`.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "shell_theme_help_@empty",
+ "args": [
+  "theme",
+  "help"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown subcommand 'theme help'\n\n  palette  (available subcommand)\n  build  (available subcommand)\n  list  (available subcommand)\n  add  (available subcommand)\n  remove  (available subcommand)\n  use  (available subcommand)\n  eject  (available subcommand)\n  template  (available subcommand)\n  targets  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

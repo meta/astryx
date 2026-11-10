@@ -1,0 +1,20 @@
+{
+ "id": "hook_usePopover_--params",
+ "args": [
+  "hook",
+  "usePopover",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `onShow` | `() => void` | - | Callback fired when the popover becomes visible. |\n| `onHide` | `() => void` | - | Callback fired when the popover is hidden. Use this to return focus to the trigger when needed. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles applied to the popover content wrapper, after the default surface styles. |\n| `hasLightDismiss` | `boolean` | `true` | Whether clicking outside dismisses the popover. |\n| `hasEscapeDismiss` | `boolean` | `true` | Whether pressing Escape dismisses the popover. Only takes full effect together with hasLightDismiss: false, since native light dismiss also closes on Escape. |\n| `hasAutoFocus` | `boolean` | `true` | Whether to focus the first genuine content control when opened. Dialogs with none fall back to the labeled surface; the generated close control is excluded from initial focus. |\n| `hasCloseButton` | `boolean` | `true` | Whether to include a hidden close button that appears for keyboard users. |\n| `closeButtonLabel` | `string` | `'Close popover'` | Accessible label for the hidden close button. |\n| `dialogLabel` | `string` | - | Accessible label for the popover dialog (only applies when role is \"dialog\"). Provide one when there is no visible title. |\n| `role` | `'dialog' \\| 'none'` | `'dialog'` | ARIA role on the content wrapper. Use \"dialog\" for genuine dialog content; use \"none\" for listbox/menu popups whose own content role should be exposed and whose trigger keeps DOM focus. |\n| `isModal` | `boolean` | `true` | Whether a dialog-role popover is modal (aria-modal). Only applies when role is \"dialog\". |\n| `hasSurface` | `boolean` | `true` | Whether to apply the default popover surface background, radius, and shadow. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Inner padding of the painted surface on the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10). Omit it and the hook paints no padding of its own; Popover passes 3 by default and 0 for a flush surface. |\n| `surfaceTarget` | `string` | - | Optional component-owned refinement target on the painted surface, without the astryx- prefix. Use and document one when a direct hook composition needs distinct theme reachability. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

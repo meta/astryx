@@ -1,0 +1,15 @@
+{
+ "id": "upgrade_--from_0.6.0_--apply_@brokencore",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.6.0",
+  "--apply"
+ ],
+ "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Could not find installed @astryxdesign/core (or legacy @xds/core). Install the target version first, then rerun `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

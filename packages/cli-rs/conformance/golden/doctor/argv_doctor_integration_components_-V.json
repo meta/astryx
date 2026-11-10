@@ -1,0 +1,15 @@
+{
+ "id": "argv_doctor_integration_components_-V",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "-V"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

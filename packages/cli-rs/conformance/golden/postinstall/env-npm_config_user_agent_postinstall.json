@@ -1,0 +1,18 @@
+{
+ "id": "env-npm_config_user_agent_postinstall",
+ "args": [
+  "postinstall"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "\n  ╭───────────────────────────────────────────────────╮\n  │                                                  │\n  │   Design system installed!                       │\n  │                                                  │\n  │   Get started:                                   │\n  │     pnpm dlx @astryxdesign/cli@0.7.12 init          Setup + AI agent docs│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 --help        See all commands│\n  │                                                  │\n  │   Or run directly:                               │\n  │     pnpm dlx @astryxdesign/cli@0.7.12 init           Setup + AI agent docs│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 component     Browse component docs│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 hook          Browse hook docs│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 docs          Design system reference│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 swizzle       Customize a component│\n  │     pnpm dlx @astryxdesign/cli@0.7.12 template      Add a page template│\n  │                                                  │\n  ╰───────────────────────────────────────────────────╯\n\n",
+ "stderr": "\nNext step: run `pnpm dlx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

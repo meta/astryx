@@ -1,0 +1,20 @@
+{
+ "id": "hook_useOutlineFromMarkdown_--dense",
+ "args": [
+  "hook",
+  "useOutlineFromMarkdown",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useOutlineFromMarkdown\n\nExtracts the headings of a Markdown string for an Outline next to the rendered document. It uses the parser and heading slugs that Markdown uses, so in a complete document each item links to its heading, and fenced code never counts as a heading. The result is memoized on the source and the options. Outside React, use parseOutlineFromMarkdown.\n\n## Best Practices\n\n- **Do:** Pass the same string, plugin list and finality to Markdown and this hook, so items match the rendered headings once the content is complete.\n- **Do:** Declare the plugin list outside the component or memoize it. A new array on each render recomputes the outline.\n- **Do:** For several documents on one page, install one createMarkdownHeadingLinks per document with headingIdPrefix, so their ids do not collide.\n- **Don't:** Write the items by hand or find headings with a regular expression. They drift from the rendered ids.\n- **Don't:** Expect every item to have a target while content streams. Markdown reveals text gradually and trims unfinished syntax, so a heading can be absent or have another id until the content is complete.\n- **Don't:** Expect an item to link to a heading that cites a Markdown sources entry. The hook does not receive sources, so the ids differ: for '# Intro [ref]', Markdown renders intro and the hook returns intro-ref.\n- **Don't:** Expect an item for a nested heading, such as one in a blockquote. Only root headings become items.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `markdown` | `string` | - | The Markdown source. Pass the same string you render with Markdown. **(required)** |\n| `options` | `ParseOutlineFromMarkdownOptions` | - | Parse options. Omit them for a document that Markdown renders without plugins. |\n| `options.plugins` | `ReadonlyArray<MarkdownPluginEntry>` | - | The ordered Markdown plugin list. Pass the same list to Markdown, so transforms, labels and ids agree. The outline is recomputed when the list reference changes. |\n| `options.isFinal` | `boolean` | `true` | Whether the source is complete. Pass false while Markdown's isStreaming is true, so both apply the same transforms. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `items` | `OutlineItem[]` | One item per root heading, in document order, ready for Outline's items prop. id is the id Markdown renders on the heading in a complete document without sources, label is the heading's text, and level is its depth from 1 to 6. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Outline, Markdown\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

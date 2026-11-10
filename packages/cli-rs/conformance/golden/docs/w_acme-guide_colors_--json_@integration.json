@@ -1,0 +1,15 @@
+{
+ "id": "w_acme-guide_colors_--json_@integration",
+ "args": [
+  "docs",
+  "acme-guide",
+  "colors",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"title\": \"Colors\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Cards use the core tokens.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"[token-ref: unknown topic \\\"no-such-topic\\\"]\"\n      }\n    ],\n    \"id\": \"colors\",\n    \"links\": {\n      \"up\": \"astryx docs acme-guide --index\",\n      \"previous\": \"astryx docs acme-guide start\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

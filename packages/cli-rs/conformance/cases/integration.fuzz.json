@@ -1,0 +1,196 @@
+[
+  {
+    "id": "fuzz_integration@doctor-integrations_5fbc8e",
+    "args": [
+      "integration"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "fuzz_integration_verify@doctor-author2_0fc4d1",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "fuzz_integration_verify@doctor-ts_a91be1",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit"
+  },
+  {
+    "id": "fuzz_integration_pack_--check@iconfresh_208728",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "fuzz_integration_verify@author_pre_d54392",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_verify_pre_d4895e",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_verify_pre_a36f53",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check_pre_904c74",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check@author_pre_a5d1d7",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check@author_pre_b18e3c",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check_pre_97e038",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_verify@monorepo_pre_c962b2",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "monorepo",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check_--json@themes_pre_fb48ff",
+    "args": [
+      "integration",
+      "pack",
+      "--check",
+      "--json"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_check@sweep-int_d211e4",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "sweep-int",
+    "cwd": "sweep-int/documented"
+  }
+]

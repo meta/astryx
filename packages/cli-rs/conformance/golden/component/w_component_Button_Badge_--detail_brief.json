@@ -1,0 +1,22 @@
+{
+ "id": "w_component_Button_Badge_--detail_brief",
+ "args": [
+  "component",
+  "Button",
+  "Badge",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nButton\n\nselector: Button\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nButton(variant: primary|secondary|ghost|destructive, size: sm|md|lg, elevation: none|low|med|high, type: button|submit|reset, value: string|number|readonly string[], endContent: ReactElement<IconProps>|ReactElement<BadgeProps>, clickAction: (e: MouseEvent) => void|Promise<void>)  <- from '@astryxdesign/core/Button'\n  Button triggers an action when clicked. Use it for form submissions, confirma...\n  Vars: --button-focus-offset (var(--focus-outline-offset)), --button-icon-only-aspect (1 / 1)\n  Derived: borderRadius -> --_button-radius\n  Targets: astryx-button preferred attrs: data-size, data-variant, data-elevation variants: size, variant, elevation\n  label: string, name, form, isLoading, isInterruptible, isDisabled, icon, isIconOnly, width, children, tooltip, onClick, href, as, target, rel\n  \n\n\nBadge\n\nselector: Badge\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nBadge  <- from '@astryxdesign/core/Badge'\n  Badge highlights a status or category at a glance. Use it sparingly: only whe...\n  Targets: astryx-badge preferred attrs: data-variant variants: variant\n  label: ReactNode, variant, icon\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

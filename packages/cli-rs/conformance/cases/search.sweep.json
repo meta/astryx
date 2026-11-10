@@ -1,0 +1,34 @@
+[
+  {
+    "id": "sweep_tokens_0",
+    "args": [
+      "search",
+      "{@command build}",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_tokens_1",
+    "args": [
+      "search",
+      "{@pm add} button",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_tokens_2",
+    "args": [
+      "search",
+      "see {@link component:Button} card",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_tokens_3",
+    "args": [
+      "search",
+      "{@command template blank} `{@link x}`",
+      "--json"
+    ]
+  }
+]

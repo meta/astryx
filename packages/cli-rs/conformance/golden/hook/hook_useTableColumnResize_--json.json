@@ -1,0 +1,14 @@
+{
+ "id": "hook_useTableColumnResize_--json",
+ "args": [
+  "hook",
+  "useTableColumnResize",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableColumnResize\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableColumnResize\",\n    \"description\": \"Hook that returns a TablePlugin adding draggable resize handles to column header borders. Supports pointer + keyboard (WAI-ARIA window splitter) resizing, RTL, per-column min/max widths, and proportional-column preservation (resizes the neighbor so the table stays full-width). Commits widths on release.\",\n    \"props\": [\n      {\n        \"name\": \"columnWidths\",\n        \"type\": \"Record<string, number>\",\n        \"description\": \"Controlled pixel-width overrides keyed by column key. When a key is present it overrides the column's declared width.\"\n      },\n      {\n        \"name\": \"onColumnResizeEnd\",\n        \"type\": \"(updates: Record<string, number>) => void\",\n        \"description\": \"Called when a resize completes (pointerup / Enter). Receives a map of every column key whose width changed; merge it into your columnWidths state.\"\n      },\n      {\n        \"name\": \"minWidth\",\n        \"type\": \"number\",\n        \"description\": \"Global minimum column width in pixels during resize. Overrides per-column defaults when set.\"\n      },\n      {\n        \"name\": \"maxWidth\",\n        \"type\": \"number\",\n        \"description\": \"Global maximum column width in pixels during resize.\",\n        \"default\": \"Infinity\"\n      },\n      {\n        \"name\": \"columns\",\n        \"type\": \"TableColumn<T>[]\",\n        \"description\": \"Column definitions, needed to derive per-column min widths and detect proportional vs pixel columns for neighbor/last-column resize behavior.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

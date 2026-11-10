@@ -1,0 +1,14 @@
+{
+ "id": "template_MoreMenuShowcase_--json_@large",
+ "args": [
+  "template",
+  "MoreMenuShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"MoreMenuShowcase\",\n    \"description\": \"A basic three-dot menu with simple action items.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"MoreMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {MoreMenu} from '@astryxdesign/core/MoreMenu';\\n\\nexport default function MoreMenuShowcase() {\\n  return (\\n    <MoreMenu\\n      items={[\\n        {label: 'Edit', onClick: () => {}},\\n        {label: 'Duplicate', onClick: () => {}},\\n        {label: 'Delete', onClick: () => {}},\\n      ]}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

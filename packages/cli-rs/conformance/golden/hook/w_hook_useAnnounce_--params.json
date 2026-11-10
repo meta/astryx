@@ -1,0 +1,20 @@
+{
+ "id": "w_hook_useAnnounce_--params",
+ "args": [
+  "hook",
+  "useAnnounce",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseAnnounceOptions` | - | Configuration object. |\n| `options.hasReplace` | `boolean` | `false` | The instance states one current state, such as a search's result count: each message it writes withdraws the instance's previous message while that one has not been spoken yet, whatever their politeness, and is spoken at its own politeness. A message already spoken stays. Messages from other instances, and from instances without hasReplace, still join. Give each state a component reports its own instance, for example one for the result count and one for selection changes. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

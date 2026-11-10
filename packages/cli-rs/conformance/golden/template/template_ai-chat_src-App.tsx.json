@@ -1,0 +1,14 @@
+{
+ "id": "template_ai-chat_src-App.tsx",
+ "args": [
+  "template",
+  "ai-chat",
+  "src/App.tsx"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Refusing to overwrite existing file src/App.tsx. Re-run with --overwrite (or -f) to replace it.\n",
+ "exit": 1,
+ "files": []
+}

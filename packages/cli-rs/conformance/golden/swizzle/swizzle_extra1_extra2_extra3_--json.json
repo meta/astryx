@@ -1,0 +1,16 @@
+{
+ "id": "swizzle_extra1_extra2_extra3_--json",
+ "args": [
+  "swizzle",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Component \\\"extra1\\\" not found.\",\n  \"code\": \"ERR_UNKNOWN_COMPONENT\",\n  \"suggestions\": [\n    {\n      \"name\": \"AlertDialog\"\n    },\n    {\n      \"name\": \"AppShell\"\n    },\n    {\n      \"name\": \"AspectRatio\"\n    },\n    {\n      \"name\": \"Avatar\"\n    },\n    {\n      \"name\": \"AvatarGroup\"\n    },\n    {\n      \"name\": \"Badge\"\n    },\n    {\n      \"name\": \"Banner\"\n    },\n    {\n      \"name\": \"Blockquote\"\n    },\n    {\n      \"name\": \"BottomSheet\"\n    },\n    {\n      \"name\": \"Breadcrumbs\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

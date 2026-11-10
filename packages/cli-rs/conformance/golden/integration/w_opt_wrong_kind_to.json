@@ -1,0 +1,17 @@
+{
+ "id": "w_opt_wrong_kind_to",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "topic",
+  "--to",
+  "1.0.0"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Option \"to\" does not apply to integration kind \"doc\".\n",
+ "exit": 1,
+ "files": []
+}

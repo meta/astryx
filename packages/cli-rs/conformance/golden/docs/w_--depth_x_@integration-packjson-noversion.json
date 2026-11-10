@@ -1,0 +1,14 @@
+{
+ "id": "w_--depth_x_@integration-packjson-noversion",
+ "args": [
+  "docs",
+  "--depth",
+  "x"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --depth takes a number of levels (0, 1, 2, ...) or all, not \"x\".\n",
+ "exit": 1,
+ "files": []
+}

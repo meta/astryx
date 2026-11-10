@@ -1,0 +1,19 @@
+{
+ "id": "template_useAnnounceHookUsage_@large",
+ "args": [
+  "template",
+  "useAnnounceHookUsage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useEffect, useRef, useState} from 'react';\nimport {Card} from '@astryxdesign/core/Card';\nimport {useAnnounce} from '@astryxdesign/core/hooks';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {List, ListItem} from '@astryxdesign/core/List';\nimport {Text} from '@astryxdesign/core/Text';\nimport {TextInput} from '@astryxdesign/core/TextInput';\n\nconst PRODUCTS = [\n  'Desk lamp',\n  'Desk organizer',\n  'Standing desk',\n  'Office chair',\n  'Chair mat',\n  'Monitor arm',\n  'Monitor stand',\n  'Keyboard tray',\n];\n\nconst ANNOUNCE_DELAY_MS = 500;\n\nfunction filterProducts(query: string): string[] {\n  const needle = query.trim().toLowerCase();\n  return PRODUCTS.filter(product => product.toLowerCase().includes(needle));\n}\n\nexport default function UseAnnounceHookUsage() {\n  const announce = useAnnounce({hasReplace: true});\n  const [query, setQuery] = useState('');\n  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);\n  const matches = filterProducts(query);\n  const count = matches.length;\n\n  const handleChange = (value: string) => {\n    setQuery(value);\n    if (timerRef.current != null) {\n      clearTimeout(timerRef.current);\n      timerRef.current = null;\n    }\n    if (value === '') {\n      return;\n    }\n    const nextCount = filterProducts(value).length;\n    timerRef.current = setTimeout(() => {\n      timerRef.current = null;\n      announce(\n        nextCount === 0\n          ? 'No results'\n          : `${nextCount} ${nextCount === 1 ? 'result' : 'results'}`,\n      );\n    }, ANNOUNCE_DELAY_MS);\n  };\n\n  // A count still pending at unmount would be spoken for a filter that is gone.\n  useEffect(() => {\n    return () => {\n      if (timerRef.current != null) {\n        clearTimeout(timerRef.current);\n      }\n    };\n  }, []);\n\n  return (\n    <Card width={360} padding={4}>\n      <VStack gap={3}>\n        <TextInput\n          label=\"Filter products\"\n          value={query}\n          onChange={handleChange}\n          hasClear\n        />\n        {count === 0 ? (\n          <Text type=\"body\" color=\"secondary\">\n            No results\n          </Text>\n        ) : (\n          <List density=\"compact\">\n            {matches.map(product => (\n              <ListItem key={product} label={product} />\n            ))}\n          </List>\n        )}\n      </VStack>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

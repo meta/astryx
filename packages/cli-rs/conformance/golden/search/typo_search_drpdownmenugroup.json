@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_drpdownmenugroup",
+ "args": [
+  "search",
+  "drpdownmenugroup"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"drpdownmenugroup\" (3)\n\nname:        DropdownMenuGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: Use DropdownMenuGroup to give related compound-menu rows one visible and programmatic name. Use an untitled group only when a separate name would not help people understand the rows.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuGroup\n\nname:        DropdownMenuGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuGroup\nkind:        block\ndescription: A compound-mode menu whose rows are titled in groups. Each DropdownMenuGroup renders a role=\"group\" named by its heading; arrow keys and typeahead skip the heading.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuGroupShowcase --type block\n\nname:        DropdownMenuGroupWithSelectable\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuGroup - Selectable rows\nkind:        block\ndescription: Titled groups around a radio group and checkbox rows - the rows the data API cannot express, which is why the heading lives in compound mode.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuGroupWithSelectable --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover drpdownmenugroup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

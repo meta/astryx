@@ -1,0 +1,7 @@
+export default {
+  docs: './d',
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_drpdownmenuitem",
+ "args": [
+  "search",
+  "drpdownmenuitem"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"drpdownmenuitem\" (4)\n\nname:        DropdownMenuItem\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: Use DropdownMenuItem inside DropdownMenu compound mode for one action or destination. Keep label, description, icon, and endContent non-interactive; controls belong in separate rows or the menu header/footer.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuItem\n\nname:        DropdownMenuItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuItem - Basic\nkind:        block\ndescription: Dropdown menu items with labels and secondary descriptions. Use DropdownMenuItem to render custom menu entries with consistent styling.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuItemBasic --type block\n\nname:        DropdownMenuItemShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuItem\nkind:        block\ndescription: Dropdown menu with custom-rendered items using DropdownMenuItem for icons and descriptions.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuItemShowcase --type block\n\nname:        DropdownMenuGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuGroup\nkind:        block\ndescription: A compound-mode menu whose rows are titled in groups. Each DropdownMenuGroup renders a role=\"group\" named by its heading; arrow keys and typeahead skip the heading.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuGroupShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover drpdownmenuitem\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

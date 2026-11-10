@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Notifications\">\n  <XDSBadge label={3} />\n</XDSDropdownMenuItem>",
+  "output": "<XDSDropdownMenuItem label=\"Notifications\" endContent={<XDSBadge label={3} />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSContextMenuItem label=\"Auto\">\n  {isSelected && <CheckIcon />}\n</XDSContextMenuItem>",
+  "output": "<XDSContextMenuItem label=\"Auto\" endContent={isSelected && <CheckIcon />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Status\">New</XDSDropdownMenuItem>",
+  "output": "<XDSDropdownMenuItem label=\"Status\" endContent=\"New\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Shortcut\">\n  <XDSBadge label=\"New\" />\n  <XDSKbd keys=\"⌘K\" />\n</XDSDropdownMenuItem>",
+  "output": "<XDSDropdownMenuItem\n  label=\"Shortcut\"\n  endContent={<><XDSBadge label=\"New\" /><XDSKbd keys=\"⌘K\" /></>} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelectorOption label=\"Admin\">\n  <XDSBadge label=\"Owner\" />\n</XDSSelectorOption>",
+  "output": "<XDSSelectorOption label=\"Admin\" endContent={<XDSBadge label=\"Owner\" />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelectorOption label=\"Notifications\" children={<XDSBadge label={3} />} />",
+  "output": "<XDSSelectorOption label=\"Notifications\" endContent={<XDSBadge label={3} />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Notifications\" endContent={<XDSBadge label={3} />} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Notifications\" endContent={<NewBadge />}>\n  <OldBadge />\n</XDSDropdownMenuItem>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-item-children-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenuItem label=\"Edit\" />",
+  "output": null,
+  "error": null
+ }
+]

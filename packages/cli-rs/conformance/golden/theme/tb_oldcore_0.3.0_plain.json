@@ -1,0 +1,14 @@
+{
+ "id": "tb_oldcore_0.3.0_plain",
+ "args": [
+  "theme",
+  "build",
+  "themes/plain.mjs"
+ ],
+ "fixture": "themes-core-0.3.0",
+ "fixtureHash": "2f7527239e99a151+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: @astryxdesign/core@0.3.0 cannot compile ordered adaptations, and whether \"plain\" uses adaptations could not be observed because a CommonJS source dependency reached a frozen or non-configurable core namespace. This core erases adaptations while resolving, so building could emit CSS with adaptation rules silently missing. Upgrade @astryxdesign/core to a version that supports theme adaptations, or use a built theme artifact that retains adaptation metadata.\n",
+ "exit": 1,
+ "files": []
+}

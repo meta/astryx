@@ -1,0 +1,19 @@
+{
+ "id": "w_-astryxdesign-theme-gothic-_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-gothic@"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "name:        @astryxdesign/theme-gothic\npackage:     @astryxdesign/theme-gothic\ncategory:    @astryxdesign/theme-gothic\nversion:     0.7.12\ndescription: Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\nthemes:      gothic\ninstalled:   false\nlatest:      0.7.12\nsource:      Astryx\n\nVersions\n1 known, newest first\n\n- 0.7.12  date unknown  latest\n\nAdd it\n\nnpm install @astryxdesign/theme-gothic@0.7.12\n\nThen use its theme:\n\nnpx @astryxdesign/cli@0.7.12 theme add gothic\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-gothic/<item>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

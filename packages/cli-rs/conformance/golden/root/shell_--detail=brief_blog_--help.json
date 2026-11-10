@@ -1,0 +1,14 @@
+{
+ "id": "shell_--detail=brief_blog_--help",
+ "args": [
+  "--detail=brief",
+  "blog",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx blog [options] [slug]\n\nRead the Astryx blog from the published feed\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n  1  unknown slug, or the feed or a post cannot be fetched\n\nExamples:\n  # List posts\n  npx @astryxdesign/cli@0.7.12 blog\n  # Read one post\n  npx @astryxdesign/cli@0.7.12 blog introducing-astryx --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/blog\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

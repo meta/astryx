@@ -1,0 +1,14 @@
+{
+ "id": "w_handbook-json_@docsbroken",
+ "args": [
+  "search",
+  "handbook",
+  "--json"
+ ],
+ "fixture": "docsbroken",
+ "fixtureHash": "1cbb060d64af0f86+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"handbook\",\n    \"matchCount\": 1,\n    \"results\": [\n      {\n        \"domain\": \"template\",\n        \"name\": \"documentation\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 50,\n        \"reason\": \"docs mention \\\"handbook\\\"\",\n        \"description\": \"Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.\",\n        \"displayName\": \"Documentation Catalog\",\n        \"kind\": \"page\",\n        \"command\": \"astryx template documentation --type page\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

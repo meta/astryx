@@ -1,0 +1,19 @@
+{
+ "id": "wide_build_r13",
+ "args": [
+  "build",
+  "Categories to heading image new and states ( the - hand-rolling the descriptions showing that"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"Categories to heading image new and states ( the - hand-rolling the descriptions showing that\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe closest template; none is exactly this page. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        table-tree\npackage:     @astryxdesign/core\ndescription: Hierarchical table where every parent row rolls up from its children - a code repository whose folders show the newest commit beneath them, beside a detail sidebar and a rendered README.\ncommand:     npx @astryxdesign/cli@0.7.12 template table-tree --type page <path>\n\nInstall missing dependencies: npm install lucide-react@\"^1.18.0\" canvas-editor\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        dashboard\npackage:     @astryxdesign/core\ndescription: Three-band analytics: a row of headline tiles, then charts, then supporting tables, all re-reading from one global filter bar.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard --type page <path>\n\nname:        dashboard-comparison\npackage:     @astryxdesign/core\ndescription: Comparison-heavy analytics behind a persistent filter bar: tiles that each carry an inline sparkline and several period-over-period deltas, then segmented breakdowns underneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-comparison --type page <path>\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        HeadingPageLayout\npackage:     @astryxdesign/core\ndescription: Real-world page layout demonstrating heading levels h1 through h3 with supporting text\n\nname:        EmptyStateContainer\npackage:     @astryxdesign/core\ndescription: Empty state wrapped in a Card for first-time setup or onboarding.\n\nname:        HeadingTruncation\npackage:     @astryxdesign/core\ndescription: Single-line and multi-line heading truncation with ellipsis for constrained layouts\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Thumbnail\npackage:     @astryxdesign/core\ndescription: Thumbnail displays a compact, square preview of an image attachment.\n\nname:        useLightbox\npackage:     @astryxdesign/core\ndescription: State management and accessible trigger wiring for Lightbox.\n\nname:        ChatToolCalls\npackage:     @astryxdesign/core\ndescription: ChatToolCalls displays tool or function call invocations from an LLM response.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

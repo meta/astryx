@@ -1,0 +1,13 @@
+{
+ "id": "doctor_--json_@monorepo-local",
+ "args": [
+  "doctor",
+  "--json"
+ ],
+ "fixture": "monorepo-local",
+ "fixtureHash": "66a78e1352faa1b5+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"doctor\",\n  \"data\": {\n    \"checks\": [\n      {\n        \"id\": \"node-version\",\n        \"label\": \"Node.js version\",\n        \"status\": \"pass\",\n        \"message\": \"Node v22.23.2 meets the minimum (>=22.13.0).\"\n      },\n      {\n        \"id\": \"answering-release\",\n        \"label\": \"Release that answered\",\n        \"status\": \"pass\",\n        \"message\": \"CLI 0.7.12 with Core 0.7.12 answered, outside a project. How each folder is answered: `npx @astryxdesign/cli@0.7.12 docs global`.\"\n      },\n      {\n        \"id\": \"newest-release\",\n        \"label\": \"Newest release\",\n        \"status\": \"info\",\n        \"message\": \"Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.\"\n      },\n      {\n        \"id\": \"cli-on-path\",\n        \"label\": \"`astryx` on the search path\",\n        \"status\": \"info\",\n        \"message\": \"No `astryx` command on the search path, so `astryx` runs only through a package manager.\",\n        \"fix\": \"To run the CLI in any folder, install it for the computer: `npm i -g @astryxdesign/cli`.\"\n      },\n      {\n        \"id\": \"computer-integrations\",\n        \"label\": \"Integrations installed for this computer\",\n        \"status\": \"info\",\n        \"message\": \"No integration is installed beside the CLI installed for this computer.\"\n      },\n      {\n        \"id\": \"computer-agent-text\",\n        \"label\": \"Computer-level agent text\",\n        \"status\": \"info\",\n        \"message\": \"No computer-level agent text: agents outside a project with Astryx agent docs do not know Astryx is here. Not linked yet: ~/.claude/skills/astryx.\",\n        \"fix\": \"Run `npx @astryxdesign/cli@0.7.12 init --user`.\"\n      }\n    ],\n    \"summary\": {\n      \"pass\": 2,\n      \"warn\": 0,\n      \"fail\": 0,\n      \"info\": 4\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

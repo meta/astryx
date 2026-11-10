@@ -1,0 +1,19 @@
+{
+ "id": "build_AspectRatio-16-9-Widescreen-Image",
+ "args": [
+  "build",
+  "AspectRatio — 16:9 Widescreen Image"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"AspectRatio - 16:9 Widescreen Image\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `centered-hero` by name, but the app shell is the closer start. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        gallery-hero\npackage:     @astryxdesign/core\ndescription: Centered stack (headline, short blurb, call-to-action buttons) resolving into a multi-image photo grid rather than one wide full-bleed picture, so the imagery reads as a set.\ncommand:     npx @astryxdesign/cli@0.7.12 template gallery-hero --type page <path>\n\nname:        centered-hero\npackage:     @astryxdesign/core\ndescription: Symmetrical centered stack (headline, short blurb, paired call-to-action buttons) resting on one wide full-bleed picture, with nothing on either flank competing.\ncommand:     npx @astryxdesign/cli@0.7.12 template centered-hero --type page <path>\n\nKeyword search matched these page templates: centered-hero (@astryxdesign/core), gallery-hero (@astryxdesign/core), mixed-gallery (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        AspectRatioWidescreen\npackage:     @astryxdesign/core\ndescription: 16:9 widescreen aspect ratio wrapping an image.\n\nname:        AspectRatioShowcase\npackage:     @astryxdesign/core\ndescription: Three aspect ratio containers at equal height (1:1, 4:3, and 16:9), each showing an image with its ratio labeled below.\n\nname:        AspectRatioSquareImage\npackage:     @astryxdesign/core\ndescription: 1:1 square aspect ratio, ideal for avatars and Instagram-style images.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        AspectRatio\npackage:     @astryxdesign/core\ndescription: Maintains a fixed width-to-height ratio for its children as its container resizes.\n\nname:        Lightbox\npackage:     @astryxdesign/core\ndescription: A fullscreen overlay for viewing images and videos at full resolution.\n\nname:        Overlay\npackage:     @astryxdesign/core\ndescription: Overlay layers action or supporting content over media, cards, video, or other bounded surfaces with an optional scrim and reveal behavior.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

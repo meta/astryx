@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat2_experimental_icon_add_--definition_Button_--definition_nope",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--definition",
+  "Button",
+  "--definition",
+  "nope"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

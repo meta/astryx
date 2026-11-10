@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_seectablecard",
+ "args": [
+  "search",
+  "seectablecard"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"seectablecard\" (4)\n\nname:        SelectableCard\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/SelectableCard\ndescription: A card that toggles between selected and unselected states with an accent border. For navigation use ClickableCard.\ncommand:     npx @astryxdesign/cli@0.7.12 component SelectableCard\n\nname:        SelectableCardElevated\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SelectableCard - Elevated\nkind:        block\ndescription: Raised selectable cards with `elevation=\"low\"`. The inset selection ring composes on top of the shadow, so a selected card keeps its elevation.\ncommand:     npx @astryxdesign/cli@0.7.12 template SelectableCardElevated --type block\n\nname:        SelectableCardMulti\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SelectableCardMulti\nkind:        block\ndescription: Multi-select tag picker using color variant selectable cards with color-matched selection borders.\ncommand:     npx @astryxdesign/cli@0.7.12 template SelectableCardMulti --type block\n\nname:        SelectableCardShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SelectableCard\nkind:        block\ndescription: A plan picker with single-select radio behavior. Cards show an accent border when selected.\ncommand:     npx @astryxdesign/cli@0.7.12 template SelectableCardShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover seectablecard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

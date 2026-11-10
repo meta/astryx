@@ -1,0 +1,15 @@
+{
+ "id": "argv_theme_add_--json_--help",
+ "args": [
+  "theme",
+  "add",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme add\",\n    \"description\": \"Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.\",\n    \"usage\": \"astryx theme add [options] [slug]\",\n    \"options\": [\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List available themes\"\n      },\n      {\n        \"flags\": \"--import\",\n        \"description\": \"Compatibility no-op; the built theme is added with or without this flag\"\n      },\n      {\n        \"flags\": \"--package <package>\",\n        \"description\": \"Select the package that owns the theme\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

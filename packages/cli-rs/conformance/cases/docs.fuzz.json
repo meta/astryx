@@ -1,0 +1,28 @@
+[
+  {
+    "id": "fuzz_docs_elevation@docsint_7356ec",
+    "args": [
+      "docs",
+      "elevation"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "fuzz_docs_theem_-_25a20e",
+    "args": [
+      "docs",
+      "theem",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_docs_--json@integration-packjson_c17f47",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  }
+]

@@ -1,0 +1,6 @@
+export default {
+  experimental: {
+    other: 1,
+    iconSets: './icons'
+  },
+};

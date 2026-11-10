@@ -1,0 +1,21 @@
+{
+ "id": "hook_useScrollOverflow_--detail_compact",
+ "args": [
+  "hook",
+  "useScrollOverflow",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useScrollOverflow\n\nTracks scroll overflow state for a horizontally scrollable container. Returns a ref callback and state booleans that update as the user scrolls, the container resizes, or its content changes (a child added, removed or resized, or a new gap or padding). Uses scroll event listeners, ResizeObserver and MutationObserver for reactive updates. Tolerance of 1px is applied to avoid sub-pixel false positives.\n\n## Import\n\n```tsx\nimport { useScrollOverflow } from '@astryxdesign/core/hooks';\n```\n\n## Best Practices\n\n- **Do:** Use to show/hide scroll navigation buttons or fade edges on carousels and horizontal lists.\n- **Do:** Apply the scrollRef to a container with overflow-x: auto or overflow-x: scroll.\n- **Don't:** Use for vertical scroll tracking; this hook only measures horizontal overflow.\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `scrollRef` | `React.RefCallback<HTMLElement>` | Ref callback to attach to the horizontally scrollable container element. |\n| `overflowStart` | `boolean` | Whether content overflows the start edge (left in LTR, right in RTL). |\n| `overflowEnd` | `boolean` | Whether content overflows the end edge (right in LTR, left in RTL). |\n| `hasOverflow` | `boolean` | Whether the container has any scroll overflow at all (scrollWidth > clientWidth). |\n\n## Related\n\nComponents: Carousel\nHooks: useOverflow\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Carousel\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "w_gothic---json_@large",
+ "args": [
+  "discover",
+  "gothic",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"gothic\",\n    \"matches\": [\n      {\n        \"package\": \"@astryxdesign/theme-gothic\",\n        \"component\": \"gothic\",\n        \"kind\": \"theme\",\n        \"installed\": true\n      },\n      {\n        \"package\": \"@astryxdesign/theme-gothic\",\n        \"component\": \"@astryxdesign/theme-gothic\",\n        \"kind\": \"package\",\n        \"installed\": true\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

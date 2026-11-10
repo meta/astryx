@@ -1,0 +1,20 @@
+{
+ "id": "component_Banner_--blocks_@large",
+ "args": [
+  "component",
+  "Banner",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: Banner - Statuses\ndescription: All four status banners stacked: info, success, warning, and error. A quick visual reference for choosing the right status.\n\nExamples\n\nname:        BannerCollapsibleContent\ndescription: Combine an action button, dismiss control, and a collapsible detail area in one banner. Children sit behind the toggle by default; `collapsible={{defaultIsOpen: true}}` starts it open, and `collapsible={false}` drops the toggle entirely. Use for complex notifications like config changes or deployment summaries.\n\nname:        BannerDismissable\ndescription: Let the user close a banner after reading it. Use for maintenance notices, feature tips, or any non-critical message the user can acknowledge.\n\nname:        BannerFloating\ndescription: A floating banner raised with `elevation=\"med\"`. Banners are inline by default; raise one when it should read as an overlay above content.\n\nname:        BannerSectionVariant\ndescription: A full-width banner with no border radius for page-level notifications. Use at the top of a page for site-wide announcements or maintenance alerts.\n\nname:        BannerStatuses\ndescription: All 4 banner statuses: info, success, warning, and error. Use to show persistent messages like updates, confirmations, cautions, or problems at the top of a page or section.\n\nname:        BannerWithActionButton\ndescription: Add a button to a banner so the user can act on the message. Use for trial expirations, payment failures, or anything that needs a response.\n\nRelated: 2 blocks that use Banner\n\n- AppShellWithBanner\n- StepperCustomContent\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

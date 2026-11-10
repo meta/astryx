@@ -1,0 +1,20 @@
+{
+ "id": "hook_useIcon_--dense",
+ "args": [
+  "hook",
+  "useIcon",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useIcon\n\nResolves a semantic icon name to a React node through the nearest Theme, so a custom component draws the same success, warning or error icon that Astryx components draw and follows a theme that overrides it. Resolution reads the nearest Theme's icons (outside any Theme, the registered theme the document root names), then registerIcons() overrides, then the built-in default. The node is returned as is, with no size or color wrapper: the built-in icons are 1em squares in currentColor, so they follow the surrounding text. A function entry is read at {size: 'md'}. Render <Icon icon={name} /> instead when the icon needs another size, a color or a label.\n\n## Best Practices\n\n- **Do:** Use it in a custom component that places a semantic icon itself, so a Theme that overrides the icon changes the component too.\n- **Do:** Render <Icon icon={name} /> when the icon needs a size other than md, a color, or an accessible label.\n- **Don't:** Import a specific icon library glyph for a semantic purpose that a theme should control, such as a success or error state.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `name` | `IconName \\| NamespacedIconName` | - | Semantic icon name, such as 'success', 'warning' or 'close', or a namespaced extension key such as 'richtext:bold'. Both resolve through the same registry. **(required)** |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `icon` | `ReactNode` | The icon for that name from the nearest Theme's icons (or, outside any Theme, from the registered theme the document root names), else from registerIcons() overrides, else the built-in default. A function entry is read at {size: 'md'}. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Icon, Theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "id": "component_EmptyState_--props_--json_@large",
+ "args": [
+  "component",
+  "EmptyState",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"title\",\n      \"type\": \"string\",\n      \"description\": \"Primary message rendered as the configured heading level inside the empty state.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"string\",\n      \"description\": \"Optional secondary text providing additional context below the title.\"\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional icon or illustration displayed above the title; rendered as decorative (aria-hidden=\\\"true\\\").\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"actions\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional action buttons displayed below the description, laid out horizontally by default and stacked vertically when isCompact is true.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Button\",\n          \"props\": {\n            \"label\": \"Action\",\n            \"variant\": \"secondary\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"headingLevel\",\n      \"type\": \"1 | 2 | 3 | 4 | 5 | 6\",\n      \"description\": \"Controls only the rendered HTML heading tag (h1-h6) so the title fits the document outline. This is a semantic change for accessibility and does not change the visual size of the title, which stays fixed regardless of level.\",\n      \"default\": \"3\"\n    },\n    {\n      \"name\": \"isCompact\",\n      \"type\": \"boolean\",\n      \"description\": \"Enables the compact variant with reduced spacing for constrained content areas.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,24 @@
+{
+ "id": "w_-test-boards_@discover-sources",
+ "args": [
+  "discover",
+  "@test/boards"
+ ],
+ "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
+ "stdout": "name:      @test/boards\npackage:   @test/boards\ncategory:  @test/boards\nversion:   1.0.0\ntemplates: pages/DialBoard\ninstalled: false\nlatest:    1.0.0\nsource:    Test catalog\n\nVersions\n1 known, newest first\n\n- 1.0.0  2026-09-10  latest\n\nAdd it\n\nnpm install @test/boards\n\nAstryx loads an integration on the next command once it is a dependency.\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @test/boards/<item>\n",
+ "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/e096dbd36355b805fa3c8b097f7bd71b.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/boards\",\"integration\":\"test-boards\",\"aliases\":[],\"latest\":\"1.0.0\",\"versions\":[{\"version\":\"1.0.0\",\"publishedAt\":\"2026-09-10T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"template\",\"name\":\"pages/DialBoard\"}]}]}}"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/discover-sources\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

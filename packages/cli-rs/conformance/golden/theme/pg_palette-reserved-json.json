@@ -1,0 +1,15 @@
+{
+ "id": "pg_palette-reserved-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/reserved.json"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Family id black is reserved for the standalone black palette value.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_ChatDictationButtonShowcase_@large",
+ "args": [
+  "template",
+  "ChatDictationButtonShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useRef} from 'react';\nimport {\n  ChatDictationButton,\n  ChatComposer,\n  ChatComposerInput,\n  useChatDictation,\n} from '@astryxdesign/core/Chat';\nimport type {ChatComposerInputHandle} from '@astryxdesign/core/Chat';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function ChatDictationButtonShowcase() {\n  const inputRef = useRef<ChatComposerInputHandle>(null);\n\n  const dictation = useChatDictation({\n    inputRef,\n    hasSounds: true,\n    onResult: text => {\n      console.log('Dictation result:', text);\n    },\n  });\n\n  return (\n    <VStack gap={4} width={450} maxWidth=\"100%\">\n      <Text type=\"supporting\" color=\"secondary\">\n        Click the microphone to start dictating. Speech is transcribed into the\n        input.\n      </Text>\n      <ChatComposer\n        onSubmit={v => console.log('Submit:', v)}\n        input={<ChatComposerInput handleRef={inputRef} />}\n        sendActions={<ChatDictationButton dictation={dictation} />}\n      />\n      {dictation.isListening && (\n        <HStack gap={2} vAlign=\"center\">\n          <Text type=\"supporting\" color=\"secondary\">\n            {dictation.isSpeaking ? 'Speaking detected' : 'Listening...'}\n          </Text>\n          <div\n            style={{\n              width: 80,\n              height: 6,\n              backgroundColor: 'var(--color-surface-secondary)',\n              borderRadius: 3,\n              overflow: 'hidden',\n            }}>\n            <div\n              style={{\n                height: '100%',\n                backgroundColor: dictation.isSpeaking\n                  ? 'var(--color-accent)'\n                  : 'var(--color-text-secondary)',\n                borderRadius: 3,\n                transition: 'width 0.08s ease-out',\n                width: `${Math.min(dictation.volume * 200, 100)}%`,\n              }}\n            />\n          </div>\n        </HStack>\n      )}\n      {!dictation.isSupported && (\n        <Text type=\"supporting\" color=\"accent\">\n          SpeechRecognition is not supported in this browser.\n        </Text>\n      )}\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

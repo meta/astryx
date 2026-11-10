@@ -1,0 +1,15 @@
+{
+ "id": "template_--type_bogus_--json",
+ "args": [
+  "template",
+  "--type",
+  "bogus",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Unknown template type \\\"bogus\\\". Valid types: page, block.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\",\n  \"suggestions\": [\n    {\n      \"name\": \"page\",\n      \"reason\": \"valid type\"\n    },\n    {\n      \"name\": \"block\",\n      \"reason\": \"valid type\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

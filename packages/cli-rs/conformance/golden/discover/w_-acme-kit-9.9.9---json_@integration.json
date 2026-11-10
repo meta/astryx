@@ -1,0 +1,14 @@
+{
+ "id": "w_-acme-kit-9.9.9---json_@integration",
+ "args": [
+  "discover",
+  "@acme/kit@9.9.9",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Version \\\"9.9.9\\\" of @acme/kit not found\",\n  \"code\": \"ERR_NOT_FOUND\",\n  \"suggestions\": [\n    {\n      \"name\": \"@acme/kit@1.2.3\",\n      \"reason\": \"published version\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

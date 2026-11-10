@@ -1,0 +1,15 @@
+{
+ "id": "w_component_exists_author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "WidgetCard"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Refusing to add component \"WidgetCard\": src/components/WidgetCard/WidgetCard.doc.mjs already defines it.\n",
+ "exit": 1,
+ "files": []
+}

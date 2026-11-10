@@ -1,0 +1,13 @@
+{
+ "id": "theme_eject_@nocore",
+ "args": [
+  "theme",
+  "eject"
+ ],
+ "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

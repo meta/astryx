@@ -1,0 +1,42 @@
+{
+ "id": "wide_legacy_apply_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 74,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 5,\n    \"transformsApplied\": 34,\n    \"modifiedFiles\": [\n      \"src/App.tsx\",\n      \"src/legacy.jsx\",\n      \"src/nested/deep/Badge.tsx\",\n      \"src/theme.css\",\n      \"src/modern.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "upgrade-legacy/src/App.tsx",
+   "status": "changed",
+   "text": "'use client';\n\n// The main screen.\nimport {Dialog, Selector, Banner, Stack} from \"@astryxdesign/core\";\nimport {Skeleton} from \"@astryxdesign/core/Skeleton\";\nimport {getIcon} from \"@astryxdesign/core/globalIconRegistry\";\n\nexport default function App({open, items}: {open: boolean; items: string[]}) {\n  const Icon = getIcon('close');\n  const css = `color: var(--color-border); box-shadow: var(--shadow-low);`;\n  return (\n    <Stack gap={2} rowGap={1.5}>\n      {/* keep this comment */}\n      <Dialog isOpen={open} onOpenChange={() => {}} title=\"Hello\">\n        <Selector options={items} />\n      </Dialog>\n      <Banner endContent={<Icon />} container=\"card\" collapsible={{\n        defaultIsOpen: true\n      }} />\n      <Skeleton radius={1} style={{boxShadow: \"var(--shadow-low)\"}} />\n    </Stack>\n  );\n}\n"
+  },
+  {
+   "path": "upgrade-legacy/src/legacy.jsx",
+   "status": "changed",
+   "text": "import {TopNav, TopNavHeading} from \"@astryxdesign/core\";\nimport {StatusDot} from \"@astryxdesign/core\";\n\nexport function Header() {\n  return (\n    <TopNav heading=\"Shop\" endContent={<span>cart</span>}>\n      <TopNavHeading heading=\"Home\" />\n      <StatusDot variant='success' />\n    </TopNav>\n  );\n}\n"
+  },
+  {
+   "path": "upgrade-legacy/src/modern.tsx",
+   "status": "changed",
+   "text": "import {Text, Switch, Avatar, TabList, Dialog, Table} from '@astryxdesign/core';\n\nexport function Panel({data}: {data: unknown[]}) {\n  return (\n    <>\n      <Text color='accent'>Hi</Text>\n      <Switch labelSpacing='hug' label=\"On\" />\n      <Avatar size='md' name=\"A\" />\n      <TabList />\n      <Dialog position={{start: 0, top: 8}} />\n      <Table data={data} aria-label='Rows' role='grid' />\n    </>\n  );\n}\n"
+  },
+  {
+   "path": "upgrade-legacy/src/nested/deep/Badge.tsx",
+   "status": "changed",
+   "text": "import { StatusDot } from \"@astryxdesign/core/StatusDot\";\n\nexport const Dot = () => <StatusDot variant='success' />;\n"
+  },
+  {
+   "path": "upgrade-legacy/src/theme.css",
+   "status": "changed",
+   "text": "@import '@astryxdesign/core/astryx.css';\n@layer astryx-theme, astryx-base;\n\n.astryx-button:is([data-variant=\"primary\"]) {\n  color: red;\n}\n[data-astryx-theme] .astryx-card {\n  padding: 4px;\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "id": "w_doc_exists_author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "widgets"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Refusing to overwrite existing file docs/widgets.doc.mjs.\n",
+ "exit": 1,
+ "files": []
+}

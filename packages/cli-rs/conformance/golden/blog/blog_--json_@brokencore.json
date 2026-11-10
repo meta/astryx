@@ -1,0 +1,13 @@
+{
+ "id": "blog_--json_@brokencore",
+ "args": [
+  "blog",
+  "--json"
+ ],
+ "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\",\n  \"code\": \"ERR_FETCH_FAILED\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

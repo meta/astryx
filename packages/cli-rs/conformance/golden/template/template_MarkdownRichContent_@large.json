@@ -1,0 +1,19 @@
+{
+ "id": "template_MarkdownRichContent_@large",
+ "args": [
+  "template",
+  "MarkdownRichContent"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Center} from '@astryxdesign/core/Center';\nimport {Markdown} from '@astryxdesign/core/Markdown';\n\nconst content = [\n  '# Markdown Demo',\n  '',\n  'Renders **markdown** with *Astryx* styling.',\n  '',\n  '## Features',\n  '',\n  '- **Bold**, *italic*, `code`',\n  '- [Links](https://example.com)',\n  '',\n  '```typescript',\n  'interface User {name: string;}',\n  '```',\n  '',\n  '- [x] Parser',\n  '- [ ] Stories',\n].join('\\n');\n\nexport default function MarkdownRichContent() {\n  return (\n    <Center width=\"100%\" style={{maxWidth: 450}}>\n      <Markdown>{content}</Markdown>\n    </Center>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

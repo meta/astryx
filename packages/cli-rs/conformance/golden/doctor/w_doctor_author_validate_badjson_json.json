@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_author_validate_badjson_json",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "--json"
+ ],
+ "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"(local package)\",\n    \"version\": null,\n    \"issues\": [\n      {\n        \"code\": \"invalid_package_json\",\n        \"severity\": \"error\",\n        \"message\": \"Could not parse /tmp/astryx-conformance/work/doctor-author/badjson/package.json: Expected double-quoted property name in JSON at position 19 (line 1 column 20)\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "w_icon_glyphs_def_exists_builtin",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "close",
+  "--description",
+  "x",
+  "--words",
+  "y"
+ ],
+ "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Astryx already has the icon definition \"close\"; map to it instead of adding your own.\n\n  --definition close  (use Astryx's definition)\n",
+ "exit": 1,
+ "files": []
+}

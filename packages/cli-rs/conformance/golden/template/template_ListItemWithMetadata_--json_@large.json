@@ -1,0 +1,14 @@
+{
+ "id": "template_ListItemWithMetadata_--json_@large",
+ "args": [
+  "template",
+  "ListItemWithMetadata",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ListItemWithMetadata\",\n    \"description\": \"List items with end-aligned metadata. Use endContent for badges, counts, timestamps, and compact status details.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"List\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {List, ListItem} from '@astryxdesign/core/List';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function ListItemWithMetadata() {\\n  return (\\n    <List header=\\\"Inbox\\\" density=\\\"compact\\\" hasDividers>\\n      <ListItem\\n        label=\\\"Launch checklist\\\"\\n        description=\\\"3 tasks still need an owner\\\"\\n        startContent={<Icon icon=\\\"check\\\" size=\\\"sm\\\" color=\\\"success\\\" />}\\n        endContent={<Badge label=\\\"3\\\" variant=\\\"blue\\\" />}\\n        isSelected\\n        onClick={() => {}}\\n      />\\n      <ListItem\\n        label=\\\"Security review\\\"\\n        description=\\\"Waiting on approval\\\"\\n        startContent={<Icon icon=\\\"warning\\\" size=\\\"sm\\\" color=\\\"warning\\\" />}\\n        endContent={<Text color=\\\"secondary\\\">Yesterday</Text>}\\n        onClick={() => {}}\\n      />\\n      <ListItem\\n        label=\\\"Old incident report\\\"\\n        description=\\\"Archived and read-only\\\"\\n        startContent={<Icon icon=\\\"copy\\\" size=\\\"sm\\\" color=\\\"secondary\\\" />}\\n        endContent={<Text color=\\\"secondary\\\">Apr 12</Text>}\\n        isDisabled\\n      />\\n    </List>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_TableRichCellTable_--json_@large",
+ "args": [
+  "template",
+  "TableRichCellTable",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TableRichCellTable\",\n    \"description\": \"Table with rich cell content using Link for emails and Badge for role labels.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Table\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Table, proportional, pixel} from '@astryxdesign/core/Table';\\nimport type {TableColumn} from '@astryxdesign/core/Table';\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Link} from '@astryxdesign/core/Link';\\n\\ninterface User extends Record<string, unknown> {\\n  id: string;\\n  name: string;\\n  email: string;\\n  role: string;\\n  age: number;\\n}\\n\\nconst users: User[] = [\\n  {\\n    id: '1',\\n    name: 'Alice Johnson',\\n    email: 'alice@example.com',\\n    role: 'Engineer',\\n    age: 30,\\n  },\\n  {\\n    id: '2',\\n    name: 'Bob Smith',\\n    email: 'bob@example.com',\\n    role: 'Designer',\\n    age: 25,\\n  },\\n  {\\n    id: '3',\\n    name: 'Charlie Brown',\\n    email: 'charlie@example.com',\\n    role: 'PM',\\n    age: 35,\\n  },\\n  {\\n    id: '4',\\n    name: 'Diana Prince',\\n    email: 'diana@example.com',\\n    role: 'Engineer',\\n    age: 28,\\n  },\\n  {\\n    id: '5',\\n    name: 'Eve Davis',\\n    email: 'eve@example.com',\\n    role: 'Designer',\\n    age: 32,\\n  },\\n];\\n\\nconst roleVariant: Record<string, 'blue' | 'purple' | 'green'> = {\\n  Engineer: 'blue',\\n  Designer: 'purple',\\n  PM: 'green',\\n};\\n\\nconst columns: TableColumn<User>[] = [\\n  {key: 'name', header: 'Name'},\\n  {\\n    key: 'email',\\n    header: 'Email',\\n    width: proportional(2),\\n    renderCell: item => <Link href={`mailto:${item.email}`}>{item.email}</Link>,\\n  },\\n  {\\n    key: 'role',\\n    header: 'Role',\\n    renderCell: item => (\\n      <Badge label={item.role} variant={roleVariant[item.role] ?? 'neutral'} />\\n    ),\\n  },\\n  {key: 'age', header: 'Age', width: pixel(80)},\\n];\\n\\nexport default function TableRichCellTable() {\\n  return <Table data={users} columns={columns} idKey=\\\"id\\\" hasHover />;\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "swizzle_Buton",
+ "args": [
+  "swizzle",
+  "Buton"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Component \"Buton\" not found.\n\n  AlertDialog\n  AppShell\n  AspectRatio\n  Avatar\n  AvatarGroup\n  Badge\n  Banner\n  Blockquote\n  BottomSheet\n  Breadcrumbs\n",
+ "exit": 1,
+ "files": []
+}

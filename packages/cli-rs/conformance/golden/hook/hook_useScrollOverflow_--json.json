@@ -1,0 +1,14 @@
+{
+ "id": "hook_useScrollOverflow_--json",
+ "args": [
+  "hook",
+  "useScrollOverflow",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useScrollOverflow\",\n    \"displayName\": \"useScrollOverflow\",\n    \"keywords\": [\n      \"scroll\",\n      \"overflow\",\n      \"carousel\",\n      \"fade\",\n      \"edge\",\n      \"horizontal\",\n      \"scrollable\",\n      \"resize\"\n    ],\n    \"params\": [],\n    \"returns\": [\n      {\n        \"name\": \"scrollRef\",\n        \"type\": \"React.RefCallback<HTMLElement>\",\n        \"description\": \"Ref callback to attach to the horizontally scrollable container element.\"\n      },\n      {\n        \"name\": \"overflowStart\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether content overflows the start edge (left in LTR, right in RTL).\"\n      },\n      {\n        \"name\": \"overflowEnd\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether content overflows the end edge (right in LTR, left in RTL).\"\n      },\n      {\n        \"name\": \"hasOverflow\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether the container has any scroll overflow at all (scrollWidth > clientWidth).\"\n      }\n    ],\n    \"usage\": {\n      \"description\": \"Tracks scroll overflow state for a horizontally scrollable container. Returns a ref callback and state booleans that update as the user scrolls, the container resizes, or its content changes (a child added, removed or resized, or a new gap or padding). Uses scroll event listeners, ResizeObserver and MutationObserver for reactive updates. Tolerance of 1px is applied to avoid sub-pixel false positives.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Use to show/hide scroll navigation buttons or fade edges on carousels and horizontal lists.\"\n        },\n        {\n          \"guidance\": true,\n          \"description\": \"Apply the scrollRef to a container with overflow-x: auto or overflow-x: scroll.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Use for vertical scroll tracking; this hook only measures horizontal overflow.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [\n      \"Carousel\"\n    ],\n    \"relatedHooks\": [\n      \"useOverflow\"\n    ],\n    \"importPath\": \"@astryxdesign/core/hooks\",\n    \"category\": \"layout\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

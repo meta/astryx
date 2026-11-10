@@ -1,0 +1,90 @@
+[
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Switch label=\"Notify\" value={on} labelSpacing=\"default\" />",
+  "output": "<Switch label=\"Notify\" value={on} labelSpacing='hug' />",
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Switch label=\"Notify\" value={on} labelSpacing={'default'} />",
+  "output": "<Switch label=\"Notify\" value={on} labelSpacing={'hug'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Switch label=\"Notify\" value={on} labelSpacing={isRow ? 'spread' : 'default'} />",
+  "output": "<Switch label=\"Notify\" value={on} labelSpacing={isRow ? 'spread' : 'hug'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Switch label=\"Notify\" value={on} labelSpacing=\"spread\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<LegacyToggle labelSpacing=\"default\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Switch label=\"Notify\" value={on} data-variant=\"default\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const theme = {mode: 'default', label: 'Default Mode'};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Switch} from '@astryxdesign/core/Switch';\nconst cfg = {labelSpacing: 'default'};",
+  "output": "import {Switch} from '@astryxdesign/core/Switch';\nconst cfg = {labelSpacing: 'hug'};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Switch} from '@astryxdesign/core/Switch';\nconst ROWS = [{labelSpacing: 'default' as const, label: 'Adjacent'}];",
+  "output": "import {Switch} from '@astryxdesign/core/Switch';\nconst ROWS = [{labelSpacing: 'hug' as const, label: 'Adjacent'}];",
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const cfg = {labelSpacing: 'default'};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.5/rename-switch-label-spacing-default-to-hug",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Switch} from '@astryxdesign/core/Switch';\nconst meta = {argTypes: {labelSpacing: {control: 'select', options: ['default', 'spread']}}};",
+  "output": "import {Switch} from '@astryxdesign/core/Switch';\nconst meta = {argTypes: {labelSpacing: {control: 'select', options: ['hug', 'spread']}}};",
+  "error": null
+ }
+]

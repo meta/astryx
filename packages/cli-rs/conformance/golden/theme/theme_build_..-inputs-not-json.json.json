@@ -1,0 +1,14 @@
+{
+ "id": "theme_build_..-inputs-not-json.json",
+ "args": [
+  "theme",
+  "build",
+  "../inputs/not-json.json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/inputs/not-json.json: /tmp/astryx-conformance/work/inputs/not-json.json: Unexpected token 'o', \"nope{\" is not valid JSON\nMake sure all imports in the theme file are resolvable.\n",
+ "exit": 1,
+ "files": []
+}

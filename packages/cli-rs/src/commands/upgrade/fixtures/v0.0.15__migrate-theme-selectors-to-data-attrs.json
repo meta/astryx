@@ -1,0 +1,44 @@
+[
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": ".xds-button.primary.sm:hover { color: red; }",
+  "output": ".xds-button[data-variant=\"primary\"][data-size=\"sm\"]:hover { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": ".xds-heading.level-2.secondary { margin: 0; }",
+  "output": ".xds-heading[data-level=\"2\"][data-color=\"secondary\"] { margin: 0; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": ".xds-text.body.primary { color: black; }",
+  "output": ".xds-text[data-type=\"body\"][data-color=\"primary\"] { color: black; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": "const selector = '.xds-card.muted > .xds-button.ghost';",
+  "output": "const selector = '.xds-card[data-variant=\"muted\"] > .xds-button[data-variant=\"ghost\"]';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": ".xds-made-up.primary { color: red; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-theme-selectors-to-data-attrs",
+  "options": null,
+  "source": ".xds-table-row.xds-row-selected { color: red; }",
+  "output": null,
+  "error": null
+ }
+]

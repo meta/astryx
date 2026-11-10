@@ -1,0 +1,602 @@
+[
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"base-table\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'table': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"checkbox\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'checkbox-indicator': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"codeblock\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'code-block': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"codeblock-copy-button\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'code-block-copy-button': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"codeblock-header\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'code-block-header': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"codeblock-title\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'code-block-title': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"date-input-clear-icon\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {/* TODO(astryx upgrade): `date-input-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-date-input *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"date-range-input-clear-icon\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {/* TODO(astryx upgrade): `date-range-input-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-date-range-input *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"hovercard\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'hover-card': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"multi-selector-clear-icon\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {/* TODO(astryx upgrade): `multi-selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-multi-selector *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"navicon\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'nav-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"popover-surface\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'popover': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"progressbar\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'progress-bar': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"progressbar-fill\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'progress-bar-fill': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"progressbar-mark\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'progress-bar-mark': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"progressbar-track\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'progress-bar-track': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"radio\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'radio-indicator': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"radio-dot\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'radio-indicator-dot': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"selector-clear-icon\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {/* TODO(astryx upgrade): `selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-selector *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"statusdot\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'status-dot': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\"textarea\": {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'text-area': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nconst theme = defineTheme({\n  components: {progressbar: {base: {color: 'red'}}},\n  onDark: {components: {'statusdot': {base: {color: 'white'}}}},\n  adaptations: {rules: [{value: {components: {'popover-surface': {base: {padding: 8}}}}}]},\n});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nconst theme = defineTheme({\n  components: {'progress-bar': {base: {color: 'red'}}},\n  onDark: {components: {'status-dot': {base: {color: 'white'}}}},\n  adaptations: {rules: [{value: {components: {'popover': {base: {padding: 8}}}}}]},\n});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nconst components = {textarea: {base: {color: 'red'}}};\nexport const theme = defineTheme({name: 'brand', components});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nconst components = {'text-area': {base: {color: 'red'}}};\nexport const theme = defineTheme({name: 'brand', components});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "const registry = {components: {checkbox: Checkbox}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "export default {components: {checkbox: Checkbox, textarea: TextArea}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "export default {name: 'app', components: {checkbox: Checkbox}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "const theme = {components: {checkbox: {base: {color: 'red'}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "src/muiTheme.ts",
+  "options": null,
+  "source": "export const muiTheme = {\n  name: 'brand',\n  components: {checkbox: {root: {color: 'red'}}, radio: {root: {}}, textarea: {root: {}}},\n};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "src/editorTheme.ts",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nexport const editorTheme = {name: 'editor', components: {textarea: {root: {}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-kBIhNb/brandTheme.ts",
+  "options": null,
+  "source": "export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-AyRmqm/brandTheme.ts",
+  "options": null,
+  "source": "export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};\nexport const otherLibraryTheme = {\n  name: 'other',\n  components: {checkbox: {root: {}}, textarea: {root: {}}},\n};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-yE9I9s/brandTheme.ts",
+  "options": null,
+  "source": "const theme = {name: 'brand', components: {navicon: {base: {}}}} as const;\nexport {theme as brandTheme};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-2yYEc5/brandTheme.ts",
+  "options": null,
+  "source": "const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-2yYEc5/brandTheme.ts",
+  "options": null,
+  "source": "export function make() {\n  const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};\n  return brandTheme;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-eTbnIq/brandTheme.ts",
+  "options": null,
+  "source": "export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-theme-surface-Q7qGsE/brandTheme.ts",
+  "options": null,
+  "source": "export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from 'other-ui';\nexport default defineTheme({components: {checkbox: {base: {color: 'red'}}}});",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core';\nfunction unrelated(defineTheme) {\n  return defineTheme({name: 'fake', components: {checkbox: {root: {}}}});\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme as makeTheme} from '@astryxdesign/core';\nfunction unrelated() {\n  const makeTheme = otherLibrary.createTheme;\n  return makeTheme({name: 'fake', components: {checkbox: {root: {}}}});\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import * as Astryx from '@astryxdesign/core';\nfunction unrelated(Astryx) {\n  return Astryx.defineTheme({name: 'fake', components: {checkbox: {root: {}}}});\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme as makeTheme} from '@astryxdesign/core';\nexport default makeTheme({name: 'brand', components: {navicon: {base: {}}}});",
+  "output": "import {defineTheme as makeTheme} from '@astryxdesign/core';\nexport default makeTheme({name: 'brand', components: {'nav-icon': {base: {}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import * as astryx from '@astryxdesign/core/theme';\nexport default astryx.defineTheme({components: {navicon: {base: {}}}});",
+  "output": "import * as astryx from '@astryxdesign/core/theme';\nexport default astryx.defineTheme({components: {'nav-icon': {base: {}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput} from '@astryxdesign/core';\nexport default {components: {navicon: {base: {}}}} satisfies DefineThemeInput;",
+  "output": "import type {DefineThemeInput} from '@astryxdesign/core';\nexport default {components: {'nav-icon': {base: {}}}} satisfies DefineThemeInput;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput} from '@astryxdesign/core';\nexport default ({components: {navicon: {base: {}}}}) as DefineThemeInput;",
+  "output": "import type {DefineThemeInput} from '@astryxdesign/core';\nexport default ({components: {'nav-icon': {base: {}}}}) as DefineThemeInput;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput} from '@astryxdesign/core';\nconst brand: DefineThemeInput = {name: 'brand', components: {navicon: {base: {}}}};",
+  "output": "import type {DefineThemeInput} from '@astryxdesign/core';\nconst brand: DefineThemeInput = {name: 'brand', components: {'nav-icon': {base: {}}}};",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput} from '@astryxdesign/core';\nfunction unrelated() {\n  type DefineThemeInput = OtherTheme;\n  return {name: 'fake', components: {checkbox: {root: {}}}} satisfies DefineThemeInput;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput as Theme} from '@astryxdesign/core';\nfunction unrelated<Theme>(value: unknown) {\n  const theme: Theme = {name: 'fake', components: {checkbox: {root: {}}}};\n  return theme;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type * as Astryx from '@astryxdesign/core';\nfunction unrelated<Astryx>() {\n  return {name: 'fake', components: {checkbox: {root: {}}}} satisfies Astryx.DefineThemeInput;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import * as Astryx from '@astryxdesign/core';\nfunction unrelated() {\n  namespace Astryx { export type DefineThemeInput = OtherTheme; }\n  return ({name: 'fake', components: {checkbox: {root: {}}}}) as Astryx.DefineThemeInput;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import type {DefineThemeInput} from '@astryxdesign/core';\nfunction makeTheme<T>() {\n  return {components: {navicon: {base: {}}}} satisfies DefineThemeInput;\n}",
+  "output": "import type {DefineThemeInput} from '@astryxdesign/core';\nfunction makeTheme<T>() {\n  return {components: {'nav-icon': {base: {}}}} satisfies DefineThemeInput;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'selector-clear-icon': {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {/* TODO(astryx upgrade): `selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-selector *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\n  'selector-clear-icon': {base: {color: 'red'}},\n  'date-input-clear-icon': {base: {color: 'blue'}},\n}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {\n  /* TODO(astryx upgrade): `selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-selector *)`. */\n  'input-clear-icon': {base: {color: 'red'}},\n  /* TODO(astryx upgrade): merge deprecated theme target `date-input-clear-icon` into `input-clear-icon`; both keys are present. */\n  'date-input-clear-icon': {base: {color: 'blue'}},\n}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nconst components = {checkbox: Checkbox};\nfunction makeTheme() {\n  const components = {textarea: {base: {color: 'red'}}};\n  return defineTheme({components});\n}",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nconst components = {checkbox: Checkbox};\nfunction makeTheme() {\n  const components = {'text-area': {base: {color: 'red'}}};\n  return defineTheme({components});\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "const labels = {progressbar: 'Progress'};\nconst oldTarget = 'progressbar';\nconst theme = {name: 'brand', components: {[oldTarget]: {base: {color: 'red'}}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nconst theme = defineTheme({name: 'brand', components: {\n  progressbar: {base: {color: 'red'}},\n  'progress-bar': {base: {backgroundColor: 'blue'}},\n}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nconst theme = defineTheme({name: 'brand', components: {\n  /* TODO(astryx upgrade): merge deprecated theme target `progressbar` into `progress-bar`; both keys are present. */\n  progressbar: {base: {color: 'red'}},\n  'progress-bar': {base: {backgroundColor: 'blue'}},\n}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nconst theme = defineTheme({name: 'brand', components: {\n  /* TODO(astryx upgrade): merge deprecated theme target `progressbar` into `progress-bar`; both keys are present. */\n  progressbar: {base: {color: 'red'}},\n  'progress-bar': {base: {backgroundColor: 'blue'}},\n}});",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-base-table { color: red; }\n.astryx-checkbox { color: red; }\n.astryx-codeblock { color: red; }\n.astryx-codeblock-copy-button { color: red; }\n.astryx-codeblock-header { color: red; }\n.astryx-codeblock-title { color: red; }\n.astryx-date-input-clear-icon { color: red; }\n.astryx-date-range-input-clear-icon { color: red; }\n.astryx-hovercard { color: red; }\n.astryx-multi-selector-clear-icon { color: red; }\n.astryx-navicon { color: red; }\n.astryx-popover-surface { color: red; }\n.astryx-progressbar { color: red; }\n.astryx-progressbar-fill { color: red; }\n.astryx-progressbar-mark { color: red; }\n.astryx-progressbar-track { color: red; }\n.astryx-radio { color: red; }\n.astryx-radio-dot { color: red; }\n.astryx-selector-clear-icon { color: red; }\n.astryx-statusdot { color: red; }\n.astryx-textarea { color: red; }",
+  "output": ".astryx-table { color: red; }\n.astryx-checkbox-indicator { color: red; }\n.astryx-code-block { color: red; }\n.astryx-code-block-copy-button { color: red; }\n.astryx-code-block-header { color: red; }\n.astryx-code-block-title { color: red; }\n.astryx-input-clear-icon:where(.astryx-date-input *) { color: red; }\n.astryx-input-clear-icon:where(.astryx-date-range-input *) { color: red; }\n.astryx-hover-card { color: red; }\n.astryx-input-clear-icon:where(.astryx-multi-selector *) { color: red; }\n.astryx-nav-icon { color: red; }\n.astryx-popover { color: red; }\n.astryx-progress-bar { color: red; }\n.astryx-progress-bar-fill { color: red; }\n.astryx-progress-bar-mark { color: red; }\n.astryx-progress-bar-track { color: red; }\n.astryx-radio-indicator { color: red; }\n.astryx-radio-indicator-dot { color: red; }\n.astryx-input-clear-icon:where(.astryx-selector *) { color: red; }\n.astryx-status-dot { color: red; }\n.astryx-text-area { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-button.primary.sm:hover { color: red; }\n.astryx-heading.level-2 { margin: 0; }\n.astryx-switch.checked { opacity: 1; }\n.astryx-grid.center { place-content: center; }",
+  "output": ".astryx-button:is([data-variant=\"primary\"]):is([data-size=\"sm\"]):hover { color: red; }\n.astryx-heading:is([data-level=\"2\"]) { margin: 0; }\n.astryx-switch:is([data-checked=\"checked\"]) { opacity: 1; }\n.astryx-grid:is([data-align=\"center\"],[data-justify=\"center\"]) { place-content: center; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-progressbar.success > .astryx-progressbar-mark.fill {}",
+  "output": ".astryx-progress-bar:is([data-variant=\"success\"]) > .astryx-progress-bar-mark:is([data-placement=\"fill\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-button:is(.primary,[data-variant=\"primary\"]) {}",
+  "output": ".astryx-button:is([data-variant=\"primary\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-selector-clear-icon:hover { color: red; }\n.astryx-date-range-input-clear-icon { color: blue; }",
+  "output": ".astryx-input-clear-icon:where(.astryx-selector *):hover { color: red; }\n.astryx-input-clear-icon:where(.astryx-date-range-input *) { color: blue; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-heading.bold { color: red; }",
+  "output": ".astryx-heading:is([data-weight=\"bold\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-button.checked { color: red; }",
+  "output": "/* TODO(astryx upgrade): Astryx 0.7 no longer emits bare prop/state classes, and .checked had no known 0.6 meaning on this target. Replace it with the target's data-* attribute or remove it. */\n.astryx-button.checked { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": "/* TODO(astryx upgrade): Astryx 0.7 no longer emits bare prop/state classes, and .checked had no known 0.6 meaning on this target. Replace it with the target's data-* attribute or remove it. */\n.astryx-button.checked { color: red; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-metadata-list.app-compact-list { gap: 4px; }\n.astryx-metadata-list.columns-3, .astryx-metadata-list.multi { gap: 8px; }",
+  "output": ".astryx-metadata-list.app-compact-list { gap: 4px; }\n.astryx-metadata-list:is([data-columns=\"3\"]), .astryx-metadata-list:is([data-columns=\"multi\"]) { gap: 8px; }",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".primary { color: red; }\n.astryx-button.brand { color: blue; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-button.primary .consumer:is(.primary,[data-custom=\"x\"]) {}",
+  "output": ".astryx-button:is([data-variant=\"primary\"]) .consumer:is(.primary,[data-custom=\"x\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "const selector = '.astryx-progressbar.success';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {statusdot: {base: {color: 'red'}}, 'selector-clear-icon': {base: {color: 'red'}}}});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'status-dot': {base: {color: 'red'}}, /* TODO(astryx upgrade): `selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-selector *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-textarea.sm {}",
+  "output": ".astryx-text-area:is([data-size=\"sm\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'brand', components: {'status-dot': {base: {color: 'red'}}, /* TODO(astryx upgrade): `selector-clear-icon` became `input-clear-icon`, which styles the clear icon of every input. To keep these styles on one component, move them to CSS under `.astryx-input-clear-icon:where(.astryx-selector *)`. */\n'input-clear-icon': {base: {color: 'red'}}}});",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "theme.css",
+  "options": null,
+  "source": ".astryx-text-area:is([data-size=\"sm\"]) {}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css",
+  "options": null,
+  "source": "a:: { color: red; }\n",
+  "output": null,
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
+  "options": null,
+  "source": "a:: { color: red; }\n",
+  "output": null,
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
+ },
+ {
+  "transform": "v0.7.0/migrate-deprecated-theme-surface",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css",
+  "options": null,
+  "source": ".x { color: blue; }\n\n@scope (a::) {\n  b { color: red; }\n}\n",
+  "output": null,
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css:3:9: Expected a pseudo-class or pseudo-element."
+ }
+]

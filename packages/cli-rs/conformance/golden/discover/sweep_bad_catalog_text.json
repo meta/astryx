@@ -1,0 +1,13 @@
+{
+ "id": "sweep_bad_catalog_text",
+ "args": [
+  "discover",
+  "Dial"
+ ],
+ "fixture": "sweep-discover-bad",
+ "fixtureHash": "7faed11c14a1eaf9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: \"Dial\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,36 @@
+{
+ "id": "fuzz_integration_pack_--check_--json@themes_pre_fb48ff",
+ "args": [
+  "integration",
+  "pack",
+  "--check",
+  "--json"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"themes-app\",\n    \"version\": \"1.0.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"themes-app-1.0.0.tgz\",\n      \"fileCount\": 114,\n      \"size\": 6592,\n      \"unpackedSize\": 18441\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"templates\",\n          \"path\": \"templates\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 3,\n      \"packedFiles\": 3\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [],\n        \"components\": [],\n        \"templates\": [\n          {\n            \"id\": \"guide\",\n            \"type\": \"page\",\n            \"name\": \"guide\"\n          }\n        ],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [],\n        \"components\": [],\n        \"templates\": [\n          {\n            \"id\": \"guide\",\n            \"type\": \"page\",\n            \"name\": \"guide\"\n          }\n        ],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"template_export_missing\",\n        \"severity\": \"error\",\n        \"message\": \"Template \\\"guide\\\" public import \\\"themes-app/templates/guide\\\" does not have a default export.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/themes\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "themes/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "themes/templates/guide.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'guide',\n  displayName: 'Guide',\n  description: 'Guide template.',\n};\n"
+  },
+  {
+   "path": "themes/templates/guide.tsx",
+   "status": "created",
+   "text": "export default function Guide() {\n  return <div>Guide</div>;\n}\n"
+  }
+ ]
+}

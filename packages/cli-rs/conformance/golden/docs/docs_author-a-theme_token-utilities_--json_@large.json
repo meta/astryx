@@ -1,0 +1,15 @@
+{
+ "id": "docs_author-a-theme_token-utilities_--json_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "token-utilities",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Token Utilities\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Use `tokenVar()` when a non-StyleX styling library wants a CSS variable reference, and `resolveThemeTokens()` when JavaScript needs token values for a specific theme and mode without React context. Themes are registered by name when created with `defineTheme()`; call `registerTheme(theme)` for prebuilt or object-literal themes that need name-based SSR lookup.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"ts\",\n        \"code\": \"import {tokenVar, tokenVars} from '@astryxdesign/core/theme/tokens';\\n\\nconst pandaOrEmotionTheme = {\\n  colors: {\\n    text: tokenVar('--color-text-primary'),\\n    surface: tokenVars['--color-background-surface'],\\n  },\\n};\",\n        \"label\": \"CSS var references for styling-library configs\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"ts\",\n        \"code\": \"import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';\\nimport {neutralTheme} from '@astryxdesign/theme-neutral';\\n\\nconst lightTokens = resolveThemeTokens(neutralTheme, {mode: 'light'});\\nconst chartTheme = {\\n  textColor: lightTokens['--color-text-primary'],\\n  seriesColor: lightTokens['--color-data-categorical-blue'],\\n};\",\n        \"label\": \"Resolve token values without a hook\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"The `@astryxdesign/core/theme/tokens` subpath is server-safe and does not require React. The main `@astryxdesign/core/theme` barrel also re-exports these helpers for client code that already imports theme APIs.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"For styling library interop patterns, see `astryx docs styling-libraries`.\"\n      }\n    ],\n    \"id\": \"token-utilities\",\n    \"links\": {\n      \"up\": \"astryx docs author-a-theme --index\",\n      \"previous\": \"astryx docs author-a-theme building-a-theme-family\",\n      \"next\": \"astryx docs author-a-theme usetheme-hook\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

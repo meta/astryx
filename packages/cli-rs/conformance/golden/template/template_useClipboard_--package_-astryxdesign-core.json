@@ -1,0 +1,15 @@
+{
+ "id": "template_useClipboard_--package_-astryxdesign-core",
+ "args": [
+  "template",
+  "useClipboard",
+  "--package",
+  "@astryxdesign/core"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"useClipboard\"\n\n  useClipboardHookUsage  (block template)\n",
+ "exit": 1,
+ "files": []
+}

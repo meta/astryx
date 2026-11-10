@@ -1,0 +1,15 @@
+{
+ "id": "ex_theme_palette_generate_palette.config.json_@integration",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette.config.json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: palette.config.json\n",
+ "exit": 1,
+ "files": []
+}

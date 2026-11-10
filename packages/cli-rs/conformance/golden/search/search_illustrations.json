@@ -1,0 +1,19 @@
+{
+ "id": "search_illustrations",
+ "args": [
+  "search",
+  "illustrations"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"illustrations\" (6)\n\nname:        illustrations\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Illustrations\ndescription: Illustration guidelines for empty states, onboarding flows, and feature highlights.\ncommand:     npx @astryxdesign/cli@0.7.12 docs illustrations --index\nparent:      npx @astryxdesign/cli@0.7.12 docs foundations\n\nname:        EmptyState\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/EmptyState\ndescription: EmptyState shows a placeholder when a content area has no data. Use it for empty lists, zero search results, first-time setups, or cleared inboxes. Always include a title and a next step so the user is not stuck.\ncommand:     npx @astryxdesign/cli@0.7.12 component EmptyState\n\nname:        illustrations\nsection:     when-to-use\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Illustrations › When to Use\ndescription: Consistent illustration usage reinforces brand identity and helps users understand context at a glance. Use illustrations in these contexts:\ncommand:     npx @astryxdesign/cli@0.7.12 docs illustrations when-to-use\nparent:      npx @astryxdesign/cli@0.7.12 docs illustrations --index\n\nname:        illustrations\nsection:     guidelines\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Illustrations › Guidelines\ndescription: Keep illustrations consistent in style across the product.\ncommand:     npx @astryxdesign/cli@0.7.12 docs illustrations guidelines\nparent:      npx @astryxdesign/cli@0.7.12 docs illustrations --index\n\nname:        illustrations\nsection:     placement\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Illustrations › Placement\ndescription: For an empty state, pass the illustration to the `icon` slot of `EmptyState`, which centers it above the title and description. Typical illustration sizes range from 120px for inline empty states to 240px for full-page onboarding screens....\ncommand:     npx @astryxdesign/cli@0.7.12 docs illustrations placement\nparent:      npx @astryxdesign/cli@0.7.12 docs illustrations --index\n\nname:        foundations\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations\ndescription: Color, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on. Each topic keeps its own name; open one by it.\ncommand:     npx @astryxdesign/cli@0.7.12 docs foundations\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover illustrations\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

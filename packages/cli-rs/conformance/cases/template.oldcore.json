@@ -1,0 +1,290 @@
+[
+  {
+    "id": "oldcore_template_--list_@core-0.7.11",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.7.11",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.7.11",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.7.11",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.7.11",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_@core-0.7.5",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.7.5",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.7.5",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.7.5",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.7.5",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_@core-0.6.8",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.6.8",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.6.8",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.6.8",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.6.8",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_@core-0.5.4",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.5.4",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.5.4",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.5.4",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.5.4",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_@core-0.4.7",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.4.7",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.4.7",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.4.7",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.4.7",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_@core-0.3.0",
+    "args": [
+      "template",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_--list_--json_@core-0.3.0",
+    "args": [
+      "template",
+      "--list",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_@core-0.3.0",
+    "args": [
+      "template",
+      "blank"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_dashboard_--skeleton_@core-0.3.0",
+    "args": [
+      "template",
+      "dashboard",
+      "--skeleton"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_template_blank_src-new-page.tsx_@core-0.3.0",
+    "args": [
+      "template",
+      "blank",
+      "src/new-page.tsx"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

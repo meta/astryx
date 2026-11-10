@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_new-set_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'name'\n",
+ "exit": 1,
+ "files": []
+}

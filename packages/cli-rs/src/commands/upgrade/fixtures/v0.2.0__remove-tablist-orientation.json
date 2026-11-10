@@ -1,0 +1,66 @@
+[
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value=\"a\" onChange={onChange} orientation=\"horizontal\"><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "output": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value=\"a\" onChange={onChange}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value=\"a\" onChange={onChange} orientation=\"vertical\"><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "output": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value=\"a\" onChange={onChange}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value={active} orientation={'horizontal'} onChange={fn}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "output": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value={active} onChange={fn}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList as Tabs} from '@astryxdesign/core';\nconst t = <Tabs value=\"a\" onChange={fn} orientation=\"vertical\"><Tab value=\"a\" label=\"A\" /></Tabs>;",
+  "output": "import {TabList as Tabs} from '@astryxdesign/core';\nconst t = <Tabs value=\"a\" onChange={fn}><Tab value=\"a\" label=\"A\" /></Tabs>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core/TabList';\nconst t = <TabList value=\"a\" onChange={fn} orientation=\"horizontal\"><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "output": "import {TabList} from '@astryxdesign/core/TabList';\nconst t = <TabList value=\"a\" onChange={fn}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core';\nconst t = <SomeOtherComponent orientation=\"vertical\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nconst t = <Button label=\"Click\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.0/remove-tablist-orientation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TabList} from '@astryxdesign/core';\nconst t = <TabList value=\"a\" onChange={fn}><Tab value=\"a\" label=\"A\" /></TabList>;",
+  "output": null,
+  "error": null
+ }
+]

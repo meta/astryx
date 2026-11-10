@@ -1,0 +1,20 @@
+{
+ "id": "component_FormLayout_--zh_@large",
+ "args": [
+  "component",
+  "FormLayout",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# FormLayout\n\nA layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a native <form> for that; <form> has no Astryx replacement, so it stays a plain element. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.\n\n**Import:** `import {FormLayout} from '@astryxdesign/core/FormLayout';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Layout container | Yes | Owns field arrangement, spacing, direction, and form-level optionality. |\n| Form title | No | Heading that describes the purpose of the form. |\n| Fields | Yes | Input components with labels for collecting user data. |\n| Footer | No | Contains confirmation buttons such as Submit or Cancel. |\n\n## Best Practices\n\n- **Do:** Stack fields vertically for most forms. It's the easiest to scan top to bottom.\n- **Do:** Nest a horizontal FormLayout inside a vertical one when fields naturally pair up, like First Name + Last Name or City + State + ZIP.\n- **Do:** Use horizontal-labels for settings pages where labels sit beside their inputs.\n- **Don't:** Use FormLayout for form state or submission. It's just layout. Wrap it in a native <form> for that.\n- **Don't:** Put unrelated fields side by side in a horizontal layout. Save it for fields that belong together.\n- **Don't:** Nest horizontal-labels inside another FormLayout. It uses CSS Grid and needs to be the outermost container.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `direction` | `'vertical' \\| 'horizontal' \\| 'horizontal-labels'` | `'vertical'` | 控制字段排列方式。vertical 从上到下堆叠；horizontal 为每个字段使用一个 1fr 网格轨道，并按逻辑行内方向排列；horizontal-labels 使用 CSS Grid，将标签放在输入框的行内起始侧（当视口宽度 <=480px 时折叠为垂直布局）。 |\n| `defaultOptionality` | `'optional' \\| 'required'` | - | 表单视为默认的状态，因此仅例外字段显示可选/必填指示器。设为 \"optional\" 时，仅标记 isRequired 的字段显示指示器；设为 \"required\" 时，仅标记 isOptional 的字段显示。与默认一致的字段不显示任何内容。设为 \"required\" 时，未标记的字段仍会暴露 aria-required，使屏幕阅读器与视觉默认一致——仅作用于 aria-required，不改变原生 required 属性。CheckboxInput、Switch 和 CheckboxList 例外：未勾选的复选框、关闭的开关或空的复选框组本身就是一个回答，因此默认值不会赋予它们必填状态。CheckboxInput 或 Switch 只有通过自身的 isRequired 才会成为必填。不设置则保持当前逐字段行为。 |\n| `children` | `ReactNode` | - | 要排列的表单字段。接受 Astryx 输入组件（TextInput、Selector 等）和 Field 包装的自定义控件。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义（外边距、定位、尺寸）的 StyleX 样式。必须是 stylex.create() 的值，而非内联样式对象如 style={{}}。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-form-layout` | `data-direction` | direction | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'form-layout': {\n    base: { /* CSS properties */ },\n    'direction:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

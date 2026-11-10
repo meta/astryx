@@ -1,0 +1,21 @@
+{
+ "id": "component_Divider_--detail_brief_@large",
+ "args": [
+  "component",
+  "Divider",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nDivider(orientation: horizontal|vertical, variant: subtle|strong)  <- from '@astryxdesign/core/Divider'\n  A visual separator that divides content into distinct sections. Use to create...\n  Targets: astryx-divider preferred attrs: data-orientation, data-variant variants: orientation, variant\n  label, isFullBleed, xstyle\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

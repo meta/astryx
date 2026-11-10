@@ -1,0 +1,21 @@
+{
+ "id": "w_theme_--depth_2",
+ "args": [
+  "docs",
+  "theme",
+  "--depth",
+  "2"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Theming\nHow to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.\n\npackage: @astryxdesign/cli\n\nquick-start              Wrap your app in a theme - Install a theme, import it with the CLI, and wire the generated\n                         module once. For the full guide - available themes, integration themes, dark mode, nested\n                         themes, and production builds - see `npx @astryxdesign/cli@0.7.12 docs use-a-theme`.\ncreating-a-custom-theme  Create a custom theme - Use `defineTheme` with token overrides, scale configs, and component\n                         style overrides. For the full guide - palette generation, extending themes, adaptations, custom\n                         variants, and production builds - see `npx @astryxdesign/cli@0.7.12 docs author-a-theme`.\nicon-sizes               Icon sizes - A theme sets the dimension of each Icon size in its stylesheet: `width` and\n                         `height` on `components.icon['size:sm']` (or `xsm`, `md`, `lg`) resize that size's glyph, for\n                         semantic icon names and SVG components passed to `Icon` alike. Give...\nlight-dark-mode          Dark mode - Light, dark, and system modes: `npx @astryxdesign/cli@0.7.12 docs use-a-theme`.\nintegration-themes       Integration themes - Install an integration and Astryx discovers its themes automatically.\n                         Import one with `npx @astryxdesign/cli@0.7.12 theme add <name> --package <integration>`. Use\n                         `theme eject` only for an independent source fork. For the full walkthrough, see `npx\n                         @astryxdesign/cli@0.7.12 docs...\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs theme <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs theme --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "shell_experimental",
+ "args": [
+  "experimental"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx experimental [options] [command]\n\n[experimental] Try features that may change in a patch release: icon sets (find icons, build an icon-set package)\n\nOptions:\n  -h, --help                 display help for command\n\nCommands:\n  icon [options] [query...]  [experimental] Find an icon by meaning, or build an icon set from a library (guide: astryx docs cli/experimental/icon-sets)\n  render [options] [file]    [experimental] Render a page to one self-contained HTML file, or turn one back into a page\n\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List the experiments\n  npx @astryxdesign/cli@0.7.12 experimental\n  # Find an icon by meaning\n  npx @astryxdesign/cli@0.7.12 experimental icon delete\n  # Render a page to one HTML file\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

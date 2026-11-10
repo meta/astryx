@@ -1,0 +1,10 @@
+export default {
+  "name": "x",
+  'q': `t`,
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

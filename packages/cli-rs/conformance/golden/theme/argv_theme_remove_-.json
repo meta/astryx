@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_remove_-",
+ "args": [
+  "theme",
+  "remove",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme \"ü中文\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add ü中文` first.\n",
+ "exit": 1,
+ "files": []
+}

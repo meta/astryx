@@ -1,0 +1,15 @@
+{
+ "id": "component_AvatarStatusDot_--props_--json_@large",
+ "args": [
+  "component",
+  "AvatarStatusDot",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"variant\",\n      \"type\": \"'success' | 'neutral' | 'error'\",\n      \"description\": \"Semantic variant pairing colour with a distinct shape: success = filled green dot, neutral = grey ring, error = red dot with a minus bar.\",\n      \"default\": \"'success'\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label describing the status. Inside an Avatar it is composed into the avatar's accessible name (e.g. \\\"Jane Doe, Online\\\"); the Avatar root is role=\\\"img\\\", which prunes child semantics, so the composed name is how the status reaches assistive tech. Standalone dots expose role=\\\"img\\\" with this label directly.\"\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Icon centered inside the dot (hidden at tiny sizes). A rendered icon replaces the built-in shape glyph, so use a different icon per status.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

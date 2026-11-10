@@ -1,0 +1,10 @@
+[
+ {
+  "transform": "v0.3.0/migrate-lab-codeblock-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock, Drawer} from '@astryxdesign/lab';\nconst x = <CodeBlock code=\"x\" />;",
+  "output": "import { CodeBlock } from '@astryxdesign/core/CodeBlock';\nimport { Drawer } from '@astryxdesign/lab';\nconst x = <CodeBlock code=\"x\" />;",
+  "error": null
+ }
+]

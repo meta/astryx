@@ -1,0 +1,28 @@
+[
+  {
+    "id": "fuzz_discover_--available_--json_--installed@badconfig_ab1139",
+    "args": [
+      "discover",
+      "--available",
+      "--json",
+      "--installed"
+    ],
+    "fixture": "badconfig"
+  },
+  {
+    "id": "fuzz_discover@doctor-author2_44954a",
+    "args": [
+      "discover"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "fuzz_discover@integration-packjson_645552",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  }
+]

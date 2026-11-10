@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AppShellTopNavOnly-src-page.tsx_template_AppShellTopNavOnly_src-page.tsx_@large",
+ "args": [
+  "template",
+  "AppShellTopNavOnly",
+  "src/page.tsx"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Refusing to overwrite existing file src/page.tsx. Re-run with --overwrite (or -f) to replace it.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AppShell} from '@astryxdesign/core/AppShell';\nimport {VStack} from '@astryxdesign/core/Stack';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\nimport {CubeIcon} from '@heroicons/react/24/outline';\n\nexport default function AppShellTopNavOnly() {\n  return (\n    <AppShell\n      contentPadding={6}\n      style={{height: '100%', minHeight: 0}}\n      topNav={\n        <TopNav\n          label=\"Main navigation\"\n          heading={\n            <TopNavHeading\n              heading=\"App Shell\"\n              logo={\n                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />\n              }\n            />\n          }\n          startContent={\n            <>\n              <TopNavItem label=\"Home\" href=\"#\" isSelected />\n              <TopNavItem label=\"Products\" href=\"#\" />\n              <TopNavItem label=\"Docs\" href=\"#\" />\n            </>\n          }\n        />\n      }>\n      <VStack gap={4}>\n        <Heading level={3}>Page Content</Heading>\n        <Text type=\"body\">\n          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do\n          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad\n          minim veniam, quis nostrud exercitation ullamco laboris.\n        </Text>\n      </VStack>\n    </AppShell>\n  );\n}\n"
+  }
+ ]
+}

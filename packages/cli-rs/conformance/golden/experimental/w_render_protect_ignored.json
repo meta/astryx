@@ -1,0 +1,16 @@
+{
+ "id": "w_render_protect_ignored",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "ignored.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: ignored.html (excluded by .gitignore) is protected, so never replaced, even with --overwrite; nothing was written. Choose another --out.\n",
+ "exit": 1,
+ "files": []
+}

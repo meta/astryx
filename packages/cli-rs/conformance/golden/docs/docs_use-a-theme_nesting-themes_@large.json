@@ -1,0 +1,20 @@
+{
+ "id": "docs_use-a-theme_nesting-themes_@large",
+ "args": [
+  "docs",
+  "use-a-theme",
+  "nesting-themes"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Nested themes\n\nWrap different sections in separate `<Theme>` providers.\n\nDark sidebar with light content:\n```tsx\n<Theme theme={lightTheme} mode=\"light\">\n  <Layout\n    header={<LayoutHeader>...</LayoutHeader>}\n    start={\n      <Theme theme={darkTheme} mode=\"dark\">\n        <LayoutPanel>{/* Dark sidebar */}</LayoutPanel>\n      </Theme>\n    }\n    content={<LayoutContent>{/* Light content */}</LayoutContent>}\n  />\n</Theme>\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-a-theme light-dark-mode\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme runtime-vs-built-themes\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

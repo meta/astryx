@@ -1,0 +1,17 @@
+{
+ "id": "w_handlers_Code",
+ "args": [
+  "gap-report",
+  "Code",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size"
+ ],
+ "fixture": "gapreport",
+ "fixtureHash": "8ac8fa7f5cb78280+4e418a0c2575d9ce",
+ "stdout": "Gap report partially filed\n\nstatus:          partial\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: project\nhandler:     project\naudience:    internal\nstatus:      failed\nmessage:     Handler changed process.exitCode.\n\nhandlerType: integration\nhandler:     @acme/hooks\naudience:    public\nstatus:      consent_required\nmessage:     Rerun with --confirm-public to file this report.\n\nhandlerType: integration\nhandler:     @acme/broken\nstatus:      failed\nmessage:     Integration @acme/broken named export \"gapReport\" is invalid: audience: Invalid option: expected one of \"internal\"|\"public\"; handle: Expected a function\nDestinations\n\ndefault: true\n\nto:        @acme/hooks\ndefault:   false\nissuesUrl: https://example.com/hooks/issues\n\nto:        @acme/broken\ndefault:   false\nissuesUrl: https://github.com/acme/broken/issues\n\nAsk the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\n",
+ "stderr": "gap-report: delivery to project failed: Handler changed process.exitCode.\ngap-report: delivery to @acme/broken failed: Integration @acme/broken named export \"gapReport\" is invalid: audience: Invalid option: expected one of \"internal\"|\"public\"; handle: Expected a function\n",
+ "exit": 1,
+ "files": []
+}

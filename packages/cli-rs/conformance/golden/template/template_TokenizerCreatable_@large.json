@@ -1,0 +1,19 @@
+{
+ "id": "template_TokenizerCreatable_@large",
+ "args": [
+  "template",
+  "TokenizerCreatable"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Tokenizer} from '@astryxdesign/core/Tokenizer';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst emptySource: SearchSource = {\n  search: () => [],\n  bootstrap: () => [],\n};\n\nconst users: SearchableItem[] = [\n  {id: '1', label: 'Alice Johnson'},\n  {id: '2', label: 'Bob Smith'},\n  {id: '3', label: 'Charlie Brown'},\n  {id: '4', label: 'Diana Prince'},\n  {id: '5', label: 'Eve Williams'},\n];\n\nconst userSource: SearchSource = {\n  search: (query: string) =>\n    users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),\n  bootstrap: () => users,\n};\n\nexport default function TokenizerCreatable() {\n  const [tags, setTags] = useState<SearchableItem[]>([]);\n  const [members, setMembers] = useState<SearchableItem[]>([]);\n\n  return (\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\n      <Stack direction=\"vertical\" gap={4}>\n        <Stack direction=\"vertical\" gap={1}>\n          <Text type=\"supporting\" color=\"secondary\">\n            Free-text only\n          </Text>\n          <Tokenizer\n            label=\"Tags\"\n            searchSource={emptySource}\n            value={tags}\n            onChange={items => setTags(items)}\n            hasCreate\n            placeholder=\"Type a tag and press Enter...\"\n          />\n        </Stack>\n        <Stack direction=\"vertical\" gap={1}>\n          <Text type=\"supporting\" color=\"secondary\">\n            Create or search\n          </Text>\n          <Tokenizer\n            label=\"Team Members\"\n            searchSource={userSource}\n            value={members}\n            onChange={items => setMembers(items)}\n            hasCreate\n            hasEntriesOnFocus\n            placeholder=\"Search or type a new name...\"\n          />\n        </Stack>\n      </Stack>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

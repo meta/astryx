@@ -1,0 +1,20 @@
+{
+ "id": "template_library_--skeleton_@large",
+ "args": [
+  "template",
+  "library",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# library - Searchable, browsable card grid with filter tabs and a real empty state: uniform tiles organized by topic, narrowing in place, with no detail surface behind them.\n# Components: Card, Center, Divider, DropdownMenu, Grid, Layout, OverflowList, Section, TextInput, ToggleButton\n\n<Layout padding={6} hasDivider>\n  /* header: */\n  <LayoutHeader padding={6} hasDivider>\n    <Heading />\n  </LayoutHeader>\n  /* content: */\n  <LayoutContent padding={6}>\n    <VStack gap={6}>\n      <VStack gap={4}>\n        <TextInput />\n        <HStack gap={4}>\n          <StackItem />\n          <ToggleButtonGroup />\n          <OverflowList gap={1} />\n          <DropdownMenu />\n          <ToggleButton />\n          <DropdownMenu />\n        </HStack>\n      </VStack>\n      <Center>\n        <Text />\n      </Center>\n      <VStack gap={6}>\n        <Divider />\n        <LibrarySection />\n      </VStack>\n    </VStack>\n  </LayoutContent>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

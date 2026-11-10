@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_int_templates_-abs_broken",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "/abs"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "Checking integration templates: /abs\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_package_spec\nmessage:  Invalid integration package name \"/abs\". Use a bare package name (no path segments).\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

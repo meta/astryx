@@ -1,0 +1,15 @@
+{
+ "id": "w_theme_acme-tips_--json_@docsint",
+ "args": [
+  "docs",
+  "theme",
+  "acme-tips",
+  "--json"
+ ],
+ "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"id\": \"acme-tips\",\n    \"title\": \"Acme tips\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Tip.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs theme --index\",\n      \"previous\": \"astryx docs theme quick-start\",\n      \"next\": \"astryx docs theme creating-a-custom-theme\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

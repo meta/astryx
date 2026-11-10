@@ -1,0 +1,14 @@
+{
+ "id": "template_SelectorOptionShowcase_--json_@large",
+ "args": [
+  "template",
+  "SelectorOptionShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SelectorOptionShowcase\",\n    \"description\": \"Selector with custom-rendered options using SelectorOption for icons and descriptions.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Selector\",\n      \"SelectorOption\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Selector, SelectorOption} from '@astryxdesign/core/Selector';\\nimport {UserIcon} from '@heroicons/react/24/outline';\\n\\nconst descriptions: Record<string, string> = {\\n  admin: 'Full access to all resources',\\n  editor: 'Can edit and publish content',\\n  viewer: 'Read-only access',\\n  billing: 'Manage plans and payments',\\n};\\n\\nconst roles = [\\n  {value: 'admin', label: 'Admin'},\\n  {value: 'editor', label: 'Editor'},\\n  {value: 'viewer', label: 'Viewer'},\\n  {value: 'billing', label: 'Billing'},\\n];\\n\\nexport default function SelectorOptionShowcase() {\\n  const [value, setValue] = useState<string | undefined>('editor');\\n\\n  return (\\n    <Selector\\n      controlStyle={{width: 300}}\\n      label=\\\"Role\\\"\\n      options={roles}\\n      value={value}\\n      onChange={setValue}\\n      placeholder=\\\"Assign a role...\\\"\\n      renderOption={option => (\\n        <SelectorOption\\n          icon={UserIcon}\\n          label={option.label}\\n          description={descriptions[option.value]}\\n        />\\n      )}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

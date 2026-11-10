@@ -1,0 +1,14 @@
+{
+ "id": "argv-emptyval_discover_--limit_x",
+ "args": [
+  "discover",
+  "--limit",
+  ""
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --limit must be a positive integer, not \"0\"\n",
+ "exit": 1,
+ "files": []
+}

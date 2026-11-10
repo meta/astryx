@@ -1,0 +1,20 @@
+{
+ "id": "w_component_Linked_--props_@compkit",
+ "args": [
+  "component",
+  "Linked",
+  "--props"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "package: @comp/kit\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `tone` | `string` | - | See `astryx docs kit-guide`. |\n\n",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/compkit\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

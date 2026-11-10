@@ -1,0 +1,14 @@
+{
+ "id": "hook_useTableRowsVirtualization_--json",
+ "args": [
+  "hook",
+  "useTableRowsVirtualization",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableRowsVirtualization\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableRowsVirtualization\",\n    \"description\": \"Returns an opaque capability for fixed-height flat-row Table windowing. Pass the capability to Table.virtualization and keep the complete data, columns, explicit stable idKey and plugins on Table. Sizes are positive finite CSS pixels. Supported rows use single-line content; explicit wrapping, arbitrary custom renderers, non-flat rows or invalid identity use ordinary full rendering. Windowing uses the Table-owned scroll wrapper; a caller-provided scrollWrapper takes diagnostic full-render fallback. Mounted rows retain native table semantics and full-table positions; unmounted rows are not promised screen-reader discovery.\",\n    \"props\": [\n      {\n        \"name\": \"rowHeight\",\n        \"type\": \"number\",\n        \"required\": true,\n        \"description\": \"Total body-row pitch in CSS pixels, including existing density padding and collapsed borders. Must fit text and supported controls without reducing their size.\"\n      },\n      {\n        \"name\": \"viewportHeight\",\n        \"type\": \"number\",\n        \"required\": true,\n        \"description\": \"Bounded Table-owned viewport height in CSS pixels. Table accounts for its headers and chrome.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

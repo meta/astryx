@@ -1,0 +1,14 @@
+{
+ "id": "w_gothic---json_@integration",
+ "args": [
+  "discover",
+  "gothic",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"gothic\",\n    \"matches\": [\n      {\n        \"package\": \"@astryxdesign/theme-gothic\",\n        \"component\": \"gothic\",\n        \"kind\": \"theme\",\n        \"installed\": false,\n        \"title\": \"Gothic\",\n        \"summary\": \"Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\"\n      },\n      {\n        \"package\": \"@astryxdesign/theme-gothic\",\n        \"component\": \"@astryxdesign/theme-gothic\",\n        \"kind\": \"package\",\n        \"installed\": false\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

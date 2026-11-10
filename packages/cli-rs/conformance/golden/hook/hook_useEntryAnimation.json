@@ -1,0 +1,19 @@
+{
+ "id": "hook_useEntryAnimation",
+ "args": [
+  "hook",
+  "useEntryAnimation"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useEntryAnimation\n\nReturns a StyleX style for animating an element on mount. Only animates when the element is dynamically inserted after the initial page paint; elements rendered on page load are not animated. Uses Astryx motion tokens (duration, easing) for consistent animation timing. Server-rendered elements hydrate without the entry style and never animate; elements mounted after hydration animate.\n\n## Best Practices\n\n- **Do:** Use for conditionally rendered elements like validation messages, toasts, or expanding sections.\n- **Do:** Spread the returned style into stylex.props() alongside other styles.\n- **Don't:** Use for elements that should be visible on initial page load; they will not animate.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `preset` | `'slideDown' \\| 'slideUp' \\| 'fadeIn' \\| 'scaleIn'` | `'slideDown'` | Animation preset to apply on mount. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `entryStyle` | `StyleXStyles \\| null` | A StyleX style object for the entry animation, or null if the element was rendered on initial page load or hydrated from server HTML (no animation needed). |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for FieldStatus\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "build_modal-dialog",
+ "args": [
+  "build",
+  "modal dialog"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"modal dialog\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `settings-dialog` by name, but the idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        settings-dialog\npackage:     @astryxdesign/core\ndescription: Preferences inside a modal container with searchable section navigation, so configuration happens without leaving whatever is underneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-dialog --type page <path>\n\nname:        form-wizard-dialog\npackage:     @astryxdesign/core\ndescription: Step through a short flow in a dialog, overlay, or popup launched from the page underneath, which stays where it was.\ncommand:     npx @astryxdesign/cli@0.7.12 template form-wizard-dialog --type page <path>\n\nKeyword search matched these page templates: settings-dialog (@astryxdesign/core), form-wizard-dialog (@astryxdesign/core), ai-chat (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        DialogFormDialog\npackage:     @astryxdesign/core\ndescription: Collects user input without navigating away from the page.\n\nname:        DialogShowcase\npackage:     @astryxdesign/core\ndescription: Modal dialog with a header, body content, and close button.\n\nname:        DialogWithSubtitle\npackage:     @astryxdesign/core\ndescription: Cannot be dismissed by Escape or backdrop click; the user must explicitly choose an action.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        AlertDialog\npackage:     @astryxdesign/core\ndescription: AlertDialog asks the user to confirm a destructive or irreversible action before it happens.\n\nname:        BottomSheet\npackage:     @astryxdesign/core\ndescription: A mobile touch surface for filters, actions, forms, and detail views that should rise from the bottom of the viewport.\n\nname:        CommandPalette\npackage:     @astryxdesign/core\ndescription: CommandPalette is a searchable dialog for quick access to commands, navigation, and actions.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

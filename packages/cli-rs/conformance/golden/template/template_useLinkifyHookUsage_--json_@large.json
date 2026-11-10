@@ -1,0 +1,14 @@
+{
+ "id": "template_useLinkifyHookUsage_--json_@large",
+ "args": [
+  "template",
+  "useLinkifyHookUsage",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"useLinkifyHookUsage\",\n    \"description\": \"Plain-text comments where useLinkify turns the URL and the email address into Links, and a custom pattern turns issue references like #123 into tracker links — the patterns option in action. The comment without matches stays plain text.\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useLinkify, type LinkifyPattern} from '@astryxdesign/core/Link';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst COMMENTS = [\\n  'See https://example.com/spec or email support@example.com.',\\n  'Fixed by #123, tracking the regression in #456.',\\n  'No links here, just a plain note.',\\n];\\n\\n// Issue references like #123 link into the tracker; the capture group maps\\n// onto its URL scheme, showing the patterns option.\\nconst ISSUE_PATTERN: LinkifyPattern = {\\n  pattern: /#(\\\\d+)/g,\\n  href: match => `https://example.com/issues/${match[1]}`,\\n};\\n\\nfunction Comment({children}: {children: string}) {\\n  const nodes = useLinkify(children, {patterns: [ISSUE_PATTERN]});\\n  return (\\n    <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n      {nodes}\\n    </Text>\\n  );\\n}\\n\\nexport default function UseLinkifyHookUsage() {\\n  return (\\n    <VStack gap={3} style={{width: '100%', maxWidth: 360}}>\\n      {COMMENTS.map(comment => (\\n        <Comment key={comment}>{comment}</Comment>\\n      ))}\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

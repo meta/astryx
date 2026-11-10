@@ -1,0 +1,14 @@
+{
+ "id": "argv_hook_--json_--help",
+ "args": [
+  "hook",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx hook\",\n    \"description\": \"List hooks or print hook docs\",\n    \"usage\": \"astryx hook [options] [name]\",\n    \"options\": [\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List all hooks grouped by category\"\n      },\n      {\n        \"flags\": \"--category <category>\",\n        \"description\": \"List hooks in a specific category\"\n      },\n      {\n        \"flags\": \"--params\",\n        \"description\": \"Print only the parameters table\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_component_--help_--json",
+ "args": [
+  "component",
+  "--help",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx component\",\n    \"description\": \"List components or print component docs\",\n    \"usage\": \"astryx component [options] [names...]\",\n    \"options\": [\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List every component (the same as giving no name)\"\n      },\n      {\n        \"flags\": \"--category <category>\",\n        \"description\": \"List one component group, e.g. --category Layout or --category Avatar (an unknown group lists the valid ones)\"\n      },\n      {\n        \"flags\": \"--props\",\n        \"description\": \"Print only the props table\"\n      },\n      {\n        \"flags\": \"--source\",\n        \"description\": \"Print component source code\"\n      },\n      {\n        \"flags\": \"--showcase\",\n        \"description\": \"Print showcase source code\"\n      },\n      {\n        \"flags\": \"--blocks\",\n        \"description\": \"List example blocks: showcase, examples, and related\"\n      },\n      {\n        \"flags\": \"--package <name>\",\n        \"description\": \"Scope lookup to an external package (e.g. @acme/xds-widgets). Use @astryxdesign/core to select an original replaced by an integration component.\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_DividerVertical_--json_@large",
+ "args": [
+  "template",
+  "DividerVertical",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DividerVertical\",\n    \"description\": \"Vertical dividers separating side-by-side metrics. Use between stat cards, toolbar groups, or any horizontal layout where you need a visual boundary between sections.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Divider\",\n      \"Section\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport type {CSSProperties} from 'react';\\nimport {Divider} from '@astryxdesign/core/Divider';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Section} from '@astryxdesign/core/Section';\\nimport {HStack, VStack, StackItem} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst dividerFill: CSSProperties = {\\n  alignSelf: 'stretch',\\n  height: 'auto',\\n};\\n\\nexport default function DividerVertical() {\\n  return (\\n    <Section variant=\\\"transparent\\\" width=\\\"100%\\\">\\n      <Card>\\n        <HStack gap={4} align=\\\"stretch\\\">\\n          <StackItem size=\\\"fill\\\">\\n            <VStack gap={1}>\\n              <Text type=\\\"label\\\">Revenue</Text>\\n              <Text type=\\\"label\\\">$24,500</Text>\\n              <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n                +12% vs last month\\n              </Text>\\n            </VStack>\\n          </StackItem>\\n          <Divider orientation=\\\"vertical\\\" style={dividerFill} />\\n          <StackItem size=\\\"fill\\\">\\n            <VStack gap={1}>\\n              <Text type=\\\"label\\\">Users</Text>\\n              <Text type=\\\"label\\\">1,240</Text>\\n              <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n                +8% vs last month\\n              </Text>\\n            </VStack>\\n          </StackItem>\\n          <Divider orientation=\\\"vertical\\\" style={dividerFill} />\\n          <StackItem size=\\\"fill\\\">\\n            <VStack gap={1}>\\n              <Text type=\\\"label\\\">Conversion</Text>\\n              <Text type=\\\"label\\\">3.2%</Text>\\n              <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n                -0.5% vs last month\\n              </Text>\\n            </VStack>\\n          </StackItem>\\n        </HStack>\\n      </Card>\\n    </Section>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

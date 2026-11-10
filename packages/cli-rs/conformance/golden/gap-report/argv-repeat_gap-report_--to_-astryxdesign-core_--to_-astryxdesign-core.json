@@ -1,0 +1,16 @@
+{
+ "id": "argv-repeat_gap-report_--to_-astryxdesign-core_--to_-astryxdesign-core",
+ "args": [
+  "gap-report",
+  "--to",
+  "@astryxdesign/core",
+  "--to",
+  "@astryxdesign/core"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_LinkProviderCustomLink_--json_@large",
+ "args": [
+  "template",
+  "LinkProviderCustomLink",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"LinkProviderCustomLink\",\n    \"description\": \"Routes every Astryx link through a custom component that intercepts the click, the hook frameworks like Next.js use for client-side navigation. Click the link to see the custom handler fire instead of a full-page load.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"LinkProvider\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport type {AnchorHTMLAttributes} from 'react';\\nimport {Link, LinkProvider} from '@astryxdesign/core/Link';\\n\\n/**\\n * A stand-in for a framework router link (e.g. Next.js `Link` or React\\n * Router `Link`). Instead of letting the browser do a full-page navigation,\\n * it intercepts the click and hands the destination to a custom handler —\\n * the same hook real routers use for client-side navigation. Here it just\\n * announces the target so the behavior swap is observable in the preview.\\n */\\nfunction RouterLink({\\n  href,\\n  onClick,\\n  children,\\n  ...props\\n}: AnchorHTMLAttributes<HTMLAnchorElement>) {\\n  return (\\n    <a\\n      href={href}\\n      onClick={e => {\\n        e.preventDefault();\\n        onClick?.(e);\\n        alert(`RouterLink intercepted navigation to: ${href}`);\\n      }}\\n      {...props}>\\n      {children}\\n    </a>\\n  );\\n}\\n\\nexport default function LinkProviderCustomLink() {\\n  return (\\n    <LinkProvider component={RouterLink}>\\n      <Link href=\\\"/dashboard\\\" isStandalone>\\n        Go to dashboard\\n      </Link>\\n    </LinkProvider>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

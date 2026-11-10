@@ -1,0 +1,20 @@
+{
+ "id": "hook_useOverlay_--zh",
+ "args": [
+  "hook",
+  "useOverlay",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useOverlay\n\nAdds overlay behavior to a container you already render, such as a Card or a custom media frame, without the wrapper Overlay adds. Spread containerRef and containerProps on the container, then render element (or renderOverlay(children)) once inside it. The scrim is absolutely positioned, so it covers the nearest positioned ancestor: the container itself, or a positioned section inside it such as an image area. Visibility is CSS-driven from the container's :hover and :focus-within, so with showOn 'hover' a keyboard user reveals the content by moving focus into the container. Hidden content is not focusable, so the container needs a focusable element before the overlay content in tab order. A revealed scrim takes pointer input over the area it covers, so put that element outside the scrim, or use a top or bottom strip and keep it in the part the strip leaves uncovered.\n\n## Best Practices\n\n- **Do:** Use showOn 'hover' for actions on media cards: it also reveals on keyboard focus within the container.\n- **Do:** Put a focusable element (a link or the card title) before the overlay content in the container, so Tab reveals the content and the next Tab reaches it.\n- **Do:** Use the Overlay component when you do not already have a container element to attach to.\n- **Don't:** Put the only way to reach an action behind hover with nothing focusable before it; keyboard users cannot focus content that is hidden.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseOverlayOptions` | - | Overlay configuration. Every field is optional. |\n| `options.content` | `ReactNode` | - | Content to render inside the scrim. When set, the hook returns it pre-rendered as element. |\n| `options.showOn` | `'hover' \\| 'always' \\| 'focus' \\| 'hover-or-focus'` | `'always'` | Visibility trigger, read with CSS from the container. 'hover' also reveals on focus within the container for keyboard users; 'hover-or-focus' is an alias for it. On a touch device (hover: none), a hover overlay toggles on a tap on the container instead. |\n| `options.isOpen` | `boolean` | - | Controlled visibility. When set, it takes precedence over showOn and the touch toggle. |\n| `options.scrim` | `'dark' \\| 'light' \\| false` | `'dark'` | Scrim background. false renders the content with no scrim background. |\n| `options.position` | `'fill' \\| 'bottom' \\| 'top'` | `'fill'` | Where the scrim sits: over the whole positioned area, or as a strip along its bottom or top edge. |\n| `options.align` | `'start' \\| 'center' \\| 'end'` | `'end'` | Alignment of the content within the scrim. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `containerRef` | `RefObject<HTMLElement \\| null>` | Attach to the container element. |\n| `containerProps` | `OverlayContainerProps` | Spread on the same container: className and style mark it as the overlay scope (positioned, clipped), and on a touch device with a hover overlay onClick and onMouseUp toggle it on a tap. |\n| `element` | `ReactElement \\| null` | The scrim with options.content, ready to render once inside the container. null when content is not set. |\n| `renderOverlay` | `(children: ReactNode) => ReactElement` | Renders the scrim around the children you pass, for content that changes or a scrim you mount yourself. Use it or element, not both. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Overlay, Card, AspectRatio\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

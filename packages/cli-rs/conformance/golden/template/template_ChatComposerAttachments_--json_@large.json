@@ -1,0 +1,14 @@
+{
+ "id": "template_ChatComposerAttachments_--json_@large",
+ "args": [
+  "template",
+  "ChatComposerAttachments",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatComposerAttachments\",\n    \"description\": \"Chat composer with removable file tokens in a collapsible drawer. Use when users can attach files or context to their message.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatComposer\",\n      \"ChatComposerDrawer\",\n      \"Stack\",\n      \"Token\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ChatComposer, ChatComposerDrawer} from '@astryxdesign/core/Chat';\\nimport {Token} from '@astryxdesign/core/Token';\\nimport {Stack} from '@astryxdesign/core/Layout';\\n\\nexport default function ChatComposerAttachments() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" width={450} maxWidth=\\\"100%\\\">\\n      <ChatComposer\\n        onSubmit={value => {\\n          console.log('Sent:', value);\\n        }}\\n        drawer={\\n          <ChatComposerDrawer count={6}>\\n            <Token label=\\\"feature-prd.docx\\\" onRemove={() => {}} />\\n            <Token label=\\\"2026-roadmap.pdf\\\" onRemove={() => {}} />\\n            <Token label=\\\"user-flow.fig\\\" onRemove={() => {}} />\\n            <Token label=\\\"launch-plan.docx\\\" onRemove={() => {}} />\\n            <Token label=\\\"user-feedback.csv\\\" onRemove={() => {}} />\\n            <Token label=\\\"analytics-kpis.csv\\\" onRemove={() => {}} />\\n          </ChatComposerDrawer>\\n        }\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,21 @@
+{
+ "id": "w_component_Button_--package_@comp-kit_@compkit",
+ "args": [
+  "component",
+  "Button",
+  "--package",
+  "@comp/kit"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "package: @comp/kit\n\n# Button\n\nThe kit button, with a kit-only look.\n\n**Import:** `import {Button} from '@comp/kit';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `tone` | `'calm' \\| 'loud'` | - | How loud it looks. |\n\n",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/compkit\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

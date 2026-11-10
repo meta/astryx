@@ -1,0 +1,14 @@
+{
+ "id": "w3_doctor_ts2_defaults",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-ts2",
+ "fixtureHash": "393cf73e5070f1dd+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/defaults@1.0.0\n\nseverity:           [warn]\nname:               Stepper\nintegrationPackage: @acme/defaults\nmessage:            Component \"Stepper\" conflicts with Core. Consider renaming the integration component. If you keep it, always select it with --package.\ncommand:            npx @astryxdesign/cli@0.7.12 component Stepper --package @acme/defaults\n\n1 Core component conflict(s). Renaming is recommended but optional; keep the package-qualified command if the overlap is intentional.\n\nseverity:    [warn]\ncomponent:   Stepper\nprop:        step\nkind:        default_mismatch\nmessage:     \"step\" is documented with default 2, but the code defaults it to 1.\ndoc:         src/Stepper/Stepper.doc.mjs\nsource:      src/Stepper/Stepper.tsx\ndocDefault:  2\ncodeDefault: 1\nfix:         In src/Stepper/Stepper.doc.mjs, set the \"step\" prop's default to the code's: default: \"1\".\n\nseverity:     [warn]\ncomponent:    StepperItem\nprop:         done\nkind:         not_in_doc\nmessage:      StepperItem declares \"done\", but the doc does not list it.\ndoc:          src/Stepper/Stepper.doc.mjs\nsource:       src/Stepper/Stepper.tsx\ncodeType:     boolean\ncodeRequired: false\n\nseverity:  [warn]\ncomponent: StepperItem\nprop:      ghost\nkind:      not_in_code\nmessage:   \"ghost\" is documented, but StepperItem's props have no \"ghost\".\ndoc:       src/Stepper/Stepper.doc.mjs\nsource:    src/Stepper/Stepper.tsx\ndocType:   boolean\n\nseverity:  [warn]\ncomponent: StepperItem\nprop:      index\nkind:      type_mismatch\nmessage:   \"index\" is documented as string, but the code declares number.\ndoc:       src/Stepper/Stepper.doc.mjs\nsource:    src/Stepper/Stepper.tsx\ndocType:   string\ncodeType:  number\n\n4 prop(s) differ between the docs and the code in 2 of 2 component(s) compared (TypeScript 6.0.3). These are warnings: update the doc, or the code if the doc is right.\n\n[info] Documented prop types judged: 5; not compared: 2. A type is judged when the doc writes it the same as the source (exactly, if it contains `readonly`), or when both are primitives, literals, arrays and unions of those, or names for them.\n\ncomponent: Stepper\ndoc:       src/Stepper/Stepper.doc.mjs\nreason:    its default in the code is not a literal, so the documented default was not compared\nprops:     start\n\ncomponent: Stepper\ndoc:       src/Stepper/Stepper.doc.mjs\nreason:    its documented default is not a literal, so it was not compared with the code's\nprops:     mode\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

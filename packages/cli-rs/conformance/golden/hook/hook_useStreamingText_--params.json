@@ -1,0 +1,20 @@
+{
+ "id": "hook_useStreamingText_--params",
+ "args": [
+  "hook",
+  "useStreamingText",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `targetText` | `string` | - | The full target text to reveal. As new chunks arrive, update this value with the accumulated text. **(required)** |\n| `isStreaming` | `boolean` | - | Whether text is currently being streamed. When false, the hook returns the full targetText immediately. **(required)** |\n| `options` | `UseStreamingTextOptions` | - | Optional configuration for streaming behavior. |\n| `options.speed` | `'natural' \\| 'fast' \\| 'instant'` | `'natural'` | Speed preset for text reveal. 'natural' is steady ~2 chars/frame, 'fast' scales with backlog ~4 chars/frame, 'instant' returns full text with no animation. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "w3_verify_theme_fresh_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/fresh\",\n    \"version\": \"1.0.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"acme-fresh-1.0.0.tgz\",\n      \"fileCount\": 5,\n      \"size\": 674,\n      \"unpackedSize\": 1006\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 3,\n      \"packedFiles\": 3\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_import_unresolvable\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" from @acme/fresh has no resolvable built module and stylesheet. Missing module export @acme/fresh/themes/ocean, stylesheet export @acme/fresh/themes/ocean.css, or the single-theme exports @acme/fresh/built and @acme/fresh/theme.css. The package must build and export them before it can be added. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

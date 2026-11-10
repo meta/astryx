@@ -1,0 +1,15 @@
+{
+ "id": "docs_use-a-theme_nesting-themes_--json_@large",
+ "args": [
+  "docs",
+  "use-a-theme",
+  "nesting-themes",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"nesting-themes\",\n    \"title\": \"Nested themes\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Wrap different sections in separate `<Theme>` providers.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"<Theme theme={lightTheme} mode=\\\"light\\\">\\n  <Layout\\n    header={<LayoutHeader>...</LayoutHeader>}\\n    start={\\n      <Theme theme={darkTheme} mode=\\\"dark\\\">\\n        <LayoutPanel>{/* Dark sidebar */}</LayoutPanel>\\n      </Theme>\\n    }\\n    content={<LayoutContent>{/* Light content */}</LayoutContent>}\\n  />\\n</Theme>\",\n        \"label\": \"Dark sidebar with light content\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs use-a-theme --index\",\n      \"previous\": \"astryx docs use-a-theme light-dark-mode\",\n      \"next\": \"astryx docs use-a-theme runtime-vs-built-themes\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

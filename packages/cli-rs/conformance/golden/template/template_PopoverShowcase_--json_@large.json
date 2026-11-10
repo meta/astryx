@@ -1,0 +1,14 @@
+{
+ "id": "template_PopoverShowcase_--json_@large",
+ "args": [
+  "template",
+  "PopoverShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"PopoverShowcase\",\n    \"description\": \"\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Divider\",\n      \"Popover\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Popover} from '@astryxdesign/core/Popover';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text, Heading} from '@astryxdesign/core/Text';\\nimport {Divider} from '@astryxdesign/core/Divider';\\n\\nexport default function PopoverShowcase() {\\n  const [isOpen, setIsOpen] = useState(false);\\n\\n  return (\\n    <Popover\\n      isOpen={isOpen}\\n      onOpenChange={setIsOpen}\\n      hasAutoFocus={false}\\n      placement=\\\"below\\\"\\n      label=\\\"Settings\\\"\\n      width={280}\\n      content={\\n        <VStack gap={3}>\\n          <Heading level={4} tabIndex={0}>\\n            Settings\\n          </Heading>\\n          <Divider />\\n          <Text type=\\\"body\\\">\\n            Notifications, dark mode, and sound preferences.\\n          </Text>\\n        </VStack>\\n      }>\\n      <Button label=\\\"Settings\\\">Settings</Button>\\n    </Popover>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

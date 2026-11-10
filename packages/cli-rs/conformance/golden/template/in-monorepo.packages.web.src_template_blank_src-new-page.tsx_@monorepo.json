@@ -1,0 +1,20 @@
+{
+ "id": "in-monorepo.packages.web.src_template_blank_src-new-page.tsx_@monorepo",
+ "args": [
+  "template",
+  "blank",
+  "src/new-page.tsx"
+ ],
+ "fixture": "monorepo",
+ "fixtureHash": "92b369c1759b654f+4e418a0c2575d9ce",
+ "stdout": "Copied template to src/new-page.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "monorepo/packages/web/src/src/new-page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Layout, LayoutContent} from '@astryxdesign/core';\nimport {Text} from '@astryxdesign/core';\n\nexport default function Page() {\n  return (\n    <Layout\n      content={\n        <LayoutContent>\n          <Text type=\"large\">New Page</Text>\n        </LayoutContent>\n      }\n    />\n  );\n}\n"
+  }
+ ]
+}

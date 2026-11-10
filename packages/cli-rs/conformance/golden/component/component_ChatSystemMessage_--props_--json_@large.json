@@ -1,0 +1,15 @@
+{
+ "id": "component_ChatSystemMessage_--props_--json_@large",
+ "args": [
+  "component",
+  "ChatSystemMessage",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"System message content: factual text or React content such as a date, join/leave notice, or status change. Long default content wraps within the available width.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"variant\",\n      \"type\": \"'default' | 'divider'\",\n      \"description\": \"Visual variant. 'default' renders centered text. 'divider' adds horizontal lines on each side via Divider: use for date separators and section breaks.\",\n      \"default\": \"'default'\"\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional caller-provided icon content. Rendered before the message in the default variant; the divider variant currently does not render it. Wrap in Icon for consistent sizing.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value: not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

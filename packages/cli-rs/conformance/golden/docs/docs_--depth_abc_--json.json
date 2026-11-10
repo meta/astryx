@@ -1,0 +1,15 @@
+{
+ "id": "docs_--depth_abc_--json",
+ "args": [
+  "docs",
+  "--depth",
+  "abc",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"--depth takes a number of levels (0, 1, 2, ...) or all, not \\\"abc\\\".\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

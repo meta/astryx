@@ -1,0 +1,15 @@
+{
+ "id": "component_Kbd_--props_--json_@large",
+ "args": [
+  "component",
+  "Kbd",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"keys\",\n      \"type\": \"string\",\n      \"description\": \"Keyboard shortcut string. Use \\\"+\\\" to separate keys. Special keys: mod (⌘ on Apple platforms, Ctrl elsewhere), ctrl, alt and shift (Apple symbols on Apple platforms, Ctrl, Alt and Shift text elsewhere), meta (⌘ on Apple platforms, Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.\"\n    },\n    {\n      \"name\": \"className\",\n      \"type\": \"string\",\n      \"description\": \"CSS class name for the root element. Prefer xstyle for styling; className is provided for integration with non-StyleX systems.\"\n    },\n    {\n      \"name\": \"style\",\n      \"type\": \"CSSProperties\",\n      \"description\": \"Inline styles for the root element. Prefer xstyle for styling; inline styles bypass StyleX optimization.\"\n    },\n    {\n      \"name\": \"ref\",\n      \"type\": \"React.Ref<HTMLSpanElement>\",\n      \"description\": \"Ref forwarded to the shortcut group element.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

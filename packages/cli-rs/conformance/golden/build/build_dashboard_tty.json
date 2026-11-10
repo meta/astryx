@@ -1,0 +1,19 @@
+{
+ "id": "build_dashboard_tty",
+ "args": [
+  "build",
+  "dashboard"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"dashboard\"\r\n\r\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\r\nChanging a page you already have? Keep it, and use only the blocks and components.\r\n\r\nTEMPLATE\r\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\r\n\r\nname:        dashboard\r\npackage:     @astryxdesign/core\r\ndescription: Three-band analytics: a row of headline tiles, then charts, then supporting tables, all re-reading from one global filter bar.\r\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard --type page <path>\r\n\r\nInstall missing dependencies: npm install recharts@\"^3.9.2\" @heroicons/react@\"^2.2.0\"\r\n\r\nOTHER TEMPLATES\r\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\r\n\r\nname:        dashboard-alert-rail\r\npackage:     @astryxdesign/core\r\ndescription: Always-on analytics with a triage rail: status-colored tiles with sparklines, multi-series time charts over a switchable window, and an independently scrolling alert column that folds into the content when narrow.\r\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-alert-rail --type page <path>\r\n\r\nname:        dashboard-scorecard\r\npackage:     @astryxdesign/core\r\ndescription: Report-shaped analytics with a prose rail beside the charts: a scorecard of headline numbers with period deltas and status coloring, goal-attainment bars, a trend grid, and a written commentary column that folds beneath the content when narrow.\r\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-scorecard --type page <path>\r\n\r\nKeyword search matched these page templates: dashboard (@astryxdesign/core), dashboard-alert-rail (@astryxdesign/core), dashboard-cohort-funnel (@astryxdesign/core).\r\n\r\nCOMPONENTS\r\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\r\n\r\nname:        ChatToolCalls\r\npackage:     @astryxdesign/core\r\ndescription: ChatToolCalls displays tool or function call invocations from an LLM response.\r\n\r\nname:        DateRangeInput\r\npackage:     @astryxdesign/core\r\ndescription: DateRangeInput lets users select a start and end date from a dual-month calendar popover.\r\n\r\nname:        SegmentedControl\r\npackage:     @astryxdesign/core\r\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options.\r\n\r\nframe:      AppShell, TopNav, SideNav, Layout\r\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\r\n\r\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "id": "fuzz_component_Spinner_--list_TabMenu_--json_--package_SideNavItem_030ca3",
+ "args": [
+  "component",
+  "Spinner",
+  "--list",
+  "TabMenu",
+  "--json",
+  "--package",
+  "SideNavItem"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.batch\",\n  \"data\": {\n    \"count\": 2,\n    \"results\": [\n      {\n        \"selector\": \"Spinner\",\n        \"status\": \"not_found\",\n        \"code\": \"ERR_UNKNOWN_PACKAGE\",\n        \"error\": \"External package \\\"SideNavItem\\\" not found\"\n      },\n      {\n        \"selector\": \"TabMenu\",\n        \"status\": \"not_found\",\n        \"code\": \"ERR_UNKNOWN_PACKAGE\",\n        \"error\": \"External package \\\"SideNavItem\\\" not found\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

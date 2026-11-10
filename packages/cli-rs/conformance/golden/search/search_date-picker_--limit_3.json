@@ -1,0 +1,21 @@
+{
+ "id": "search_date-picker_--limit_3",
+ "args": [
+  "search",
+  "date picker",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"date picker\" (3 of 69)\n\nname:        Calendar\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Calendar\ndescription: Calendar lets the user pick a date or date range from a month grid. Use it in booking flows, scheduling UIs, date filters, or anywhere the user needs to see surrounding dates for context.\ncommand:     npx @astryxdesign/cli@0.7.12 component Calendar\n\nname:        DateInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DateInput\ndescription: DateInput lets the user type or pick a date from a calendar popover. Use it for scheduling, deadlines, booking dates, or any form field that needs a specific calendar date.\ncommand:     npx @astryxdesign/cli@0.7.12 component DateInput\n\nname:        DateTimeInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DateTimeInput\ndescription: DateTimeInput combines date and time selection in one field. With presentation=\"adaptive-native\" (the default), mouse/trackpad devices use Astryx typed fields and popovers, while coarse-pointer devices use browser/OS date and time controls in the same two-segment field. presentation=\"native\" uses both native controls on every pointer; presentation=\"adaptive-bottom-sheet\" keeps Astryx's own surfaces - pointer fields on fine pointers and the coordinated Date/Time bottom sheet on coarse pointers; \"popover\" and \"bottom-sheet\" force one Astryx surface on every pointer. The closed segments stay side by side when at least 400px is available and wrap into full-width rows below 400px, independent of viewport width. Use it for scheduling, event creation, deadline setting, or any form field that needs a specific datetime.\ncommand:     npx @astryxdesign/cli@0.7.12 component DateTimeInput\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'date picker'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

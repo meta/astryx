@@ -1,0 +1,20 @@
+{
+ "id": "docs_author-a-theme_theme-adaptations_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "theme-adaptations"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Theme Adaptations\n\nUse `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, or motion preference. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win.\n\nWidth and pointer adaptations:\n```tsx\nconst acmeTheme = defineTheme({\n  name: 'acme',\n  adaptations: {\n    widthBreakpoints: {\n      sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536,\n    },\n    rules: [\n      {\n        when: {width: {below: 'md'}},\n        value: {tokens: {'--spacing-4': '12px'}},\n      },\n      {\n        when: {pointer: 'coarse'},\n        value: {tokens: {'--size-element-sm': '36px', '--size-element-md': '40px', '--size-element-lg': '44px'}},\n      },\n    ],\n  },\n});\n```\n\nCondition                | Values                       \n------------------------ | -----------------------------\nwidth.from / width.below | sm \\| md \\| lg \\| xl \\| 2xl  \npointer                  | coarse \\| fine               \ncontrast                 | more \\| less \\| no-preference\nmotion                   | reduce \\| no-preference      \n\n`widthBreakpoints` are fixed named start points. Defaults are 640 / 768 / 1024 / 1280 / 1536 CSS pixels. `from` includes its point; `below` excludes it. Breakpoint configuration alone emits no CSS.\n\nUp: npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs author-a-theme custom-variants\nNext: npx @astryxdesign/cli@0.7.12 docs author-a-theme adaptation-rules\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

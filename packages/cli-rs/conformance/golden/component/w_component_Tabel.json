@@ -1,0 +1,13 @@
+{
+ "id": "w_component_Tabel",
+ "args": [
+  "component",
+  "Tabel"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No component named \"Tabel\"\n\n  Text  (keyword \"label\" (distance 1))\n  Badge  (keyword \"label\" (distance 1))\n  Token  (keyword \"label\" (distance 1))\n  Field  (keyword \"label\" (distance 1))\n  InfoTip  (keyword \"label\" (distance 1))\n",
+ "exit": 1,
+ "files": []
+}

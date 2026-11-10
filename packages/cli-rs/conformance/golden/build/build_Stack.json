@@ -1,0 +1,19 @@
+{
+ "id": "build_Stack",
+ "args": [
+  "build",
+  "Stack"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"Stack\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: checkout-wizard (@astryxdesign/core), ide (@astryxdesign/core), messaging-shell (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        VStackBasic\npackage:     @astryxdesign/core\ndescription: A heading and paragraphs stacked vertically with a consistent gap.\n\nname:        StackItemShowcase\npackage:     @astryxdesign/core\ndescription: StackItem can be used within HStack or VStack for more granular control over individual item sizing and alignment, but is optional; stack children work without it.\n\nname:        ToastStacking\npackage:     @astryxdesign/core\ndescription: Multiple toasts stacking vertically with smooth enter and exit animations.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Stack\npackage:     @astryxdesign/core\ndescription: Stack arranges items in a row or column with consistent spacing.\n\nname:        AvatarGroup\npackage:     @astryxdesign/core\ndescription: AvatarGroup displays multiple avatars in an overlapping row with an optional overflow indicator.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

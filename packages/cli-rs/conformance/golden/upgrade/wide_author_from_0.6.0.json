@@ -1,0 +1,15 @@
+{
+ "id": "wide_author_from_0.6.0",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.6.0",
+  "--json"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.6.0\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 11,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 0,\n    \"transformsApplied\": 0,\n    \"modifiedFiles\": [],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

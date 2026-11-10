@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSToolbar label=\"Actions\" density=\"compact\" />",
+  "output": "<XDSToolbar label=\"Actions\" size='sm' />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSToolbar label=\"Actions\" density=\"default\" />",
+  "output": "<XDSToolbar label=\"Actions\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSToolbar label=\"Actions\" density={d} />",
+  "output": "<XDSToolbar label=\"Actions\" size={d === 'compact' ? 'sm' : 'md'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSToolbar label=\"Actions\" variant=\"muted\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSList density=\"spacious\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst x = { density: 'compact' };",
+  "output": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst x = { size: 'sm' };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst meta = { argTypes: { density: { control: 'radio', options: ['default', 'compact'] } } };",
+  "output": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst meta = { argTypes: { size: { control: 'radio', options: ['sm', 'md', 'lg'] } } };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/toolbar-density-to-size",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "const x = { density: 'compact' };",
+  "output": null,
+  "error": null
+ }
+]

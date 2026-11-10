@@ -1,0 +1,4 @@
+export default ({
+  name: 'x',
+  components: './components'
+}) as const;

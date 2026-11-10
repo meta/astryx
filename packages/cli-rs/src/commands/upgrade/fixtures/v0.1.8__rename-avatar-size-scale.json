@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@astryxdesign/core';\nconst a = <Avatar name=\"A\" size=\"tiny\" />;\nconst b = <Avatar name=\"B\" size=\"xsmall\" />;\nconst c = <Avatar name=\"C\" size=\"small\" />;\nconst d = <Avatar name=\"D\" size=\"medium\" />;\nconst e = <Avatar name=\"E\" size=\"large\" />;",
+  "output": "import {Avatar} from '@astryxdesign/core';\nconst a = <Avatar name=\"A\" size='xsm' />;\nconst b = <Avatar name=\"B\" size='sm' />;\nconst c = <Avatar name=\"C\" size='md' />;\nconst d = <Avatar name=\"D\" size='lg' />;\nconst e = <Avatar name=\"E\" size='xl' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@astryxdesign/core';\nconst view = <Avatar size={'small' satisfies AvatarSize} />;",
+  "output": "import {Avatar} from '@astryxdesign/core';\nconst view = <Avatar size={'md' satisfies AvatarSize} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {AvatarGroup} from '@astryxdesign/core';\nconst view = <AvatarGroup size={large ? 'large' : 'small'}>{kids}</AvatarGroup>;",
+  "output": "import {AvatarGroup} from '@astryxdesign/core';\nconst view = <AvatarGroup size={large ? 'xl' : 'md'}>{kids}</AvatarGroup>;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar as Face} from '@xds/core';\nimport Faces from '@astryxdesign/core/AvatarGroup';\nconst view = <><Face size=\"medium\" /><Faces size=\"large\" /></>;",
+  "output": "import {Avatar as Face} from '@xds/core';\nimport Faces from '@astryxdesign/core/AvatarGroup';\nconst view = <><Face size='lg' /><Faces size='xl' /></>;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {Avatar} from '@astryxdesign/core';\nconst Avatar = props => <div {...props} />;\nconst view = <Avatar size=\"small\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {type Avatar, AvatarGroup} from '@astryxdesign/core';\nconst Avatar = props => <div {...props} />;\nconst view = <><Avatar size=\"small\" /><AvatarGroup size=\"large\" /></>;",
+  "output": "import {type Avatar, AvatarGroup} from '@astryxdesign/core';\nconst Avatar = props => <div {...props} />;\nconst view = <><Avatar size=\"small\" /><AvatarGroup size='xl' /></>;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Core from '@astryxdesign/core';\nconst view = <Core.Avatar size=\"small\" />;",
+  "output": "import * as Core from '@astryxdesign/core';\nconst view = <Core.Avatar size='md' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@astryxdesign/core';\nconst named = 'small';\nconst a = <Avatar size={48} />;\nconst b = <Avatar size={named} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@astryxdesign/core';\ntype Density = 'tiny' | 'xsmall' | 'small' | 'medium' | 'large';\nconst card = {size: 'small'};\nconst sizes = ['tiny', 'xsmall', 'small', 'medium', 'large'];\nconst meta = {argTypes: {size: {options: sizes}}};\nconst view = <Avatar size={card.size} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Badge} from '@astryxdesign/core';\nconst view = <Badge size=\"small\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@other/core';\nconst view = <Avatar size=\"small\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar as Face} from '@xds/core';\nconst migrated = <Face size=\"medium\" />;\nfunction Local(Face) { return <Face size=\"large\" />; }",
+  "output": "import {Avatar as Face} from '@xds/core';\nconst migrated = <Face size='lg' />;\nfunction Local(Face) { return <Face size=\"large\" />; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.8/rename-avatar-size-scale",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Avatar} from '@astryxdesign/core';\nconst view = <Avatar size=\"small\" label=\"small\" />;",
+  "output": "import {Avatar} from '@astryxdesign/core';\nconst view = <Avatar size='md' label=\"small\" />;",
+  "error": null
+ }
+]

@@ -1,0 +1,17 @@
+{
+ "id": "u3_run_path_blocks_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.7.12",
+  "--path",
+  "src/components/astryx/blocks",
+  "--json"
+ ],
+ "fixture": "upgrade-registry",
+ "fixtureHash": "9610d6e18a60f803+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.status\",\n  \"data\": {\n    \"status\": \"up_to_date\",\n    \"from\": \"0.7.12\",\n    \"to\": \"0.7.12\",\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"registryCompositions\": {\n      \"applied\": false,\n      \"ok\": false,\n      \"found\": 4,\n      \"current\": 0,\n      \"wouldUpdate\": 0,\n      \"updated\": 0,\n      \"wouldMerge\": 0,\n      \"merged\": 0,\n      \"wouldRefreshReceipt\": 0,\n      \"receiptsRefreshed\": 0,\n      \"conflicts\": 0,\n      \"missing\": 0,\n      \"invalid\": 4,\n      \"failed\": 0,\n      \"items\": [\n        {\n          \"item\": \"block-broken\",\n          \"action\": \"invalid\",\n          \"message\": \"Invalid receipt .astryx/block-broken.json: Expected double-quoted property name in JSON at position 21 (line 2 column 1)\",\n          \"files\": []\n        },\n        {\n          \"item\": \"block-schema\",\n          \"action\": \"invalid\",\n          \"message\": \"Invalid receipt .astryx/block-schema.json: [\\n  {\\n    \\\"code\\\": \\\"invalid_value\\\",\\n    \\\"values\\\": [\\n      \\\"showcase\\\",\\n      \\\"example\\\",\\n      \\\"block\\\",\\n      \\\"page\\\"\\n    ],\\n    \\\"path\\\": [\\n      \\\"item\\\",\\n      \\\"kind\\\"\\n    ],\\n    \\\"message\\\": \\\"Invalid option: expected one of \\\\\\\"showcase\\\\\\\"|\\\\\\\"example\\\\\\\"|\\\\\\\"block\\\\\\\"|\\\\\\\"page\\\\\\\"\\\"\\n  },\\n  {\\n    \\\"origin\\\": \\\"string\\\",\\n    \\\"code\\\": \\\"invalid_format\\\",\\n    \\\"format\\\": \\\"regex\\\",\\n    \\\"pattern\\\": \\\"/^\\\\\\\\.\\\\\\\\.\\\\\\\\/[^/\\\\\\\\\\\\\\\\]+$/\\\",\\n    \\\"path\\\": [\\n      \\\"files\\\",\\n      0,\\n      \\\"target\\\"\\n    ],\\n    \\\"message\\\": \\\"must point to one adjacent source file\\\"\\n  },\\n  {\\n    \\\"code\\\": \\\"unrecognized_keys\\\",\\n    \\\"keys\\\": [\\n      \\\"extra\\\"\\n    ],\\n    \\\"path\\\": [],\\n    \\\"message\\\": \\\"Unrecognized key: \\\\\\\"extra\\\\\\\"\\\"\\n  }\\n]\",\n          \"files\": []\n        },\n        {\n          \"item\": \"block-tampered\",\n          \"action\": \"invalid\",\n          \"message\": \"Invalid receipt .astryx/block-tampered.json: stored hash does not match registry/block-tampered/Hero.tsx (typescript)\",\n          \"files\": []\n        },\n        {\n          \"item\": \"wrong-name\",\n          \"action\": \"invalid\",\n          \"message\": \"Invalid receipt .astryx/wrong-name.json: receipt filename does not match its item identity\",\n          \"files\": []\n        }\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,21 @@
+{
+ "id": "hook_useMediaQuery_--detail_compact",
+ "args": [
+  "hook",
+  "useMediaQuery",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useMediaQuery\n\nSSR-safe media query hook that subscribes to window.matchMedia changes. Returns whether the given media query matches. Always returns false on first render for SSR compatibility. Where `window.matchMedia` is missing, it returns its server default and never throws.\n\n## Import\n\n```tsx\nimport { useMediaQuery } from '@astryxdesign/core/hooks';\n```\n\n## Best Practices\n\n- **Do:** Use for responsive layout switching based on viewport width, color scheme, or motion preferences.\n- **Do:** Prefer Astryx responsive tokens and component props over manual breakpoint logic when possible.\n- **Don't:** Use for server-rendered content that must match on first paint; the hook always returns false initially.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `query` | `string` | - | CSS media query string to evaluate. **(required)** |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `matches` | `boolean` | Whether the media query currently matches. Always false on first render (SSR-safe). |\n\n## Related\n\nHooks: useImageMode\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

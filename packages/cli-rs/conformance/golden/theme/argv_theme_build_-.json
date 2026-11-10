@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_build_-",
+ "args": [
+  "theme",
+  "build",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/ü中文\n",
+ "exit": 1,
+ "files": []
+}

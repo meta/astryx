@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_collide",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/ocean-midnight.mjs",
+  "--family-key",
+  "ocean"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n",
+ "stderr": "Error: Family key \"ocean\" collides with a selected theme's standalone outputs. Choose a distinct filename stem.\n",
+ "exit": 1,
+ "files": []
+}

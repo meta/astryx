@@ -1,0 +1,15 @@
+{
+ "id": "w_component_from_subdir_app",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "AcmeWidget"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: /tmp/astryx-conformance/work/app/src has no package.json. The nearest is /tmp/astryx-conformance/work/app/package.json (app), which is not an Astryx integration yet. Run this in your integration package's own directory, next to its package.json.\n",
+ "exit": 1,
+ "files": []
+}

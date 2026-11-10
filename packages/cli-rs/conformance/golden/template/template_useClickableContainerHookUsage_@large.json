@@ -1,0 +1,19 @@
+{
+ "id": "template_useClickableContainerHookUsage_@large",
+ "args": [
+  "template",
+  "useClickableContainerHookUsage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useRef, useState} from 'react';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {useClickableContainer} from '@astryxdesign/core/hooks';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Link} from '@astryxdesign/core/Link';\nimport {Heading, Text} from '@astryxdesign/core/Text';\n\nconst PROJECT_HREF = '#project-design-tokens';\n\nexport default function UseClickableContainerHookUsage() {\n  const containerRef = useRef<HTMLDivElement>(null);\n  const projectLinkRef = useRef<HTMLAnchorElement | HTMLButtonElement>(null);\n  const [openCount, setOpenCount] = useState(0);\n  const [isStarred, setIsStarred] = useState(false);\n  const {onClick, onMouseUp} = useClickableContainer({\n    containerRef,\n    interactiveRef: projectLinkRef,\n    href: PROJECT_HREF,\n  });\n\n  return (\n    <VStack gap={3}>\n      <Card\n        ref={containerRef}\n        onClick={onClick}\n        onMouseUp={onMouseUp}\n        width={360}\n        padding={4}>\n        <VStack gap={2}>\n          <HStack gap={2} justify=\"between\" vAlign=\"center\">\n            <Heading level={4}>\n              <Link\n                ref={projectLinkRef}\n                href={PROJECT_HREF}\n                type=\"inherit\"\n                onClick={() => setOpenCount(count => count + 1)}>\n                Design tokens\n              </Link>\n            </Heading>\n            <Button\n              label={isStarred ? 'Starred' : 'Star'}\n              variant=\"secondary\"\n              onClick={() => setIsStarred(starred => !starred)}\n            />\n          </HStack>\n          <Text type=\"body\" color=\"secondary\">\n            Color, spacing and type tokens shared by every product surface.\n          </Text>\n          <Text type=\"supporting\" color=\"secondary\">\n            Owned by{' '}\n            <Link href=\"#team-design-systems\" type=\"inherit\">\n              Design Systems\n            </Link>\n          </Text>\n        </VStack>\n      </Card>\n      <Text type=\"supporting\">\n        Project opened {openCount} {openCount === 1 ? 'time' : 'times'}\n      </Text>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,338 @@
+[
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button.primary.sm:hover { color: red; }\n.astryx-heading.level-2 { margin: 0; }\n.astryx-switch.checked { opacity: 1; }",
+  "output": ".astryx-button:is(.primary,[data-variant=\"primary\"]):is(.sm,[data-size=\"sm\"]):hover { color: red; }\n.astryx-heading:is(.level-2,[data-level=\"2\"]) { margin: 0; }\n.astryx-switch:is(.checked,[data-checked=\"checked\"]) { opacity: 1; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": "@media (hover: hover) {\n  @scope (.app) {\n    .astryx-card.muted > .astryx-button.ghost::before,\n    .astryx-progressbar.success { color: red; }\n  }\n}",
+  "output": "@media (hover: hover) {\n  @scope (.app) {\n    .astryx-card:is(.muted,[data-variant=\"muted\"]) > .astryx-button:is(.ghost,[data-variant=\"ghost\"])::before,\n    .astryx-progressbar:is(.success,[data-variant=\"success\"]) { color: red; }\n  }\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ":is(.astryx-button.primary, .astryx-card.muted) {}\n.astryx-button:not(.primary) {}\n.astryx-button:is(.primary) {}\n:is(.astryx-button).primary {}\n.wrapper:has(.astryx-button.primary) {}\n.astryx-button:is(.wrapper .primary) {}\n:is(.astryx-button):not(.primary) {}\n:is(.astryx-button):where(.primary) {}\n:not(.astryx-button).primary {}\n:not(:not(.astryx-button)).primary {}\n:nth-child(2n of .astryx-button).primary {}\n:is(.astryx-button, .other).primary {}\n:where(.astryx-button, .other).primary {}\n:is(.astryx-button, .other):not(.primary) {}\n:is(.astryx-button, .other):where(.primary) {}\n.astryx-button:nth-child(2n of .primary) {}\n:is(.astryx-button):nth-child(2n of .primary) {}\n.astryx-button:nth-child(2n of :is(.primary)) {}\n.astryx-button:nth-last-child(2n of .primary) {}\n.astryx-banner-icon:is(.info,[data-status=\"info\"],.astryx-icon.accent) {}",
+  "output": ":is(.astryx-button:is(.primary,[data-variant=\"primary\"]), .astryx-card:is(.muted,[data-variant=\"muted\"])) {}\n.astryx-button:not(:is(.primary,[data-variant=\"primary\"])) {}\n.astryx-button:is(:is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):is(.primary,[data-variant=\"primary\"]) {}\n.wrapper:has(.astryx-button:is(.primary,[data-variant=\"primary\"])) {}\n.astryx-button:is(.wrapper :is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):not(:is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):where(:is(.primary,[data-variant=\"primary\"])) {}\n:not(.astryx-button):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:not(:not(.astryx-button)):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:nth-child(2n of .astryx-button):is(.primary,[data-variant=\"primary\"]) {}\n:is(.astryx-button, .other):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:where(.astryx-button, .other):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:is(.astryx-button, .other):not(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n:is(.astryx-button, .other):where(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-button:nth-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n:is(.astryx-button):nth-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-button:nth-child(2n of :is(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"]))) {}\n.astryx-button:nth-last-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-banner-icon:is(.info,[data-status=\"info\"],.astryx-icon:is(.accent,[data-color=\"accent\"])) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ":is(.astryx-button:is(.primary,[data-variant=\"primary\"]), .astryx-card:is(.muted,[data-variant=\"muted\"])) {}\n.astryx-button:not(:is(.primary,[data-variant=\"primary\"])) {}\n.astryx-button:is(:is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):is(.primary,[data-variant=\"primary\"]) {}\n.wrapper:has(.astryx-button:is(.primary,[data-variant=\"primary\"])) {}\n.astryx-button:is(.wrapper :is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):not(:is(.primary,[data-variant=\"primary\"])) {}\n:is(.astryx-button):where(:is(.primary,[data-variant=\"primary\"])) {}\n:not(.astryx-button):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:not(:not(.astryx-button)):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:nth-child(2n of .astryx-button):is(.primary,[data-variant=\"primary\"]) {}\n:is(.astryx-button, .other):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:where(.astryx-button, .other):is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) {}\n:is(.astryx-button, .other):not(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n:is(.astryx-button, .other):where(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-button:nth-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n:is(.astryx-button):nth-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-button:nth-child(2n of :is(:is(.primary,:where(.astryx-button)[data-variant=\"primary\"]))) {}\n.astryx-button:nth-last-child(2n of :is(.primary,:where(.astryx-button)[data-variant=\"primary\"])) {}\n.astryx-banner-icon:is(.info,[data-status=\"info\"],.astryx-icon:is(.accent,[data-color=\"accent\"])) {}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": "@scope (.astryx-button.primary) to (.astryx-card:not(.muted)) { .child {} }",
+  "output": "@scope (.astryx-button:is(.primary,[data-variant=\"primary\"])) to (.astryx-card:not(:is(.muted,[data-variant=\"muted\"]))) { .child {} }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button {\n  &.primary { color: red; }\n  & .primary { color: blue; }\n}\n:is(.astryx-button, .other) {\n  &.primary { color: green; }\n}",
+  "output": ".astryx-button {\n  &:is(.primary,[data-variant=\"primary\"]) { color: red; }\n  & .primary { color: blue; }\n}\n:is(.astryx-button, .other) {\n  &:is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) { color: green; }\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button {\n  &:is(.primary,[data-variant=\"primary\"]) { color: red; }\n  & .primary { color: blue; }\n}\n:is(.astryx-button, .other) {\n  &:is(.primary,:where(.astryx-button)[data-variant=\"primary\"]) { color: green; }\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".primary.astryx-button,\n.astryx-button[data-test].primary,\n.astryx-button:hover.primary { color: red; }",
+  "output": ":is(.primary,[data-variant=\"primary\"]).astryx-button,\n.astryx-button[data-test]:is(.primary,[data-variant=\"primary\"]),\n.astryx-button:hover:is(.primary,[data-variant=\"primary\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-grid.gap-0\\.5 { gap: 2px; }",
+  "output": ".astryx-grid:is(.gap-0\\.5,[data-gap=\"0.5\"]) { gap: 2px; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": "/* Old example: .astryx-button.primary */\n.example { content: \".astryx-button.primary\"; }\n.astryx-button.primary { color: red; }",
+  "output": "/* Old example: .astryx-button.primary */\n.example { content: \".astryx-button.primary\"; }\n.astryx-button:is(.primary,[data-variant=\"primary\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button.primary.my-consumer-class { color: red; }",
+  "output": ".astryx-button:is(.primary,[data-variant=\"primary\"]).my-consumer-class { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-grid.center { place-content: center; }",
+  "output": ".astryx-grid:is(.center,[data-align=\"center\"],[data-justify=\"center\"]) { place-content: center; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button.brand { color: red; }\n.primary { color: blue; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "selectors.ts",
+  "options": null,
+  "source": "const selector = \".astryx-button.primary\";",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "selectors.js",
+  "options": null,
+  "source": "const selector = \".astryx-button.primary\";",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-app-shell-sidenav.astryx-app-shell-sidenav { width: 20rem; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-avatar-group.lg { color: red; }",
+  "output": ".astryx-avatar-group:is(.lg,[data-size=\"lg\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-chat-message-bubble.assistant { color: red; }",
+  "output": ".astryx-chat-message-bubble:is(.assistant,[data-sender=\"assistant\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-toolbar.md { color: red; }",
+  "output": ".astryx-toolbar:is(.md,[data-size=\"md\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-code-block.javascript { color: red; }",
+  "output": ".astryx-code-block:is(.javascript,[data-language=\"javascript\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-grid.columns-3 { color: red; }",
+  "output": ".astryx-grid:is(.columns-3,[data-columns=\"3\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-outline-item.level-9 { color: red; }",
+  "output": ".astryx-outline-item:is(.level-9,[data-level=\"9\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-metadata-list.columns-5 { color: red; }",
+  "output": ".astryx-metadata-list:is(.columns-5,[data-columns=\"5\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-alert-dialog.standard { color: red; }",
+  "output": ".astryx-alert-dialog:is(.standard,[data-variant=\"standard\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-chat-send-button.primary { color: red; }",
+  "output": ".astryx-chat-send-button:is(.primary,[data-variant=\"primary\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-input-clear-icon.secondary { color: red; }",
+  "output": ".astryx-input-clear-icon:is(.secondary,[data-color=\"secondary\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-dropdown-menu-divider.horizontal { color: red; }",
+  "output": ".astryx-dropdown-menu-divider:is(.horizontal,[data-orientation=\"horizontal\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-list-item.spacious { color: red; }",
+  "output": ".astryx-list-item:is(.spacious,[data-density=\"spacious\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-selectable-card.false { color: red; }",
+  "output": ".astryx-selectable-card:is(.false,[data-selected=\"false\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-selector-check.disabled { color: red; }",
+  "output": ".astryx-selector-check:is(.disabled,[data-color=\"disabled\"],[data-disabled=\"disabled\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-code-block.sm {}",
+  "output": ".astryx-code-block:is(.sm,[data-size=\"sm\"],[data-language=\"sm\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-code-block.language-123 {}",
+  "output": ".astryx-code-block:is(.language-123,[data-language=\"language-123\"],[data-language=\"123\"]) {}",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-toolbar.size {}\n.astryx-resize-handle.horizontal {}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-text.code { color: red; }",
+  "output": ".astryx-text:is(.code,[data-type=\"code\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-layout.fill { color: red; }",
+  "output": ".astryx-layout:is(.fill,[data-height=\"fill\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-side-nav-item.selected { color: red; }",
+  "output": ".astryx-side-nav-item:is(.selected,[data-selected=\"selected\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-radio-list.horizontal { color: red; }",
+  "output": ".astryx-radio-list:is(.horizontal,[data-orientation=\"horizontal\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-top-nav-item.selected { color: red; }",
+  "output": ".astryx-top-nav-item:is(.selected,[data-selected=\"selected\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-segmented-control-item.selected { color: red; }",
+  "output": ".astryx-segmented-control-item:is(.selected,[data-selected=\"selected\"]) { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button.primary.my-class { color: red; }\n.astryx-grid.center { place-content: center; }",
+  "output": ".astryx-button:is(.primary,[data-variant=\"primary\"]).my-class { color: red; }\n.astryx-grid:is(.center,[data-align=\"center\"],[data-justify=\"center\"]) { place-content: center; }",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "styles.css",
+  "options": null,
+  "source": ".astryx-button:is(.primary,[data-variant=\"primary\"]).my-class { color: red; }\n.astryx-grid:is(.center,[data-align=\"center\"],[data-justify=\"center\"]) { place-content: center; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
+  "options": null,
+  "source": "a:: { color: red; }\n",
+  "output": "/* TODO(astryx upgrade): verify selector a::; the CSS selector parser could not migrate it safely. */\na:: { color: red; }\n",
+  "error": null
+ }
+]

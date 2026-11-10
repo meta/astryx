@@ -1,0 +1,13 @@
+{
+ "id": "component_card",
+ "args": [
+  "component",
+  "card"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No component named \"card\"\n\n  Card  (same name)\n  ClickableCard  (keyword \"card\")\n  SelectableCard  (keyword \"card\")\n  Overlay  (keyword \"card\")\n",
+ "exit": 1,
+ "files": []
+}

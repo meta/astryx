@@ -1,0 +1,10 @@
+[
+ {
+  "transform": "v0.3.0/rename-topnavheading-href-to-headinghref",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';\nconst x = <><TopNavHeading heading=\"App\" href=\"/\" /><TopNavItem label=\"Home\" href=\"/\" /></>;",
+  "output": "import {TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';\nconst x = <><TopNavHeading heading=\"App\" headingHref=\"/\" /><TopNavItem label=\"Home\" href=\"/\" /></>;",
+  "error": null
+ }
+]

@@ -1,0 +1,14 @@
+{
+ "id": "w_theme_1",
+ "args": [
+  "docs",
+  "theme",
+  "1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Section \"1\" not found in \"theme\"\n\n  Wrap your app in a theme  (available section)\n  Create a custom theme  (available section)\n  Icon sizes  (available section)\n  Dark mode  (available section)\n  Integration themes  (available section)\n",
+ "exit": 1,
+ "files": []
+}

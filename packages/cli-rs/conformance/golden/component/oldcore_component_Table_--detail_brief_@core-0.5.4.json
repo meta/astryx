@@ -1,0 +1,21 @@
+{
+ "id": "oldcore_component_Table_--detail_brief_@core-0.5.4",
+ "args": [
+  "component",
+  "Table",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "core-0.5.4",
+ "fixtureHash": "f83fac28730aff29+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nTable(idKey: (keyof T & string)|((item: T) => string|number), density: compact|balanced|spacious, dividers: rows|columns|grid|none, verticalAlign: middle|top|bottom, textOverflow: wrap|truncate)  <- from '@astryxdesign/core/Table'\n  Table displays structured data in rows and columns with consistent dimensiona...\n  Targets: astryx-table | astryx-table-scroll-wrapper | astryx-table-header | astryx-table-body | astryx-table-footer | astryx-table-row | astryx-table-cell preferred attrs: data-density variants: density | astryx-table-header-cell preferred attrs: data-density variants: density | astryx-base-table\n  data, columns, isStriped, hasHover, plugins, rowIndexStart, rowCount, children, xstyle\n\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.5.4`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.5.4\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

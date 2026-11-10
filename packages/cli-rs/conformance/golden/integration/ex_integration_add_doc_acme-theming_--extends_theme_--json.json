@@ -1,0 +1,29 @@
+{
+ "id": "ex_integration_add_doc_acme-theming_--extends_theme_--json",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "acme-theming",
+  "--extends",
+  "theme",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"doc\",\n    \"name\": \"acme-theming\",\n    \"root\": {\n      \"path\": \"./docs\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"docs/acme-theming.doc.mjs\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "app/docs/acme-theming.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'acme-theming',\n  title: 'Acme Theming',\n  description: 'Acme Theming documentation.',\n  extends: 'theme',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Acme Theming documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

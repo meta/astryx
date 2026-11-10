@@ -1,0 +1,8 @@
+export default {
+  // components live here
+  components: './c',
+
+  /* the docs */
+  docs: './d', // inline
+  templates: './t' /* after */,
+};

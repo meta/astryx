@@ -1,0 +1,21 @@
+{
+ "id": "w_principles_--index_--zh",
+ "args": [
+  "docs",
+  "principles",
+  "--index",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Principles\nAstryx 核心设计原则和规则。\n\npackage: @astryxdesign/cli\n\ndesign-philosophy  设计哲学 - 一个注重一致性、适应性和开发者体验的设计系统。核心理念：\nrules              规则 - 让应用代码保持在设计系统之内的八条规则。\nstyling-approach   样式方法 - 组件覆盖使用 xstyle 属性。布局使用 StyleX 或 Tailwind。\nanti-patterns      反模式 - 会破坏主题、路由或布局的写法，以及应改用的做法。\ndesign-tokens      设计令牌 - 完整令牌参考见 `npx @astryxdesign/cli@0.7.12 docs tokens`。\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs principles <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs principles --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs is-my-code-good\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

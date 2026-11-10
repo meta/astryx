@@ -1,0 +1,21 @@
+{
+ "id": "doctor_integration_components_-acme-kit_@integration",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/kit@1.2.3\n\n[ok] No component names conflict with Core.\n\n[skip] Props not compared: TypeScript is not installed in this project, so documented props were not compared with the code. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

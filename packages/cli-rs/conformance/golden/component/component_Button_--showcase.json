@@ -1,0 +1,20 @@
+{
+ "id": "component_Button_--showcase",
+ "args": [
+  "component",
+  "Button",
+  "--showcase"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Button} from '@astryxdesign/core/Button';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function ButtonShowcase() {\n  return (\n    <Stack direction=\"horizontal\" gap={3} vAlign=\"center\">\n      <Button label=\"Primary\" variant=\"primary\" />\n      <Button label=\"Secondary\" variant=\"secondary\" />\n      <Button label=\"Ghost\" variant=\"ghost\" />\n      <Button label=\"Destructive\" variant=\"destructive\" />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "package: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "w_component_SideNav_--json_@compkit",
+ "args": [
+  "component",
+  "SideNav",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@comp/swap\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"SwapNav\",\n    \"replaces\": \"SideNav\",\n    \"usage\": {\n      \"description\": \"A side navigation that replaces the Core one.\"\n    },\n    \"props\": [\n      {\n        \"name\": \"items\",\n        \"type\": \"NavItem[]\",\n        \"required\": true,\n        \"description\": \"The links.\"\n      }\n    ],\n    \"package\": \"@comp/swap\",\n    \"import\": \"@comp/swap\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

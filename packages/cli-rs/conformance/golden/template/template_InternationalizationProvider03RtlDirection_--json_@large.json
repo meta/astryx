@@ -1,0 +1,14 @@
+{
+ "id": "template_InternationalizationProvider03RtlDirection_--json_@large",
+ "args": [
+  "template",
+  "InternationalizationProvider03RtlDirection",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"InternationalizationProvider03RtlDirection\",\n    \"description\": \"Toggle text direction with the `dir` prop and watch Astryx components mirror. Pagination flips its prev/next chevrons under RTL. The `dir` prop is passed to both `InternationalizationProvider` (so Astryx components pick it up) and the `VStack` (so the DOM subtree mirrors); both channels stay in sync with no extra wrapper.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"InternationalizationProvider\",\n      \"Pagination\",\n      \"SegmentedControl\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {InternationalizationProvider} from '@astryxdesign/core/i18n';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Pagination} from '@astryxdesign/core/Pagination';\\nimport {\\n  SegmentedControl,\\n  SegmentedControlItem,\\n} from '@astryxdesign/core/SegmentedControl';\\n\\ntype TextDirection = 'ltr' | 'rtl';\\n\\nexport default function InternationalizationProviderRtlDirection() {\\n  const [textDirection, setTextDirection] = useState<TextDirection>('ltr');\\n  const [page, setPage] = useState(3);\\n  return (\\n    <InternationalizationProvider locale=\\\"en\\\" dir={textDirection}>\\n      {/* `dir` on the VStack scopes text direction to this subtree — no extra\\n          wrapper needed. (VStack has no `direction` prop, so there's nothing to\\n          confuse with `dir` here.) */}\\n      <VStack\\n        gap={4}\\n        hAlign=\\\"center\\\"\\n        dir={textDirection}\\n        style={{width: '100%'}}>\\n        <SegmentedControl\\n          label=\\\"Direction\\\"\\n          value={textDirection}\\n          onChange={next => setTextDirection(next as TextDirection)}\\n          size=\\\"sm\\\">\\n          <SegmentedControlItem value=\\\"ltr\\\" label=\\\"LTR\\\" />\\n          <SegmentedControlItem value=\\\"rtl\\\" label=\\\"RTL\\\" />\\n        </SegmentedControl>\\n        <Pagination\\n          page={page}\\n          onChange={setPage}\\n          totalItems={200}\\n          pageSize={10}\\n          variant=\\\"pages\\\"\\n        />\\n      </VStack>\\n    </InternationalizationProvider>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

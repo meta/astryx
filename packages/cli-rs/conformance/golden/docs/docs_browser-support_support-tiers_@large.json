@@ -1,0 +1,20 @@
+{
+ "id": "docs_browser-support_support-tiers_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "support-tiers"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Support Tiers\n\nAstryx officially supports Tier 1 and Tier 2. Tier 3 is best-effort: components will not crash, but positioning and theming may degrade.\n\nTier                  | Baseline                  | Representative versions                          | What your users experience                                                                                                                                                      \n--------------------- | ------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\nTier 1: Full fidelity | Current Baseline (2026)   | Chrome 125+, Edge 125+, Safari 26+, Firefox 147+ | Everything works, including CSS anchor positioning. This is the reference target.                                                                                               \nTier 2: Functional    | Baseline − 2 years (2024) | Chrome 114+, Edge 114+, Safari 17+, Firefox 125+ | Components open, dismiss, and are fully usable. Only anchor positioning is missing, so layered surfaces (tooltips, menus, popovers) may not be positioned next to their trigger.\nTier 3: Below Tier 2  | Older than Baseline − 2   | Anything older                                   | Best-effort. The only guarantee is \"does not crash.\" `light-dark()` is unavailable, so theme colors may fall back to defaults.                                                  \n\nUp: npx @astryxdesign/cli@0.7.12 docs browser-support --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs browser-support overview\nNext: npx @astryxdesign/cli@0.7.12 docs browser-support which-features-set-the-floor\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "tb_icons_mutated-ts",
+ "args": [
+  "theme",
+  "build",
+  "themes/icons/mutated.ts"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme sets `icons: mine` but no import for the registry was found. The generated module cannot preserve inline registries because they may contain React elements, which cannot be serialized. The referenced binding is mutated or passed to unsupported code. Move the registry to its own module and import it into the theme file.\n",
+ "exit": 1,
+ "files": []
+}

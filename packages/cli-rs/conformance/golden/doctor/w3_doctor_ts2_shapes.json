@@ -1,0 +1,14 @@
+{
+ "id": "w3_doctor_ts2_shapes",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-ts2",
+ "fixtureHash": "393cf73e5070f1dd+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/shapes@1.0.0\n\nseverity:           [warn]\nname:               Grid\nintegrationPackage: @acme/shapes\nmessage:            Component \"Grid\" conflicts with Core. Consider renaming the integration component. If you keep it, always select it with --package.\ncommand:            npx @astryxdesign/cli@0.7.12 component Grid --package @acme/shapes\n\n1 Core component conflict(s). Renaming is recommended but optional; keep the package-qualified command if the overlap is intentional.\n\nseverity:  [warn]\ncomponent: Bag\nprop:      extra\nkind:      type_mismatch\nmessage:   \"extra\" is documented as number, but Bag's props take it as string | undefined.\ndoc:       src/Bag/Bag.doc.mjs\nsource:    src/Bag/Bag.tsx\ndocType:   number\ncodeType:  string | undefined\n\nseverity:     [warn]\ncomponent:    Grid\nprop:         padLeft\nkind:         not_in_doc\nmessage:      Grid declares \"padLeft\", but the doc does not list it.\ndoc:          src/Grid/Grid.doc.mjs\nsource:       src/Grid/Grid.tsx\ncodeType:     number\ncodeRequired: false\n\nseverity:  [warn]\ncomponent: Grid\nprop:      padTop\nkind:      type_mismatch\nmessage:   \"padTop\" is documented as string, but the code declares number.\ndoc:       src/Grid/Grid.doc.mjs\nsource:    src/Grid/Grid.tsx\ndocType:   string\ncodeType:  number\n\n3 prop(s) differ between the docs and the code in 2 of 2 component(s) compared (TypeScript 6.0.3). These are warnings: update the doc, or the code if the doc is right.\n\n[info] Props not compared for 2 documented component(s):\n\ncomponent: Loose\ndoc:       src/Loose/Loose.doc.mjs\nreason:    Loose's props are typed `any`, so there is nothing to compare them with\n\ncomponent: Poly\ndoc:       src/Poly/Poly.doc.mjs\nreason:    Poly's props take some of their names from a type parameter, such as the element it renders, so which props it accepts is known only where it is used\n\n[info] Documented prop types judged: 4; not compared: 0. A type is judged when the doc writes it the same as the source (exactly, if it contains `readonly`), or when both are primitives, literals, arrays and unions of those, or names for them.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

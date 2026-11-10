@@ -1,0 +1,18 @@
+{
+ "id": "argv-repeat2_theme_build_theme.ts_--family-key_brand_--family-key_other",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--family-key",
+  "brand",
+  "--family-key",
+  "other"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

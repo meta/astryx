@@ -1,0 +1,14 @@
+{
+ "id": "argv_theme_palette_x",
+ "args": [
+  "theme",
+  "palette",
+  ""
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette '\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

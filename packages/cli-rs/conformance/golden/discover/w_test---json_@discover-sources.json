@@ -1,0 +1,20 @@
+{
+ "id": "w_test---json_@discover-sources",
+ "args": [
+  "discover",
+  "test",
+  "--json"
+ ],
+ "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"test\",\n    \"matches\": [\n      {\n        \"package\": \"@test/kit\",\n        \"component\": \"@test/kit\",\n        \"kind\": \"package\",\n        \"installed\": true\n      },\n      {\n        \"package\": \"@test/boards\",\n        \"component\": \"@test/boards\",\n        \"kind\": \"package\",\n        \"installed\": false\n      },\n      {\n        \"package\": \"@test/charts\",\n        \"component\": \"@test/charts\",\n        \"kind\": \"package\",\n        \"installed\": false\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/df24c521686f8898cb9e43ef523fb698.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/kit\",\"integration\":\"test-kit\",\"aliases\":[],\"latest\":\"3.2.0\",\"versions\":[{\"version\":\"3.2.0\",\"publishedAt\":\"2026-09-29T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"3.1.4\",\"publishedAt\":\"2026-09-01T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Dial\"}]},{\"package\":\"@test/charts\",\"integration\":\"test-charts\",\"aliases\":[],\"latest\":\"2.0.0\",\"versions\":[{\"version\":\"2.1.0-beta.1\",\"publishedAt\":\"2026-09-25T00:00:00.000Z\",\"prerelease\":true,\"status\":\"ok\"},{\"version\":\"2.0.0\",\"publishedAt\":\"2026-09-20T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Chart\"},{\"kind\":\"template\",\"name\":\"pages/Report\"}]},{\"package\":\"@test/boards\",\"integration\":\"test-boards\",\"aliases\":[],\"latest\":\"1.0.0\",\"versions\":[{\"version\":\"1.0.0\",\"publishedAt\":\"2026-09-10T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"template\",\"name\":\"pages/DialBoard\"}]}]}}"
+  }
+ ]
+}

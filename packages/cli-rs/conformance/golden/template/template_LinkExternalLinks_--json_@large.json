@@ -1,0 +1,14 @@
+{
+ "id": "template_LinkExternalLinks_--json_@large",
+ "args": [
+  "template",
+  "LinkExternalLinks",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"LinkExternalLinks\",\n    \"description\": \"A vertical list of external links that open in a new tab with an indicator icon.\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Link} from '@astryxdesign/core/Link';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function LinkExternalLinks() {\\n  return (\\n    <VStack gap={2}>\\n      <Link href=\\\"https://github.com\\\" isExternalLink isStandalone>\\n        GitHub\\n      </Link>\\n      <Link href=\\\"https://developer.mozilla.org\\\" isExternalLink isStandalone>\\n        MDN Web Docs\\n      </Link>\\n      <Link href=\\\"https://react.dev\\\" isExternalLink hasUnderline isStandalone>\\n        React Documentation\\n      </Link>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

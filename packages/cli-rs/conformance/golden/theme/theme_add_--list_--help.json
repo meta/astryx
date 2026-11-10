@@ -1,0 +1,15 @@
+{
+ "id": "theme_add_--list_--help",
+ "args": [
+  "theme",
+  "add",
+  "--list",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx theme add [options] [slug]\n\nAdd a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.\n\nOptions:\n  --list               List available themes\n  --import             Compatibility no-op; the built theme is added with or without this flag\n  --package <package>  Select the package that owns the theme\n  -h, --help           display help for command\n\nExit codes:\n  0  the theme is listed or added\n  1  the theme, its built imports, its record, or the option combination is invalid\n\nExamples:\n  # Add a built theme to the app\n  npx @astryxdesign/cli@0.7.12 theme add ocean\n  # Select a package theme over a local theme\n  npx @astryxdesign/cli@0.7.12 theme add ocean --package @acme/themes\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-add\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

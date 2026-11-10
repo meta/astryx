@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AspectRatioWithSkeleton-src-page.ts_template_AspectRatioWithSkeleton_src-page.tsx_@large",
+ "args": [
+  "template",
+  "AspectRatioWithSkeleton",
+  "src/page.tsx"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Refusing to overwrite existing file src/page.tsx. Re-run with --overwrite (or -f) to replace it.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AspectRatio} from '@astryxdesign/core/AspectRatio';\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\nimport {Center} from '@astryxdesign/core/Center';\n\nexport default function AspectRatioWithSkeleton() {\n  return (\n    <Center width={600}>\n      <AspectRatio ratio={16 / 9}>\n        <Skeleton width=\"100%\" height=\"100%\" />\n      </AspectRatio>\n    </Center>\n  );\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "wide_build_r02",
+ "args": [
+  "build",
+  "details plus uploads and of sizes"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"details plus uploads and of sizes\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        detail-page\npackage:     @astryxdesign/core\ndescription: Single-record detail in two columns: a summary header with status and actions, a repeating line-item list, a totals block that sums it, and a chronological activity timeline in the rail.\ncommand:     npx @astryxdesign/cli@0.7.12 template detail-page --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        work-item-detail\npackage:     @astryxdesign/core\ndescription: Single work-item detail in two columns: a title with a status selector, a description, a subtask checklist with progress, an attachments block, and a comment and activity feed in the main column, plus a property rail with assignee, dates, labels, and linked items.\ncommand:     npx @astryxdesign/cli@0.7.12 template work-item-detail --type page <path>\n\nname:        course-detail\npackage:     @astryxdesign/core\ndescription: Long-form sales page for a single offering, in two columns - read the pitch, then enroll from a sticky rail.\ncommand:     npx @astryxdesign/cli@0.7.12 template course-detail --type page <path>\n\nKeyword search matched these page templates: detail-page (@astryxdesign/core), work-item-detail (@astryxdesign/core), form-wizard-vertical (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks. Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        FileInputBasic\npackage:     @astryxdesign/core\ndescription: A controlled single-file upload with accepted types, a size limit, and helper text.\n\nname:        SpinnerSizes\npackage:     @astryxdesign/core\ndescription: All spinner sizes displayed side by side.\n\nname:        ThumbnailStates\npackage:     @astryxdesign/core\ndescription: All visual states side by side: image loaded, placeholder,...\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 5; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        FileInput\npackage:     @astryxdesign/core\ndescription: FileInput provides file upload with optional drag-and-drop support.\n\nname:        MetadataList\npackage:     @astryxdesign/core\ndescription: MetadataList displays key-value pairs for object attributes like quality, condition, and status, in a structured layout.\n\nname:        Thumbnail\npackage:     @astryxdesign/core\ndescription: Thumbnail displays a compact, square preview of an image attachment.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

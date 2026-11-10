@@ -1,0 +1,14 @@
+{
+ "id": "w_guide_intro_@integration-packjson-noname",
+ "args": [
+  "docs",
+  "guide",
+  "intro"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Provider ID \"(local integration)\" must be a bare npm package name.\n",
+ "exit": 1,
+ "files": []
+}

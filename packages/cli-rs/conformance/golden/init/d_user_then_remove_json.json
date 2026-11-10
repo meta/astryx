@@ -1,0 +1,26 @@
+{
+ "id": "d_user_then_remove_json",
+ "args": [
+  "init",
+  "--user",
+  "--remove-agents",
+  "--json"
+ ],
+ "fixture": "initdone",
+ "fixtureHash": "00b23c13e90f8a54+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.user\",\n  \"data\": {\n    \"files\": [\n      {\n        \"path\": \"/tmp/astryx-conformance/work/home/.agents/skills/astryx/SKILL.md\",\n        \"action\": \"removed\"\n      },\n      {\n        \"path\": \"/tmp/astryx-conformance/work/home/.claude/skills/astryx\",\n        \"action\": \"removed\"\n      }\n    ],\n    \"command\": \"astryx\",\n    \"warnings\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/settings.json",
+   "status": "created",
+   "text": "{\n  \"computerAgentText\": {\n    \"install\": false,\n    \"links\": []\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"agentText\": {\n    \"writtenBy\": \"0.7.12\"\n  }\n}\n"
+  }
+ ]
+}

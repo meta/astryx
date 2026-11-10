@@ -1,0 +1,16 @@
+{
+ "id": "theme_build_theme.ts_--check_--help",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--check",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx theme build [options] <files...>\n\nCompile standalone themes or one keyed theme family\n\nOptions:\n  --family                       Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)\n  --family-key <key>             Lower-kebab filename stem required with --family and refused without it; must differ from every member name (ERR_THEME_INVALID)\n  -o, --out <path>               Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)\n  --icons-specifier <specifier>  Override the icon-registry import in the generated JS module, for example ./icons.mjs (default: the specifier in the theme source's own import). With --family it applies to every member's icon import\n  -w, --watch                    Rebuild automatically when a theme file changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)\n  -c, --check                    Verify the committed outputs match the source without writing; exit non-zero if stale. Composes with --family and several files; refused with --watch (ERR_THEME_INVALID)\n  -h, --help                     display help for command\n\nExit codes:\n  0  the theme builds, or --check finds the outputs up to date\n  1  a build or validation error, or --check finds stale or missing outputs\n\nExamples:\n  # Build to a CSS file\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/ocean.ts --out ./dist/ocean.css\n  # Build one related family for attribute-only switching\n  npx @astryxdesign/cli@0.7.12 theme build --family ./themes/ocean.mjs ./themes/ocean-calm.mjs --family-key ocean-family\n  # Build every theme in a directory\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/*.ts\n  # Check for drift (CI)\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/ocean.ts --check\n  # Build against a separately compiled icon registry\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/ocean.ts --icons-specifier ./icons.mjs\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-build\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

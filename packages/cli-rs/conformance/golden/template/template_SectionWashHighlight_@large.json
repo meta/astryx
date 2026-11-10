@@ -1,0 +1,19 @@
+{
+ "id": "template_SectionWashHighlight_@large",
+ "args": [
+  "template",
+  "SectionWashHighlight"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Section} from '@astryxdesign/core/Section';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {CheckIcon} from '@heroicons/react/24/solid';\n\nconst FEATURES = [\n  '10 team members',\n  'Unlimited projects',\n  'Priority support',\n  'Advanced analytics',\n];\n\nexport default function SectionDefaultWithWash() {\n  return (\n    <Stack direction=\"vertical\" gap={2}>\n      <Section variant=\"section\" padding={4}>\n        <Stack direction=\"vertical\" gap={3} hAlign=\"center\">\n          <Stack direction=\"vertical\" gap={1} hAlign=\"center\">\n            <Text type=\"display-3\">Pro Plan</Text>\n            <Text type=\"body\" color=\"secondary\">\n              Everything you need to scale your team.\n            </Text>\n          </Stack>\n          <Stack direction=\"vertical\" gap={2}>\n            {FEATURES.map(feature => (\n              <Stack\n                key={feature}\n                direction=\"horizontal\"\n                gap={2}\n                vAlign=\"center\">\n                <Icon icon={CheckIcon} size=\"sm\" />\n                <Text type=\"body\">{feature}</Text>\n              </Stack>\n            ))}\n          </Stack>\n        </Stack>\n      </Section>\n      <Section variant=\"muted\" padding={6}>\n        <Stack direction=\"vertical\" gap={2} hAlign=\"center\">\n          <Stack direction=\"horizontal\" gap={2} vAlign=\"center\">\n            <Text type=\"display-3\">$49</Text>\n            <Text type=\"supporting\" color=\"secondary\">\n              / month\n            </Text>\n          </Stack>\n          <Button label=\"Upgrade\" variant=\"primary\" />\n        </Stack>\n      </Section>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

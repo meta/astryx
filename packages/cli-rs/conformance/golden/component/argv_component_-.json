@@ -1,0 +1,13 @@
+{
+ "id": "argv_component_-",
+ "args": [
+  "component",
+  "ü中文"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No component named \"ü中文\"\n\n  Kbd  (similar name (distance 3))\n  Tab  (similar name (distance 3))\n",
+ "exit": 1,
+ "files": []
+}

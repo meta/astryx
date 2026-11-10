@@ -1,0 +1,16 @@
+{
+ "id": "ex_experimental_icon_map_delete_trash_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "delete",
+  "trash"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon map works only in a project. Run it in the icon-set package.\n",
+ "exit": 1,
+ "files": []
+}

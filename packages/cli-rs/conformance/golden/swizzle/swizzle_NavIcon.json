@@ -1,0 +1,34 @@
+{
+ "id": "swizzle_NavIcon",
+ "args": [
+  "swizzle",
+  "NavIcon"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/NavIcon/\n\nWhat @astryxdesign/core exports is imported from @astryxdesign/core; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nIt imports these npm packages; install any your project lacks: @stylexjs/stylex@\"^0.19.0\" react@\">=19.0.0\"\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n\n! These components use StyleX and require a StyleX compiler in your build.\n  Without one, importing them throws \"Unexpected 'stylex.create' call at runtime\"\n  and the page does not render. See setup per framework:\n  npx @astryxdesign/cli@0.7.12 docs styling\n  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -\n  use an SWC-based StyleX transform instead (covered in the guide).\n\nCustomizing a component often signals a gap in the design system.\nLet the maintainers know what you needed:\n  https://github.com/meta/astryx/issues/new\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/NavIcon/NavIcon.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file NavIcon.tsx\n * @input Uses React, HTMLAttributes, ReactNode\n * @output Exports NavIcon component and NavIconProps\n * @position Shared circular icon container for navigation headers (TopNav, PageNav)\n *\n * SYNC: When modified, update these files to stay in sync:\n * - /packages/core/src/NavIcon/NavIcon.doc.mjs\n * - /packages/core/src/NavIcon/NavIcon.test.tsx\n * - /packages/core/src/NavIcon/index.ts\n * - /apps/storybook/stories/TopNav.stories.tsx\n * - /packages/cli/assets/templates/blocks/components/NavIcon/NavIconShowcase.tsx\n */\n\nimport type {ReactNode} from 'react';\nimport type {BaseProps} from '@astryxdesign/core/BaseProps';\nimport * as stylex from '@stylexjs/stylex';\nimport {colorVars, sizeVars} from '@astryxdesign/core/theme/tokens.stylex';\nimport {mergeProps} from '@astryxdesign/core/utils';\nimport {themeProps} from '@astryxdesign/core/utils';\n\n/**\n * NavIcon styles\n */\nconst styles = stylex.create({\n  base: {\n    display: 'flex',\n    alignItems: 'center',\n    justifyContent: 'center',\n    borderRadius: '50%',\n    backgroundColor: colorVars['--color-accent'],\n    color: colorVars['--color-on-accent'],\n    flexShrink: 0,\n    width: sizeVars['--size-element-md'],\n    height: sizeVars['--size-element-md'],\n  },\n});\n\nexport interface NavIconProps extends BaseProps<HTMLSpanElement> {\n  /** Ref forwarded to the root element */\n  ref?: React.Ref<HTMLSpanElement>;\n  /**\n   * The icon element to render inside the circular background.\n   * Should be an Icon or similar icon component.\n   */\n  icon: ReactNode;\n}\n\n/**\n * Circular icon container for navigation headers.\n *\n * Wraps an icon with a circular accent-colored background, suitable for\n * use as a logo in top navigation or side navigation title areas.\n *\n * @example\n * ```\n * import {HomeIcon} from '@heroicons/react/24/solid';\n * <TopNavHeading\n *   heading=\"Dashboard\"\n *   logo={<NavIcon icon={<HomeIcon style={{width: 16, height: 16}} />} />}\n * />\n * <PageNavHeader\n *   icon={<NavIcon icon={<HomeIcon style={{width: 16, height: 16}} />} />}\n *   heading=\"My App\"\n * />\n * ```\n */\nexport function NavIcon({\n  icon,\n  xstyle,\n  className,\n  style,\n  ref,\n  ...props\n}: NavIconProps) {\n  return (\n    <span\n      ref={ref}\n      {...mergeProps(\n        themeProps('nav-icon'),\n        stylex.props(styles.base, xstyle),\n        className,\n        style,\n      )}\n      {...props}>\n      {icon}\n    </span>\n  );\n}\n\nNavIcon.displayName = 'NavIcon';\n"
+  },
+  {
+   "path": "app/components/astryx/NavIcon/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file index.ts\n * @input Imports from NavIcon.tsx\n * @output Exports NavIcon component and types\n * @position Entry point for NavIcon module\n *\n * SYNC: When modified, update /packages/core/src/NavIcon/NavIcon.doc.mjs\n */\n\nexport {NavIcon} from './NavIcon';\nexport type {NavIconProps} from './NavIcon';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

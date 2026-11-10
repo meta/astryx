@@ -1,0 +1,20 @@
+{
+ "id": "template_TextInputIcon_--skeleton_@large",
+ "args": [
+  "template",
+  "TextInputIcon",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# TextInputIcon - Inputs with a leading icon that hints at the expected content. Use when the icon helps users identify the field faster, like a lock for passwords or an envelope for email.\n# Components: Stack, TextInput\n\n<Stack gap={3} />\n<TextInput />\n<TextInput />\n<TextInput />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

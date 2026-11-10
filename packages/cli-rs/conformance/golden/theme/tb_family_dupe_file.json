@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_dupe_file",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/ocean.mjs",
+  "--family-key",
+  "fam"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/ocean.mjs...\n",
+ "stderr": "Error: Duplicate family source: /tmp/astryx-conformance/work/themes/fam/themes/ocean.mjs. Select each theme file once.\n",
+ "exit": 1,
+ "files": []
+}

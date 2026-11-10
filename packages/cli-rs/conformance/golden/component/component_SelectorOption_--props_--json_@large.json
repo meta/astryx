@@ -1,0 +1,15 @@
+{
+ "id": "component_SelectorOption_--props_--json_@large",
+ "args": [
+  "component",
+  "SelectorOption",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"label\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Primary label text for the item.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"IconType\",\n      \"description\": \"Icon displayed before the label. See `astryx docs icons` for valid semantic names.\"\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Secondary description text displayed below the label.\"\n    },\n    {\n      \"name\": \"layout\",\n      \"type\": \"'stacked' | 'inline'\",\n      \"description\": \"How the label and description sit together. 'stacked' puts the description on its own line; 'inline' keeps both on one line so the row fits a fixed-height host. Inside a Selector trigger the trigger's padding sizes itself to whichever layout you pick, so both land on the 4px rhythm; an InputGroup pins the row height and forces 'inline'.\",\n      \"default\": \"'stacked'\"\n    },\n    {\n      \"name\": \"endContent\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Additional content rendered after the label and description.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

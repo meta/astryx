@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_reg_split",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "reg/split.mjs",
+  "reg/split-child.mjs",
+  "--family-key",
+  "fam-split"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from reg/split.mjs...\n\nBuilding theme from reg/split-child.mjs...\n",
+ "stderr": "Error: Cannot import family registry /tmp/astryx-conformance/work/themes/node_modules/@acme/split-icons/index.mjs: esm registry exploded\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,22 @@
+{
+ "id": "w_component_--category_Navigation_--detail_compact_@compkit",
+ "args": [
+  "component",
+  "--category",
+  "Navigation",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "Navigation\n\nname:        MobileNav\nimport:      @astryxdesign/core/MobileNav\ndescription: A slide-out drawer for mobile navigation. MobileNav is the mobile counterpart to SideNav and accepts the same children. Use it on narrow viewports where a persistent sidebar is not practical. Inside AppShell, use MobileNavToggle as the trigger; it reads state from context automatically.\n\nname:        NavIcon\nimport:      @astryxdesign/core/NavIcon\ndescription: NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.\n\nname:        SwapNav\nimport:      @comp/swap  [@comp/swap]\ndescription: A side navigation that replaces the Core one.\n\nname:        SideNavCollapseButton\nimport:      @astryxdesign/core/SideNav\ndescription: Toggle button for sidenav collapse. Place inside SideNav (reads context automatically) or outside it (hand the same controlled collapsible config to both). Renders as an icon-only ghost button by default.\n\nname:        SideNavHeading\nimport:      @astryxdesign/core/SideNav\ndescription: Product/suite/account heading with smart interaction boundary logic for links and a menu popover.\n\nname:        SideNavItem\nimport:      @astryxdesign/core/SideNav\ndescription: Navigation item with icon, selected state, optional end content, and nesting support via children.\n\nname:        SideNavSection\nimport:      @astryxdesign/core/SideNav\ndescription: Section grouping with an optional title, subtitle, and end content.\n\nname:        TopNav\nimport:      @astryxdesign/core/TopNav\ndescription: TopNav is a horizontal navigation bar for product-level navigation in application headers. Use TopNav for 5 or fewer always-visible navigation items, or minimal navigation paired with search and controls. For complex navigation hierarchies, use a sidebar; to filter content, use tabs or filter buttons instead.\n\nname:        TopNavHeading\nimport:      @astryxdesign/core/TopNav\ndescription: Product/suite/account heading for the TopNav heading slot. Supports smart interaction boundary logic: logo, heading text, superheading/subheading with independent links, and an optional menu popover with automatic chevron indicator.\n\nname:        TopNavItem\nimport:      @astryxdesign/core/TopNav\ndescription: Navigation link item for use in TopNav startContent: renders as an anchor with hover and selected states.\n\nname:        TopNavMegaMenu\nimport:      @astryxdesign/core/TopNav\ndescription: Navigation item that displays a full-width mega menu panel on hover. Uses a slots API with items and featured props. TopNavMegaMenuItem renders itself in both desktop and mobile drawer modes. Supports inline collapsible drawer via render mode context.\n\nname:        TopNavMegaMenuFeaturedCard\nimport:      @astryxdesign/core/TopNav\ndescription: Standard featured card for the TopNavMegaMenu featured slot. Provides a consistent card with optional image, title, description, and CTA link.\n\nname:        TopNavMegaMenuItem\nimport:      @astryxdesign/core/TopNav\ndescription: An individual item inside an TopNavMegaMenu. Renders itself in both desktop (popover grid) and mobile drawer modes via render mode context.\n\nname:        TopNavMenu\nimport:      @astryxdesign/core/TopNav\ndescription: Navigation item that displays a hover-triggered popover menu with rich items containing an icon, title, and optional description.\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/compkit\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

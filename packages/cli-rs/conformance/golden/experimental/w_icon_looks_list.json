@@ -1,0 +1,14 @@
+{
+ "id": "w_icon_looks_list",
+ "args": [
+  "experimental",
+  "icon",
+  "list"
+ ],
+ "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
+ "stdout": "No icons match \"list\".\n\nSee the installed sets: npx @astryxdesign/cli@0.7.12 experimental icon --list\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

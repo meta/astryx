@@ -1,0 +1,15 @@
+{
+ "id": "w_render_rebuild_gen_only",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "gen-only.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: gen-only.html was rendered by Astryx, but its embedded source was removed (a sanitizer or an editor strips <script> blocks) and it has no Astryx components to rebuild from; nothing was written. Render the page again from its source and send the new file as is.\n",
+ "exit": 1,
+ "files": []
+}

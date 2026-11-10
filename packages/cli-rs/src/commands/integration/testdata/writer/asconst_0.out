@@ -1,0 +1,7 @@
+export default ({
+  name: 'x',
+
+  experimental: {
+    iconSets: './icons'
+  }
+}) as const;

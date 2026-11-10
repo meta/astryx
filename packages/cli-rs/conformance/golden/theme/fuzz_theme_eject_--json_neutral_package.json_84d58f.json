@@ -1,0 +1,16 @@
+{
+ "id": "fuzz_theme_eject_--json_neutral_package.json_84d58f",
+ "args": [
+  "theme",
+  "eject",
+  "--json",
+  "neutral",
+  "package.json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Failed to write theme files: EEXIST: file already exists, mkdir '/tmp/astryx-conformance/work/app/package.json'\",\n  \"code\": \"ERR_WRITE_FAILED\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,27 @@
+Gap report route
+
+status:          consent_required
+package:         @astryxdesign/core
+issuesUrl:       https://github.com/meta/astryx/issues/new
+filedCount:      0
+routedOnlyCount: 0
+Deliveries
+
+handlerType: fallback
+handler:     github
+audience:    public
+status:      consent_required
+message:     Rerun with --confirm-public to file this report.
+Destinations
+
+default: true
+
+to:        @astryxdesign/charts
+default:   false
+issuesUrl: https://github.com/meta/astryx/issues
+
+to:        @astryxdesign/lab
+default:   false
+issuesUrl: https://github.com/meta/astryx/issues
+
+Ask the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.

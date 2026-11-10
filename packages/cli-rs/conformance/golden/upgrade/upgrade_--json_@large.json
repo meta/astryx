@@ -1,0 +1,13 @@
+{
+ "id": "upgrade_--json_@large",
+ "args": [
+  "upgrade",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

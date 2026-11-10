@@ -1,0 +1,15 @@
+{
+ "id": "pg_palette-endpoint-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/endpoint.json"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Anchor stop 0 is reserved for exact black; use an interior stop for a tinted endpoint.\n",
+ "exit": 1,
+ "files": []
+}

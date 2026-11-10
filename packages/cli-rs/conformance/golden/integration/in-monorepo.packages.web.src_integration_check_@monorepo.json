@@ -1,0 +1,13 @@
+{
+ "id": "in-monorepo.packages.web.src_integration_check_@monorepo",
+ "args": [
+  "integration",
+  "check"
+ ],
+ "fixture": "monorepo",
+ "fixtureHash": "92b369c1759b654f+4e418a0c2575d9ce",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. Run this command in an integration package's folder.\nIntegration check: (local package)\n\ncheck:    validate\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    components\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    templates\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    docs\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\n[ok] 0 errors, 0 warnings, 1 skipped. No check failed; review the warnings and skipped work above (--strict fails on them).\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

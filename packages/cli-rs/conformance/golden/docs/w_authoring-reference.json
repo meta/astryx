@@ -1,0 +1,13 @@
+{
+ "id": "w_authoring-reference",
+ "args": [
+  "docs",
+  "authoring/reference"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"authoring/reference\"\n\n  authoring/field-reference  (Every file an integration author writes, field by field: the integration manifest, astryx.config, codemods, identity, and each doc type. The guides that use them are the rest of `astryx docs authoring`.)\n  authoring/quick-start  (Create a new integration package or add Astryx to one you already publish.)\n  authoring/building-blocks  (Add components, templates, themes, docs, and codemods, and configure how it behaves.)\n  authoring/global-integrations  (People can install your integration next to their global Astryx install, where it works in every folder outside a project; inside a project, only the project's own integrations work. A checklist, with the exact commands to try it.)\n  authoring/ship  (Test, publish, and upgrade your package.)\n  authoring/help  (Find a CLI message and how to fix it.)\n",
+ "exit": 1,
+ "files": []
+}

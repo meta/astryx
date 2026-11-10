@@ -1,0 +1,14 @@
+{
+ "id": "template_blank_--json_@large",
+ "args": [
+  "template",
+  "blank",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"blank\",\n    \"description\": \"Bare scaffold: one heading slot, one empty content region, no navigation and no chrome. The starting point when every other layout imposes more structure than wanted.\",\n    \"type\": \"page\",\n    \"components\": [\n      \"Layout\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Layout, LayoutContent} from '@astryxdesign/core';\\nimport {Text} from '@astryxdesign/core';\\n\\nexport default function Page() {\\n  return (\\n    <Layout\\n      content={\\n        <LayoutContent>\\n          <Text type=\\\"large\\\">New Page</Text>\\n        </LayoutContent>\\n      }\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

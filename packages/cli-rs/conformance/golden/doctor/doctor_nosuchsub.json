@@ -1,0 +1,13 @@
+{
+ "id": "doctor_nosuchsub",
+ "args": [
+  "doctor",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor nosuchsub'\n\n  integration  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

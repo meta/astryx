@@ -1,0 +1,18 @@
+{
+ "id": "tb_family_reg_dyn",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "reg/dyn.mjs",
+  "reg/dyn-child.mjs",
+  "--family-key",
+  "fam-dyn"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from reg/dyn.mjs...\n\nBuilding theme from reg/dyn-child.mjs...\n",
+ "stderr": "Error: Registry module /tmp/astryx-conformance/work/themes/reg/dyn-icons.mjs has a non-static dependency; family output cannot prove that graph is resolvable and CSS-free.\n",
+ "exit": 1,
+ "files": []
+}

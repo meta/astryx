@@ -1,0 +1,13 @@
+{
+ "id": "w_-acme-oddversion-v2_oddversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/oddversion@v2"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "name:      @acme/oddversion\npackage:   @acme/oddversion\ncategory:  @acme/oddversion\nversion:   v2\ndocs:      guide\ninstalled: true\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @acme/oddversion/<item>\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

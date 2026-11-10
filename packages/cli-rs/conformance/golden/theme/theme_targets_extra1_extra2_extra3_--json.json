@@ -1,0 +1,17 @@
+{
+ "id": "theme_targets_extra1_extra2_extra3_--json",
+ "args": [
+  "theme",
+  "targets",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"No theming target matches \\\"extra1\\\". Run `theme targets` with no filter for the whole list.\",\n  \"code\": \"ERR_UNKNOWN_COMPONENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

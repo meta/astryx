@@ -1,0 +1,20 @@
+{
+ "id": "component_TopNavHeading_--dense_@large",
+ "args": [
+  "component",
+  "TopNavHeading",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# TopNavHeading\n\nProduct/suite heading for TopNav; logo+heading text w/ smart interaction boundaries, optional menu popover, superheading/subheading w/ independent links.\n\n**Import:** `import {TopNavHeading} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `logo` | `ReactNode` | - | Logo before heading text. Image, NavIcon, or ReactNode. |\n| `heading` | `string` | - | Product/app name. |\n| `headingHref` | `string` | - | Link for heading (product home). Only href + no menu → whole heading is link. |\n| `superheading` | `string` | - | Text above heading (suite name). Smaller secondary style. |\n| `superheadingHref` | `string` | - | Link for superheading. Independent inline link when menu present. |\n| `subheading` | `string` | - | Text below heading (account context). Smaller secondary style. |\n| `subheadingHref` | `string` | - | Link for subheading. Independent inline link when menu present. |\n| `headerEndContent` | `ReactNode` | - | Trailing edge content (badge, status indicator). |\n| `menu` | `ReactNode` | - | Popover dropdown content. Shows chevron auto. No hrefs → whole header triggers; with hrefs → chevron area triggers. |\n| `as` | `LinkComponentType` | - | Custom link component. Overrides LinkProvider default. Must accept href, className, style, children. |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles. Must be stylex.create() value. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

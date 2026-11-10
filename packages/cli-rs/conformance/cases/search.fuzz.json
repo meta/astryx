@@ -1,0 +1,35 @@
+[
+  {
+    "id": "fuzz_search_of-chart-spacing-ChatMessageListDensity@docsbroken_990d2c",
+    "args": [
+      "search",
+      "of chart spacing ChatMessageListDensity"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "fuzz_search_avatar-list@docsint_884aab",
+    "args": [
+      "search",
+      "avatar list"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "fuzz_search_token@docsint_7c5566",
+    "args": [
+      "search",
+      "token"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "fuzz_search_sarch@integration-packjson_5d4e3a",
+    "args": [
+      "search",
+      "sarch"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  }
+]

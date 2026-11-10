@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_blckquote",
+ "args": [
+  "search",
+  "blckquote"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"blckquote\" (4)\n\nname:        Blockquote\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Blockquote\ndescription: A quotation block with a rule on its inline-start edge and secondary text color. Use to highlight quoted content, testimonials, or excerpts. The rule and padding are logical, so they move to the right edge in right-to-left locales.\ncommand:     npx @astryxdesign/cli@0.7.12 component Blockquote\n\nname:        BlockquoteShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Blockquote - Showcase\nkind:        block\ndescription: Blockquote with and without citation. A quick visual reference for the blockquote component.\ncommand:     npx @astryxdesign/cli@0.7.12 template BlockquoteShowcase --type block\n\nname:        BlockquoteTestimonials\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Blockquote - Testimonials\nkind:        block\ndescription: Multiple quotes arranged in a card grid for a testimonials section. Combine with Card and Grid to create social-proof layouts.\ncommand:     npx @astryxdesign/cli@0.7.12 template BlockquoteTestimonials --type block\n\nname:        BlockquoteWithCite\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Blockquote - With Attribution\nkind:        block\ndescription: A plain quote and a quote with a cite attribution. Use cite to credit the original author or source.\ncommand:     npx @astryxdesign/cli@0.7.12 template BlockquoteWithCite --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover blckquote\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

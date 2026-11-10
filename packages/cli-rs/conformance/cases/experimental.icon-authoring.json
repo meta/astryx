@@ -1,0 +1,1138 @@
+[
+  {
+    "id": "w_icon_glyphs_map_check_home",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "check",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "map",
+      "close",
+      "trash"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_same",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "close",
+      "x"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_remove",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--remove",
+      "search"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_remove_unmapped",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--remove",
+      "check"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_unknown_def",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "nope",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_unknown_icon",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "check",
+      "nothere"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_custom_def",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "sparkle",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_pairs",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close=home,check=trash"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_pairs_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close=home check=trash"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_pairs_bad",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_pairs_unknown_icon",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close=nope"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_pairs_unknown_def",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "zzz=home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_set",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "glyphs",
+      "check",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_set_other",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--set",
+      "other",
+      "check",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_map_variant_id",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "delete",
+      "trash"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_new",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Launch something.",
+      "--words",
+      "fly,launch"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_new_kebab",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket-launch",
+      "--description",
+      "Launch it.",
+      "--words",
+      "fly",
+      "--icon",
+      "home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_new_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Launch something.",
+      "--words",
+      "fly,launch"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_new_dry",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Launch something.",
+      "--words",
+      "fly",
+      "--dry-run"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_exists_builtin",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "close",
+      "--description",
+      "x",
+      "--words",
+      "y"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_exists_own",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "sparkle",
+      "--description",
+      "x",
+      "--words",
+      "y"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_bad_name",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "Bad_Name",
+      "--description",
+      "x",
+      "--words",
+      "y"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_no_desc",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--words",
+      "y"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_no_words",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "x"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_def_icon_unknown",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "x",
+      "--words",
+      "y",
+      "--icon",
+      "nope"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_list",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_map",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--definition",
+      "check"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_id",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--id",
+      "house"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--id",
+      "house",
+      "--definition",
+      "check"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "TrashSolidIcon",
+      "--from",
+      "./icons/trash.js",
+      "--id",
+      "home",
+      "--variant",
+      "solid"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_bad_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--variant",
+      "duotone"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_missing_export",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "NopeIcon",
+      "--from",
+      "./icons/home.js"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_bad_from",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./nothere.js"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_pkg_from",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "@acme/missing"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_new_def",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--id",
+      "house",
+      "--new-definition",
+      "dwelling",
+      "--description",
+      "A place to live.",
+      "--words",
+      "house,home"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_new_def_nowords",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--new-definition",
+      "dwelling",
+      "--description",
+      "x"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_data_export",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "themeIcons",
+      "--from",
+      "./theme.js"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_add_unknown_def",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "./icons/home.js",
+      "--id",
+      "house",
+      "--definition",
+      "zzz"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_new_set_second",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_new_set_exists",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "glyphs"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_glyphs_new_set_from",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "lib",
+      "--from",
+      "./icons/x.js"
+    ],
+    "fixture": "iconglyphs"
+  },
+  {
+    "id": "w_icon_fresh_add_x",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "XMarkIcon",
+      "--from",
+      "./lib/icons.js",
+      "--definition",
+      "close"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_add_search",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "MagnifyingGlassIcon",
+      "--from",
+      "./lib/icons.js"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_add_x_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "add",
+      "XMarkIcon",
+      "--from",
+      "./lib/icons.js",
+      "--definition",
+      "close"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_add_pkg_self",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeIcon",
+      "--from",
+      "@acme/fresh"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_map_empty",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "close",
+      "x-mark"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_def_new",
+    "args": [
+      "experimental",
+      "icon",
+      "new-definition",
+      "rocket",
+      "--description",
+      "Launch.",
+      "--words",
+      "fly"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_new_set_from_lib",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "solid",
+      "--from",
+      "./lib/icons.js"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_new_set_from_lib_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-set",
+      "solid",
+      "--from",
+      "./lib/icons.js"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_new_set_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "duo",
+      "--variants",
+      "outline,solid"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_list",
+    "args": [
+      "experimental",
+      "icon",
+      "list"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_search_x",
+    "args": [
+      "experimental",
+      "icon",
+      "search",
+      "close"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_fresh_add_all_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/icons.js",
+      "--all"
+    ],
+    "fixture": "iconfresh"
+  },
+  {
+    "id": "w_icon_app_use_glyphs",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_outline",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "outline"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_pkg",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/outline/outline"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "use",
+      "outline"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_missing",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "nope"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_twin",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "@acme/twin/glyphs"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_use_ambiguous",
+    "args": [
+      "experimental",
+      "icon",
+      "use",
+      "glyphs"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_list",
+    "args": [
+      "experimental",
+      "icon",
+      "list"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_search",
+    "args": [
+      "experimental",
+      "icon",
+      "search",
+      "trash"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_app_detail",
+    "args": [
+      "experimental",
+      "icon",
+      "x"
+    ],
+    "fixture": "iconapp"
+  },
+  {
+    "id": "w_icon_looks_all_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_solid_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_bad_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "duotone",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_default_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "outline",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_all_no_variant",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_variant_one",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "HomeSolidIcon",
+      "--from",
+      "./lib/looks.js",
+      "--id",
+      "home",
+      "--variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_add_one_look",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "StarSolidIcon",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_exclude",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--exclude",
+      "HomeOutlineIcon,HomeSolidIcon"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_desc",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--description",
+      "Two-look test icons."
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_variants",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--variants",
+      "outline,solid,bold"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_redeclare_default",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_plain",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_badlook",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "bold,thin"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_new_second_unknown_default",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "second",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,bold",
+      "--default-variant",
+      "bold"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_map_pairs",
+    "args": [
+      "experimental",
+      "icon",
+      "map",
+      "--pairs",
+      "close=x,star=star"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_list",
+    "args": [
+      "experimental",
+      "icon",
+      "list"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_default_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--variants",
+      "outline,solid",
+      "--default-variant",
+      "solid"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks_refresh_dry",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--dry-run"
+    ],
+    "fixture": "iconlooks"
+  },
+  {
+    "id": "w_icon_looks2_refresh",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_refresh_json",
+    "args": [
+      "--json",
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_refresh_exclude",
+    "args": [
+      "experimental",
+      "icon",
+      "new-set",
+      "hero",
+      "--from",
+      "./lib/looks.js",
+      "--exclude",
+      "StarOutlineIcon,StarSolidIcon"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_all_solid",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "--variant",
+      "solid",
+      "--from",
+      "./lib/looks.js",
+      "--all"
+    ],
+    "fixture": "iconlooks2"
+  },
+  {
+    "id": "w_icon_looks2_add_rocket",
+    "args": [
+      "experimental",
+      "icon",
+      "add",
+      "RocketOutlineIcon",
+      "--from",
+      "./lib/looks.js"
+    ],
+    "fixture": "iconlooks2"
+  }
+]

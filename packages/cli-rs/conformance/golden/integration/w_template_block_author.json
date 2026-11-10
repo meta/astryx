@@ -1,0 +1,33 @@
+{
+ "id": "w_template_block_author",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "account-card",
+  "--type",
+  "block"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "template contribution added\n\n[ok] account-card\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/account-card.doc.mjs\n- templates/account-card.tsx\n- astryx.integration.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "author/templates/account-card.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'block',\n  name: 'account-card',\n  displayName: 'Account Card',\n  description: 'Account Card template.',\n  aspectRatio: 1,\n};\n"
+  },
+  {
+   "path": "author/templates/account-card.tsx",
+   "status": "created",
+   "text": "export default function AccountCard() {\n  return <div>Account Card</div>;\n}\n"
+  }
+ ]
+}

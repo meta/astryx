@@ -1,0 +1,20 @@
+{
+ "id": "component_DropdownMenuCheckboxItem_--zh_@large",
+ "args": [
+  "component",
+  "DropdownMenuCheckboxItem",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# DropdownMenuCheckboxItem\n\n可勾选的菜单项（role=\"menuitemcheckbox\"），用于切换独立的布尔值。用于 DropdownMenu 中的开关选项；单选请使用 DropdownMenuRadioGroup。\n\n**Import:** `import {DropdownMenuCheckboxItem} from '@astryxdesign/core/DropdownMenu';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Checkable row | Yes | The menuitemcheckbox root that owns the accessible name, checked state, focus, and activation. |\n| Label/content | Yes | Caller content laid out by Item: the required label plus optional description, icon, and end content. |\n| Checkbox marker | Yes | Decorative shared Indicator chrome that visualizes checked and disabled state without adding a second control. |\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | 标识该项的主标签文本。 |\n| `description` | `ReactNode` | - | 显示在标签下方的次要描述文本。 |\n| `icon` | `IconType` | - | 显示在标签前的图标。 |\n| `value` | `boolean` | - | 该项是否被勾选。受控，与 onChange 搭配使用。 |\n| `onChange` | `(checked: boolean) => void` | - | 切换该项时以下一个勾选状态触发的回调。 |\n| `isDisabled` | `boolean` | `false` | 该项是否禁用。 |\n| `hasCloseOnSelect` | `boolean` | `false` | 切换该项是否关闭菜单。默认保持打开。 |\n| `ref` | `React.Ref<HTMLElement>` | - | 转发到行根元素（带 role=\"menuitemcheckbox\" 的元素）的 ref。 |\n| `endContent` | `ReactNode` | - | 在标签和描述之后渲染的内容。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-dropdown-menu-item` | `data-size` | size | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'dropdown-menu-item': {\n    base: { /* CSS properties */ },\n    'size:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

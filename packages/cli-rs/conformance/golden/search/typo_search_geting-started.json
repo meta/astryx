@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_geting-started",
+ "args": [
+  "search",
+  "geting-started"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"geting-started\" (2)\n\nname:        getting-started\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Getting Started\ndescription: Add the design system to your project and start building.\ncommand:     npx @astryxdesign/cli@0.7.12 docs getting-started --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nname:        authoring/building-blocks/docs/extend-or-replace\nsection:     replace-a-topic\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Docs › Extend or replace a topic › Replace a topic\ndescription: Set `replaces` to take over an existing topic, such as Core's `getting-started`. Readers who open the old name get your topic.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs/extend-or-replace replace-a-topic\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs/extend-or-replace --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover geting-started\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

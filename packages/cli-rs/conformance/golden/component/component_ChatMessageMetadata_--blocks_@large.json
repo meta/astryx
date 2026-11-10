@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatMessageMetadata_--blocks_@large",
+ "args": [
+  "component",
+  "ChatMessageMetadata",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: ChatMessageMetadata\ndescription: Three-message conversation showcasing error status with retry, delivery status, and full footer actions with model label.\n\nExamples\n\nname:        ChatMessageMetadataFooter\ndescription: Assistant message with footer actions: copy, retry, thumbs up/down, and model label. Use for AI responses that need feedback or utility controls.\n\nname:        ChatMessageMetadataStatus\ndescription: All 5 delivery statuses (sending, sent, delivered, read, and error), each with a timestamp. Use to show message delivery progress or surface failures.\n\nname:        ChatMessageMetadataTimestamp\ndescription: Timestamp-only metadata on user and assistant messages. Supports absolute time and relative formats via Timestamp.\n\nRelated: 6 blocks that use ChatMessageMetadata\n\n- ChatMessageAvatarName\n- ChatMessageGhost\n- ChatMessageMultiBubble\n- ChatMessageShowcase\n- ChatMessageBubbleCustomContent\n- ChatMessageBubbleShowcase\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

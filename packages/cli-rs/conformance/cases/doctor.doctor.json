@@ -1,0 +1,2055 @@
+[
+  {
+    "id": "w_doctor_config_throws",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/throws"
+  },
+  {
+    "id": "w_doctor_config_throws_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/throws"
+  },
+  {
+    "id": "w_doctor_config_multi",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/multi"
+  },
+  {
+    "id": "w_doctor_config_multi_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/multi"
+  },
+  {
+    "id": "w_doctor_config_number",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/number"
+  },
+  {
+    "id": "w_doctor_config_number_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/number"
+  },
+  {
+    "id": "w_doctor_config_schema",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/schema"
+  },
+  {
+    "id": "w_doctor_config_schema_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/schema"
+  },
+  {
+    "id": "w_doctor_config_missing",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/missing"
+  },
+  {
+    "id": "w_doctor_config_missing_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/missing"
+  },
+  {
+    "id": "w_doctor_config_ok",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/ok"
+  },
+  {
+    "id": "w_doctor_config_ok_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-config",
+    "cwd": "doctor-config/ok"
+  },
+  {
+    "id": "w_doctor_agents_good",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-agents",
+    "cwd": "doctor-agents/good"
+  },
+  {
+    "id": "w_doctor_agents_nomarkers",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-agents",
+    "cwd": "doctor-agents/nomarkers"
+  },
+  {
+    "id": "w_doctor_agents_dangling",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-agents",
+    "cwd": "doctor-agents/dangling"
+  },
+  {
+    "id": "w_doctor_agents_legacy",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-agents",
+    "cwd": "doctor-agents/legacy"
+  },
+  {
+    "id": "w_doctor_agents_good_from_src",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-agents",
+    "cwd": "doctor-agents/good/src"
+  },
+  {
+    "id": "w_doctor_env_peers",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/peers"
+  },
+  {
+    "id": "w_doctor_env_peers_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/peers"
+  },
+  {
+    "id": "w_doctor_env_stray",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/stray"
+  },
+  {
+    "id": "w_doctor_env_stray_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/stray"
+  },
+  {
+    "id": "w_doctor_env_ambiguous",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/ambiguous"
+  },
+  {
+    "id": "w_doctor_env_ambiguous_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/ambiguous"
+  },
+  {
+    "id": "w_doctor_env_evidence",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/evidence"
+  },
+  {
+    "id": "w_doctor_env_evidence_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/evidence"
+  },
+  {
+    "id": "w_doctor_env_bun",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/bun"
+  },
+  {
+    "id": "w_doctor_env_bun_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/bun"
+  },
+  {
+    "id": "w_doctor_env_yarn",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/yarn"
+  },
+  {
+    "id": "w_doctor_env_yarn_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/yarn"
+  },
+  {
+    "id": "w_doctor_env_cli",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/cli"
+  },
+  {
+    "id": "w_doctor_env_cli_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/cli"
+  },
+  {
+    "id": "w_doctor_env_oldcore",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/oldcore"
+  },
+  {
+    "id": "w_doctor_env_oldcore_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/oldcore"
+  },
+  {
+    "id": "w_doctor_env_workspace",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/workspace"
+  },
+  {
+    "id": "w_doctor_env_workspace_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-env",
+    "cwd": "doctor-env/workspace"
+  },
+  {
+    "id": "w_doctor_themes_unwired",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "cwd": "doctor-themes/unwired"
+  },
+  {
+    "id": "w_doctor_themes_legacy",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "cwd": "doctor-themes/legacy"
+  },
+  {
+    "id": "w_doctor_themes_cssimport",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "cwd": "doctor-themes/cssimport"
+  },
+  {
+    "id": "w_doctor_themes_notgenerated",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "cwd": "doctor-themes/notgenerated"
+  },
+  {
+    "id": "w_doctor_int_broken",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_broken_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_provider",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_provider_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_clicommand",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_clicommand_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_oneclicommand",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "w_doctor_int_oneclicommand_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "w_doctor_int_configured",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_configured_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_alias",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_alias_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_validate_bad-throws_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@bad/throws"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_templates_bad-throws_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@bad/throws"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_components_bad-throws_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@bad/throws"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_docs_bad-throws_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@bad/throws"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_bad-throws_broken_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@bad/throws",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_bad-messy_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@bad/messy"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_templates_bad-messy_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@bad/messy"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_components_bad-messy_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@bad/messy"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_docs_bad-messy_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@bad/messy"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_bad-messy_broken_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@bad/messy",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_dup-two_provider",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@dup/two"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_templates_dup-two_provider",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@dup/two"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_components_dup-two_provider",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@dup/two"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_docs_dup-two_provider",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@dup/two"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_validate_dup-two_provider_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@dup/two",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/provider"
+  },
+  {
+    "id": "w_doctor_int_validate_cmd-one_clicommand",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@cmd/one"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_templates_cmd-one_clicommand",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@cmd/one"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_components_cmd-one_clicommand",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@cmd/one"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_docs_cmd-one_clicommand",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@cmd/one"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_validate_cmd-one_clicommand_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@cmd/one",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/clicommand"
+  },
+  {
+    "id": "w_doctor_int_validate_kit-alias_alias",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "kit-alias"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_templates_kit-alias_alias",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "kit-alias"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_components_kit-alias_alias",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "kit-alias"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_docs_kit-alias_alias",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "kit-alias"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_validate_kit-alias_alias_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "kit-alias",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/alias"
+  },
+  {
+    "id": "w_doctor_int_validate_nope-absent_configured",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@nope/absent"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_templates_nope-absent_configured",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@nope/absent"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_components_nope-absent_configured",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@nope/absent"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_docs_nope-absent_configured",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@nope/absent"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_validate_nope-absent_configured_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@nope/absent",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/configured"
+  },
+  {
+    "id": "w_doctor_int_validate_dotdot-x_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "../x"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_templates_dotdot-x_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "../x"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_components_dotdot-x_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "../x"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_docs_dotdot-x_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "../x"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_dotdot-x_broken_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "../x",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_-abs_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "/abs"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_templates_-abs_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "/abs"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_components_-abs_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "/abs"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_docs_-abs_broken",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "/abs"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_int_validate_-abs_broken_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "/abs",
+      "--json"
+    ],
+    "fixture": "doctor-integrations",
+    "cwd": "doctor-integrations/broken"
+  },
+  {
+    "id": "w_doctor_built_dist",
+    "args": [
+      "doctor",
+      "--built",
+      "dist"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_dist-indexdothtml",
+    "args": [
+      "doctor",
+      "--built",
+      "dist/index.html"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_plain-indexdothtml",
+    "args": [
+      "doctor",
+      "--built",
+      "plain/index.html"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_styled-indexdothtml",
+    "args": [
+      "doctor",
+      "--built",
+      "styled/index.html"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src",
+    "args": [
+      "doctor",
+      "--built",
+      "src"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src-Pagedottsx",
+    "args": [
+      "doctor",
+      "--built",
+      "src/Page.tsx"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src-cleandottsx",
+    "args": [
+      "doctor",
+      "--built",
+      "src/clean.tsx"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src-utildotjs",
+    "args": [
+      "doctor",
+      "--built",
+      "src/util.js"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src-brokendottsx",
+    "args": [
+      "doctor",
+      "--built",
+      "src/broken.tsx"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_nojsx",
+    "args": [
+      "doctor",
+      "--built",
+      "nojsx"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_empty",
+    "args": [
+      "doctor",
+      "--built",
+      "empty"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_dot",
+    "args": [
+      "doctor",
+      "--built",
+      "."
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_nope",
+    "args": [
+      "doctor",
+      "--built",
+      "nope"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_dist-assets-appdotcss",
+    "args": [
+      "doctor",
+      "--built",
+      "dist/assets/app.css"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_src_json",
+    "args": [
+      "doctor",
+      "--built",
+      "src",
+      "--json"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_integration_validate",
+    "args": [
+      "doctor",
+      "--built",
+      "src",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-built"
+  },
+  {
+    "id": "w_doctor_built_empty_outside",
+    "args": [
+      "doctor",
+      "--built",
+      "."
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_doctor_author_validate_absolute",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/absolute"
+  },
+  {
+    "id": "w_doctor_author_templates_absolute",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/absolute"
+  },
+  {
+    "id": "w_doctor_author_components_absolute",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/absolute"
+  },
+  {
+    "id": "w_doctor_author_docs_absolute",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/absolute"
+  },
+  {
+    "id": "w_doctor_author_validate_absolute_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/absolute"
+  },
+  {
+    "id": "w_doctor_author_validate_noname",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/noname"
+  },
+  {
+    "id": "w_doctor_author_templates_noname",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/noname"
+  },
+  {
+    "id": "w_doctor_author_components_noname",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/noname"
+  },
+  {
+    "id": "w_doctor_author_docs_noname",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/noname"
+  },
+  {
+    "id": "w_doctor_author_validate_noname_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/noname"
+  },
+  {
+    "id": "w_doctor_author_validate_exports",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/exports"
+  },
+  {
+    "id": "w_doctor_author_templates_exports",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/exports"
+  },
+  {
+    "id": "w_doctor_author_components_exports",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/exports"
+  },
+  {
+    "id": "w_doctor_author_docs_exports",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/exports"
+  },
+  {
+    "id": "w_doctor_author_validate_exports_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/exports"
+  },
+  {
+    "id": "w_doctor_author_validate_badmanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "w_doctor_author_templates_badmanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "w_doctor_author_components_badmanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "w_doctor_author_docs_badmanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "w_doctor_author_validate_badmanifest_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badmanifest"
+  },
+  {
+    "id": "w_doctor_author_validate_twomanifests",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/twomanifests"
+  },
+  {
+    "id": "w_doctor_author_templates_twomanifests",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/twomanifests"
+  },
+  {
+    "id": "w_doctor_author_components_twomanifests",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/twomanifests"
+  },
+  {
+    "id": "w_doctor_author_docs_twomanifests",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/twomanifests"
+  },
+  {
+    "id": "w_doctor_author_validate_twomanifests_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/twomanifests"
+  },
+  {
+    "id": "w_doctor_author_validate_nomanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/nomanifest"
+  },
+  {
+    "id": "w_doctor_author_templates_nomanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/nomanifest"
+  },
+  {
+    "id": "w_doctor_author_components_nomanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/nomanifest"
+  },
+  {
+    "id": "w_doctor_author_docs_nomanifest",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/nomanifest"
+  },
+  {
+    "id": "w_doctor_author_validate_nomanifest_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/nomanifest"
+  },
+  {
+    "id": "w_doctor_author_validate_badjson",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badjson"
+  },
+  {
+    "id": "w_doctor_author_templates_badjson",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badjson"
+  },
+  {
+    "id": "w_doctor_author_components_badjson",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badjson"
+  },
+  {
+    "id": "w_doctor_author_docs_badjson",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badjson"
+  },
+  {
+    "id": "w_doctor_author_validate_badjson_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author",
+    "cwd": "doctor-author/badjson"
+  },
+  {
+    "id": "w_doctor_from_subdir",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "cwd": "app/src"
+  },
+  {
+    "id": "w_doctor_integration_validate_from_kit_components",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "integration",
+    "cwd": "integration/node_modules/@acme/kit/components"
+  },
+  {
+    "id": "w_doctor_integration_docs_kit_installed",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_doctor_integration_components_kit_installed",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_doctor_integration_templates_kit_installed",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_doctor_integration_validate_charts_large",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@astryxdesign/charts"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_doctor_integration_validate_build_large",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@astryxdesign/build"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_doctor_integration_validate_core_app",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "@astryxdesign/core"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w2_doctor_author2_validate",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_validate_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_templates",
+    "args": [
+      "doctor",
+      "integration",
+      "templates"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_templates_json",
+    "args": [
+      "doctor",
+      "integration",
+      "templates",
+      "--json"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_components",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_components_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_docs",
+    "args": [
+      "doctor",
+      "integration",
+      "docs"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_author2_docs_json",
+    "args": [
+      "doctor",
+      "integration",
+      "docs",
+      "--json"
+    ],
+    "fixture": "doctor-author2",
+    "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "w2_doctor_ts_validate",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w2_doctor_ts_validate_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w2_doctor_ts_components",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w2_doctor_ts_components_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts",
+    "cwd": "doctor-ts/kit",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_theme_y2k_large",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_y2k_large_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_two_large",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ],
+      [
+        "theme",
+        "add",
+        "y2k"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_neutral_unwired",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "doctor-themes",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ]
+    ],
+    "cwd": "doctor-themes/unwired"
+  },
+  {
+    "id": "w3_doctor_theme_neutral_app",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_use_large",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "neutral"
+      ],
+      [
+        "theme",
+        "add",
+        "y2k"
+      ],
+      [
+        "theme",
+        "use",
+        "neutral"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_ts2_clean",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/clean",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_clean_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/clean",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_unresolved",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/unresolved",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_unresolved_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/unresolved",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_defaults",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/defaults",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_defaults_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/defaults",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_shapes",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/shapes",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_shapes_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/shapes",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_badconfig",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/badconfig",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_badconfig_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/badconfig",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_pack_ignored",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/ignored"
+  },
+  {
+    "id": "w3_doctor_pack_nested",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/nested"
+  },
+  {
+    "id": "w3_doctor_pack_gitignored",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/gitignored"
+  },
+  {
+    "id": "w3_doctor_pack_negated",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/negated"
+  },
+  {
+    "id": "w3_doctor_pack_kept",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/kept"
+  },
+  {
+    "id": "w3_doctor_pack_filesglob",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesglob"
+  },
+  {
+    "id": "w3_doctor_pack_filesneg",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesneg"
+  },
+  {
+    "id": "w3_doctor_pack_filesok",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesok"
+  },
+  {
+    "id": "w3_doctor_pack_folder",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/folder"
+  },
+  {
+    "id": "w3_doctor_theme_butter",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_butter_stone_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_removed",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ],
+      [
+        "theme",
+        "remove",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject_add",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject_add_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_broken_module",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/astryx-themes.js"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_template_ts",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  }
+]

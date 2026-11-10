@@ -1,0 +1,15 @@
+{
+ "id": "w3_doctor_ts2_clean_json",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--json"
+ ],
+ "fixture": "doctor-ts2",
+ "fixtureHash": "393cf73e5070f1dd+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.component-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/clean\",\n    \"version\": \"1.0.0\",\n    \"conflicts\": [],\n    \"issues\": [],\n    \"propDrift\": {\n      \"status\": \"checked\",\n      \"typescript\": \"6.0.3\",\n      \"components\": 1,\n      \"typesCompared\": 8,\n      \"findings\": [\n        {\n          \"component\": \"Meter\",\n          \"prop\": \"options.missing\",\n          \"severity\": \"warning\",\n          \"doc\": \"src/Meter/Meter.doc.mjs\",\n          \"source\": \"src/Meter/Meter.tsx\",\n          \"kind\": \"not_in_code\",\n          \"message\": \"\\\"options.missing\\\" is documented, but Meter's \\\"options\\\" has no \\\"missing\\\".\"\n        },\n        {\n          \"component\": \"Meter\",\n          \"prop\": \"options.step\",\n          \"severity\": \"warning\",\n          \"doc\": \"src/Meter/Meter.doc.mjs\",\n          \"source\": \"src/Meter/Meter.tsx\",\n          \"kind\": \"type_mismatch\",\n          \"message\": \"\\\"options.step\\\" is documented as string, but the code declares number.\",\n          \"docType\": \"string\",\n          \"codeType\": \"number\"\n        },\n        {\n          \"component\": \"Meter\",\n          \"prop\": \"tone\",\n          \"severity\": \"warning\",\n          \"doc\": \"src/Meter/Meter.doc.mjs\",\n          \"source\": \"src/Meter/Meter.tsx\",\n          \"kind\": \"type_mismatch\",\n          \"message\": \"\\\"tone\\\" is documented as 'calm' | 'loud', but the code declares Tone (Tone.Calm | Tone.Loud).\",\n          \"docType\": \"'calm' | 'loud'\",\n          \"codeType\": \"Tone\"\n        }\n      ],\n      \"unchecked\": [],\n      \"typesNotCompared\": []\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

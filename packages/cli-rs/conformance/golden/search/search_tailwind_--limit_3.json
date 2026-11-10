@@ -1,0 +1,21 @@
+{
+ "id": "search_tailwind_--limit_3",
+ "args": [
+  "search",
+  "tailwind",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"tailwind\" (3 of 30)\n\nname:        styling-libraries/tailwind\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Other styling libraries › Tailwind\ndescription: The Tailwind v4 bridge, cascade layer order, and utility-class usage backed by system tokens.\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind --index\nparent:      npx @astryxdesign/cli@0.7.12 docs styling-libraries\n\nname:        styling-libraries/tailwind\nsection:     tailwind\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Other styling libraries › Tailwind › Tailwind\ndescription: The Tailwind v4 bridge at `@astryxdesign/core/tailwind-theme.css` maps Tailwind theme variables to system CSS variables with `@theme reference inline`, so utility classes like `text-primary`, `bg-surface`, `border-border`, `rounded-lg`,...\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind tailwind\nparent:      npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind --index\n\nname:        styling-libraries/tailwind\nsection:     add-astryx-to-an-app-that-already-uses-tailwind\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Other styling libraries › Tailwind › Add Astryx to an app that already uses Tailwind\ndescription: The recipe in the Tailwind section is a whole `globals.css` for a new app. An app that already uses Tailwind keeps its own file: its `@import \"tailwindcss\"`, its `@theme` mapping, and its `:root` variables stay as they are. Add one...\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind add-astryx-to-an-app-that-already-uses-tailwind\nparent:      npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover tailwind\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

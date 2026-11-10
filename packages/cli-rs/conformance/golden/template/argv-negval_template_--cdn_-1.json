@@ -1,0 +1,14 @@
+{
+ "id": "argv-negval_template_--cdn_-1",
+ "args": [
+  "template",
+  "--cdn",
+  "-1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '-1'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "w_icon_looks_redeclare_default",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "hero",
+  "--variants",
+  "outline,solid",
+  "--default-variant",
+  "solid"
+ ],
+ "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"hero\" can't move its default variant from \"outline\" to \"solid\" in place: each of its 27 icons still draws \"outline\". Wrap the library again with the new default, so each icon takes that look.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set hero --from ./lib/looks.js --variants outline,solid --default-variant solid  (wrap the library again in the new default look)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-set_--json_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"missing required argument 'name'\",\n  \"code\": \"ERR_MISSING_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

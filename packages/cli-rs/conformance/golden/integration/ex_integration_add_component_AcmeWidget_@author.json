@@ -1,0 +1,26 @@
+{
+ "id": "ex_integration_add_component_AcmeWidget_@author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "AcmeWidget"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "component contribution added\n\n[ok] AcmeWidget\n\nUse component root ./src/components in astryx.integration.mjs.\n\n- src/components/AcmeWidget.doc.mjs\n- src/components/AcmeWidget.tsx\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/src/components/AcmeWidget.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'AcmeWidget',\n  displayName: 'AcmeWidget',\n  import: \"@acme/widgets/src/components/AcmeWidget\",\n  usage: {description: 'AcmeWidget component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/AcmeWidget.tsx",
+   "status": "created",
+   "text": "export function AcmeWidget() {\n  return <div>AcmeWidget</div>;\n}\n"
+  }
+ ]
+}

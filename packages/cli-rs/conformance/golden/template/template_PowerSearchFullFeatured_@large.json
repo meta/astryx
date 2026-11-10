@@ -1,0 +1,19 @@
+{
+ "id": "template_PowerSearchFullFeatured_@large",
+ "args": [
+  "template",
+  "PowerSearchFullFeatured"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {PowerSearch} from '@astryxdesign/core/PowerSearch';\nimport type {\n  PowerSearchConfig,\n  PowerSearchFilter,\n} from '@astryxdesign/core/PowerSearch';\nimport type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';\n\nconst statusValues = [\n  {value: 'open', label: 'Open'},\n  {value: 'in_progress', label: 'In Progress'},\n  {value: 'review', label: 'In Review'},\n  {value: 'closed', label: 'Closed'},\n];\nconst priorityValues = [\n  {value: 'p0', label: 'P0 — Critical'},\n  {value: 'p1', label: 'P1 — High'},\n  {value: 'p2', label: 'P2 — Medium'},\n  {value: 'p3', label: 'P3 — Low'},\n];\nconst users: SearchableItem[] = [\n  {id: 'user-1', label: 'Alice Johnson'},\n  {id: 'user-2', label: 'Bob Smith'},\n  {id: 'user-3', label: 'Charlie Brown'},\n  {id: 'user-4', label: 'Diana Prince'},\n];\nconst userSource: SearchSource = {\n  search: (q: string) =>\n    users.filter(u => u.label.toLowerCase().includes(q.toLowerCase())),\n  bootstrap: () => users,\n};\n\nconst config: PowerSearchConfig = {\n  name: 'FullSearch',\n  fields: [\n    {\n      key: 'status',\n      label: 'Status',\n      defaultOperator: 'any_of',\n      operators: [\n        {\n          key: 'any_of',\n          label: 'is any of',\n          value: {type: 'enum_list', values: statusValues},\n        },\n        {\n          key: 'none_of',\n          label: 'is none of',\n          value: {type: 'enum_list', values: statusValues},\n        },\n      ],\n    },\n    {\n      key: 'title',\n      label: 'Title',\n      defaultOperator: 'contains',\n      operators: [\n        {key: 'contains', label: 'contains', value: {type: 'string'}},\n        {\n          key: 'not_contains',\n          label: 'does not contain',\n          value: {type: 'string'},\n        },\n      ],\n    },\n    {\n      key: 'priority',\n      label: 'Priority',\n      defaultOperator: 'is',\n      operators: [\n        {key: 'is', label: 'is', value: {type: 'enum', values: priorityValues}},\n      ],\n    },\n    {\n      key: 'assignee',\n      label: 'Assignee',\n      defaultOperator: 'any_of',\n      operators: [\n        {\n          key: 'any_of',\n          label: 'is any of',\n          value: {type: 'entity_list', searchSource: userSource},\n        },\n      ],\n    },\n  ],\n};\n\nexport default function PowerSearchFullFeatured() {\n  const [filters, setFilters] = useState<PowerSearchFilter[]>([]);\n\n  return (\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 300px)'}}>\n      <PowerSearch\n        config={config}\n        filters={filters}\n        onChange={newFilters => setFilters([...newFilters])}\n        placeholder=\"Search...\"\n      />\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_button_@monorepo",
+ "args": [
+  "theme",
+  "targets",
+  "button"
+ ],
+ "fixture": "monorepo",
+ "fixtureHash": "92b369c1759b654f+4e418a0c2575d9ce",
+ "stdout": "Theming targets\n1 across 1 component\n(key - component - props - states - className)\n\nbutton  Button - size, variant, elevation - astryx-button\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: pnpm dlx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

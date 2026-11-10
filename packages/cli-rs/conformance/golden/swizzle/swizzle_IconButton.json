@@ -1,0 +1,34 @@
+{
+ "id": "swizzle_IconButton",
+ "args": [
+  "swizzle",
+  "IconButton"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/IconButton/\n\nWhat @astryxdesign/core exports is imported from @astryxdesign/core; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nIt imports these npm packages; install any your project lacks: react@\">=19.0.0\"\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n\nCustomizing a component often signals a gap in the design system.\nLet the maintainers know what you needed:\n  https://github.com/meta/astryx/issues/new\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/IconButton/IconButton.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file IconButton.tsx\n * @input Uses Button, ButtonProps\n * @output Exports IconButton component, IconButtonProps type\n * @position Composition wrapper over Button for icon-only buttons\n *\n * SYNC: When modified, update these files to stay in sync:\n * - /packages/core/src/IconButton/IconButton.doc.mjs (props table, features)\n * - /packages/core/src/IconButton/IconButton.test.tsx (tests)\n * - /packages/core/src/IconButton/index.ts (exports if types change)\n * - /apps/storybook/stories/IconButton.stories.tsx (storybook stories)\n * - /packages/cli/assets/templates/blocks/components/IconButton/ (showcase blocks)\n */\n\nimport type {ReactNode} from 'react';\nimport {Button} from '@astryxdesign/core/Button';\nimport type {ButtonProps} from '@astryxdesign/core/Button';\n\n/**\n * Props for IconButton.\n *\n * Omits `isIconOnly` (always true), `children` and `endContent` (not applicable\n * for icon-only buttons). `icon` is required.\n */\nexport interface IconButtonProps extends Omit<\n  ButtonProps,\n  'isIconOnly' | 'children' | 'endContent'\n> {\n  /** Icon element rendered inside the button (required). */\n  icon: ReactNode;\n}\n\n/**\n * An icon-only button — a thin wrapper around Button with `isIconOnly`\n * always set to true.\n *\n * Use this instead of `<Button isIconOnly>` for explicit, greppable,\n * and codemod-safe icon-only button usage.\n *\n * @example\n * ```\n * <IconButton label=\"Settings\" icon={<GearIcon />} variant=\"ghost\" />\n * <IconButton label=\"Delete\" icon={<TrashIcon />} variant=\"destructive\" />\n * <IconButton label=\"Emoji\" icon={<span>🚀</span>} variant=\"ghost\" size=\"sm\" />\n * ```\n */\nexport function IconButton({icon, ...props}: IconButtonProps): ReactNode {\n  return <Button {...props} icon={icon} isIconOnly />;\n}\n\nIconButton.displayName = 'IconButton';\n"
+  },
+  {
+   "path": "app/components/astryx/IconButton/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file index.ts\n * @input Imports IconButton component and types from IconButton.tsx\n * @output Exports IconButton, IconButtonProps\n * @position Component entry point; re-exported by /packages/core/src/index.ts\n *\n * SYNC: When modified, update this header and /packages/core/src/IconButton/IconButton.doc.mjs\n */\n\nexport {IconButton} from './IconButton';\nexport type {IconButtonProps} from './IconButton';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

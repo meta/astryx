@@ -1,0 +1,15 @@
+{
+ "id": "docs_author-a-theme_theme-adaptations_--json_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "theme-adaptations",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Theme Adaptations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Use `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, or motion preference. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"const acmeTheme = defineTheme({\\n  name: 'acme',\\n  adaptations: {\\n    widthBreakpoints: {\\n      sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536,\\n    },\\n    rules: [\\n      {\\n        when: {width: {below: 'md'}},\\n        value: {tokens: {'--spacing-4': '12px'}},\\n      },\\n      {\\n        when: {pointer: 'coarse'},\\n        value: {tokens: {'--size-element-sm': '36px', '--size-element-md': '40px', '--size-element-lg': '44px'}},\\n      },\\n    ],\\n  },\\n});\",\n        \"label\": \"Width and pointer adaptations\"\n      },\n      {\n        \"type\": \"table\",\n        \"headers\": [\n          \"Condition\",\n          \"Values\"\n        ],\n        \"rows\": [\n          [\n            \"width.from / width.below\",\n            \"sm | md | lg | xl | 2xl\"\n          ],\n          [\n            \"pointer\",\n            \"coarse | fine\"\n          ],\n          [\n            \"contrast\",\n            \"more | less | no-preference\"\n          ],\n          [\n            \"motion\",\n            \"reduce | no-preference\"\n          ]\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"`widthBreakpoints` are fixed named start points. Defaults are 640 / 768 / 1024 / 1280 / 1536 CSS pixels. `from` includes its point; `below` excludes it. Breakpoint configuration alone emits no CSS.\"\n      }\n    ],\n    \"id\": \"theme-adaptations\",\n    \"links\": {\n      \"up\": \"astryx docs author-a-theme --index\",\n      \"previous\": \"astryx docs author-a-theme custom-variants\",\n      \"next\": \"astryx docs author-a-theme adaptation-rules\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

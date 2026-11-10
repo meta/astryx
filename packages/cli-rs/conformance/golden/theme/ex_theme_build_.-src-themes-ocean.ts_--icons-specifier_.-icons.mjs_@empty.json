@@ -1,0 +1,16 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--icons-specifier_.-icons.mjs_@empty",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--icons-specifier",
+  "./icons.mjs"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: File not found: /tmp/astryx-conformance/work/empty/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

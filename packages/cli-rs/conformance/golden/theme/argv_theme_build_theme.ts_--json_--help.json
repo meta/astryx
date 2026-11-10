@@ -1,0 +1,16 @@
+{
+ "id": "argv_theme_build_theme.ts_--json_--help",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme build\",\n    \"description\": \"Compile standalone themes or one keyed theme family\",\n    \"usage\": \"astryx theme build [options] <files...>\",\n    \"options\": [\n      {\n        \"flags\": \"--family\",\n        \"description\": \"Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)\"\n      },\n      {\n        \"flags\": \"--family-key <key>\",\n        \"description\": \"Lower-kebab filename stem required with --family and refused without it; must differ from every member name (ERR_THEME_INVALID)\"\n      },\n      {\n        \"flags\": \"-o, --out <path>\",\n        \"description\": \"Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)\"\n      },\n      {\n        \"flags\": \"--icons-specifier <specifier>\",\n        \"description\": \"Override the icon-registry import in the generated JS module, for example ./icons.mjs (default: the specifier in the theme source's own import). With --family it applies to every member's icon import\"\n      },\n      {\n        \"flags\": \"-w, --watch\",\n        \"description\": \"Rebuild automatically when a theme file changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)\"\n      },\n      {\n        \"flags\": \"-c, --check\",\n        \"description\": \"Verify the committed outputs match the source without writing; exit non-zero if stale. Composes with --family and several files; refused with --watch (ERR_THEME_INVALID)\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

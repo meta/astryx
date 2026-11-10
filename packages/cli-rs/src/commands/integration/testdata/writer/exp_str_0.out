@@ -1,0 +1,1 @@
+ERROR Could not update astryx.integration.mjs safely: its `experimental` field is not a static object literal. Set "experimental.iconSets: './icons'" in it yourself.

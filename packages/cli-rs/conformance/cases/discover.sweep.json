@@ -1,0 +1,43 @@
+[
+  {
+    "id": "sweep_dates_json",
+    "args": [
+      "discover",
+      "@test/dates",
+      "--json"
+    ],
+    "fixture": "sweep-discover"
+  },
+  {
+    "id": "sweep_dates_text",
+    "args": [
+      "discover",
+      "@test/dates"
+    ],
+    "fixture": "sweep-discover"
+  },
+  {
+    "id": "sweep_dates_list",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "sweep-discover"
+  },
+  {
+    "id": "sweep_bad_catalog",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "sweep-discover-bad"
+  },
+  {
+    "id": "sweep_bad_catalog_text",
+    "args": [
+      "discover",
+      "Dial"
+    ],
+    "fixture": "sweep-discover-bad"
+  }
+]

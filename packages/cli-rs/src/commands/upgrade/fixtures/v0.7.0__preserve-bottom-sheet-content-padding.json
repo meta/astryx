@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, VStack} from '@astryxdesign/core';\nconst a = (\n  <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label=\"Filters\">\n    <VStack gap={4} padding={4}>x</VStack>\n  </BottomSheet>\n);",
+  "output": "import {BottomSheet, VStack} from '@astryxdesign/core';\nconst a = (\n  <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label=\"Filters\" padding={0}>\n    <VStack gap={4} padding={4}>x</VStack>\n  </BottomSheet>\n);",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, Section, VStack} from '@astryxdesign/core';\nconst a = (\n  <BottomSheet isOpen onOpenChange={() => {}} label=\"Filters\">\n    {/* filters */}\n    <Section padding={4}>\n      <VStack gap={4}>x</VStack>\n    </Section>\n  </BottomSheet>\n);",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, Layout, LayoutContent} from '@astryxdesign/core';\nconst a = (\n  <BottomSheet isOpen onOpenChange={() => {}} label=\"Message\">\n    <Layout content={<LayoutContent>x</LayoutContent>} />\n  </BottomSheet>\n);",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, Layout, VStack} from '@astryxdesign/core';\nfunction A() {\n  return (\n    <BottomSheet sheetId=\"a\" label=\"A\">\n      <VStack>\n        <Layout content={x} />\n      </VStack>\n    </BottomSheet>\n  );\n}\nfunction B() {\n  return (\n    <BottomSheet sheetId=\"b\" label=\"B\">\n      <VStack>\n        <Layout padding={4} content={x} />\n      </VStack>\n    </BottomSheet>\n  );\n}",
+  "output": "import {BottomSheet, Layout, VStack} from '@astryxdesign/core';\nfunction A() {\n  /* TODO(astryx upgrade): BottomSheet now pads its content like Dialog. padding={0} keeps the unpadded content box, but it also removes the inset between a nested Layout's regions, which the Layout's own padding does not restore. Drop padding={0} and the sheet content's own inset, or give the Layout its inset another way. */\n  return (\n    <BottomSheet sheetId=\"a\" label=\"A\" padding={0}>\n      <VStack>\n        <Layout content={x} />\n      </VStack>\n    </BottomSheet>\n  );\n}\nfunction B() {\n  /* TODO(astryx upgrade): BottomSheet now pads its content like Dialog. padding={0} keeps the unpadded content box, but it also removes the inset between a nested Layout's regions, which the Layout's own padding does not restore. Drop padding={0} and the sheet content's own inset, or give the Layout its inset another way. */\n  return (\n    <BottomSheet sheetId=\"b\" label=\"B\" padding={0}>\n      <VStack>\n        <Layout padding={4} content={x} />\n      </VStack>\n    </BottomSheet>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from '@astryxdesign/core';\nimport {Layout} from './my-layout';\nexport function A() {\n  return <BottomSheet isOpen><Layout content={<p>b</p>} /></BottomSheet>;\n}\n",
+  "output": "import {BottomSheet} from '@astryxdesign/core';\nimport {Layout} from './my-layout';\nexport function A() {\n  return <BottomSheet isOpen padding={0}><Layout content={<p>b</p>} /></BottomSheet>;\n}\n",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from '@astryxdesign/core';\nexport function Host({BottomSheet: Sheet}) {\n  return <Sheet isOpen><p>own inset</p></Sheet>;\n}\nexport function Local() {\n  const BottomSheet = (props) => <div {...props} />;\n  return <BottomSheet isOpen><p>own inset</p></BottomSheet>;\n}\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, Layout, VStack} from '@astryxdesign/core';\nexport function A() {\n  return <BottomSheet isOpen><VStack><p>a</p></VStack></BottomSheet>;\n}\nexport function B() {\n  return <BottomSheet isOpen><VStack><Layout content={<p>b</p>} /></VStack></BottomSheet>;\n}\n",
+  "output": "import {BottomSheet, Layout, VStack} from '@astryxdesign/core';\nexport function A() {\n  return <BottomSheet isOpen padding={0}><VStack><p>a</p></VStack></BottomSheet>;\n}\nexport function B() {\n  /* TODO(astryx upgrade): BottomSheet now pads its content like Dialog. padding={0} keeps the unpadded content box, but it also removes the inset between a nested Layout's regions, which the Layout's own padding does not restore. Drop padding={0} and the sheet content's own inset, or give the Layout its inset another way. */\n  return <BottomSheet isOpen padding={0}><VStack><Layout content={<p>b</p>} /></VStack></BottomSheet>;\n}\n",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet, Layout, VStack} from '@astryxdesign/core';\nexport function A() {\n  return <BottomSheet isOpen padding={0}><VStack><p>a</p></VStack></BottomSheet>;\n}\nexport function B() {\n  /* TODO(astryx upgrade): BottomSheet now pads its content like Dialog. padding={0} keeps the unpadded content box, but it also removes the inset between a nested Layout's regions, which the Layout's own padding does not restore. Drop padding={0} and the sheet content's own inset, or give the Layout its inset another way. */\n  return <BottomSheet isOpen padding={0}><VStack><Layout content={<p>b</p>} /></VStack></BottomSheet>;\n}\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from '@astryxdesign/core';\nimport {Section} from './local';\nimport {Section as CoreSection} from '@astryxdesign/core';\nconst a = <BottomSheet sheetId=\"a\" label=\"A\"><Section>x</Section></BottomSheet>;\nconst b = (\n  <BottomSheet sheetId=\"b\" label=\"B\">\n    <CoreSection>x</CoreSection>\n    <p>after</p>\n  </BottomSheet>\n);",
+  "output": "import {BottomSheet} from '@astryxdesign/core';\nimport {Section} from './local';\nimport {Section as CoreSection} from '@astryxdesign/core';\nconst a = <BottomSheet sheetId=\"a\" label=\"A\" padding={0}><Section>x</Section></BottomSheet>;\nconst b = (\n  <BottomSheet sheetId=\"b\" label=\"B\" padding={0}>\n    <CoreSection>x</CoreSection>\n    <p>after</p>\n  </BottomSheet>\n);",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from '@astryxdesign/core';\nconst a = <BottomSheet sheetId=\"a\" label=\"A\" padding={2}>x</BottomSheet>;\nconst b = <BottomSheet sheetId=\"b\" label=\"B\" padding={value}>x</BottomSheet>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet as Sheet} from '@astryxdesign/core';\nimport Panel from '@astryxdesign/core/BottomSheet';\nimport * as Core from '@astryxdesign/core';\nconst a = <Sheet sheetId=\"a\" label=\"A\">x</Sheet>;\nconst b = <Panel sheetId=\"b\" label=\"B\">x</Panel>;\nconst c = <Core.BottomSheet sheetId=\"c\" label=\"C\">x</Core.BottomSheet>;",
+  "output": "import {BottomSheet as Sheet} from '@astryxdesign/core';\nimport Panel from '@astryxdesign/core/BottomSheet';\nimport * as Core from '@astryxdesign/core';\nconst a = <Sheet sheetId=\"a\" label=\"A\" padding={0}>x</Sheet>;\nconst b = <Panel sheetId=\"b\" label=\"B\" padding={0}>x</Panel>;\nconst c = <Core.BottomSheet sheetId=\"c\" label=\"C\" padding={0}>x</Core.BottomSheet>;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from '@astryxdesign/core';\nconst a = <BottomSheet label=\"A\" {...args} />;",
+  "output": "import {BottomSheet} from '@astryxdesign/core';\nconst a = <BottomSheet label=\"A\" padding={0} {...args} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/preserve-bottom-sheet-content-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BottomSheet} from './prototype';\nconst a = <BottomSheet title=\"A\">x</BottomSheet>;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,19 @@
+{
+ "id": "hook_useImageMode",
+ "args": [
+  "hook",
+  "useImageMode"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useImageMode\n\nDetects whether an image is predominantly dark or light by sampling pixels via OffscreenCanvas. Uses APCA perceptual lightness (sRGB linearization + power curve) for accurate detection, especially on saturated colors. Runs entirely off the paint path: no visible canvas, no layout thrash. Supports regional sampling for detecting luminance where text overlays will appear. Returns null while loading and falls back gracefully on CORS or network errors.\n\n## Best Practices\n\n- **Do:** Pair with MediaTheme to automatically adapt text color over dynamic background images.\n- **Do:** Use the region option to sample only the area where text overlays will appear for more accurate results.\n- **Don't:** Use for images that change rapidly (e.g., video frames); each src change triggers a new fetch and analysis.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `src` | `string \\| null \\| undefined` | - | Image source URL to analyze. When null/undefined, returns the fallback value. **(required)** |\n| `options` | `UseImageModeOptions` | - | Optional configuration for image analysis. |\n| `options.region` | `ImageSampleRegion` | - | Region to sample within the image using normalized 0-1 coordinates ({ x, y, width, height }). Defaults to the full image. |\n| `options.threshold` | `number` | `0.5` | Luminance threshold for the dark/light split. Below = dark, above = light. |\n| `options.fallback` | `'dark' \\| 'light' \\| null` | `null` | Fallback value while loading or on error. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `mode` | `'dark' \\| 'light' \\| null` | Detected luminance mode of the image. Returns null while loading or if src is null/undefined. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for MediaTheme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

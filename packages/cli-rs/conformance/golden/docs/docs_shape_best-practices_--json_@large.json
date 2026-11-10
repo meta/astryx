@@ -1,0 +1,15 @@
+{
+ "id": "docs_shape_best-practices_--json_@large",
+ "args": [
+  "docs",
+  "shape",
+  "best-practices",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Best Practices\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Use --radius-element for interactive controls (buttons, inputs, selectors).\",\n          \"Use --radius-container for content containers (cards, panels, dialogs).\",\n          \"Use --radius-full for pill shapes (badges, tags, avatar status dots).\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Use --radius-page for small elements; it's meant for page-level containers.\",\n          \"Hardcode radius values; they won't scale with theme radius multipliers.\"\n        ]\n      }\n    ],\n    \"id\": \"best-practices\",\n    \"links\": {\n      \"up\": \"astryx docs shape --index\",\n      \"previous\": \"astryx docs shape concentric-radius\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

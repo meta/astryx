@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_block_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "block",
+  "Thing"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown contribution kind \"block\". Choose component, doc, template, codemod, agent-doc, or theme.\n",
+ "exit": 1,
+ "files": []
+}

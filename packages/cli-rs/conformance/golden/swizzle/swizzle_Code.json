@@ -1,0 +1,34 @@
+{
+ "id": "swizzle_Code",
+ "args": [
+  "swizzle",
+  "Code"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/Code/\n\nWhat @astryxdesign/core exports is imported from @astryxdesign/core; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nIt imports these npm packages; install any your project lacks: @stylexjs/stylex@\"^0.19.0\" react@\">=19.0.0\"\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n\n! These components use StyleX and require a StyleX compiler in your build.\n  Without one, importing them throws \"Unexpected 'stylex.create' call at runtime\"\n  and the page does not render. See setup per framework:\n  npx @astryxdesign/cli@0.7.12 docs styling\n  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -\n  use an SWC-based StyleX transform instead (covered in the guide).\n\nCustomizing a component often signals a gap in the design system.\nLet the maintainers know what you needed:\n  https://github.com/meta/astryx/issues/new\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/Code/Code.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file Code.tsx\n * @input Uses React, StyleX, theme tokens\n * @output Exports Code component for inline code styling\n * @position Core implementation; lives in own Code/ dir, re-exported by CodeBlock/\n *\n * SYNC: When modified, update:\n * - /packages/core/src/Code/Code.doc.mjs (consumer API and theming metadata)\n * - /docs/specs/components/Code/Code.spec.md (behavior and verification map)\n * - /packages/core/src/CodeBlock/index.ts (compatibility re-exports if types change)\n * - /packages/cli/assets/templates/blocks/components/Code/ (showcase blocks)\n * - /packages/cli/assets/templates/blocks/components/CodeBlock/ (showcase blocks)\n */\n\nimport type {ReactNode} from 'react';\nimport * as stylex from '@stylexjs/stylex';\nimport {\n  colorVars,\n  spacingVars,\n  radiusVars,\n  typographyVars,\n  typeScaleVars,\n} from '@astryxdesign/core/theme/tokens.stylex';\nimport {mergeProps} from '@astryxdesign/core/utils';\nimport type {BaseProps} from '@astryxdesign/core/BaseProps';\nimport {themeProps} from '@astryxdesign/core/utils';\n\nconst styles = stylex.create({\n  base: {\n    fontFamily: typographyVars['--font-family-code'],\n    fontSize: typeScaleVars['--text-code-size'],\n    lineHeight: 'inherit',\n    backgroundColor: colorVars['--color-background-muted'],\n    paddingInline: spacingVars['--spacing-1'],\n    paddingBlock: spacingVars['--spacing-0'],\n    borderRadius: radiusVars['--radius-inner'],\n    // Prevent code from breaking parent layout\n    overflowWrap: 'break-word',\n    wordBreak: 'break-word',\n  },\n});\n\nconst colorStyles = stylex.create({\n  primary: {\n    color: colorVars['--color-text-primary'],\n  },\n  secondary: {\n    color: colorVars['--color-text-secondary'],\n  },\n  inherit: {\n    color: 'inherit',\n  },\n});\n\nconst sizeStyles = stylex.create({\n  // Adopt the surrounding text's font-size and line-height, for inline code\n  // that should match differently-sized text around it.\n  inherit: {\n    fontSize: 'inherit',\n    lineHeight: 'inherit',\n  },\n});\n\n/** Text color for {@link Code}, mirroring the primary/secondary/inherit subset of Text. */\nexport type CodeColor = 'primary' | 'secondary' | 'inherit';\n\n/** Font size for {@link Code}. `'inherit'` adopts the surrounding text size. */\nexport type CodeSize = 'inherit';\n\nexport interface CodeProps extends BaseProps<HTMLElement> {\n  /** Ref forwarded to the root element */\n  ref?: React.Ref<HTMLElement>;\n  /**\n   * Text color. Mirrors the Text color subset.\n   * @default 'primary'\n   */\n  color?: CodeColor;\n  /**\n   * Font size. Set to `'inherit'` to adopt the surrounding text's font-size\n   * and line-height (useful for inline code inside larger/smaller text).\n   */\n  size?: CodeSize;\n  /** Code content */\n  children: ReactNode;\n}\n\n/**\n * Inline code element. Renders a styled `<code>` with monospace font,\n * muted background, and design-system-consistent sizing.\n *\n * For fenced code blocks with syntax highlighting, use `CodeBlock`.\n *\n * @example\n * ```\n * <Text type=\"body\">\n *   Use <Code>const x = 1</Code> to declare a variable.\n * </Text>\n * ```\n */\nexport function Code({\n  children,\n  color = 'primary',\n  size,\n  xstyle,\n  className,\n  style,\n  ref,\n  ...props\n}: CodeProps) {\n  return (\n    <code\n      ref={ref}\n      {...props}\n      {...mergeProps(\n        themeProps('code', {color, size}),\n        stylex.props(\n          styles.base,\n          colorStyles[color],\n          size && sizeStyles[size],\n          xstyle,\n        ),\n        className,\n        style,\n      )}>\n      {children}\n    </code>\n  );\n}\n\nCode.displayName = 'Code';\n"
+  },
+  {
+   "path": "app/components/astryx/Code/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file index.ts\n * @input Code component source\n * @output Exports Code and its props type\n * @position Entry point for @astryxdesign/core/Code subpath export\n */\n\nexport {Code, type CodeProps, type CodeColor, type CodeSize} from './Code';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

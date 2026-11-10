@@ -1,0 +1,17 @@
+{
+ "id": "pg_palette-basic-json_--out_palette-out-x-txt",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/basic.json",
+  "--out",
+  "palette/out/x.txt"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette output must end in .ts or .json.\n",
+ "exit": 1,
+ "files": []
+}

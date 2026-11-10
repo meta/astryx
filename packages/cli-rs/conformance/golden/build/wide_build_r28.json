@@ -1,0 +1,19 @@
+{
+ "id": "wide_build_r28",
+ "args": [
+  "build",
+  "For picker for copy for new In for Date : required , heading comments — banner basic on two contact —"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"For picker for copy for new In for Date : required , heading comments - banner basic on two contact -\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe closest template; none is exactly this page. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        contact-form\npackage:     @astryxdesign/core\ndescription: Flat single-column form mixing control types (text, pill toggles, dropdowns, long free-text) landing on one full-width submit.\ncommand:     npx @astryxdesign/cli@0.7.12 template contact-form --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        table-page\npackage:     @astryxdesign/core\ndescription: Flat table of uniform rows under a block of record-level facts, narrowed three ways at once - a full-text search box, a scope toggle, and per-column popovers - with sortable and filterable columns, per-row hover detail, and totals derived from the visible rows that flag themselves as partial while a filter is on.\ncommand:     npx @astryxdesign/cli@0.7.12 template table-page --type page <path>\n\nname:        login\npackage:     @astryxdesign/core\ndescription: Minimal centered credential form on a plain ground: two fields and a submit, nothing competing for attention.\ncommand:     npx @astryxdesign/cli@0.7.12 template login --type page <path>\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        BannerStatuses\npackage:     @astryxdesign/core\ndescription: All 4 banner statuses: info, success, warning, and error.\n\nname:        DialogFormDialog\npackage:     @astryxdesign/core\ndescription: Collects user input without navigating away from the page.\n\nname:        BannerWithActionButton\npackage:     @astryxdesign/core\ndescription: Add a button to a banner so the user can act on the message.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Selector\npackage:     @astryxdesign/core\ndescription: A dropdown selector for choosing a single value from a list of options.\n\nname:        Banner\npackage:     @astryxdesign/core\ndescription: Banner shows a persistent message at the top of a page or section.\n\nname:        ComplexSelector\npackage:     @astryxdesign/core\ndescription: Use ComplexSelector when a selection needs richer custom content than a Selector option row.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

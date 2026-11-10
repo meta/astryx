@@ -1,0 +1,15 @@
+{
+ "id": "component_ChatEmojiPicker_--props_--json_@large",
+ "args": [
+  "component",
+  "ChatEmojiPicker",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"onSelect\",\n      \"type\": \"(emoji: string) => void\",\n      \"description\": \"Called with the picked emoji character. The popover closes itself after selection.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"emojis\",\n      \"type\": \"readonly {emoji: string; name: string}[]\",\n      \"description\": \"Emoji options rendered in the grid, 8 per row. name drives filtering and accessible labels.\",\n      \"default\": \"DEFAULT_CHAT_EMOJIS\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the popover dialog.\",\n      \"default\": \"'Pick an emoji'\"\n    },\n    {\n      \"name\": \"searchLabel\",\n      \"type\": \"string\",\n      \"description\": \"Placeholder and hidden label for the filter input.\",\n      \"default\": \"'Search emoji'\"\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Trigger element. Must contain a button; the popover wires up click handlers and ARIA automatically.\",\n      \"required\": true\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

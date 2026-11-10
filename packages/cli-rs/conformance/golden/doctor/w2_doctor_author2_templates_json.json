@@ -1,0 +1,15 @@
+{
+ "id": "w2_doctor_author2_templates_json",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "--json"
+ ],
+ "fixture": "doctor-author2",
+ "fixtureHash": "aa955d534238e078+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.template-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/kit2\",\n    \"version\": \"2.0.0\",\n    \"conflicts\": [\n      {\n        \"id\": \"dashboard\",\n        \"severity\": \"warning\",\n        \"integrationPackage\": \"@acme/kit2\",\n        \"integrationType\": \"page\",\n        \"integrationName\": \"dashboard\",\n        \"coreMatches\": [\n          {\n            \"type\": \"page\",\n            \"name\": \"Analytics Dashboard\"\n          }\n        ],\n        \"message\": \"Template id \\\"dashboard\\\" conflicts with Core (page \\\"Analytics Dashboard\\\"). Consider renaming the integration template. If you keep it, always select it with --package.\",\n        \"command\": \"npx @astryxdesign/cli@0.7.12 template dashboard --package @acme/kit2\"\n      }\n    ],\n    \"issues\": [\n      {\n        \"code\": \"source_without_component_doc\",\n        \"severity\": \"warning\",\n        \"message\": \"Component source \\\"Orphan.tsx\\\" has no same-stem metadata file Orphan.doc.mjs, so Astryx ignores it. Fix: add Orphan.doc.mjs beside it with type: 'component'; `astryx docs authoring component-doc` lists its fields.\"\n      },\n      {\n        \"code\": \"duplicate_prop\",\n        \"severity\": \"warning\",\n        \"message\": \"Gauge's prop \\\"value\\\" is documented twice: props[0] and props[1].\",\n        \"fix\": \"In src/Gauge/Gauge.doc.mjs, delete props[1] (the second \\\"value\\\" entry), keeping what it adds in props[0].\",\n        \"file\": \"src/Gauge/Gauge.doc.mjs\",\n        \"line\": 1\n      },\n      {\n        \"code\": \"unknown_translated_prop\",\n        \"severity\": \"warning\",\n        \"message\": \"docsZh.propDescriptions names \\\"ghost\\\", but no prop entry of Gauge is named \\\"ghost\\\" (an overlay matches an entry's whole name), so that text is never shown.\",\n        \"fix\": \"In src/Gauge/Gauge.doc.mjs, remove \\\"ghost\\\" from docsZh.propDescriptions, or document the prop \\\"ghost\\\" first.\",\n        \"file\": \"src/Gauge/Gauge.doc.mjs\",\n        \"line\": 2\n      },\n      {\n        \"code\": \"unreachable_contribution\",\n        \"severity\": \"warning\",\n        \"message\": \"Found contribution metadata \\\"lost/Widget.doc.mjs\\\" outside every declared integration root, so it contributes nothing. Fix: move it under src/ (the components root). Also add Widget.tsx beside it.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

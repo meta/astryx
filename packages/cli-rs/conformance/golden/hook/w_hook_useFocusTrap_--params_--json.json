@@ -1,0 +1,15 @@
+{
+ "id": "w_hook_useFocusTrap_--params_--json",
+ "args": [
+  "hook",
+  "useFocusTrap",
+  "--params",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail.params\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"options\",\n      \"type\": \"UseFocusTrapOptions\",\n      \"description\": \"Configuration object for the focus trap.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"options.isActive\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether the focus trap is currently active.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"options.onEscape\",\n      \"type\": \"() => void\",\n      \"description\": \"Callback when Escape key is pressed inside the trapped container.\",\n      \"required\": false\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

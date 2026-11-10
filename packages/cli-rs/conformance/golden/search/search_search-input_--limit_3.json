@@ -1,0 +1,21 @@
+{
+ "id": "search_search-input_--limit_3",
+ "args": [
+  "search",
+  "search input",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"search input\" (3 of 250)\n\nname:        TextInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TextInput\ndescription: TextInput collects short-form text like names, emails, or search queries. Use it for single-line values where the expected input is brief. Pair it with validation status to guide users through required or formatted fields.\ncommand:     npx @astryxdesign/cli@0.7.12 component TextInput\n\nname:        InputGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/InputGroup\ndescription: InputGroup connects an input with prefix/suffix addons in a single visual unit. Use it for URL fields, currency inputs, search fields with action buttons, or any input that needs contextual decorations.\ncommand:     npx @astryxdesign/cli@0.7.12 component InputGroup\n\nname:        PowerSearch\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/PowerSearch\ndescription: PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead.\ncommand:     npx @astryxdesign/cli@0.7.12 component PowerSearch\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'search input'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

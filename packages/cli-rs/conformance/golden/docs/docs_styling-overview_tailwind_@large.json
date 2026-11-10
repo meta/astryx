@@ -1,0 +1,20 @@
+{
+ "id": "docs_styling-overview_tailwind_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "tailwind"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Tailwind\n\nInstall:\n```bash\nnpm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral\n```\n\nglobals.css:\n```css\n@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;\n\n@import \"tailwindcss/theme.css\" layer(theme);\n@import \"tailwindcss/preflight.css\" layer(base);\n@import \"@astryxdesign/core/reset.css\";\n@import \"@astryxdesign/core/astryx.css\";\n@import \"@astryxdesign/theme-neutral/theme.css\";\n@import \"@astryxdesign/core/tailwind-theme.css\";\n@import \"tailwindcss/utilities.css\" layer(utilities);\n```\n\nThe `@layer` declaration is critical — without it, component styles outrank Tailwind utilities and `className` overrides stop working. The bridge (`tailwind-theme.css`) maps classes like `text-primary`, `bg-surface`, and `rounded-lg` to design tokens with no JS.\n\nA project with Tailwind already set up needs a smaller change, which `npx @astryxdesign/cli@0.7.12 docs styling-libraries/tailwind` shows. For Tailwind v3, see the layer workaround in `npx @astryxdesign/cli@0.7.12 docs migration/migration-setup`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview plain\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview stylex-own-code\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

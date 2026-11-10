@@ -1,0 +1,13 @@
+{
+ "id": "shell_help_blog_@oneclicommand",
+ "args": [
+  "help",
+  "blog"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx blog [options] [slug]\n\nRead the Astryx blog from the published feed\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n  1  unknown slug, or the feed or a post cannot be fetched\n\nExamples:\n  # List posts\n  acme astryx blog\n  # Read one post\n  acme astryx blog introducing-astryx --json\n\nMore: acme astryx docs cli/commands/blog\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

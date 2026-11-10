@@ -1,0 +1,20 @@
+{
+ "id": "hook_useLightbox_--params",
+ "args": [
+  "hook",
+  "useLightbox",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseLightboxOptions` | - | Configuration options for the lightbox. **(required)** |\n| `options.media` | `LightboxMedia \\| LightboxMedia[]` | - | Media to display in the lightbox. Pass a single object for one item, or an array for gallery mode. **(required)** |\n| `options.hasZoom` | `boolean` | `false` | Enable zoom on double-click, or Enter/Space/+/- via keyboard (images only). When zoomed, drag or use arrow keys to pan. |\n| `options.hasAutoPlay` | `boolean` | `false` | Whether video should autoplay when the lightbox opens. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

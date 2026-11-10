@@ -1,0 +1,13 @@
+{
+ "id": "discover_chart_@syntaxconfig",
+ "args": [
+  "discover",
+  "chart"
+ ],
+ "fixture": "syntaxconfig",
+ "fixtureHash": "ab195cfd5f559ef1+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unexpected end of input\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_PowerSearchShowcase_--json_@large",
+ "args": [
+  "template",
+  "PowerSearchShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"PowerSearchShowcase\",\n    \"description\": \"Token-based filter bar with enum and text fields, pre-populated with sample filters.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"PowerSearch\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {PowerSearch} from '@astryxdesign/core/PowerSearch';\\nimport type {\\n  PowerSearchConfig,\\n  PowerSearchFilter,\\n} from '@astryxdesign/core/PowerSearch';\\n\\nconst config: PowerSearchConfig = {\\n  name: 'BasicSearch',\\n  fields: [\\n    {\\n      key: 'status',\\n      label: 'Status',\\n      defaultOperator: 'is',\\n      operators: [\\n        {\\n          key: 'is',\\n          label: 'is',\\n          value: {\\n            type: 'enum',\\n            values: [\\n              {value: 'open', label: 'Open'},\\n              {value: 'in_progress', label: 'In Progress'},\\n              {value: 'closed', label: 'Closed'},\\n            ],\\n          },\\n        },\\n      ],\\n    },\\n    {\\n      key: 'title',\\n      label: 'Title',\\n      defaultOperator: 'contains',\\n      operators: [\\n        {key: 'contains', label: 'contains', value: {type: 'string'}},\\n      ],\\n    },\\n  ],\\n};\\n\\nconst initialFilters: PowerSearchFilter[] = [\\n  {field: 'status', operator: 'is', value: {type: 'enum', value: 'open'}},\\n  {\\n    field: 'title',\\n    operator: 'contains',\\n    value: {type: 'string', value: 'dashboard'},\\n  },\\n];\\n\\nexport default function PowerSearchShowcase() {\\n  const [filters, setFilters] = useState<PowerSearchFilter[]>(initialFilters);\\n\\n  return (\\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\\n      <PowerSearch\\n        config={config}\\n        filters={filters}\\n        onChange={newFilters => setFilters([...newFilters])}\\n        placeholder=\\\"Search by status, title...\\\"\\n      />\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

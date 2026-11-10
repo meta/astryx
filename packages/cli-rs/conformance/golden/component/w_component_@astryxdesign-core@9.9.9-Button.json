@@ -1,0 +1,13 @@
+{
+ "id": "w_component_@astryxdesign-core@9.9.9-Button",
+ "args": [
+  "component",
+  "@astryxdesign/core@9.9.9/Button"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/core@9.9.9\" is not installed\n\n  npx @astryxdesign/cli@0.7.12 discover @astryxdesign/core@9.9.9  (look up this package version)\n",
+ "exit": 1,
+ "files": []
+}

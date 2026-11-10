@@ -1,0 +1,16 @@
+{
+ "id": "w_doctor_int_validate_dotdot-x_broken_json",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "../x",
+  "--json"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"../x\",\n    \"version\": null,\n    \"issues\": [\n      {\n        \"code\": \"invalid_package_spec\",\n        \"severity\": \"error\",\n        \"message\": \"Invalid integration package name \\\"../x\\\". Use a bare package name (no path segments).\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

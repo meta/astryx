@@ -1,0 +1,16 @@
+{
+ "id": "theme_list_--package_nope-pkg_--json",
+ "args": [
+  "theme",
+  "list",
+  "--package",
+  "nope-pkg",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.list\",\n  \"data\": [],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

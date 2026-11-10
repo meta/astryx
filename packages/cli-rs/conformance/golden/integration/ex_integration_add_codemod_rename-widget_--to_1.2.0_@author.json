@@ -1,0 +1,28 @@
+{
+ "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@author",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "rename-widget",
+  "--to",
+  "1.2.0"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "codemod contribution added\n\n[ok] rename-widget\n\nDeclare codemod root ./codemods in astryx.integration.mjs.\n\n- codemods/1.2.0/rename-widget.mjs\n- astryx.integration.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  codemods: './codemods'\n};\n"
+  },
+  {
+   "path": "author/codemods/1.2.0/rename-widget.mjs",
+   "status": "created",
+   "text": "export default {\n  type: 'code',\n  title: 'Rename Widget',\n  transform(file, api) {\n    // Replace this with your transform logic.\n    return file.source;\n  },\n};\n"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_BottomSheetSwitcher_--props_@large",
+ "args": [
+  "component",
+  "BottomSheetSwitcher",
+  "--props"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `ref` | `Ref<HTMLDialogElement>` | - | Ref resolved to the native dialog hosting the flow: the active sheet's dialog, which changes to the next sheet's on a handoff; the exiting sheet's through its exit; and, while the flow is closed, the dialog that hosted it last (or the first mounted sheet's). It is never null while a sheet is mounted, from the first commit on. id and data-testid render on this dialog only: a flow that mounts open carries them on the active sheet's dialog in server markup too; a flow that mounts closed carries them from the first commit's synchronous re-render on, and its server markup carries them on no element. Other dialog props apply to every sheet dialog. |\n| `onCancel` | `(event: SyntheticEvent<HTMLDialogElement>) => void` | - | Called before the switcher handles a native cancel request (Escape or the platform close). Attached to every sheet dialog; the browser raises cancel on the dialog it is presenting, the active sheet's. Calling preventDefault() keeps the controlled flow open. |\n| `activeSheet` | `string \\| null` | - | ID of the interactive BottomSheet, or null when the flow should close. Match a nested BottomSheet's unique sheetId; the previous sheet may remain visually present and inert while the new sheet enters, simultaneously align downward behind a shorter step, then fade away. **(required)** |\n| `onActiveSheetChange` | `(activeSheet: string \\| null) => void` | - | Called with null when the active sheet dismisses according to its purpose. Child BottomSheets may use purpose='form' or purpose='required' to limit implicit dismissal while flow controls can still use the same state setter to switch sheets or close the flow. **(required)** |\n| `hasScrim` | `boolean` | `true` | Whether the sheet dialogs are modal. true presents each sheet with showModal() for a native ::backdrop, native focus containment, one body scroll lock held for the whole flow, and click-to-dismiss when the active BottomSheet has purpose='info'; only one backdrop paints at a time. false uses show() with no backdrop and leaves the page interactive; avoid transformed, contained, or clipping ancestors because a non-modal dialog remains in its containing context. |\n| `children` | `ReactNode` | - | BottomSheets identified by unique sheetId values. **(required)** |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

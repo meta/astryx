@@ -1,0 +1,19 @@
+{
+ "id": "template_useScrollLockHookUsage_@large",
+ "args": [
+  "template",
+  "useScrollLockHookUsage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useEffect, useState} from 'react';\nimport * as stylex from '@stylexjs/stylex';\nimport {Button} from '@astryxdesign/core/Button';\nimport {useFocusTrap, useScrollLock} from '@astryxdesign/core/hooks';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Link} from '@astryxdesign/core/Link';\nimport {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  menu: {\n    width: '100%',\n    height: '100%',\n    maxWidth: 'none',\n    maxHeight: 'none',\n    margin: 0,\n    borderWidth: 0,\n    overflowY: 'auto',\n    padding: spacingVars['--spacing-4'],\n    color: colorVars['--color-text-primary'],\n    backgroundColor: colorVars['--color-background-surface'],\n  },\n});\n\nconst MENU_ITEMS = ['Products', 'Pricing', 'Customers', 'Support'];\n\nexport default function UseScrollLockHookUsage() {\n  const [isOpen, setIsOpen] = useState(false);\n  useScrollLock(isOpen);\n  const {containerRef, focusFirst} = useFocusTrap<HTMLDialogElement>({\n    isActive: isOpen,\n    onEscape: close,\n  });\n\n  // The dialog leaves the top layer before the state change, so the page is\n  // no longer inert when the focus trap hands focus back to Menu.\n  function close() {\n    containerRef.current?.close();\n    setIsOpen(false);\n  }\n\n  useEffect(() => {\n    const dialog = containerRef.current;\n    if (isOpen && dialog != null && !dialog.open) {\n      dialog.showModal();\n      focusFirst();\n    }\n  }, [isOpen, containerRef, focusFirst]);\n\n  return (\n    <>\n      <Button label=\"Menu\" onClick={() => setIsOpen(true)} />\n      <dialog\n        ref={containerRef}\n        aria-label=\"Menu\"\n        onCancel={event => {\n          event.preventDefault();\n          close();\n        }}\n        {...stylex.props(styles.menu)}>\n        <nav aria-label=\"Site menu\">\n          <VStack gap={4} hAlign=\"start\">\n            <Button label=\"Close menu\" variant=\"secondary\" onClick={close} />\n            {MENU_ITEMS.map(item => (\n              <Link\n                key={item}\n                href={`#menu-${item.toLowerCase()}`}\n                onClick={close}>\n                {item}\n              </Link>\n            ))}\n          </VStack>\n        </nav>\n      </dialog>\n    </>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

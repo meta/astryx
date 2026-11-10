@@ -1,0 +1,15 @@
+{
+ "id": "ex_search_warm_--type_theme_@empty",
+ "args": [
+  "search",
+  "warm",
+  "--type",
+  "theme"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "Results for \"warm\" (4)\n\nname:        butter\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Butter\ndescription: Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\ncommand:     npx @astryxdesign/cli@0.7.12 theme eject butter\n\nname:        chocolate\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Chocolate\ndescription: Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\ncommand:     npx @astryxdesign/cli@0.7.12 theme eject chocolate\n\nname:        neutral\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Neutral\ndescription: Restrained warm grays. Minimal and quiet, so the content stays the focus.\ncommand:     npx @astryxdesign/cli@0.7.12 theme eject neutral\n\nname:        stone\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Stone\ndescription: Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\ncommand:     npx @astryxdesign/cli@0.7.12 theme eject stone\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover warm\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

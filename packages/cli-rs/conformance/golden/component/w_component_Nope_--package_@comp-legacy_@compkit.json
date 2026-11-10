@@ -1,0 +1,15 @@
+{
+ "id": "w_component_Nope_--package_@comp-legacy_@compkit",
+ "args": [
+  "component",
+  "Nope",
+  "--package",
+  "@comp/legacy"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component \"Nope\" in package \"@comp/legacy\"\n",
+ "exit": 1,
+ "files": []
+}

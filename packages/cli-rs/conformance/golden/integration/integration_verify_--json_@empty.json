@@ -1,0 +1,14 @@
+{
+ "id": "integration_verify_--json_@empty",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": null,\n    \"version\": null,\n    \"packable\": false,\n    \"tarball\": null,\n    \"inventory\": {\n      \"manifest\": null,\n      \"roots\": [],\n      \"expectedFiles\": 0,\n      \"packedFiles\": 0\n    },\n    \"contributions\": {\n      \"local\": null,\n      \"packed\": null\n    },\n    \"issues\": [\n      {\n        \"code\": \"no_package\",\n        \"severity\": \"error\",\n        \"message\": \"No package.json found. Run this command inside an integration package.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

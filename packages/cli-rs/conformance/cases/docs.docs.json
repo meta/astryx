@@ -1,0 +1,2108 @@
+[
+  {
+    "id": "w_acme-guide_@integration",
+    "args": [
+      "docs",
+      "acme-guide"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--index_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--index"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--full_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--full"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--index_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--index",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--zh_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--zh"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--dense_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--dense"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--detail_compact_--full_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--detail",
+      "compact",
+      "--full"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_--detail_brief_--full_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "--detail",
+      "brief",
+      "--full"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_start_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "start"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_start_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "start",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_colors_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "colors"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_colors_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "colors",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_Colors_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "Colors"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_Colors_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "Colors",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_col_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "col"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_col_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "col",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_nope_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "nope"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme-guide_nope_--json_@integration",
+    "args": [
+      "docs",
+      "acme-guide",
+      "nope",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme_@integration",
+    "args": [
+      "docs",
+      "acme"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_acme_--json_@integration",
+    "args": [
+      "docs",
+      "acme",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides_@integration",
+    "args": [
+      "docs",
+      "guides"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides_--depth_1_@integration",
+    "args": [
+      "docs",
+      "guides",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides_--depth_1_--detail_compact_@integration",
+    "args": [
+      "docs",
+      "guides",
+      "--depth",
+      "1",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides_--json_@integration",
+    "args": [
+      "docs",
+      "guides",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--depth_1_@integration",
+    "args": [
+      "docs",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_--depth_0_--json_@integration",
+    "args": [
+      "docs",
+      "--depth",
+      "0",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_ACME-GUIDE_@integration",
+    "args": [
+      "docs",
+      "ACME-GUIDE"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides_start_@integration",
+    "args": [
+      "docs",
+      "guides",
+      "start"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_guides-acme-guide_@integration",
+    "args": [
+      "docs",
+      "guides/acme-guide"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "w_THEME",
+    "args": [
+      "docs",
+      "THEME"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_Theme_quick-start",
+    "args": [
+      "docs",
+      "Theme",
+      "quick-start"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_Quick-Start",
+    "args": [
+      "docs",
+      "theme",
+      "Quick-Start"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_Dark-mode",
+    "args": [
+      "docs",
+      "theme",
+      "Dark mode"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_dark",
+    "args": [
+      "docs",
+      "theme",
+      "dark"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_icon",
+    "args": [
+      "docs",
+      "theme",
+      "icon"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_1",
+    "args": [
+      "docs",
+      "theme",
+      "1"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--quick-start--",
+    "args": [
+      "docs",
+      "theme",
+      "  quick-start  "
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_EMPTY",
+    "args": [
+      "docs",
+      "theme",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tokens-tokens-color",
+    "args": [
+      "docs",
+      "tokens/tokens-color"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tokens-color",
+    "args": [
+      "docs",
+      "tokens/color"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-integrations",
+    "args": [
+      "docs",
+      "cli/integrations"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-integrations-foo",
+    "args": [
+      "docs",
+      "cli/integrations/foo"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-commands-doctor",
+    "args": [
+      "docs",
+      "cli/commands/doctor"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_doctor",
+    "args": [
+      "docs",
+      "doctor"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-host-entry",
+    "args": [
+      "docs",
+      "cli-host-entry"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_search",
+    "args": [
+      "docs",
+      "search"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-functions-search_foo",
+    "args": [
+      "docs",
+      "cli/api/functions/search",
+      "foo"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api_foo",
+    "args": [
+      "docs",
+      "cli/api",
+      "foo"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_layout_scaffold",
+    "args": [
+      "docs",
+      "layout",
+      "scaffold"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_layout_Budget",
+    "args": [
+      "docs",
+      "layout",
+      "Budget"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_layout_region",
+    "args": [
+      "docs",
+      "layout",
+      "region"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_guides_theme",
+    "args": [
+      "docs",
+      "guides",
+      "theme"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_foundations_spacing",
+    "args": [
+      "docs",
+      "foundations",
+      "spacing"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-commands-nope",
+    "args": [
+      "docs",
+      "cli/commands/nope"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-commands-nope-deeper",
+    "args": [
+      "docs",
+      "cli/commands/nope/deeper"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_a-b-c",
+    "args": [
+      "docs",
+      "a/b/c"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_xyz-tokens",
+    "args": [
+      "docs",
+      "xyz-tokens"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_color-tokens",
+    "args": [
+      "docs",
+      "color-tokens"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_use-theme",
+    "args": [
+      "docs",
+      "use-theme"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_EMPTY",
+    "args": [
+      "docs",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--lang_en",
+    "args": [
+      "docs",
+      "theme",
+      "--lang",
+      "en"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--lang_en_--full",
+    "args": [
+      "docs",
+      "theme",
+      "--lang",
+      "en",
+      "--full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--depth_2",
+    "args": [
+      "docs",
+      "theme",
+      "--depth",
+      "2"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--depth_all_--json",
+    "args": [
+      "docs",
+      "theme",
+      "--depth",
+      "all",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--depth_0",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--depth_01",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "01"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--depth_-1",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "-1"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--depth_1.5",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "1.5"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_quick-start_--dense",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start",
+      "--dense"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_quick-start_--zh",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start",
+      "--zh"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_quick-start_--detail_compact",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_quick-start_--detail_brief",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_quick-start_--index",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start",
+      "--index"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_principles_--index_--zh",
+    "args": [
+      "docs",
+      "principles",
+      "--index",
+      "--zh"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_principles_--zh_--json",
+    "args": [
+      "docs",
+      "principles",
+      "--zh",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_nope_--json",
+    "args": [
+      "docs",
+      "theme",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-commands_--depth_1_--detail_brief",
+    "args": [
+      "docs",
+      "cli/commands",
+      "--depth",
+      "1",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_authoring_--depth_all_--detail_compact",
+    "args": [
+      "docs",
+      "authoring",
+      "--depth",
+      "all",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--detail_compact",
+    "args": [
+      "docs",
+      "cli",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_--detail_brief",
+    "args": [
+      "docs",
+      "cli",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tokens_--full_--detail_compact",
+    "args": [
+      "docs",
+      "tokens",
+      "--full",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_global",
+    "args": [
+      "docs",
+      "global"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_global_--json",
+    "args": [
+      "docs",
+      "global",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_global-install-once",
+    "args": [
+      "docs",
+      "global/install-once"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_global-updates_--full",
+    "args": [
+      "docs",
+      "global/updates",
+      "--full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--lang_zh_theme",
+    "args": [
+      "docs",
+      "--lang",
+      "zh",
+      "theme"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_--index_--full_--json",
+    "args": [
+      "docs",
+      "theme",
+      "--index",
+      "--full",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_--depth_x_--json",
+    "args": [
+      "docs",
+      "--depth",
+      "x",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-functions",
+    "args": [
+      "docs",
+      "cli/api/functions"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-functions_--depth_1_--detail_compact",
+    "args": [
+      "docs",
+      "cli/api/functions",
+      "--depth",
+      "1",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_icon-definitions",
+    "args": [
+      "docs",
+      "icon-definitions"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-enums",
+    "args": [
+      "docs",
+      "cli/api/enums"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_authoring-reference",
+    "args": [
+      "docs",
+      "authoring/reference"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_authoring_component-doc",
+    "args": [
+      "docs",
+      "authoring",
+      "component-doc"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w__@docsint",
+    "args": [
+      "docs"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_--json_@docsint",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_--depth_all_@docsint",
+    "args": [
+      "docs",
+      "--depth",
+      "all"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_--depth_1_--json_@docsint",
+    "args": [
+      "docs",
+      "--depth",
+      "1",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_nope_@docsint",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_nope_--json_@docsint",
+    "args": [
+      "docs",
+      "nope",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_@docsint",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_color_@docsint",
+    "args": [
+      "docs",
+      "color"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w__@docsbroken",
+    "args": [
+      "docs"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_--json_@docsbroken",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_--depth_all_@docsbroken",
+    "args": [
+      "docs",
+      "--depth",
+      "all"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_--depth_1_--json_@docsbroken",
+    "args": [
+      "docs",
+      "--depth",
+      "1",
+      "--json"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_nope_@docsbroken",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_nope_--json_@docsbroken",
+    "args": [
+      "docs",
+      "nope",
+      "--json"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_theme_@docsbroken",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_color_@docsbroken",
+    "args": [
+      "docs",
+      "color"
+    ],
+    "fixture": "docsbroken"
+  },
+  {
+    "id": "w_acme-handbook_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_--depth_1_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "--depth",
+      "1"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_--depth_all_--detail_full_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "--depth",
+      "all",
+      "--detail",
+      "full"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_--depth_1_--json_--detail_compact_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "--depth",
+      "1",
+      "--json",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--full_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--full"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--index_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--index",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--zh_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--zh"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--zh_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--zh",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_--dense_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "--dense"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_overview_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "overview"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_rollback_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "rollback"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_rollback_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "rollback",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_\u6982\u8ff0_--zh_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "\u6982\u8ff0",
+      "--zh"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_rollback_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "rollback"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_nope_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "nope"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_deploying_@docsint",
+    "args": [
+      "docs",
+      "deploying"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-nope_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/nope"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_--json_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_--full_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "--full"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_--index_--json_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "--index",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_acme-tips_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "acme-tips"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_acme-tips_--json_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "acme-tips",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_light-dark-mode_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "light-dark-mode"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_--zh_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "--zh"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme-extra_@docsint",
+    "args": [
+      "docs",
+      "theme-extra"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-colors_@docsint",
+    "args": [
+      "docs",
+      "acme-colors"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-colors_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-colors",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-colors_--full_@docsint",
+    "args": [
+      "docs",
+      "acme-colors",
+      "--full"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_color_--json_@docsint",
+    "args": [
+      "docs",
+      "color",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-colors_palette_@docsint",
+    "args": [
+      "docs",
+      "acme-colors",
+      "palette"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_foundations_@docsint",
+    "args": [
+      "docs",
+      "foundations"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_foundations_--depth_1_--json_@docsint",
+    "args": [
+      "docs",
+      "foundations",
+      "--depth",
+      "1",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_guides_--depth_1_@docsint",
+    "args": [
+      "docs",
+      "guides",
+      "--depth",
+      "1"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_cross-links_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "cross-links"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_cross-links_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "cross-links",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook-deploying_cross-links_--detail_compact_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook/deploying",
+      "cross-links",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout_@docsint",
+    "args": [
+      "docs",
+      "layout"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout_--json_@docsint",
+    "args": [
+      "docs",
+      "layout",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout_--depth_1_--detail_compact_@docsint",
+    "args": [
+      "docs",
+      "layout",
+      "--depth",
+      "1",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-scaffold_--index_@docsint",
+    "args": [
+      "docs",
+      "layout/scaffold",
+      "--index"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-scaffold_acme-shell_@docsint",
+    "args": [
+      "docs",
+      "layout/scaffold",
+      "acme-shell"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-scaffold_--json_@docsint",
+    "args": [
+      "docs",
+      "layout/scaffold",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-responsive_@docsint",
+    "args": [
+      "docs",
+      "layout/responsive"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-responsive_--json_@docsint",
+    "args": [
+      "docs",
+      "layout/responsive",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-responsive_--full_@docsint",
+    "args": [
+      "docs",
+      "layout/responsive",
+      "--full"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout_breakpoints_@docsint",
+    "args": [
+      "docs",
+      "layout",
+      "breakpoints"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout_acme-shell_@docsint",
+    "args": [
+      "docs",
+      "layout",
+      "acme-shell"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_--depth_all_--json_@docsint",
+    "args": [
+      "docs",
+      "--depth",
+      "all",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-handbook_--depth_0_@docsint",
+    "args": [
+      "docs",
+      "acme-handbook",
+      "--depth",
+      "0"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_elevation_@docsint",
+    "args": [
+      "docs",
+      "elevation"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_elevation_--json_@docsint",
+    "args": [
+      "docs",
+      "elevation",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_browser-support_--index_--json_@docsint",
+    "args": [
+      "docs",
+      "browser-support",
+      "--index",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_icons_@docsint",
+    "args": [
+      "docs",
+      "icons"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-colors_--index_@docsint",
+    "args": [
+      "docs",
+      "acme-colors",
+      "--index"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-side-panels_@docsint",
+    "args": [
+      "docs",
+      "layout/side-panels"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_layout-headers-and-footers_--json_@docsint",
+    "args": [
+      "docs",
+      "layout/headers-and-footers",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theme_quick-start_@docsint",
+    "args": [
+      "docs",
+      "theme",
+      "quick-start"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w__@icons",
+    "args": [
+      "docs"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_--json_@icons",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions_@icons",
+    "args": [
+      "docs",
+      "icon-definitions"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions_--json_@icons",
+    "args": [
+      "docs",
+      "icon-definitions",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_--depth_all_@icons",
+    "args": [
+      "docs",
+      "--depth",
+      "all"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental_@icons",
+    "args": [
+      "docs",
+      "cli/experimental"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental_--depth_all_@icons",
+    "args": [
+      "docs",
+      "cli/experimental",
+      "--depth",
+      "all"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions-sparkle_@icons",
+    "args": [
+      "docs",
+      "icon-definitions/sparkle"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions-sparkle_--json_@icons",
+    "args": [
+      "docs",
+      "icon-definitions/sparkle",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions-random_@icons",
+    "args": [
+      "docs",
+      "icon-definitions/random"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_sparkle_@icons",
+    "args": [
+      "docs",
+      "sparkle"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions_--depth_1_--detail_compact_@icons",
+    "args": [
+      "docs",
+      "icon-definitions",
+      "--depth",
+      "1",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icons_@icons",
+    "args": [
+      "docs",
+      "icons"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_icon-definitions_@icons-unselected",
+    "args": [
+      "docs",
+      "icon-definitions"
+    ],
+    "fixture": "icons-unselected"
+  },
+  {
+    "id": "w_--depth_all_--json_@icons-unselected",
+    "args": [
+      "docs",
+      "--depth",
+      "all",
+      "--json"
+    ],
+    "fixture": "icons-unselected"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions_--json_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions-sparkle_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions/sparkle"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions-sparkle_--json_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions/sparkle",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions-random_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions/random"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions_--depth_1_--detail_compact_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions",
+      "--depth",
+      "1",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions_--depth_1_--json_--detail_full_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions",
+      "--depth",
+      "1",
+      "--json",
+      "--detail",
+      "full"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental_--depth_all_--json_@icons",
+    "args": [
+      "docs",
+      "cli/experimental",
+      "--depth",
+      "all",
+      "--json"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions-arrow-left_@icons",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions/arrow-left"
+    ],
+    "fixture": "icons"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions_@icons-unselected",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions"
+    ],
+    "fixture": "icons-unselected"
+  },
+  {
+    "id": "w_cli-experimental-icon-definitions-sparkle_@icons-unselected",
+    "args": [
+      "docs",
+      "cli/experimental/icon-definitions/sparkle"
+    ],
+    "fixture": "icons-unselected"
+  },
+  {
+    "id": "w_acme-big_@docsint",
+    "args": [
+      "docs",
+      "acme-big"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_--index_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "--index",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_huge_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "huge"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_part-170_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "part-170"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_theem_tab",
+    "args": [
+      "docs",
+      "theem",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_space",
+    "args": [
+      "docs",
+      "theem",
+      " "
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_empty",
+    "args": [
+      "docs",
+      "theem",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_tab_--json",
+    "args": [
+      "docs",
+      "theem",
+      "\t",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_tab",
+    "args": [
+      "docs",
+      "theme",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_tab",
+    "args": [
+      "docs",
+      "cli",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_layout_tab",
+    "args": [
+      "docs",
+      "layout",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-functions-search_tab",
+    "args": [
+      "docs",
+      "cli/api/functions/search",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_nbsp",
+    "args": [
+      "docs",
+      "theem",
+      "\u00a0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_nbsp",
+    "args": [
+      "docs",
+      "theme",
+      "\u00a0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_x",
+    "args": [
+      "docs",
+      "theem",
+      "x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_EMPTY_@integration-packjson-noname",
+    "args": [
+      "docs"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--json_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_--json_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_intro_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide",
+      "intro"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_theme_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_nope_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--depth_x_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "--depth",
+      "x"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_cli_--depth_1_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_EMPTY_@integration-packjson-noversion",
+    "args": [
+      "docs"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--json_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_--json_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_intro_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide",
+      "intro"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_theme_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_nope_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--depth_x_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "--depth",
+      "x"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_cli_--depth_1_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  }
+]

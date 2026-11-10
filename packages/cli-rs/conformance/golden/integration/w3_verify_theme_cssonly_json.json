@@ -1,0 +1,14 @@
+{
+ "id": "w3_verify_theme_cssonly_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/cssonly\",\n    \"version\": \"1.0.0\",\n    \"packable\": true,\n    \"tarball\": {\n      \"filename\": \"acme-cssonly-1.0.0.tgz\",\n      \"fileCount\": 6,\n      \"size\": 702,\n      \"unpackedSize\": 969\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 3,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 4,\n      \"packedFiles\": 4\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_exports_incomplete\",\n        \"severity\": \"warning\",\n        \"message\": \"Theme \\\"ocean\\\" exports @acme/cssonly/themes/ocean.css without a complete built module and stylesheet pair. Missing partner exports alone do not block packing; add the matching export when the theme should be importable. Every declared export must resolve. Staleness is a warning until the complete importable pair is declared.\"\n      },\n      {\n        \"code\": \"theme_stylesheet_stale\",\n        \"severity\": \"warning\",\n        \"message\": \"Theme \\\"ocean\\\" stylesheet does not match themes/ocean/oceanTheme.ts. This incomplete export remains packable, but run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before adding its matching export.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

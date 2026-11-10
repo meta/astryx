@@ -1,0 +1,82 @@
+[
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" experimental={{presentation: 'adaptive'}} />;\nconst b = <Tokenizer label=\"Tags\" experimental={{'presentation': 'bottom-sheet' as const}} />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" presentation=\"adaptive\" />;\nconst b = <Tokenizer label=\"Tags\" presentation=\"bottom-sheet\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer as Tags} from '@astryxdesign/core/Tokenizer';\nconst a = <Tags label=\"Tags\" experimental={{presentation: isPhone ? 'bottom-sheet' : 'popover'}} />;\nconst b = <Tags label=\"Tags\" experimental={{presentation}} />;",
+  "output": "import {Tokenizer as Tags} from '@astryxdesign/core/Tokenizer';\nconst a = <Tags label=\"Tags\" presentation={isPhone ? 'bottom-sheet' : 'popover'} />;\nconst b = <Tags label=\"Tags\" presentation={presentation} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Core from '@astryxdesign/core';\nconst a = <Core.Tokenizer label=\"Tags\" experimental={{presentation: 'adaptive', other: true}} />;",
+  "output": "import * as Core from '@astryxdesign/core';\nconst a = <Core.Tokenizer\n  label=\"Tags\"\n  experimental={{\n    other: true\n  }}\n  presentation=\"adaptive\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" experimental={options} />;\nconst b = <Tokenizer label=\"Tags\" experimental={{presentation: 'adaptive'}} {...rest} />;\nconst c = <Tokenizer label=\"Tags\" presentation=\"popover\" experimental={{presentation: 'adaptive'}} />;\nconst d = <Tokenizer label=\"Tags\" experimental={{...base, presentation: 'adaptive'}} />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because the value is not a literal object. */\nexperimental={options} />;\nconst b = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because a spread may also set presentation. */\nexperimental={{presentation: 'adaptive'}} {...rest} />;\nconst c = <Tokenizer label=\"Tags\" presentation=\"popover\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. presentation is already set; remove experimental.presentation. */\nexperimental={{presentation: 'adaptive'}} />;\nconst d = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because the object has a spread or a computed key. */\nexperimental={{...base, presentation: 'adaptive'}} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" experimental={{presentation: 'adaptive', 'presentation': 'popover'}} />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because the object sets presentation more than once. */\nexperimental={{presentation: 'adaptive', 'presentation': 'popover'}} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer {...args} label=\"Tags\" experimental={{presentation: 'bottom-sheet'}} />;\nconst b = <Tokenizer label=\"Tags\" experimental={{presentation: 'bottom-sheet'}} {...args} />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer {...args} label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because a spread may also set presentation. */\nexperimental={{presentation: 'bottom-sheet'}} />;\nconst b = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because a spread may also set presentation. */\nexperimental={{presentation: 'bottom-sheet'}} {...args} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer {...args} label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because a spread may also set presentation. */\nexperimental={{presentation: 'bottom-sheet'}} />;\nconst b = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because a spread may also set presentation. */\nexperimental={{presentation: 'bottom-sheet'}} {...args} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nimport {Tokenizer as Other} from 'some-other-library';\nconst a = <Tokenizer label=\"Tags\" presentation=\"popover\" />;\nconst b = <Tokenizer label=\"Tags\" experimental={{}} />;\nconst c = <Other label=\"Tags\" experimental={{presentation: 'adaptive'}} />;\nconst d = <Selector experimental={{presentation: 'adaptive'}} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" experimental={{presentation: 'adaptive'}} />;\nconst b = <Tokenizer label=\"Tags\" experimental={options} />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" presentation=\"adaptive\" />;\nconst b = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because the value is not a literal object. */\nexperimental={options} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.8/promote-tokenizer-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"Tags\" presentation=\"adaptive\" />;\nconst b = <Tokenizer label=\"Tags\" /* TODO(astryx upgrade): experimental.presentation was removed in favor of presentation. Move the value to presentation; the codemod left this one unchanged because the value is not a literal object. */\nexperimental={options} />;",
+  "output": null,
+  "error": null
+ }
+]

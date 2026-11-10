@@ -1,0 +1,34 @@
+{
+ "id": "swizzle_VStack",
+ "args": [
+  "swizzle",
+  "VStack"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/VStack/\n\nWhat @astryxdesign/core exports is imported from @astryxdesign/core; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n\nCustomizing a component often signals a gap in the design system.\nLet the maintainers know what you needed:\n  https://github.com/meta/astryx/issues/new\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/VStack/VStack.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file VStack.tsx\n * @input Uses Stack component\n * @output Exports VStack as a thin wrapper around Stack\n * @position Layout/Stack component; wraps Stack with direction='vertical'\n *\n * SYNC: When modified, update these files to stay in sync:\n * - /packages/core/src/Stack/Stack.doc.mjs\n * - /packages/core/src/VStack/VStack.test.tsx\n * - /packages/cli/assets/templates/blocks/components/VStack/ (showcase blocks)\n */\n\nimport {Stack, type StackProps} from '@astryxdesign/core/Stack';\nimport type {\n  StackCrossAlignment,\n  StackMainAlignment,\n} from '@astryxdesign/core/Stack/stack.stylex';\n\nexport interface VStackProps extends Omit<\n  StackProps,\n  'direction' | 'hAlign' | 'vAlign'\n> {\n  /** Ref forwarded to the root element */\n  ref?: React.Ref<HTMLElement>;\n  /**\n   * Horizontal alignment of items (cross-axis for vertical stack).\n   * @default 'stretch'\n   */\n  hAlign?: StackCrossAlignment;\n\n  /**\n   * Vertical alignment of items (main-axis for vertical stack).\n   * - `start`: Align to top\n   * - `center`: Center items\n   * - `end`: Align to bottom\n   * - `between`: Space between items\n   * - `around`: Space around items\n   * - `evenly`: Even space distribution\n   */\n  vAlign?: StackMainAlignment;\n\n  /**\n   * Main-axis alignment alias. Maps to `vAlign` on VStack.\n   * Mirrors CSS `justify-content` / Tailwind `justify-*`.\n   */\n  justify?: StackMainAlignment;\n\n  /**\n   * Cross-axis alignment alias. Maps to `hAlign` on VStack.\n   * Mirrors CSS `align-items` / Tailwind `items-*`.\n   */\n  align?: StackCrossAlignment;\n}\n\n/**\n * Vertical stack component for arranging items top-to-bottom.\n * Convenience wrapper around `Stack` with `direction=\"vertical\"`.\n *\n * @example\n * ```\n * <VStack gap={2}>\n *   <Item />\n *   <Item />\n * </VStack>\n * ```\n */\nexport function VStack({\n  ref,\n  justify,\n  align,\n  hAlign,\n  vAlign,\n  ...props\n}: VStackProps) {\n  return (\n    <Stack\n      {...props}\n      direction=\"vertical\"\n      hAlign={hAlign ?? align}\n      vAlign={vAlign ?? justify}\n      ref={ref}\n    />\n  );\n}\n\nVStack.displayName = 'VStack';\n"
+  },
+  {
+   "path": "app/components/astryx/VStack/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file index.ts\n * @input VStack component source\n * @output Exports VStack and its props type\n * @position Entry point for @astryxdesign/core/VStack subpath export\n */\n\nexport {VStack, type VStackProps} from './VStack';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

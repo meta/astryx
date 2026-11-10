@@ -1,0 +1,14 @@
+{
+ "id": "template_AvatarGroupShowcase_--json_@large",
+ "args": [
+  "template",
+  "AvatarGroupShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"AvatarGroupShowcase\",\n    \"description\": \"Overlapping avatar rows with a sliced visible set and a server-side overflow count. Shows team members in a compact facepile layout.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Avatar\",\n      \"AvatarGroupOverflow\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n'use client';\\n\\nimport {AvatarGroup, AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';\\nimport {Avatar} from '@astryxdesign/core/Avatar';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst USERS = [\\n  {\\n    name: 'Alex Daniels',\\n    key: 'alex',\\n  },\\n  {\\n    name: 'Ann Smith',\\n    key: 'ann',\\n  },\\n  {\\n    name: 'Carol Davis',\\n    key: 'carol',\\n  },\\n  {\\n    name: 'Gina Wilson',\\n    key: 'gina',\\n  },\\n  {\\n    name: 'Eve Park',\\n    key: 'eve',\\n  },\\n];\\n\\nexport default function AvatarGroupShowcase() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={8}>\\n      <Stack direction=\\\"vertical\\\" gap={3}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Team members\\n        </Text>\\n        <AvatarGroup size=\\\"lg\\\">\\n          {USERS.map(u => (\\n            <Avatar key={u.key} name={u.name} />\\n          ))}\\n        </AvatarGroup>\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={3}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          With overflow\\n        </Text>\\n        <AvatarGroup size=\\\"lg\\\">\\n          {USERS.slice(0, 3).map(u => (\\n            <Avatar key={u.key} name={u.name} />\\n          ))}\\n          <AvatarGroupOverflow count={USERS.length - 3} />\\n        </AvatarGroup>\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

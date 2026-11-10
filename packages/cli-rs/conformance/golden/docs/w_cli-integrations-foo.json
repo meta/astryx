@@ -1,0 +1,13 @@
+{
+ "id": "w_cli-integrations-foo",
+ "args": [
+  "docs",
+  "cli/integrations/foo"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"cli/integrations/foo\"\n\n  cli/component-lookups  (Look up one or several exact component identities, choose a focused projection, and handle complete batch receipts.)\n  cli/host-entry  (Run the Astryx CLI from your own command-line tool: the inputs `runHostedCli` takes, what it returns, and when the process ends instead.)\n  cli/experimental  (Features you can try now that may change or be removed in a patch release.)\n  cli/commands  (Every command and subcommand: usage, options, examples, exit codes, and what it does outside a project.)\n  cli/api  (The programmatic API: functions, the JSON output envelope, error codes, and response types.)\n",
+ "exit": 1,
+ "files": []
+}

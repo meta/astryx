@@ -1,0 +1,23 @@
+{
+ "id": "ex_experimental_icon_add_Dice5_--from_-acme-glyph-library_--new-definition_random_--description_Pick-something-at-random~3",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Dice5",
+  "--from",
+  "@acme/glyph-library",
+  "--new-definition",
+  "random",
+  "--description",
+  "Pick something at random.",
+  "--words",
+  "dice,shuffle,chance"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

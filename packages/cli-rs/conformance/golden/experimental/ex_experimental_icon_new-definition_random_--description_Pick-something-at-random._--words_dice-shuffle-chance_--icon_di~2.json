@@ -1,0 +1,21 @@
+{
+ "id": "ex_experimental_icon_new-definition_random_--description_Pick-something-at-random._--words_dice-shuffle-chance_--icon_di~2",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "random",
+  "--description",
+  "Pick something at random.",
+  "--words",
+  "dice,shuffle,chance",
+  "--icon",
+  "dice-5"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon new-definition works only in a project. Run it in the icon-set package.\n",
+ "exit": 1,
+ "files": []
+}

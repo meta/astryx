@@ -1,0 +1,13 @@
+{
+ "id": "postinstall_--help",
+ "args": [
+  "postinstall",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx postinstall [options]\n\nPrint the welcome message shown after install\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n\nExamples:\n  # Print the welcome box\n  npx @astryxdesign/cli@0.7.12 postinstall\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/postinstall\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

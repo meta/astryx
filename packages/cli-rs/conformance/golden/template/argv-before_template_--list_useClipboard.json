@@ -1,0 +1,14 @@
+{
+ "id": "argv-before_template_--list_useClipboard",
+ "args": [
+  "template",
+  "--list",
+  "useClipboard"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: `--list` cannot be combined with <name>: it lists templates and does not scaffold.\n",
+ "exit": 1,
+ "files": []
+}

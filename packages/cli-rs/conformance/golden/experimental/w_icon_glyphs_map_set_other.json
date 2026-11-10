@@ -1,0 +1,18 @@
+{
+ "id": "w_icon_glyphs_map_set_other",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--set",
+  "other",
+  "check",
+  "home"
+ ],
+ "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No icon set named \"other\" in this package\n\n  glyphs  (an icon set in this package)\n",
+ "exit": 1,
+ "files": []
+}

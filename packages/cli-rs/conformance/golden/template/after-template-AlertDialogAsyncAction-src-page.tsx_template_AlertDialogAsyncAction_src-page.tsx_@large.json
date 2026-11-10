@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AlertDialogAsyncAction-src-page.tsx_template_AlertDialogAsyncAction_src-page.tsx_@large",
+ "args": [
+  "template",
+  "AlertDialogAsyncAction",
+  "src/page.tsx"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Refusing to overwrite existing file src/page.tsx. Re-run with --overwrite (or -f) to replace it.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {AlertDialog} from '@astryxdesign/core/AlertDialog';\n\nexport default function AlertDialogAsyncAction() {\n  const [isLoading, setIsLoading] = useState(false);\n\n  return (\n    <AlertDialog\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      title=\"Revoke access?\"\n      description=\"This user will immediately lose access to all shared resources.\"\n      actionLabel=\"Revoke\"\n      isActionLoading={isLoading}\n      onAction={async () => {\n        setIsLoading(true);\n        await new Promise(r => setTimeout(r, 2000));\n        setIsLoading(false);\n      }}\n    />\n  );\n}\n"
+  }
+ ]
+}

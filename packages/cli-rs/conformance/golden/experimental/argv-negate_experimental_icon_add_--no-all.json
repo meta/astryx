@@ -1,0 +1,15 @@
+{
+ "id": "argv-negate_experimental_icon_add_--no-all",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--no-all"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-all'\n(Did you mean --all?)\n",
+ "exit": 1,
+ "files": []
+}

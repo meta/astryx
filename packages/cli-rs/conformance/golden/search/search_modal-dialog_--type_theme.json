@@ -1,0 +1,21 @@
+{
+ "id": "search_modal-dialog_--type_theme",
+ "args": [
+  "search",
+  "modal dialog",
+  "--type",
+  "theme"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "No results for \"modal dialog\".\n\nTry a broader term, or browse: npx @astryxdesign/cli@0.7.12 component --list\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'modal dialog'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,1411 @@
+[
+  {
+    "id": "bare",
+    "args": [],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "@empty",
+    "args": [],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "-h",
+    "args": [
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "-h_@empty",
+    "args": [
+      "-h"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "help",
+    "args": [
+      "help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_@empty",
+    "args": [
+      "help"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--version",
+    "args": [
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--version_@empty",
+    "args": [
+      "--version"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "-V",
+    "args": [
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "-V_@empty",
+    "args": [
+      "-V"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--json",
+    "args": [
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--json_@empty",
+    "args": [
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--bogus",
+    "args": [
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--bogus_@empty",
+    "args": [
+      "--bogus"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "nosuchcommand_--json",
+    "args": [
+      "nosuchcommand",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "nosuchcommand_--json_@empty",
+    "args": [
+      "nosuchcommand",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "compnent",
+    "args": [
+      "compnent"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "compnent_@empty",
+    "args": [
+      "compnent"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "serch_button",
+    "args": [
+      "serch",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "serch_button_@empty",
+    "args": [
+      "serch",
+      "button"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "help_nosuchcommand",
+    "args": [
+      "help",
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_nosuchcommand_@empty",
+    "args": [
+      "help",
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--version_--json",
+    "args": [
+      "--version",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--version_--json_@empty",
+    "args": [
+      "--version",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--zh",
+    "args": [
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--zh_@empty",
+    "args": [
+      "--zh"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--dense",
+    "args": [
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--dense_@empty",
+    "args": [
+      "--dense"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--lang_zh",
+    "args": [
+      "--lang",
+      "zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--lang_zh_@empty",
+    "args": [
+      "--lang",
+      "zh"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "--detail_brief",
+    "args": [
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--detail_brief_@empty",
+    "args": [
+      "--detail",
+      "brief"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "cols40_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "40"
+    }
+  },
+  {
+    "id": "cols80_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "80"
+    }
+  },
+  {
+    "id": "cols200_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "200"
+    }
+  },
+  {
+    "id": "cols-empty_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": ""
+    }
+  },
+  {
+    "id": "--help_tty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "cols60_--help_tty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true,
+    "env": {
+      "COLUMNS": "60"
+    }
+  },
+  {
+    "id": "cols40_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "40"
+    }
+  },
+  {
+    "id": "cols80_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "80"
+    }
+  },
+  {
+    "id": "cols200_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "200"
+    }
+  },
+  {
+    "id": "cols-empty_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": ""
+    }
+  },
+  {
+    "id": "nosuchcommand_tty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "cols60_nosuchcommand_tty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true,
+    "env": {
+      "COLUMNS": "60"
+    }
+  },
+  {
+    "id": "global_--json_component_Button",
+    "args": [
+      "--json",
+      "component",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--dense_component_Button",
+    "args": [
+      "--dense",
+      "component",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--zh_docs_principles",
+    "args": [
+      "--zh",
+      "docs",
+      "principles"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--detail_brief_component_Button",
+    "args": [
+      "--detail",
+      "brief",
+      "component",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_--json_Button",
+    "args": [
+      "component",
+      "--json",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--lang_dense_docs_tokens",
+    "args": [
+      "--lang",
+      "dense",
+      "docs",
+      "tokens"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--json_--dense",
+    "args": [
+      "component",
+      "Button",
+      "--json",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--zh_--dense",
+    "args": [
+      "component",
+      "Button",
+      "--zh",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--lang_zh_--zh",
+    "args": [
+      "component",
+      "Button",
+      "--lang",
+      "zh",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--version_component",
+    "args": [
+      "--version",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--version",
+    "args": [
+      "component",
+      "Button",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_--_component_Button",
+    "args": [
+      "--",
+      "component",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_--_Button",
+    "args": [
+      "component",
+      "--",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--json-true",
+    "args": [
+      "component",
+      "Button",
+      "--json=true"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_Button_--no-json",
+    "args": [
+      "component",
+      "Button",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_COMPONENT_Button",
+    "args": [
+      "COMPONENT",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_component_x",
+    "args": [
+      "component",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_search_x",
+    "args": [
+      "search",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "global_docs_x",
+    "args": [
+      "docs",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "--help_@pm-npm",
+    "args": [
+      "--help"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "@pm-npm",
+    "args": [],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "--help_@pm-pnpm",
+    "args": [
+      "--help"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "@pm-pnpm",
+    "args": [],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "--help_@pm-yarn",
+    "args": [
+      "--help"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "@pm-yarn",
+    "args": [],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "--help_@pm-yarnberry",
+    "args": [
+      "--help"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "@pm-yarnberry",
+    "args": [],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "--help_@pm-bun",
+    "args": [
+      "--help"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "@pm-bun",
+    "args": [],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "--help_@monorepo",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "@monorepo",
+    "args": [],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_--help_@monorepo",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web_@monorepo",
+    "args": [],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_--help_@monorepo",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_@monorepo",
+    "args": [],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_--help_@monorepo",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "in-monorepo.packages.api_@monorepo",
+    "args": [],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "--help_@monorepo-local",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "@monorepo-local",
+    "args": [],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_--help_@monorepo-local",
+    "args": [
+      "--help"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "in-monorepo-local.apps.site_@monorepo-local",
+    "args": [],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "--help_@configured",
+    "args": [
+      "--help"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "@configured",
+    "args": [],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "--help_@configts",
+    "args": [
+      "--help"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "@configts",
+    "args": [],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "--help_@badconfig",
+    "args": [
+      "--help"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "@badconfig",
+    "args": [],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "--help_@syntaxconfig",
+    "args": [
+      "--help"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "@syntaxconfig",
+    "args": [],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "--help_@unknownint",
+    "args": [
+      "--help"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "@unknownint",
+    "args": [],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.src",
+    "args": [],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core",
+    "args": [],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_--help_@large",
+    "args": [
+      "--help"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-large.src_@large",
+    "args": [],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_--help_@integration",
+    "args": [
+      "--help"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_@integration",
+    "args": [],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "in-._@empty",
+    "args": [],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "env-ua-pnpm_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_--help_@empty",
+    "args": [
+      "--help"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_nosuchcommand_@empty",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ci-1_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-1_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-true_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-true_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-false_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-false_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-0_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-0_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-github_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-github_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-xdg_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg-relative_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-xdg-relative_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-node-env-prod_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-node-env-prod_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-agent_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-agent_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-pnpm-home_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-pnpm-home_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-lang-zh_--help",
+    "args": [
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  },
+  {
+    "id": "env-lang-zh_nosuchcommand",
+    "args": [
+      "nosuchcommand"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  }
+]

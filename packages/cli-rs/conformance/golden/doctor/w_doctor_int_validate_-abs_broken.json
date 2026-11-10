@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_int_validate_-abs_broken",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "/abs"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "Validating integration: /abs\n\nseverity: [fail]\ncode:     invalid_package_spec\nmessage:  Invalid integration package name \"/abs\". Use a bare package name (no path segments).\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

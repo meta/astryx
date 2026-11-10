@@ -1,0 +1,8 @@
+/** @type {import('@astryxdesign/cli/authoring').AstryxIntegration} */
+const integration = {
+  name: 'x',
+  agentDocs: {append: ['a']},
+  components: './components'
+};
+
+export default integration;

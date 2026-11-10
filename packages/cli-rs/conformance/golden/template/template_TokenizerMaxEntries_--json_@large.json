@@ -1,0 +1,14 @@
+{
+ "id": "template_TokenizerMaxEntries_--json_@large",
+ "args": [
+  "template",
+  "TokenizerMaxEntries",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TokenizerMaxEntries\",\n    \"description\": \"Tokenizer with a maximum selection limit. The input hides automatically when the limit is reached, preventing further additions.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"Tokenizer\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Tokenizer} from '@astryxdesign/core/Tokenizer';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\\n\\nconst skills: SearchableItem[] = [\\n  {id: '1', label: 'React'},\\n  {id: '2', label: 'TypeScript'},\\n  {id: '3', label: 'GraphQL'},\\n  {id: '4', label: 'Node.js'},\\n  {id: '5', label: 'Python'},\\n  {id: '6', label: 'Rust'},\\n  {id: '7', label: 'Go'},\\n  {id: '8', label: 'Swift'},\\n];\\n\\nconst skillSource: SearchSource = {\\n  search: (query: string) =>\\n    skills.filter(s => s.label.toLowerCase().includes(query.toLowerCase())),\\n  bootstrap: () => skills,\\n};\\n\\nconst MAX_SKILLS = 3;\\n\\nexport default function TokenizerMaxEntries() {\\n  const [value, setValue] = useState<SearchableItem[]>([skills[0], skills[1]]);\\n\\n  return (\\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Limited to {MAX_SKILLS} selections — {MAX_SKILLS - value.length}{' '}\\n          remaining\\n        </Text>\\n        <Tokenizer\\n          label=\\\"Top Skills\\\"\\n          placeholder=\\\"Search skills...\\\"\\n          description={`Choose up to ${MAX_SKILLS} skills`}\\n          searchSource={skillSource}\\n          value={value}\\n          onChange={items => setValue(items)}\\n          maxEntries={MAX_SKILLS}\\n        />\\n      </Stack>\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

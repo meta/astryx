@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatEmojiPicker_--zh_@large",
+ "args": [
+  "component",
+  "ChatEmojiPicker",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatEmojiPicker\n\n包裹触发按钮的弹出层表情网格：短名过滤输入框 + 8 列网格，方向键在网格内移动焦点。选中表情会调用 onSelect 并关闭弹出层，焦点回到触发元素。内置小型默认表情集，可通过 emojis 覆盖。\n\n**Import:** `import {ChatEmojiPicker} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `onSelect` | `(emoji: string) => void` | - | 以选中的表情字符调用；弹出层随后自动关闭。 **(required)** |\n| `emojis` | `readonly {emoji: string; name: string}[]` | `DEFAULT_CHAT_EMOJIS` | 网格渲染的表情选项，每行 8 个。name 用于过滤和无障碍标签。 |\n| `label` | `string` | `'Pick an emoji'` | 弹出层对话框的无障碍标签。 |\n| `searchLabel` | `string` | `'Search emoji'` | 过滤输入框的占位符和隐藏标签。 |\n| `children` | `ReactNode` | - | 触发元素，必须包含一个按钮。 **(required)** |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

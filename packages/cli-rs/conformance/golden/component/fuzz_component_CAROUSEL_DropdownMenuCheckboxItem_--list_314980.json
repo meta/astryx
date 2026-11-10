@@ -1,0 +1,21 @@
+{
+ "id": "fuzz_component_CAROUSEL_DropdownMenuCheckboxItem_--list_314980",
+ "args": [
+  "component",
+  "CAROUSEL",
+  "DropdownMenuCheckboxItem",
+  "--list"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nCAROUSEL\n\nselector: CAROUSEL\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nCAROUSEL(gap: 0|0.5|1|1.5|2|3|4, hasSnap: boolean|SnapPaging)  <- from '@astryxdesign/core/Carousel'\n  Carousel scrolls a row of items horizontally when they overflow the available...\n  Targets: astryx-carousel | astryx-carousel-scroller preferred attrs: data-gap, data-padding, data-snap, data-edge-fade variants: gap, padding, snap, edgeFade\n  children: ReactNode, hasButtons, hasEdgeFade, hasLoop, padding, aria-label, ref, handleRef, xstyle, className, style, data-testid\n\n\nDropdownMenuCheckboxItem\n\nselector: DropdownMenuCheckboxItem\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nDropdownMenuCheckboxItem  <- from '@astryxdesign/core/DropdownMenu'\n  An independently checkable option inside DropdownMenu. The row owns menuitemc...\n  Targets: astryx-dropdown-menu-item preferred attrs: data-size variants: size\n  label, description, icon, value, onChange, isDisabled, hasCloseOnSelect, ref, endContent\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

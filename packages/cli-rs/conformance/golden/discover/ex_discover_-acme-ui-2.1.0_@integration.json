@@ -1,0 +1,13 @@
+{
+ "id": "ex_discover_-acme-ui-2.1.0_@integration",
+ "args": [
+  "discover",
+  "@acme/ui@2.1.0"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Package \"@acme/ui\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

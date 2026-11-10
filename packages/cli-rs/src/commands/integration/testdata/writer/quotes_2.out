@@ -1,0 +1,5 @@
+export default {
+  "name": "x",
+  'q': `t`,
+  components: './components'
+};

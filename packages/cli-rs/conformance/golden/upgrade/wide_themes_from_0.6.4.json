@@ -1,0 +1,20 @@
+{
+ "id": "wide_themes_from_0.6.4",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.6.4"
+ ],
+ "fixture": "upgrade-themes",
+ "fixtureHash": "544bb3b7c9285044+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.6.4\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-themes/src for source files...\nFound 7 source files\nApplying v0.6.7 codemods...\n  Give copied app themes their local descriptors\n!     ~ src/themes/deep-sea/deepSeaTheme.doc.mjs (would write)\nApplying v0.7.0 codemods...\n  Migrate removed component theme aliases and selectors\n!     ~ src/theme.ts (would change)\n!     ~ src/themes/brand/brandTheme.ts (would change)\n  Would update 2 files\n  Validate data-token ownership\n  Migrate input root styling to container/control parts\n  Preserve BottomSheet content padding\n  Rename emptySearchResultsText to emptySearchText\nApplying v0.7.2 codemods...\n  Migrate List edgeCompensation to edge\nApplying v0.7.5 codemods...\n  Migrate CodeBlock tokenizer to a custom language\nApplying v0.7.8 codemods...\n  Move Tokenizer's removed experimental presentation to presentation\n\n! Found 3 changes across 3 files.\nRun with --apply to write changes to disk.\n9 codemods to run (dry run)\nDry run complete\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/upgrade-themes\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

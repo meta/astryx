@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatMessage_--blocks_@large",
+ "args": [
+  "component",
+  "ChatMessage",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: ChatMessage\ndescription: A user multi-bubble group with delivery status and an assistant ghost response with avatar, name, timestamp, and model info.\n\nExamples\n\nname:        ChatMessageAvatarName\ndescription: Messages with avatars and sender names. Place the name on the bubble when using bubbles, or on the message wrapper for raw content.\n\nname:        ChatMessageGhost\ndescription: Ghost variant for messages without visible bubble boundaries. Keeps padding for alignment but renders a transparent background, useful for AI-style responses.\n\nname:        ChatMessageMultiBubble\ndescription: Grouped bubbles using the group prop for corner radius reduction. Use first, middle, and last to visually connect related bubbles from the same sender.\n\nRelated: 2 blocks that use ChatMessage\n\n- ChatMessageBubbleCustomContent\n- ChatMessageBubbleShowcase\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

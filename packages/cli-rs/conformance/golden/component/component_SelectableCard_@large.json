@@ -1,0 +1,19 @@
+{
+ "id": "component_SelectableCard_@large",
+ "args": [
+  "component",
+  "SelectableCard"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# SelectableCard\n\nA card that toggles between selected and unselected states with an accent border. For navigation use ClickableCard.\n\n**Import:** `import {SelectableCard} from '@astryxdesign/core/SelectableCard';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Container | Yes | Interactive div with accent border on selection. |\n| Content | Yes | Children rendered inside the card. |\n\n## Best Practices\n\n- **Do:** Use for multi-select choices: filter chips, feature add-ons, or option grids where several can be on.\n- **Do:** Use for multi-select groups; track the selected IDs in a Set.\n- **Do:** When focused, toggle selection with Space or Enter.\n- **Don't:** Use for navigation; use ClickableCard for that.\n- **Don't:** Use for a single-select group: each card is a checkbox, so assistive technology announces a multi-select group with one tab stop per card.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Accessibility label. **(required)** |\n| `isSelected` | `boolean` | - | Controlled selection state. **(required)** |\n| `onChange` | `(isSelected: boolean) => void` | - | Called when toggled. **(required)** |\n| `isDisabled` | `boolean` | `false` | Disables the card. |\n| `children` | `ReactNode` | - | Card content. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `4` | Inner padding. |\n| `variant` | `'default' \\| 'transparent' \\| 'muted' \\| 'blue' \\| 'cyan' \\| 'gray' \\| 'green' \\| 'orange' \\| 'pink' \\| 'purple' \\| 'red' \\| 'teal' \\| 'yellow'` | `'default'` | Background color variant. |\n| `elevation` | `'none' \\| 'low' \\| 'med' \\| 'high'` | `'none'` | Resting shadow depth. The selection ring composes on top, so a selected card keeps its shadow. |\n| `width` | `SizeValue` | - | Card width. |\n| `height` | `SizeValue` | - | Card height. |\n| `maxWidth` | `SizeValue` | - | Maximum card width. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-selectable-card` | `data-selected`, `data-variant` | default, transparent, muted, blue, cyan, gray, green, orange, pink, purple, red, teal, yellow | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'selectable-card': {\n    base: { /* CSS properties */ },\n    'selected:value': { /* variant-specific */ },\n  },\n}\n```\n\n**Themeable CSS variables** - additional properties that can be overridden in `defineTheme` component overrides.\n\n| CSS Variable | Default | Description |\n|-------------|---------|-------------|\n| `--selectable-card-ring-color` | `var(--color-accent)` | Colour of the selection ring drawn for a variant a theme added. The built-in variants each ring in their own border token and ignore this; a theme that adds a variant sets it in the same rule as that variant's `backgroundColor`, because no token the component could pick is guaranteed to contrast with a fill it cannot know. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

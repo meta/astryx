@@ -1,0 +1,20 @@
+{
+ "id": "title_docs_is-my-code-good_Understand-the-app_@large",
+ "args": [
+  "docs",
+  "is-my-code-good",
+  "Understand the app"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Understand the app\n\nDo not judge a file or surface in isolation. First learn the app context that makes a pattern correct, inconsistent, or incomplete.\n\n1. Name what the app is for, who uses it, and the task this surface helps them complete.\n2. Trace where the surface sits: its route, entry point, navigation path, parent shell, and the page or block pattern it is meant to use.\n3. Inspect sibling surfaces that do the same or adjacent jobs. Record their shared headers, actions, layout primitives, spacing, density, states, and narrow-screen behavior.\n4. Read project guidance, including the root and relevant nested `AGENTS.md` files. Record app-owned wrapper components and intentional app conventions.\n5. Record the installed `@astryxdesign/core`, `@astryxdesign/cli`, and integration-package versions from the project manifest and lockfile. Run the installed invocation of `npx @astryxdesign/cli@0.7.12 component --list` to see core and integration components, then inspect app-owned wrappers that do not appear in that catalog.\n6. List the real data states, roles and permissions, supported locales and RTL behavior, and mobile or narrow-width needs that affect the task.\n\nKeep this context with the review. Mark anything you could not learn as `not inspected`. Do not flag a documented, intentional app convention merely because it differs from a generic pattern; cite the convention and verify that the user task and accessibility requirements still work.\n\nUp: npx @astryxdesign/cli@0.7.12 docs is-my-code-good --index\nNext: npx @astryxdesign/cli@0.7.12 docs is-my-code-good choose-the-review\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

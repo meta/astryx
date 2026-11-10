@@ -1,0 +1,19 @@
+{
+ "id": "build_Breadcrumbs-Deep-Path",
+ "args": [
+  "build",
+  "Breadcrumbs — Deep Path"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"Breadcrumbs - Deep Path\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        BreadcrumbsDeepHierarchy\npackage:     @astryxdesign/core\ndescription: A 5-level breadcrumb trail for deeply nested content.\n\nname:        BreadcrumbsShowcase\npackage:     @astryxdesign/core\ndescription: A breadcrumb trail showing page hierarchy with linked ancestors and a current page.\n\nname:        BreadcrumbsSupportingVariant\npackage:     @astryxdesign/core\ndescription: Compare the default and supporting variants side by side.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 4; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Breadcrumbs\npackage:     @astryxdesign/core\ndescription: Breadcrumbs show a trail of links from the root to the current page.\n\nname:        OverflowList\npackage:     @astryxdesign/core\ndescription: A horizontal list that automatically hides items when they exceed the available width.\n\nname:        useOverflow\npackage:     @astryxdesign/core\ndescription: Measures children rendered in a hidden container to determine how many fit in the available width without flickering.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

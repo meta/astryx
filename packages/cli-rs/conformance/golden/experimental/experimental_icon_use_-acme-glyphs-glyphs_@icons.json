@@ -1,0 +1,26 @@
+{
+ "id": "experimental_icon_use_-acme-glyphs-glyphs_@icons",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "@acme/glyphs/glyphs"
+ ],
+ "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
+ "stdout": "[ok] experimental.iconSet is now \"@acme/glyphs/glyphs\" (@acme/glyphs/glyphs) in astryx.config.mjs.\n\nIt was \"glyphs\".\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/icons\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "icons/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {\"integrations\":[\"@acme/glyphs\"],\"experimental\":{\"iconSet\":'@acme/glyphs/glyphs'}};\n"
+  }
+ ]
+}

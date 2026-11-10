@@ -1,0 +1,45 @@
+{
+ "id": "swizzle_SizeContext_--json",
+ "args": [
+  "swizzle",
+  "SizeContext",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"swizzle.copy\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"component\": \"SizeContext\",\n    \"package\": \"@astryxdesign/core\",\n    \"outputDir\": \"components/astryx/SizeContext\",\n    \"filesCopied\": 5,\n    \"files\": [\n      \"index.ts\",\n      \"SizeContext.ts\",\n      \"../Layer/layerScopedContext.tsx\",\n      \"../utils/sharedContext.ts\",\n      \"../utils/sharedRealm.ts\"\n    ],\n    \"usesStyleX\": false,\n    \"dependencies\": {\n      \"react\": \">=19.0.0\"\n    },\n    \"marker\": {\n      \"path\": \"components/astryx/astryx-swizzle.json\",\n      \"written\": true\n    },\n    \"feedback\": {\n      \"issuesUrl\": \"https://github.com/meta/astryx/issues/new\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/Layer/layerScopedContext.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file layerScopedContext.tsx\n * @input Surface-scoped React contexts and layer content\n * @output Private context creation and whole-value content boundary\n * @position AST-038 surface membership; unrelated contexts retain their owners\n */\n\nimport {createContext, useState, type Context, type ReactNode} from 'react';\nimport {createSharedContext} from '../utils/sharedContext';\nimport {realmValue, sharedKey} from '../utils/sharedRealm';\n\ntype Reset = (children: ReactNode) => ReactNode;\n/**\n * The reset of each layer-scoped context from every copy of Core on this\n * React. A layer boundary from any of those copies resets them all, and never\n * renders another React's contexts.\n */\nconst resetsByReact = realmValue(\n  sharedKey('layer-scoped-context-resets', 2),\n  () => new WeakMap<typeof createContext, Map<Context<unknown>, Reset>>(),\n  value => value instanceof WeakMap,\n);\nlet resets = resetsByReact.get(createContext);\nif (resets == null) {\n  resets = new Map();\n  resetsByReact.set(createContext, resets);\n}\nconst reactResets = resets;\n\n/**\n * Create a surface-scoped context whose whole default applies in a new layer.\n * The name and version register it like `createSharedContext`.\n */\nexport function createLayerScopedContext<T>(\n  name: string,\n  version: number,\n  defaultValue: T,\n): Context<T> {\n  const Context = createSharedContext(name, version, defaultValue);\n  if (!reactResets.has(Context as Context<unknown>)) {\n    reactResets.set(Context as Context<unknown>, children => (\n      <Context value={defaultValue}>{children}</Context>\n    ));\n  }\n  return Context;\n}\n\nexport function LayerContentBoundary({\n  children,\n}: {\n  children: ReactNode;\n}): ReactNode {\n  // Keep the provider chain stable for this mount: lazy imports must not\n  // remount existing content and discard its state or focus.\n  const [resetChain] = useState(() => [...reactResets.values()]);\n  return resetChain.reduceRight(\n    (content, reset): ReactNode => reset(content),\n    children,\n  );\n}\n"
+  },
+  {
+   "path": "app/components/astryx/SizeContext/SizeContext.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file SizeContext.ts\n * @input Layer-scoped React context, use\n * @output Exports SizeContext, useSize, ElementSize, SizeProvider\n * @position Context provider; consumed by Button, TextInput, TabList, Selector, etc.\n *\n * Generic size context that lets container components (Toolbar, TopNav, Card headers)\n * cascade a default size to interactive children. Children use the context as a\n * fallback — an explicit `size` prop always wins.\n */\n\nimport {use} from 'react';\nimport {createLayerScopedContext} from '../Layer/layerScopedContext';\n\n/**\n * Standard element sizes used across interactive components.\n */\nexport type ElementSize = 'sm' | 'md' | 'lg';\n\n/**\n * Context for cascading a default size from container to children.\n *\n * `null` means no container is providing a size — components use their own default.\n */\nexport const SizeContext = createLayerScopedContext<ElementSize | null>(\n  'SizeContext',\n  1,\n  null,\n);\nSizeContext.displayName = 'SizeContext';\n\n/**\n * Resolve the effective size from an explicit prop, inherited context, or default.\n *\n * @param sizeProp - Explicit size prop from the component (wins if set)\n * @param defaultSize - Fallback when neither prop nor context provides a size\n * @returns The resolved size\n *\n * @example\n * ```ts\n * // In a component:\n * const size = useSize(sizeProp, 'md');\n * ```\n */\nexport function useSize<T extends string = ElementSize>(\n  sizeProp?: T,\n  defaultSize: T = 'md' as T,\n): T {\n  const inherited = use(SizeContext);\n  return sizeProp ?? (inherited as T | null) ?? defaultSize;\n}\n\nexport const SizeProvider = SizeContext.Provider;\n"
+  },
+  {
+   "path": "app/components/astryx/SizeContext/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file index.ts\n * @input SizeContext.ts\n * @output Re-exports size context utilities\n * @position Public entry point for @astryxdesign/core/SizeContext\n */\n\nexport {\n  SizeContext,\n  SizeProvider,\n  useSize,\n  type ElementSize,\n} from './SizeContext';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "app/components/astryx/utils/sharedContext.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file sharedContext.ts\n * @input A registered name and its protocol version\n * @output A React context per key and React, shared by every copy of Core\n *   that runs on that React\n * @position Shared runtime state: a swizzled copy and the package use the same\n *   contexts and stores when their protocol versions match\n */\n\nimport {createContext, type Context} from 'react';\nimport {realmValue, sharedKey} from './sharedRealm';\n\n/**\n * A React context registered under a versioned key, so a provider in one copy\n * of Core reaches consumers in another. Each React gets its own context under\n * the key: a server can load two Reacts, and a streaming render leaves context\n * values that only its own React restores, so requests on two Reacts must not\n * share a context.\n */\nexport function createSharedContext<T>(\n  name: string,\n  version: number,\n  defaultValue: T,\n): Context<T> {\n  const byReact = realmValue(\n    sharedKey(`context/${name}`, version),\n    () => new WeakMap<typeof createContext, Context<unknown>>(),\n    value => value instanceof WeakMap,\n  );\n  const existing = byReact.get(createContext);\n  if (existing != null) {\n    return existing as Context<T>;\n  }\n  const SharedContext = createContext(defaultValue);\n  SharedContext.displayName = name;\n  byReact.set(createContext, SharedContext as Context<unknown>);\n  return SharedContext;\n}\n"
+  },
+  {
+   "path": "app/components/astryx/utils/sharedRealm.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file sharedRealm.ts\n * @input A registered name and its protocol version\n * @output One value per key in the JavaScript realm, shared by every copy of\n *   Core\n * @position Shared runtime state for stores and contexts; no React and no\n *   client directive, so server-safe modules can use it\n */\n\n/**\n * The registered key of a shared value. The version names the value's shape.\n * Change it when a copy built against the old shape cannot read the value.\n * Each copy then keeps its own value.\n */\nexport function sharedKey(name: string, version: number): symbol {\n  return Symbol.for(`@astryxdesign/core/${name}/v${version}`);\n}\n\n/**\n * The value under `key` in this JavaScript realm, created on first use. Every\n * copy of Core that asks for the same key gets the same value.\n *\n * The key names the protocol version, so a value found under it has this\n * protocol's shape. `accepts` guards against a key collision: a value it\n * rejects is left in place, and this copy keeps a value of its own.\n */\nexport function realmValue<T>(\n  key: symbol,\n  create: () => T,\n  accepts: (value: unknown) => boolean = () => true,\n): T {\n  const realm = globalThis as typeof globalThis & {[key: symbol]: unknown};\n  if (Object.hasOwn(realm, key)) {\n    const existing = realm[key];\n    return accepts(existing) ? (existing as T) : create();\n  }\n  const value = create();\n  realm[key] = value;\n  return value;\n}\n"
+  }
+ ]
+}

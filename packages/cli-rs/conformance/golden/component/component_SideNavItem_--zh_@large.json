@@ -1,0 +1,20 @@
+{
+ "id": "component_SideNavItem_--zh_@large",
+ "args": [
+  "component",
+  "SideNavItem",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# SideNavItem\n\n导航项，支持图标、选中状态、可选尾部内容，以及通过 children 实现嵌套。\n\n**Import:** `import {SideNavItem} from '@astryxdesign/core/SideNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 项目标签。 **(required)** |\n| `as` | `LinkComponentType` | - | 自定义链接组件。 |\n| `icon` | `IconType` | - | 轮廓（未选中）变体中显示的图标。 |\n| `selectedIcon` | `IconType` | - | 选中时显示的图标（填充变体）。 |\n| `isSelected` | `boolean` | `false` | 将此项标记为当前页面。 |\n| `isDisabled` | `boolean` | `false` | 禁用状态。 |\n| `href` | `string` | - | 导航 URL。 |\n| `onClick` | `(e: MouseEvent) => void` | - | 点击处理函数。 |\n| `endContent` | `ReactNode` | - | 仅用于被动右侧内容（徽章、计数）。交互控件请使用 actions。 |\n| `actions` | `ReactNode` | - | 行级次要控件（图标按钮、菜单），作为主元素的同级节点渲染在行尾——位于展开/折叠切换按钮之后、任何嵌套子项之前（DOM 与焦点顺序一致）。每个控件自行负责其无障碍名称与行为。控件通过 SizeContext 继承行内控件尺寸，因此未指定尺寸的图标按钮会与内置的展开/折叠切换按钮保持同一尺寸；显式指定的 size 优先。侧边栏折叠为图标栏时隐藏。被动内容（徽章、计数）请使用 endContent；交互内容请使用 actions。 |\n| `children` | `ReactNode` | - | 用于嵌套的子项。 |\n| `collapsible` | `boolean \\| { defaultIsCollapsed?: boolean, isCollapsed?: boolean, onCollapsedChange?: (isCollapsed: boolean) => void }` | `false` | 启用带子项的折叠行为。传 true 为非受控模式（默认展开），或传对象用于受控模式。 |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | 导航项的尺寸变体。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

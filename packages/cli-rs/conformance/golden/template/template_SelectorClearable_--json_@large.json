@@ -1,0 +1,14 @@
+{
+ "id": "template_SelectorClearable_--json_@large",
+ "args": [
+  "template",
+  "SelectorClearable",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SelectorClearable\",\n    \"description\": \"Selector with a clear button to reset the selected value.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Selector\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Selector} from '@astryxdesign/core/Selector';\\n\\nexport default function SelectorClearable() {\\n  const [value, setValue] = useState<string | null>('engineering');\\n  return (\\n    <Selector\\n      controlStyle={{width: 300}}\\n      label=\\\"Department\\\"\\n      options={[\\n        {value: 'engineering', label: 'Engineering'},\\n        {value: 'design', label: 'Design'},\\n        {value: 'marketing', label: 'Marketing'},\\n        {value: 'sales', label: 'Sales'},\\n      ]}\\n      value={value}\\n      onChange={setValue}\\n      placeholder=\\\"Choose a department...\\\"\\n      hasClear\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

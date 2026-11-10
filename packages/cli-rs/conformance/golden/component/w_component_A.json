@@ -1,0 +1,13 @@
+{
+ "id": "w_component_A",
+ "args": [
+  "component",
+  "A"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No component named \"A\"\n\n  Tab  (similar name (distance 2))\n  Badge  (keyword \"tag\" (distance 2))\n  Toolbar  (keyword \"nav\" (distance 2))\n  Token  (keyword \"tag\" (distance 2))\n  Button  (keyword \"cta\" (distance 2))\n",
+ "exit": 1,
+ "files": []
+}

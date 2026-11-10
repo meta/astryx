@@ -1,0 +1,118 @@
+[
+  {
+    "id": "fuzz_component_CAROUSEL_DropdownMenuCheckboxItem_--list_314980",
+    "args": [
+      "component",
+      "CAROUSEL",
+      "DropdownMenuCheckboxItem",
+      "--list"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_TableBody_toast_--category-Chat-astryxdesign-lab-_9ecdce",
+    "args": [
+      "component",
+      "TableBody",
+      "toast",
+      "--category=Chat (@astryxdesign/lab)"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_--category_CdeEditor-_DropdownMenuRadioItem_TabMenu-TabMenu_b7bd0d",
+    "args": [
+      "component",
+      "--category",
+      "CdeEditor (@",
+      "DropdownMenuRadioItem",
+      "TabMenu TabMenu"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_CheckboxListItem_--list_-etc_d7b099",
+    "args": [
+      "component",
+      "CheckboxListItem",
+      "--list",
+      "/etc"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_ChatSystemMessage_Theme_--list_--package_LayoutHeader_10013f",
+    "args": [
+      "component",
+      "ChatSystemMessage",
+      "Theme",
+      "--list",
+      "--package",
+      "LayoutHeader"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_Spinner_--list_TabMenu_--json_--package_SideNavItem_030ca3",
+    "args": [
+      "component",
+      "Spinner",
+      "--list",
+      "TabMenu",
+      "--json",
+      "--package",
+      "SideNavItem"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_LayoutContent_AcmeCard_--category_Focus_dbd554",
+    "args": [
+      "component",
+      "LayoutContent",
+      "AcmeCard",
+      "--category",
+      "Focus"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component_ChartAxis_-TopNavHeading_--category_Selector-a_5e8a6f",
+    "args": [
+      "component",
+      "ChartAxis",
+      " TopNavHeading",
+      "--category",
+      "Selector (@a"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_component@doctor-themes_5c6421",
+    "args": [
+      "component"
+    ],
+    "fixture": "doctor-themes",
+    "cwd": "doctor-themes/legacy"
+  },
+  {
+    "id": "fuzz_component_DropdownMenuSubMenu@brokencore_40f8ef",
+    "args": [
+      "component",
+      "DropdownMenuSubMenu"
+    ],
+    "fixture": "brokencore"
+  },
+  {
+    "id": "fuzz_--zh_component_--list_--_--json_Link_0c57ce",
+    "args": [
+      "--zh",
+      "component",
+      "--list",
+      "--",
+      "--json",
+      "Link"
+    ],
+    "fixture": "app"
+  }
+]

@@ -1,0 +1,14 @@
+{
+ "id": "template_ChatMessageBubbleShowcase_--json_@large",
+ "args": [
+  "template",
+  "ChatMessageBubbleShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatMessageBubbleShowcase\",\n    \"description\": \"Grouped user bubbles with filled styling and a ghost-variant agent response, with timestamps and delivery status.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatMessage\",\n      \"ChatMessageBubble\",\n      \"ChatMessageList\",\n      \"ChatMessageMetadata\",\n      \"Timestamp\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  ChatMessageList,\\n  ChatMessage,\\n  ChatMessageBubble,\\n  ChatMessageMetadata,\\n} from '@astryxdesign/core/Chat';\\nimport {Timestamp} from '@astryxdesign/core/Timestamp';\\n\\nexport default function ChatMessageBubbleShowcase() {\\n  return (\\n    <ChatMessageList style={{maxWidth: 600}}>\\n      <ChatMessage sender=\\\"user\\\">\\n        <ChatMessageBubble group=\\\"first\\\">\\n          I just pushed the latest changes to the feature branch.\\n        </ChatMessageBubble>\\n        <ChatMessageBubble\\n          group=\\\"last\\\"\\n          metadata={\\n            <ChatMessageMetadata\\n              timestamp={\\n                <Timestamp value=\\\"2026-04-10T09:15:00\\\" format=\\\"time\\\" />\\n              }\\n              status=\\\"read\\\"\\n            />\\n          }>\\n          Can you review when you get a chance?\\n        </ChatMessageBubble>\\n      </ChatMessage>\\n      <ChatMessage sender=\\\"assistant\\\">\\n        <ChatMessageBubble\\n          variant=\\\"ghost\\\"\\n          metadata={\\n            <ChatMessageMetadata\\n              timestamp={\\n                <Timestamp value=\\\"2026-04-10T09:16:00\\\" format=\\\"time\\\" />\\n              }\\n            />\\n          }>\\n          The changes look great. Ship it!\\n        </ChatMessageBubble>\\n      </ChatMessage>\\n    </ChatMessageList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

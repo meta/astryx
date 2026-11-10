@@ -1,0 +1,34 @@
+{
+ "id": "w_doc_parent_author_json",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "releasing",
+  "--parent",
+  "acme",
+  "--json"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"doc\",\n    \"name\": \"releasing\",\n    \"root\": {\n      \"path\": \"./docs\",\n      \"created\": false\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"docs/releasing.doc.mjs\",\n      \"docs/acme.doc.mjs\",\n      \"package.json\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/docs/acme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: 'acme',\n  title: 'Acme',\n  summary: 'Guides for Acme.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n"
+  },
+  {
+   "path": "author/docs/releasing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'releasing',\n  title: 'Releasing',\n  description: 'Releasing documentation.',\n  placement: {parent: 'namespace:acme', slot: 'guides'},\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Releasing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  },
+  {
+   "path": "author/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@acme/widgets\",\n  \"version\": \"0.1.0\",\n  \"peerDependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  }
+ ]
+}

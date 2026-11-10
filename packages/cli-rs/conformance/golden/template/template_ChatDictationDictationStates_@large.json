@@ -1,0 +1,19 @@
+{
+ "id": "template_ChatDictationDictationStates_@large",
+ "args": [
+  "template",
+  "ChatDictationDictationStates"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatDictationButton} from '@astryxdesign/core/Chat';\nimport type {UseSpeechRecognitionReturn} from '@astryxdesign/core/Chat';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst noop = () => {};\n\nconst idle: UseSpeechRecognitionReturn = {\n  volume: 0,\n  rawBands: [0, 0, 0, 0, 0],\n  bands: [0, 0, 0, 0, 0],\n  isSupported: true,\n  isListening: false,\n  isSpeaking: false,\n  interimTranscript: '',\n  start: noop,\n  stop: noop,\n  abort: noop,\n  toggle: noop,\n};\n\nconst listening: UseSpeechRecognitionReturn = {\n  volume: 0.05,\n  rawBands: [0.08, 0.06, 0.04, 0.02, 0.01],\n  bands: [0.08, 0.06, 0.04, 0.02, 0.01],\n  isSupported: true,\n  isListening: true,\n  isSpeaking: false,\n  interimTranscript: '',\n  start: noop,\n  stop: noop,\n  abort: noop,\n  toggle: noop,\n};\n\nconst speaking: UseSpeechRecognitionReturn = {\n  volume: 0.12,\n  rawBands: [0.15, 0.12, 0.08, 0.05, 0.02],\n  bands: [0.15, 0.12, 0.08, 0.05, 0.02],\n  isSupported: true,\n  isListening: true,\n  isSpeaking: true,\n  interimTranscript: 'hello world',\n  start: noop,\n  stop: noop,\n  abort: noop,\n  toggle: noop,\n};\n\nexport default function ChatDictationDictationStates() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Three states of a dictation interaction\n      </Text>\n      <Stack direction=\"horizontal\" gap={6} hAlign=\"center\">\n        <Stack direction=\"vertical\" gap={1} hAlign=\"center\">\n          <ChatDictationButton dictation={idle} />\n          <Text type=\"supporting\" color=\"secondary\">\n            Idle\n          </Text>\n        </Stack>\n        <Stack direction=\"vertical\" gap={1} hAlign=\"center\">\n          <ChatDictationButton dictation={listening} />\n          <Text type=\"supporting\" color=\"secondary\">\n            Listening\n          </Text>\n        </Stack>\n        <Stack direction=\"vertical\" gap={1} hAlign=\"center\">\n          <ChatDictationButton dictation={speaking} />\n          <Text type=\"supporting\" color=\"secondary\">\n            Speaking\n          </Text>\n        </Stack>\n      </Stack>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

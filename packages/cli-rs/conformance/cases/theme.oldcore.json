@@ -1,0 +1,728 @@
+[
+  {
+    "id": "oldcore_theme_list_@core-0.7.11",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.7.11",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.7.11",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.7.11",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.7.11",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.7.11",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.7.11",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.7.11",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.7.11",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_list_@core-0.7.5",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.7.5",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.7.5",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.7.5",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.7.5",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.7.5",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.7.5",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.7.5",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.7.5",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_list_@core-0.6.8",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.6.8",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.6.8",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.6.8",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.6.8",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.6.8",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.6.8",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.6.8",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.6.8",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_list_@core-0.5.4",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.5.4",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.5.4",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.5.4",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.5.4",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.5.4",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.5.4",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.5.4",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.5.4",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_list_@core-0.4.7",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.4.7",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.4.7",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.4.7",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.4.7",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.4.7",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.4.7",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.4.7",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.4.7",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_list_@core-0.3.0",
+    "args": [
+      "theme",
+      "list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_list_--json_@core-0.3.0",
+    "args": [
+      "theme",
+      "list",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_add_--list_@core-0.3.0",
+    "args": [
+      "theme",
+      "add",
+      "--list"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_targets_button_@core-0.3.0",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_template_src-my.theme.ts_@core-0.3.0",
+    "args": [
+      "theme",
+      "template",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_@core-0.3.0",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--json_@core-0.3.0",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--check_@core-0.3.0",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--check"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "oldcore_theme_build_src-my.theme.ts_--out_dist-theme.css_@core-0.3.0",
+    "args": [
+      "theme",
+      "build",
+      "src/my.theme.ts",
+      "--out",
+      "dist/theme.css"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true,
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
+  }
+]

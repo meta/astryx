@@ -1,0 +1,20 @@
+{
+ "id": "w_acme-big_part-170_@docsint",
+ "args": [
+  "docs",
+  "acme-big",
+  "part-170"
+ ],
+ "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
+ "stdout": "package: @acme/docs\n\n## Part 170\n\nPart 170: a long summary that fills the index line. a long summary that fills the index line. a long summary that fills the index line. a long summary that fills the index line. a long summary that fills the index line. a long summary that fills the index line. \n\nUp: npx @astryxdesign/cli@0.7.12 docs acme-big --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs acme-big part-169\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

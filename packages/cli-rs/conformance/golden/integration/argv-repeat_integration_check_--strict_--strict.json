@@ -1,0 +1,15 @@
+{
+ "id": "argv-repeat_integration_check_--strict_--strict",
+ "args": [
+  "integration",
+  "check",
+  "--strict",
+  "--strict"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. Run this command in an integration package's folder.\nFailing under --strict\n\nseverity: [fail]\ncheck:    validate\ncode:     missing_manifest\n\nIntegration check: (local package) (strict)\n\ncheck:    validate\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    components\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    templates\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    docs\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\n[fail] 0 errors, 0 warnings, 1 skipped. --strict fails on every warning and on skipped work; fix them, or drop --strict to fail only on errors.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv-negval_template_--type_-1",
+ "args": [
+  "template",
+  "--type",
+  "-1"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown template type \"-1\". Valid types: page, block.\n\n  page  (valid type)\n  block  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

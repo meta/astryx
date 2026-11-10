@@ -1,0 +1,182 @@
+[
+  {
+    "id": "w_bare_@discover-badconfig",
+    "args": [
+      "discover"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_x_@discover-badconfig",
+    "args": [
+      "discover",
+      "x"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_x---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "x",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_-acme-kit_@discover-badconfig",
+    "args": [
+      "discover",
+      "@acme/kit"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_-acme-kit---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "@acme/kit",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--installed---available_@discover-badconfig",
+    "args": [
+      "discover",
+      "--installed",
+      "--available"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--installed---available---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--installed",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--type-bogus_@discover-badconfig",
+    "args": [
+      "discover",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--type-bogus---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--type",
+      "bogus",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--type-icon-set_@discover-badconfig",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--type-icon-set---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--type",
+      "icon-set",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--limit-0_@discover-badconfig",
+    "args": [
+      "discover",
+      "--limit",
+      "0"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--limit-0---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--limit",
+      "0",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--limit-2-x_@discover-badconfig",
+    "args": [
+      "discover",
+      "--limit",
+      "2",
+      "x"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--limit-2-x---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--limit",
+      "2",
+      "x",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--available_@discover-badconfig",
+    "args": [
+      "discover",
+      "--available"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--available---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--available",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--components_@discover-badconfig",
+    "args": [
+      "discover",
+      "--components"
+    ],
+    "fixture": "discover-badconfig"
+  },
+  {
+    "id": "w_--components---json_@discover-badconfig",
+    "args": [
+      "discover",
+      "--components",
+      "--json"
+    ],
+    "fixture": "discover-badconfig"
+  }
+]

@@ -1,0 +1,18 @@
+{
+ "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--json",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"gap-report.file\",\n  \"data\": {\n    \"status\": \"consent_required\",\n    \"package\": \"@astryxdesign/core\",\n    \"issuesUrl\": \"https://github.com/meta/astryx/issues/new\",\n    \"deliveries\": [\n      {\n        \"handlerType\": \"fallback\",\n        \"handler\": \"github\",\n        \"audience\": \"public\",\n        \"status\": \"consent_required\",\n        \"url\": null,\n        \"message\": \"Rerun with --confirm-public to file this report.\"\n      }\n    ],\n    \"filedCount\": 0,\n    \"routedOnlyCount\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

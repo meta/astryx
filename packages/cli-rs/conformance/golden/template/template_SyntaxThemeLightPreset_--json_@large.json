@@ -1,0 +1,14 @@
+{
+ "id": "template_SyntaxThemeLightPreset_--json_@large",
+ "args": [
+  "template",
+  "SyntaxThemeLightPreset",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SyntaxThemeLightPreset\",\n    \"description\": \"Use a light syntax preset for code examples that need to sit on light documentation surfaces.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"CodeBlock\",\n      \"SyntaxTheme\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {SyntaxTheme} from '@astryxdesign/core/theme';\\nimport {githubLight} from '@astryxdesign/core/theme/syntax';\\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\\n\\nconst code = `const status = response.ok ? 'success' : 'error';\\nconsole.log({status});`;\\n\\nexport default function SyntaxThemeLightPreset() {\\n  return (\\n    <SyntaxTheme theme={githubLight}>\\n      <CodeBlock code={code} language=\\\"tsx\\\" title=\\\"GitHub Light preset\\\" />\\n    </SyntaxTheme>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

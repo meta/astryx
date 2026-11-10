@@ -1,0 +1,21 @@
+{
+ "id": "search_Card_--limit_3",
+ "args": [
+  "search",
+  "Card",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"Card\" (3 of 322)\n\nname:        Card\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Card\ndescription: Card is a bordered, elevated container for discrete, self-contained items: things you could reorder, remove, or interact with independently. Cards are NOT the default layout tool. Most content groups don't need a container at all; spacing and alignment create visual grouping naturally. Only reach for a Card when items need clear interaction boundaries or visual comparison in a grid.\ncommand:     npx @astryxdesign/cli@0.7.12 component Card\n\nname:        ClickableCard\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ClickableCard\ndescription: An interactive card for navigation or action targets. Nested interactive elements work independently.\ncommand:     npx @astryxdesign/cli@0.7.12 component ClickableCard\n\nname:        Overlay\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Overlay\ndescription: Overlay layers action or supporting content over media, cards, video, or other bounded surfaces with an optional scrim and reveal behavior. Host attributes and DOM handlers (id, data-*, aria-*) reach the root element.\ncommand:     npx @astryxdesign/cli@0.7.12 component Overlay\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover Card\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

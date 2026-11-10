@@ -1,0 +1,22 @@
+{
+ "id": "wide_config_apply_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.1.2",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "upgrade-config",
+ "fixtureHash": "0dde49a77bc154dc+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.1.2\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 35,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 1,\n    \"transformsApplied\": 1,\n    \"modifiedFiles\": [\n      \"astryx.config.mjs\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "upgrade-config/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {\n  experimental: {\n    xle: {\n      components: {\n        Hero: {\n          from: \"./src/Hero.tsx\"\n        },\n\n        Footer: {from: './src/Footer.tsx'}\n      }\n    }\n  }\n};\n"
+  }
+ ]
+}

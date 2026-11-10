@@ -1,0 +1,14 @@
+{
+ "id": "template_CarouselCards_--json_@large",
+ "args": [
+  "template",
+  "CarouselCards",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CarouselCards\",\n    \"description\": \"A horizontally scrollable row of cards with snap scrolling enabled. Use for feature grids, product lists, or any set of cards that overflows the available width. The carousel adds fade edges and navigation buttons automatically.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Carousel\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Carousel} from '@astryxdesign/core/Carousel';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst FEATURES = [\\n  {\\n    title: 'Design System',\\n    desc: 'Tokens, components, and patterns',\\n  },\\n  {\\n    title: 'Documentation',\\n    desc: 'API reference and usage guides',\\n  },\\n  {\\n    title: 'Sandbox',\\n    desc: 'Visual testing and previews',\\n  },\\n  {\\n    title: 'Library',\\n    desc: 'Component and hook information',\\n  },\\n  {\\n    title: 'Contributing',\\n    desc: 'Open source development',\\n  },\\n];\\n\\nexport default function CarouselCards() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={3} style={{maxWidth: 520, padding: 8}}>\\n      <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n        Browse features\\n      </Text>\\n      <Carousel gap={2} hasSnap aria-label=\\\"Feature cards\\\">\\n        {FEATURES.map(item => (\\n          <Card key={item.title} width={200} minHeight={100}>\\n            <Stack direction=\\\"vertical\\\" gap={1}>\\n              <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n                {item.title}\\n              </Text>\\n              <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n                {item.desc}\\n              </Text>\\n            </Stack>\\n          </Card>\\n        ))}\\n      </Carousel>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

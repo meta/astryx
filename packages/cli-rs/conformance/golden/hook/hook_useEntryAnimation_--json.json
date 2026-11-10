@@ -1,0 +1,14 @@
+{
+ "id": "hook_useEntryAnimation_--json",
+ "args": [
+  "hook",
+  "useEntryAnimation",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useEntryAnimation\",\n    \"displayName\": \"useEntryAnimation\",\n    \"keywords\": [\n      \"animation\",\n      \"entry\",\n      \"mount\",\n      \"transition\",\n      \"slide\",\n      \"fade\",\n      \"scale\",\n      \"motion\",\n      \"stylex\"\n    ],\n    \"params\": [\n      {\n        \"name\": \"preset\",\n        \"type\": \"'slideDown' | 'slideUp' | 'fadeIn' | 'scaleIn'\",\n        \"description\": \"Animation preset to apply on mount.\",\n        \"default\": \"'slideDown'\",\n        \"required\": false\n      }\n    ],\n    \"returns\": [\n      {\n        \"name\": \"entryStyle\",\n        \"type\": \"StyleXStyles | null\",\n        \"description\": \"A StyleX style object for the entry animation, or null if the element was rendered on initial page load or hydrated from server HTML (no animation needed).\"\n      }\n    ],\n    \"usage\": {\n      \"description\": \"Returns a StyleX style for animating an element on mount. Only animates when the element is dynamically inserted after the initial page paint; elements rendered on page load are not animated. Uses Astryx motion tokens (duration, easing) for consistent animation timing. Server-rendered elements hydrate without the entry style and never animate; elements mounted after hydration animate.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Use for conditionally rendered elements like validation messages, toasts, or expanding sections.\"\n        },\n        {\n          \"guidance\": true,\n          \"description\": \"Spread the returned style into stylex.props() alongside other styles.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Use for elements that should be visible on initial page load; they will not animate.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [\n      \"FieldStatus\"\n    ],\n    \"relatedHooks\": [],\n    \"importPath\": \"@astryxdesign/core/hooks\",\n    \"category\": \"motion & gestures\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

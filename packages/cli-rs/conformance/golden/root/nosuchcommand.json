@@ -1,0 +1,12 @@
+{
+ "id": "nosuchcommand",
+ "args": [
+  "nosuchcommand"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown command 'nosuchcommand'\n\n  init  (available command)\n  component  (available command)\n  docs  (available command)\n  blog  (available command)\n  swizzle  (available command)\n  gap-report  (available command)\n  template  (available command)\n  upgrade  (available command)\n  theme  (available command)\n  integration  (available command)\n  hook  (available command)\n  discover  (available command)\n  search  (available command)\n  build  (available command)\n  doctor  (available command)\n  experimental  (available command)\n  manifest  (available command)\n",
+ "exit": 1,
+ "files": []
+}

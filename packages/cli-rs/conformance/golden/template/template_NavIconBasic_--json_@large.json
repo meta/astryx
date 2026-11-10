@@ -1,0 +1,14 @@
+{
+ "id": "template_NavIconBasic_--json_@large",
+ "args": [
+  "template",
+  "NavIconBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"NavIconBasic\",\n    \"description\": \"Circular icon containers wrapping semantic icons. Use as logos or accent icons in navigation headers such as TopNavHeading.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"NavIcon\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {HStack} from '@astryxdesign/core/Layout';\\n\\nexport default function NavIconBasic() {\\n  return (\\n    <HStack gap={4} vAlign=\\\"center\\\">\\n      <NavIcon icon={<Icon icon=\\\"search\\\" />} />\\n      <NavIcon icon={<Icon icon=\\\"calendar\\\" />} />\\n    </HStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

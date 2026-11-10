@@ -1,0 +1,14 @@
+{
+ "id": "shell_doctor_integration_nope_@empty",
+ "args": [
+  "doctor",
+  "integration",
+  "nope"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown subcommand 'doctor integration nope'\n\n  validate  (available subcommand)\n  templates  (available subcommand)\n  components  (available subcommand)\n  docs  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

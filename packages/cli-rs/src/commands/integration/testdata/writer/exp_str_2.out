@@ -1,0 +1,4 @@
+export default {
+  experimental: 'no',
+  components: './components'
+};

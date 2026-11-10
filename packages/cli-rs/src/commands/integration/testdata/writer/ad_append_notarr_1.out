@@ -1,0 +1,4 @@
+export default {
+  agentDocs: {append: lines},
+  docs: './docs'
+};

@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AppShellSideNavOnly-src-page.tsx_template_AppShellSideNavOnly_src-page.tsx_@large",
+ "args": [
+  "template",
+  "AppShellSideNavOnly",
+  "src/page.tsx"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Refusing to overwrite existing file src/page.tsx. Re-run with --overwrite (or -f) to replace it.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AppShell} from '@astryxdesign/core/AppShell';\nimport {VStack} from '@astryxdesign/core/Stack';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\nimport {\n  SideNav,\n  SideNavHeading,\n  SideNavItem,\n  SideNavSection,\n} from '@astryxdesign/core/SideNav';\nimport {\n  ChartBarIcon,\n  FolderIcon,\n  UsersIcon,\n  Cog6ToothIcon,\n} from '@heroicons/react/24/outline';\nimport {HomeIcon} from '@heroicons/react/24/solid';\nimport {CubeIcon} from '@heroicons/react/24/outline';\n\nexport default function AppShellSideNavOnly() {\n  return (\n    <AppShell\n      contentPadding={6}\n      style={{height: '100%', minHeight: 0}}\n      sideNav={\n        <SideNav\n          header={\n            <SideNavHeading\n              icon={\n                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />\n              }\n              heading=\"App Shell\"\n              headingHref=\"#\"\n            />\n          }>\n          <SideNavSection title=\"Main\" isHeaderHidden>\n            <SideNavItem\n              label=\"Dashboard\"\n              icon={HomeIcon}\n              isSelected\n              href=\"#\"\n            />\n            <SideNavItem label=\"Analytics\" icon={ChartBarIcon} href=\"#\" />\n            <SideNavItem label=\"Projects\" icon={FolderIcon} href=\"#\" />\n          </SideNavSection>\n          <SideNavSection title=\"Organization\">\n            <SideNavItem label=\"Team\" icon={UsersIcon} href=\"#\" />\n            <SideNavItem label=\"Settings\" icon={Cog6ToothIcon} href=\"#\" />\n          </SideNavSection>\n        </SideNav>\n      }>\n      <VStack gap={4}>\n        <Heading level={3}>Page Content</Heading>\n        <Text type=\"body\">\n          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do\n          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad\n          minim veniam, quis nostrud exercitation ullamco laboris.\n        </Text>\n      </VStack>\n    </AppShell>\n  );\n}\n"
+  }
+ ]
+}

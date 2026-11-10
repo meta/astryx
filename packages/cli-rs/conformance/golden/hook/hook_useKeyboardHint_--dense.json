@@ -1,0 +1,20 @@
+{
+ "id": "hook_useKeyboardHint_--dense",
+ "args": [
+  "hook",
+  "useKeyboardHint",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useKeyboardHint\n\nShows an ephemeral \"← → to navigate\" hint anchored to the focused item the first time a roving-tabindex composite (Toolbar, TabList, SegmentedControl, etc.) receives keyboard focus. It teaches sighted keyboard users that arrow keys move within the group. The hint renders arrow keys with Kbd in the top layer (popover=\"manual\") and is CSS-anchor-positioned to the focused element, so overflow containers never clip it. It auto-dismisses on the first arrow press, on timeout, or on blur, and does not re-show for that instance. Toolbar, TabList, and SegmentedControl wire this in automatically; reach for the hook directly only when building a custom roving-tabindex widget.\n\n## Best Practices\n\n- **Do:** Compose the returned onFocus/onKeyDown with your existing focus handlers rather than replacing them: call onKeyDown first (it only dismisses, never prevents), then your navigation handler.\n- **Do:** Render hintElement as the last child of the composite container; it is position:fixed in the top layer and aria-hidden, so it never affects layout or the accessibility tree.\n- **Do:** Match orientation to the arrow keys your widget actually responds to so the hint shows the correct icons.\n- **Don't:** Use for single controls or widgets without roving-tabindex navigation; the hint only makes sense where arrows move focus within a group.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseKeyboardHintOptions` | - | Configuration object for the keyboard hint. |\n| `options.orientation` | `'horizontal' \\| 'vertical' \\| 'both'` | `'horizontal'` | Which arrow-key axis the composite navigates, controlling which arrow icons the hint shows (← → for horizontal, ↑ ↓ for vertical, all four for both). |\n| `options.dismissAfterMs` | `number` | `3000` | Milliseconds before the hint auto-dismisses after appearing. |\n| `options.isEnabled` | `boolean` | `true` | Whether the hint is enabled. Set to false to suppress it for a specific instance (e.g. a disabled or read-only widget). |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `hintElement` | `ReactNode` | The popover hint element to render inside the composite container (as the last child). Portals to the top layer via popover=\"manual\", renders arrow keys with Kbd, and manages its own visibility; render it unconditionally. |\n| `onFocus` | `(e: React.FocusEvent) => void` | Attach to the container onFocus. Shows the hint on the first keyboard-focus (:focus-visible) entry from outside the composite. |\n| `onBlur` | `(e: React.FocusEvent) => void` | Attach to the container onBlur. Hides the hint when focus leaves the composite entirely, and re-anchors when focus moves within. |\n| `onKeyDown` | `(e: React.KeyboardEvent) => void` | Attach to the container onKeyDown. Dismisses the hint on the first arrow press (the user has discovered the interaction). Never prevents default or stops propagation. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Toolbar, TabList, SegmentedControl\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

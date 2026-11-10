@@ -1,0 +1,21 @@
+{
+ "id": "search_avatar-group_--limit_3",
+ "args": [
+  "search",
+  "avatar group",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"avatar group\" (3 of 164)\n\nname:        AvatarGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/AvatarGroup\ndescription: AvatarGroup displays multiple avatars in an overlapping row with an optional overflow indicator. Uses a compositional API: pass Avatar children directly so each avatar can carry its own props (status dots, click handlers, etc.).\ncommand:     npx @astryxdesign/cli@0.7.12 component AvatarGroup\n\nname:        AvatarGroup\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Avatar - Group\nkind:        block\ndescription: Overlap multiple avatars in a row to represent a group of people. Use for team lists, PR reviewers, or participant counts where you want to show faces without taking up much space.\ncommand:     npx @astryxdesign/cli@0.7.12 template AvatarGroup --type block\n\nname:        AvatarGroupOverflow\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/AvatarGroup\ndescription: AvatarGroupOverflow appears at the end of an AvatarGroup to summarize people who are not shown individually. Use it when a group is sliced to a small number of visible avatars but the hidden count still matters.\ncommand:     npx @astryxdesign/cli@0.7.12 component AvatarGroupOverflow\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'avatar group'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

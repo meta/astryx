@@ -1,0 +1,20 @@
+{
+ "id": "component_AvatarGroupOverflow_--zh_@large",
+ "args": [
+  "component",
+  "AvatarGroupOverflow",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# AvatarGroupOverflow\n\nAvatarGroupOverflow 显示在 AvatarGroup 末尾，用来汇总未单独展示的成员。适用于只展示少量头像但仍需要显示隐藏数量的场景。\n\n**Import:** `import {AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Count label | Yes | The compact `+N` or custom count text displayed inside the circular indicator. |\n| Button behavior | No | When `onClick` is provided, the indicator becomes an interactive button with focus and hover states. |\n\n## Best Practices\n\n- **Do:** 向 `count` 传入真实隐藏数量，确保无障碍标签与可见指示器一致。\n- **Do:** 使用 `+12` 或 `99+` 等短文本；指示器在计数较短时为圆形，计数较宽时会拉伸为胶囊形，确保数字始终完整显示。\n- **Do:** 当溢出项会打开成员列表、弹出层或详情视图时提供 `onClick`。\n- **Don't:** 不要让自定义文本与 `count` 不一致；`count` 仍用于无障碍标签。\n- **Don't:** 不要在指示器内使用长标签；更长的参与者详情应放在头像组旁边。\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `count` | `number` | - | 隐藏头像数量，用于默认 `+N` 标签和无障碍标签。 **(required)** |\n| `children` | `ReactNode` | - | 可选的自定义计数字符串。省略时使用默认 `+N` 标签。 |\n| `onClick` | `() => void` | - | 点击溢出指示器时触发。提供后指示器会渲染为可聚焦按钮。 |\n| `ref` | `React.Ref<HTMLElement>` | - | 转发到溢出指示器元素的引用。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式。 |\n\n## Examples\n\n### Default overflow count\n\n```tsx\n\n<AvatarGroup size=\"lg\">\n  {users.slice(0, 3).map(user => (\n    <Avatar key={user.id} src={user.src} name={user.name} />\n  ))}\n  <AvatarGroupOverflow count={users.length - 3} />\n</AvatarGroup>\n\n```\n\n### Custom count text\n\n```tsx\n\n<AvatarGroup size=\"lg\">\n  {users.slice(0, 3).map(user => (\n    <Avatar key={user.id} src={user.src} name={user.name} />\n  ))}\n  <AvatarGroupOverflow count={12}>12+</AvatarGroupOverflow>\n</AvatarGroup>\n\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

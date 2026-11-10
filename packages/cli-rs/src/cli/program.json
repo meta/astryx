@@ -1,0 +1,4074 @@
+{
+ "generatedFrom": "packages/cli (scripts/gen-program.mjs)",
+ "version": "0.7.12",
+ "jsonSupported": [
+  "init",
+  "component",
+  "docs",
+  "blog",
+  "discover",
+  "search",
+  "experimental icon",
+  "experimental icon add",
+  "experimental icon map",
+  "experimental icon use",
+  "experimental icon new-set",
+  "experimental icon new-definition",
+  "experimental render",
+  "build",
+  "swizzle",
+  "gap-report",
+  "template",
+  "hook",
+  "theme build",
+  "theme list",
+  "theme add",
+  "theme remove",
+  "theme use",
+  "theme eject",
+  "theme template",
+  "theme targets",
+  "theme palette generate",
+  "integration add",
+  "integration check",
+  "integration verify",
+  "integration pack",
+  "upgrade",
+  "manifest",
+  "doctor",
+  "doctor integration validate",
+  "doctor integration templates",
+  "doctor integration components",
+  "doctor integration docs"
+ ],
+ "commandNames": [
+  "init",
+  "component",
+  "docs",
+  "blog",
+  "swizzle",
+  "gap-report",
+  "template",
+  "upgrade",
+  "theme",
+  "integration",
+  "hook",
+  "discover",
+  "search",
+  "build",
+  "doctor",
+  "experimental",
+  "manifest",
+  "postinstall"
+ ],
+ "program": {
+  "name": "astryx",
+  "fullName": "",
+  "aliases": [],
+  "description": "Design system CLI — components, themes, and tooling",
+  "summary": "",
+  "hidden": false,
+  "usage": null,
+  "hasAction": true,
+  "allowUnknownOption": false,
+  "allowExcessArguments": true,
+  "args": [],
+  "options": [
+   {
+    "flags": "-V, --version",
+    "long": "--version",
+    "short": "-V",
+    "attributeName": "version",
+    "description": "output the version number",
+    "required": false,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValueDescription": null,
+    "choices": null,
+    "collect": false
+   },
+   {
+    "flags": "--zh",
+    "long": "--zh",
+    "short": null,
+    "attributeName": "zh",
+    "description": "Simplified Chinese for component reads and for docs topics that have a translation (English otherwise)",
+    "required": false,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValueDescription": null,
+    "choices": null,
+    "collect": false
+   },
+   {
+    "flags": "--dense",
+    "long": "--dense",
+    "short": null,
+    "attributeName": "dense",
+    "description": "Token-efficient dense text for component <Name> and docs <topic> reads",
+    "required": false,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValueDescription": null,
+    "choices": null,
+    "collect": false
+   },
+   {
+    "flags": "--lang <locale>",
+    "long": "--lang",
+    "short": null,
+    "attributeName": "lang",
+    "description": "Language or format for component and docs reads: en (default), zh (as --zh), or dense (as --dense)",
+    "required": true,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValueDescription": null,
+    "choices": [
+     "en",
+     "zh",
+     "dense"
+    ],
+    "collect": false
+   },
+   {
+    "flags": "--detail <level>",
+    "long": "--detail",
+    "short": null,
+    "attributeName": "detail",
+    "description": "Detail level for component, hook, and docs tree reads (e.g. docs cli/commands/build), and for theme build reports. Lists default to brief; theme build prints one line per built theme unless full, which adds the install example and font recipe",
+    "required": true,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValue": "full",
+    "defaultValueDescription": null,
+    "choices": [
+     "full",
+     "compact",
+     "brief"
+    ],
+    "collect": false
+   },
+   {
+    "flags": "--json",
+    "long": "--json",
+    "short": null,
+    "attributeName": "json",
+    "description": "Output as typed JSON. Success envelope: { apiVersion, type, package?, data, meta? }. Error envelope: { apiVersion, error, code, suggestions? }.",
+    "required": false,
+    "optional": false,
+    "variadic": false,
+    "negate": false,
+    "mandatory": false,
+    "hidden": false,
+    "defaultValueDescription": null,
+    "choices": null,
+    "collect": false
+   }
+  ],
+  "beforeHelp": "",
+  "afterHelp": "\nOutput format\nText mirrors --json (the machine-readable surface); it is built from these blocks:\n\nblock: Record\nshape: aligned \"key: value\" lines = one item; records separated by a blank line\n\nblock: Section\nshape: a header line (no \"key:\"), optional one-line subtitle, then its records/list\n\nblock: List\nshape: \"- value\" lines for a simple sequence of values\n\nblock: Text\nshape: free-form prose / notes\n\nblock: Code\nshape: a verbatim block (source, skeleton, or doc), emitted exactly\n\nGrep a field across records, e.g.  \u0001 search button | grep \"^command:\". Errors/warnings go to stderr; use --json for structured parsing.\n\nGlobal mode: in a project, the project's own CLI answers (this copy hands the run to it); a copy installed for the computer checks for updates once a day and keeps an agent skill in your home folder. See \u0001 docs global.\n",
+  "json": false,
+  "responseTypes": [],
+  "examples": [],
+  "exitCodes": [],
+  "outsideProject": null,
+  "commands": [
+   {
+    "name": "init",
+    "fullName": "init",
+    "aliases": [],
+    "description": "Initialize the design system in your project",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [
+     {
+      "flags": "--features <list>",
+      "long": "--features",
+      "short": null,
+      "attributeName": "features",
+      "description": "Comma-separated features: agents (agent docs), theme (writes theme.template.ts), template (prints the page-building commands; writes no file). An unknown feature exits 1 with ERR_UNKNOWN_FEATURE. Refused with --all or --remove-agents",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--all",
+      "long": "--all",
+      "short": null,
+      "attributeName": "all",
+      "description": "Install all features (agents, theme, template); refused with --features. Prints their guidance instead of the getting-started steps",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--remove-agents",
+      "long": "--remove-agents",
+      "short": null,
+      "attributeName": "removeAgents",
+      "description": "Remove the managed block from AGENTS.md, CLAUDE.md, .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md and HERMES.md, at the project root (where init writes them) and in this folder (deleting AGENTS.md or .claude/CLAUDE.md when only init's heading is left, and GEMINI.md when nothing is left) and do nothing else. Below the project root, a project-root agent file whose block resolves outside the project is left as it is, with a note. --features, --all, --agent and --agent-docs-path are refused; a file written with --agent-docs-path keeps its block",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--user",
+      "long": "--user",
+      "short": null,
+      "attributeName": "user",
+      "description": "Write or refresh the computer-level agent text instead of setting up the folder: one skill file, ~/.agents/skills/astryx/SKILL.md, which most coding agents read, linked into the skill folders of agents that read only their own (~/.claude/skills always; Kiro, Windsurf, Letta, Xcode's coding assistant, and ~/.config/agents/skills when that folder exists): a folder symlink with a relative target, a junction on Windows, or a copy where neither can be made. Continue, whose scanner skips links, gets a managed copy, refreshed with the file. It tells agents anywhere on the computer that Astryx is there, when it is relevant, and to start with `astryx search`. Records the links it made in astryx/settings.json in the per-user configuration folder, so removal removes exactly those; the CLI installed for the computer refreshes the file in the background after each upgrade. Works in any folder. A file without the Astryx markers, one edited since Astryx wrote it, or a symlink, is kept as it is, and so is anything at a link target that Astryx did not create. Warns, and still writes, when no `astryx` command on the computer runs the Astryx CLI. With --remove-agents it removes the file, the links, and the copy instead and records that the text is turned off. --features, --all, --agent and --agent-docs-path are refused",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--agent <tool>",
+      "long": "--agent",
+      "short": null,
+      "attributeName": "agent",
+      "description": "Target AI tool for agent docs: claude (CLAUDE.md or .claude/CLAUDE.md, else creates .claude/CLAUDE.md), cursor (.cursorrules if present, else AGENTS.md), codex and muse (AGENTS.md), hermes (.hermes.md or HERMES.md if present, else AGENTS.md), all (every existing agent doc except GEMINI.md, which keeps its one-line import of AGENTS.md, else AGENTS.md and .claude/CLAUDE.md). With claude and all, when CLAUDE.md gets the block, .claude/CLAUDE.md gets none and a block already there is removed, unless the project ignores CLAUDE.md: then a .claude/CLAUDE.md the project commits gets a copy too, with claude and all alike. An unknown tool exits 1 with ERR_UNKNOWN_AGENT. Used only when agent docs are installed (the default, --all, or --features agents); --agent-docs-path takes precedence.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--agent-docs-path <path...>",
+      "long": "--agent-docs-path",
+      "short": null,
+      "attributeName": "agentDocsPath",
+      "description": "Explicit file path(s) for agent docs, inside the project; takes precedence over --agent. If any path is outside the project, no agent docs are written and the command exits 1. A path in the home folder itself, or in a settings folder in it outside a project (such as ~/.claude or ~/.claude/hooks), is refused with a note (exit 0), and nothing is written. Used only when agent docs are installed",
+      "required": true,
+      "optional": false,
+      "variadic": true,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success, including agent docs left unwritten in five soft cases, each reported as docsError with one note: running in the home folder, or in a settings folder in it outside a project; a GEMINI.md that resolves outside the project; when init runs below the project root, a project-root agent file that resolves outside the project; the project's Claude Code file (root CLAUDE.md, or .claude/CLAUDE.md when there is no root one) when it resolves outside the project and is a block-less import of an existing AGENTS.md, which 0.7.1 left alone; and a .claude/CLAUDE.md that resolves outside the project and that 0.7.1 did not write: beside a CLAUDE.md the project ignores, the one --agent claude adds or a block-less import of an existing AGENTS.md; with --agent claude beside a CLAUDE.md, one whose block it would remove\n  1  an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, --remove-agents combined with install options, --user combined with --features, --all, --agent or --agent-docs-path, or --all with --features (ERR_INVALID_ARGUMENT); or, when init runs at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, docsError path-safety, nothing written)\n\nExamples:\n  # Default setup\n  \u0001 init\n  # All features, no prompts\n  \u0001 init --all\n  # Machine-readable receipt\n  \u0001 init --json\n  # Agent text for the whole computer\n  \u0001 init --user\n  # Remove the computer-level agent text and turn it off\n  \u0001 init --user --remove-agents\n\nMore: \u0001 docs cli/commands/init\n",
+    "json": true,
+    "responseTypes": [
+     "init.run",
+     "init.remove",
+     "init.user"
+    ],
+    "examples": [
+     "astryx init",
+     "astryx init --all",
+     "astryx init --json",
+     "astryx init --user",
+     "astryx init --user --remove-agents"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success, including agent docs left unwritten in five soft cases, each reported as docsError with one note: running in the home folder, or in a settings folder in it outside a project; a GEMINI.md that resolves outside the project; when init runs below the project root, a project-root agent file that resolves outside the project; the project's Claude Code file (root CLAUDE.md, or .claude/CLAUDE.md when there is no root one) when it resolves outside the project and is a block-less import of an existing AGENTS.md, which 0.7.1 left alone; and a .claude/CLAUDE.md that resolves outside the project and that 0.7.1 did not write: beside a CLAUDE.md the project ignores, the one --agent claude adds or a block-less import of an existing AGENTS.md; with --agent claude beside a CLAUDE.md, one whose block it would remove"
+     },
+     {
+      "code": 1,
+      "when": "an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, --remove-agents combined with install options, --user combined with --features, --all, --agent or --agent-docs-path, or --all with --features (ERR_INVALID_ARGUMENT); or, when init runs at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, docsError path-safety, nothing written)"
+     }
+    ],
+    "outsideProject": "own",
+    "commands": []
+   },
+   {
+    "name": "component",
+    "fullName": "component",
+    "aliases": [],
+    "description": "List components or print component docs",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "names",
+      "required": false,
+      "variadic": true,
+      "description": "One or more exact selectors. Use Name, package/Name, @scope/package/Name, or @scope/package@version/Name. Two or more return one ordered batch. At most 100 selectors are accepted.",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--list",
+      "long": "--list",
+      "short": null,
+      "attributeName": "list",
+      "description": "List every component (the same as giving no name)",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--category <category>",
+      "long": "--category",
+      "short": null,
+      "attributeName": "category",
+      "description": "List one component group, e.g. --category Layout or --category Avatar (an unknown group lists the valid ones)",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--props",
+      "long": "--props",
+      "short": null,
+      "attributeName": "props",
+      "description": "Print only the props table",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--source",
+      "long": "--source",
+      "short": null,
+      "attributeName": "source",
+      "description": "Print component source code",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--showcase",
+      "long": "--showcase",
+      "short": null,
+      "attributeName": "showcase",
+      "description": "Print showcase source code",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--blocks",
+      "long": "--blocks",
+      "short": null,
+      "attributeName": "blocks",
+      "description": "List example blocks: showcase, examples, and related",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--package <name>",
+      "long": "--package",
+      "short": null,
+      "attributeName": "package",
+      "description": "Scope lookup to an external package (e.g. @acme/xds-widgets). Use @astryxdesign/core to select an original replaced by an integration component.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown component, category, or package; more than 100 selectors; any batch row is unresolved; or @astryxdesign/core cannot be resolved\n\nExamples:\n  # Browse the catalog\n  \u0001 component --list\n  # Look up several components\n  \u0001 component Button Badge Text\n  # Props table as JSON\n  \u0001 component Button --props --json\n  # Select a replaced Core original\n  \u0001 component SideNav --package @astryxdesign/core\n\nMore: \u0001 docs cli/commands/component\n",
+    "json": true,
+    "responseTypes": [
+     "component.list",
+     "component.batch",
+     "component.detail",
+     "component.detail.props",
+     "component.detail.source",
+     "component.detail.showcase",
+     "component.detail.blocks"
+    ],
+    "examples": [
+     "astryx component --list",
+     "astryx component Button Badge Text",
+     "astryx component Button --props --json",
+     "astryx component SideNav --package @astryxdesign/core"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown component, category, or package; more than 100 selectors; any batch row is unresolved; or @astryxdesign/core cannot be resolved"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "docs",
+    "fullName": "docs",
+    "aliases": [],
+    "description": "Print reference docs",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "topic",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     },
+     {
+      "name": "section",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--index",
+      "long": "--index",
+      "short": null,
+      "attributeName": "index",
+      "description": "List the topic's sections and their keys, even for a topic with one section",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--full",
+      "long": "--full",
+      "short": null,
+      "attributeName": "full",
+      "description": "Print the whole topic instead of its sections (text; `--json` returns the whole topic unless --index). Cannot be set with --index",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--depth <levels>",
+      "long": "--depth",
+      "short": null,
+      "attributeName": "depth",
+      "description": "How many levels of the docs tree to read below a namespace: 0 for the namespace alone, 1 for its children (what a read without --depth shows), all for everything below it. On the topic list, where a namespace otherwise lists alone, it names the docs below each one by the route that opens them, one line each. With it on a namespace read, --detail sets how much of each doc below shows: brief (one line each, the default), compact (with its sections), or full; the topic list is one line per doc whatever the detail",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown topic or route, a section that matches no section or more than one, or a --depth that is not a number of levels or all\n\nExamples:\n  # List topics\n  \u0001 docs\n  # A topic's sections\n  \u0001 docs theme\n  # A whole topic as JSON\n  \u0001 docs spacing --json\n  # One section\n  \u0001 docs theme quick-start\n  # The CLI docs tree\n  \u0001 docs cli\n  # Every CLI doc, one line each\n  \u0001 docs cli --depth all\n  # Every route in the docs tree, one line each\n  \u0001 docs --depth all\n  # The integration guides as one read\n  \u0001 docs authoring --depth all --detail full\n  # One API function\n  \u0001 docs cli/api/functions/search\n  # A whole guide\n  \u0001 docs authoring/quick-start --full\n\nMore: \u0001 docs cli/commands/docs\n",
+    "json": true,
+    "responseTypes": [
+     "docs.list",
+     "docs.detail",
+     "docs.index",
+     "docs.detail.section",
+     "docs.node"
+    ],
+    "examples": [
+     "astryx docs",
+     "astryx docs theme",
+     "astryx docs spacing --json",
+     "astryx docs theme quick-start",
+     "astryx docs cli",
+     "astryx docs cli --depth all",
+     "astryx docs --depth all",
+     "astryx docs authoring --depth all --detail full",
+     "astryx docs cli/api/functions/search",
+     "astryx docs authoring/quick-start --full"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown topic or route, a section that matches no section or more than one, or a --depth that is not a number of levels or all"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "blog",
+    "fullName": "blog",
+    "aliases": [],
+    "description": "Read the Astryx blog from the published feed",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "slug",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown slug, or the feed or a post cannot be fetched\n\nExamples:\n  # List posts\n  \u0001 blog\n  # Read one post\n  \u0001 blog introducing-astryx --json\n\nMore: \u0001 docs cli/commands/blog\n",
+    "json": true,
+    "responseTypes": [
+     "blog.list",
+     "blog.detail"
+    ],
+    "examples": [
+     "astryx blog",
+     "astryx blog introducing-astryx --json"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown slug, or the feed or a post cannot be fetched"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "swizzle",
+    "fullName": "swizzle",
+    "aliases": [],
+    "description": "Copy component source for customization",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "component",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--output <dir>",
+      "long": "--output",
+      "short": null,
+      "attributeName": "output",
+      "description": "Output directory",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": "./components/astryx",
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--package <pkg>",
+      "long": "--package",
+      "short": null,
+      "attributeName": "package",
+      "description": "Scope to a specific owning package. Use @astryxdesign/core to copy an original replaced by an integration component",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--list",
+      "long": "--list",
+      "short": null,
+      "attributeName": "list",
+      "description": "List the swizzlable Core components, including any that an integration component replaces",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "-f, --overwrite",
+      "long": "--overwrite",
+      "short": "-f",
+      "attributeName": "overwrite",
+      "description": "Replace the component's existing files. Without it, existing files fail the command with ERR_FILE_EXISTS and nothing is written. A helper an earlier swizzle wrote is reused when it is the same and is never replaced by a copy that carries it: a different one stays, and this copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper counts it as one of that component's own files. A changed private attribute owner module, or a style module it imports, fails the command without --overwrite and is replaced with it",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown or ambiguous component, no source on disk, a path escape, or existing files without --overwrite\n\nExamples:\n  # List swizzlable components\n  \u0001 swizzle --list\n  # Eject a component\n  \u0001 swizzle Button\n  # Copy a replaced Core original\n  \u0001 swizzle SideNav --package @astryxdesign/core\n\nMore: \u0001 docs cli/commands/swizzle\n",
+    "json": true,
+    "responseTypes": [
+     "swizzle.list",
+     "swizzle.copy"
+    ],
+    "examples": [
+     "astryx swizzle --list",
+     "astryx swizzle Button",
+     "astryx swizzle SideNav --package @astryxdesign/core"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown or ambiguous component, no source on disk, a path escape, or existing files without --overwrite"
+     }
+    ],
+    "outsideProject": "refuse",
+    "commands": []
+   },
+   {
+    "name": "gap-report",
+    "fullName": "gap-report",
+    "aliases": [],
+    "description": "Report a missing component or feature to the package that owns it",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "component",
+      "required": false,
+      "variadic": false,
+      "description": "Component or design-system area the gap is about, up to 120 characters. Required unless --list-categories is set.",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--category <category>",
+      "long": "--category",
+      "short": null,
+      "attributeName": "category",
+      "description": "Gap category (run --list-categories for values). Required unless --list-categories is set.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--reason <reason>",
+      "long": "--reason",
+      "short": null,
+      "attributeName": "reason",
+      "description": "What capability was missing or difficult, up to 2000 characters. Required unless --list-categories is set.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--additional-context <text>",
+      "long": "--additional-context",
+      "short": null,
+      "attributeName": "additionalContext",
+      "description": "Optional additional context, up to 8000 characters",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--package <pkg>",
+      "long": "--package",
+      "short": null,
+      "attributeName": "package",
+      "description": "Package that owns the gap: @astryxdesign/core or a loaded integration. Overrides automatic routing, which picks the integration whose component replaces the named Core component, else the one package that provides it, else Core; needed when more than one package provides the component",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--confirm-public",
+      "long": "--confirm-public",
+      "short": null,
+      "attributeName": "confirmPublic",
+      "description": "Allow public delivery: public handlers run, and a GitHub issues URL gets an issue filed with your gh login",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--to <package>",
+      "long": "--to",
+      "short": null,
+      "attributeName": "to",
+      "description": "Send the report only to this loaded integration's issues URL, as the person chose; the destinations the output lists are the choices",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--list-categories",
+      "long": "--list-categories",
+      "short": null,
+      "attributeName": "listCategories",
+      "description": "List valid report categories, and the destinations when there is more than one, without filing; the component and the other gap-report options are refused with ERR_INVALID_ARGUMENT",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  filed, routed-only, confirmation required, skipped, or categories listed\n  1  failed or partial delivery, invalid input, or ambiguous routing\n\nExamples:\n  # List categories\n  \u0001 gap-report --list-categories\n  # Prepare a report (nothing public happens without --confirm-public)\n  \u0001 gap-report Button --category missing_variant --reason 'Need a compact size'\n  # File where the person chose\n  \u0001 gap-report Button --category missing_variant --reason 'Need a compact size' --to @acme/widgets\n\nMore: \u0001 docs cli/commands/gap-report\n",
+    "json": true,
+    "responseTypes": [
+     "gap-report.categories",
+     "gap-report.file"
+    ],
+    "examples": [
+     "astryx gap-report --list-categories",
+     "astryx gap-report Button --category missing_variant --reason 'Need a compact size'",
+     "astryx gap-report Button --category missing_variant --reason 'Need a compact size' --to @acme/widgets"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "filed, routed-only, confirmation required, skipped, or categories listed"
+     },
+     {
+      "code": 1,
+      "when": "failed or partial delivery, invalid input, or ambiguous routing"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "template",
+    "fullName": "template",
+    "aliases": [],
+    "description": "List, show, or scaffold page and block templates",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "name",
+      "required": false,
+      "variadic": false,
+      "description": "Template id (see --list). Omit it to list the templates.",
+      "choices": null
+     },
+     {
+      "name": "path",
+      "required": false,
+      "variadic": false,
+      "description": "Where to scaffold the template, relative to the project root. A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block. Omit it to print the source.",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--list",
+      "long": "--list",
+      "short": null,
+      "attributeName": "list",
+      "description": "List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are refused",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--type <type>",
+      "long": "--type",
+      "short": null,
+      "attributeName": "type",
+      "description": "Filter by template type: page or block",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--package <pkg>",
+      "long": "--package",
+      "short": null,
+      "attributeName": "package",
+      "description": "Narrow to templates from a specific package. Use @astryxdesign/core to select an original hidden by an integration replacement.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--skeleton",
+      "long": "--skeleton",
+      "short": null,
+      "attributeName": "skeleton",
+      "description": "Show layout skeleton with spatial annotations (padding, gap, nesting) instead of the source. Needs <name>. It writes nothing, so <path> and --overwrite are refused with ERR_INVALID_ARGUMENT",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--cdn [path]",
+      "long": "--cdn",
+      "short": null,
+      "attributeName": "cdn",
+      "description": "Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are refused. The page goes to the --cdn value, else to <path>, else cdn.template.html, and that path is always the file itself. A value right after --cdn (anything not starting with -) is taken as that path",
+      "required": false,
+      "optional": true,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "-f, --overwrite",
+      "long": "--overwrite",
+      "short": "-f",
+      "attributeName": "overwrite",
+      "description": "Replace an existing target file. Without it an existing file is refused (ERR_FILE_EXISTS) and an existing CDN page is left as is",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success, including a CDN page left untouched because it already exists\n  1  unknown or ambiguous template, no source, a path escape, an existing target without --overwrite, or --list with a type outside page or block or a package that provides no templates\n\nExamples:\n  # List templates\n  \u0001 template --json\n  # List exact Core ids\n  \u0001 --json template --list --package @astryxdesign/core\n  # Scaffold into the app\n  \u0001 template dashboard ./src/app\n  # Select a replaced Core original\n  \u0001 template shell-side-nav ./src/app --package @astryxdesign/core\n  # CDN starter page\n  \u0001 template --cdn\n  # CDN starter page, elsewhere\n  \u0001 template --cdn public/demo.html\n\nMore: \u0001 docs cli/commands/template\n",
+    "json": true,
+    "responseTypes": [
+     "template.list",
+     "template.show",
+     "template.skeleton",
+     "template.copy",
+     "template.cdn"
+    ],
+    "examples": [
+     "astryx template --json",
+     "astryx --json template --list --package @astryxdesign/core",
+     "astryx template dashboard ./src/app",
+     "astryx template shell-side-nav ./src/app --package @astryxdesign/core",
+     "astryx template --cdn",
+     "astryx template --cdn public/demo.html"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success, including a CDN page left untouched because it already exists"
+     },
+     {
+      "code": 1,
+      "when": "unknown or ambiguous template, no source, a path escape, an existing target without --overwrite, or --list with a type outside page or block or a package that provides no templates"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "upgrade",
+    "fullName": "upgrade",
+    "aliases": [],
+    "description": "Update your code after upgrading Astryx, and refresh ShadCN-copied components",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [
+     {
+      "flags": "--from <version>",
+      "long": "--from",
+      "short": null,
+      "attributeName": "from",
+      "description": "Previous version before the dependency upgrade; required unless --list or --registry is set. The target is the installed @astryxdesign/core version, or legacy @xds/core when @astryxdesign/core is not installed",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--apply",
+      "long": "--apply",
+      "short": null,
+      "attributeName": "apply",
+      "description": "Write changes to disk; without it, the run is a dry run",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--force",
+      "long": "--force",
+      "short": null,
+      "attributeName": "force",
+      "description": "Run codemods even if --from is newer than the installed version",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--codemod <name>",
+      "long": "--codemod",
+      "short": null,
+      "attributeName": "codemod",
+      "description": "Run only the named codemod. Optional codemods run only when named here; a normal run skips them. Also skips the check of ShadCN-copied compositions. An unknown name exits 1 with ERR_UNKNOWN_CODEMOD when the version range has codemods",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--skip-codemod <name...>",
+      "long": "--skip-codemod",
+      "short": null,
+      "attributeName": "skipCodemod",
+      "description": "Exclude named codemods (repeatable). Re-run past a failed codemod by skipping it.",
+      "required": true,
+      "optional": false,
+      "variadic": true,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--integration <package>",
+      "long": "--integration",
+      "short": null,
+      "attributeName": "integration",
+      "description": "Explicit integration specifier (repeatable). Resolved beneath node_modules; absolute paths and `.` or `..` segments are rejected.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": [],
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": true
+     },
+     {
+      "flags": "--path <dir>",
+      "long": "--path",
+      "short": null,
+      "attributeName": "path",
+      "description": "Source directory to scan, relative to where you run the command, however you spell it. Without --path, the project's src folder, from any folder in the project",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": "./src at the project root",
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--install-deps",
+      "long": "--install-deps",
+      "short": null,
+      "attributeName": "installDeps",
+      "description": "Install jscodeshift when it is missing. Without it, a missing jscodeshift fails the command with ERR_DEP_MISSING",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--registry",
+      "long": "--registry",
+      "short": null,
+      "attributeName": "registry",
+      "description": "Only update ShadCN-copied compositions from their install receipts: unchanged files are updated, edits that do not overlap are merged, and conflicts are left untouched; --from is not required. Combining it with --list, --from, --force, --codemod, --skip-codemod, --integration or --install-deps exits 1 with ERR_INVALID_ARGUMENT",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--list",
+      "long": "--list",
+      "short": null,
+      "attributeName": "list",
+      "description": "List available codemods and do nothing else. Every other flag is refused, as is --registry (exit 1)",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValue": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success, including complete dry-run previews and runs whose only findings are manual migrations\n  1  missing or invalid --from, --registry with --list or a migration flag, a --path escape, no installed @astryxdesign/core (or legacy @xds/core), jscodeshift missing and not installed by --install-deps, an astryx.config that fails validation and that no pending config codemod repairs, an unreadable or invalid protection declaration, a protected file that still requires a codemod change, a generated file that must be regenerated, an unknown codemod, a codemod or post-codemod hook failure, or unresolved registry items\n\nExamples:\n  # List available codemods\n  \u0001 upgrade --list --json\n  # Update ShadCN-copied compositions\n  \u0001 upgrade --registry --apply\n  # Apply a migration\n  \u0001 upgrade --from 0.1.0 --apply\n\nMore: \u0001 docs cli/commands/upgrade\n",
+    "json": true,
+    "responseTypes": [
+     "upgrade.list",
+     "upgrade.registry",
+     "upgrade.status",
+     "upgrade.run"
+    ],
+    "examples": [
+     "astryx upgrade --list --json",
+     "astryx upgrade --registry --apply",
+     "astryx upgrade --from 0.1.0 --apply"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success, including complete dry-run previews and runs whose only findings are manual migrations"
+     },
+     {
+      "code": 1,
+      "when": "missing or invalid --from, --registry with --list or a migration flag, a --path escape, no installed @astryxdesign/core (or legacy @xds/core), jscodeshift missing and not installed by --install-deps, an astryx.config that fails validation and that no pending config codemod repairs, an unreadable or invalid protection declaration, a protected file that still requires a codemod change, a generated file that must be regenerated, an unknown codemod, a codemod or post-codemod hook failure, or unresolved registry items"
+     }
+    ],
+    "outsideProject": "own",
+    "commands": []
+   },
+   {
+    "name": "theme",
+    "fullName": "theme",
+    "aliases": [],
+    "description": "Add, switch, build, and author themes",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List available and added themes\n  \u0001 theme list\n  # Import a theme into the app\n  \u0001 theme add ocean\n  # Choose the default\n  \u0001 theme use ocean\n  # Fork source to customize\n  \u0001 theme eject ocean\n  # Generate a palette candidate\n  \u0001 theme palette generate palette.config.json\n  # See what a theme can override\n  \u0001 theme targets\n\nMore: \u0001 docs cli/commands/theme\n\nComponent style overrides:\n  \u0002 theme targets            Every themeable class, with its props and states\n  \u0002 component <Name>         One component's theming table\n  \u0002 docs theme               How component overrides work\n\n",
+    "json": false,
+    "responseTypes": [],
+    "examples": [
+     "astryx theme list",
+     "astryx theme add ocean",
+     "astryx theme use ocean",
+     "astryx theme eject ocean",
+     "astryx theme palette generate palette.config.json",
+     "astryx theme targets"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "help is shown or a subcommand succeeds"
+     },
+     {
+      "code": 1,
+      "when": "an unknown subcommand or a subcommand failure"
+     }
+    ],
+    "outsideProject": null,
+    "commands": [
+     {
+      "name": "palette",
+      "fullName": "theme palette",
+      "aliases": [],
+      "description": "Create and work with theme-owned color palettes",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand is provided\n\nExamples:\n  # Generate a candidate\n  \u0001 theme palette generate palette.config.json\n\nMore: \u0001 docs cli/commands/theme-palette\n",
+      "json": false,
+      "responseTypes": [],
+      "examples": [
+       "astryx theme palette generate palette.config.json"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "help is shown or a subcommand succeeds"
+       },
+       {
+        "code": 1,
+        "when": "an unknown subcommand is provided"
+       }
+      ],
+      "outsideProject": null,
+      "commands": [
+       {
+        "name": "generate",
+        "fullName": "theme palette generate",
+        "aliases": [],
+        "description": "Generate an OKLCH palette candidate for human review",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "config",
+          "required": true,
+          "variadic": false,
+          "description": "",
+          "choices": null
+         }
+        ],
+        "options": [
+         {
+          "flags": "-o, --out <path>",
+          "long": "--out",
+          "short": "-o",
+          "attributeName": "out",
+          "description": "Write a candidate TypeScript or JSON file and a sibling receipt",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--preview <path>",
+          "long": "--preview",
+          "short": null,
+          "attributeName": "preview",
+          "description": "Write a self-contained HTML preview page; the path must end in .html",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "-f, --overwrite",
+          "long": "--overwrite",
+          "short": "-f",
+          "attributeName": "overwrite",
+          "description": "Replace existing candidate, receipt, and preview files. Without it, if any of them exists, nothing is written",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         }
+        ],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  a candidate is produced or existing output is left untouched\n  1  the request is invalid or output cannot be written safely\n\nExamples:\n  # Preview candidate JSON\n  \u0001 theme palette generate themes/ocean/palette.config.json\n  # Write candidate and receipt\n  \u0001 theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts\n  # Write candidate, receipt, and review preview\n  \u0001 theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts --preview themes/ocean/tokens/ocean.palette.html\n\nMore: \u0001 docs cli/commands/theme-palette-generate\n",
+        "json": true,
+        "responseTypes": [
+         "theme.palette.generate"
+        ],
+        "examples": [
+         "astryx theme palette generate themes/ocean/palette.config.json",
+         "astryx theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts",
+         "astryx theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts --preview themes/ocean/tokens/ocean.palette.html"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "a candidate is produced or existing output is left untouched"
+         },
+         {
+          "code": 1,
+          "when": "the request is invalid or output cannot be written safely"
+         }
+        ],
+        "outsideProject": "same",
+        "commands": []
+       }
+      ]
+     },
+     {
+      "name": "build",
+      "fullName": "theme build",
+      "aliases": [],
+      "description": "Compile standalone themes or one keyed theme family",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "files",
+        "required": true,
+        "variadic": true,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "--family",
+        "long": "--family",
+        "short": null,
+        "attributeName": "family",
+        "description": "Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--family-key <key>",
+        "long": "--family-key",
+        "short": null,
+        "attributeName": "familyKey",
+        "description": "Lower-kebab filename stem required with --family and refused without it; must differ from every member name (ERR_THEME_INVALID)",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "-o, --out <path>",
+        "long": "--out",
+        "short": "-o",
+        "attributeName": "out",
+        "description": "Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--icons-specifier <specifier>",
+        "long": "--icons-specifier",
+        "short": null,
+        "attributeName": "iconsSpecifier",
+        "description": "Override the icon-registry import in the generated JS module, for example ./icons.mjs (default: the specifier in the theme source's own import). With --family it applies to every member's icon import",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "-w, --watch",
+        "long": "--watch",
+        "short": "-w",
+        "attributeName": "watch",
+        "description": "Rebuild automatically when a theme file changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "-c, --check",
+        "long": "--check",
+        "short": "-c",
+        "attributeName": "check",
+        "description": "Verify the committed outputs match the source without writing; exit non-zero if stale. Composes with --family and several files; refused with --watch (ERR_THEME_INVALID)",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the theme builds, or --check finds the outputs up to date\n  1  a build or validation error, or --check finds stale or missing outputs\n\nExamples:\n  # Build to a CSS file\n  \u0001 theme build ./src/themes/ocean.ts --out ./dist/ocean.css\n  # Build one related family for attribute-only switching\n  \u0001 theme build --family ./themes/ocean.mjs ./themes/ocean-calm.mjs --family-key ocean-family\n  # Build every theme in a directory\n  \u0001 theme build ./src/themes/*.ts\n  # Check for drift (CI)\n  \u0001 theme build ./src/themes/ocean.ts --check\n  # Build against a separately compiled icon registry\n  \u0001 theme build ./src/themes/ocean.ts --icons-specifier ./icons.mjs\n\nMore: \u0001 docs cli/commands/theme-build\n",
+      "json": true,
+      "responseTypes": [
+       "theme.build",
+       "theme.build.check"
+      ],
+      "examples": [
+       "astryx theme build ./src/themes/ocean.ts --out ./dist/ocean.css",
+       "astryx theme build --family ./themes/ocean.mjs ./themes/ocean-calm.mjs --family-key ocean-family",
+       "astryx theme build ./src/themes/*.ts",
+       "astryx theme build ./src/themes/ocean.ts --check",
+       "astryx theme build ./src/themes/ocean.ts --icons-specifier ./icons.mjs"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the theme builds, or --check finds the outputs up to date"
+       },
+       {
+        "code": 1,
+        "when": "a build or validation error, or --check finds stale or missing outputs"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     },
+     {
+      "name": "list",
+      "fullName": "theme list",
+      "aliases": [],
+      "description": "List themes available to add",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [],
+      "options": [
+       {
+        "flags": "--package <package>",
+        "long": "--package",
+        "short": null,
+        "attributeName": "package",
+        "description": "Show only themes owned by this package",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  success\n  1  a bundled or installed theme descriptor cannot be read\n\nExamples:\n  # List available themes\n  \u0001 theme list --json\n  # List one integration package\n  \u0001 theme list --package @acme/themes\n\nMore: \u0001 docs cli/commands/theme-list\n",
+      "json": true,
+      "responseTypes": [
+       "theme.list"
+      ],
+      "examples": [
+       "astryx theme list --json",
+       "astryx theme list --package @acme/themes"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "success"
+       },
+       {
+        "code": 1,
+        "when": "a bundled or installed theme descriptor cannot be read"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     },
+     {
+      "name": "add",
+      "fullName": "theme add",
+      "aliases": [],
+      "description": "Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": false,
+      "args": [
+       {
+        "name": "slug",
+        "required": false,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "--list",
+        "long": "--list",
+        "short": null,
+        "attributeName": "list",
+        "description": "List available themes",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--import",
+        "long": "--import",
+        "short": null,
+        "attributeName": "import",
+        "description": "Compatibility no-op; the built theme is added with or without this flag",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--package <package>",
+        "long": "--package",
+        "short": null,
+        "attributeName": "package",
+        "description": "Select the package that owns the theme",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the theme is listed or added\n  1  the theme, its built imports, its record, or the option combination is invalid\n\nExamples:\n  # Add a built theme to the app\n  \u0001 theme add ocean\n  # Select a package theme over a local theme\n  \u0001 theme add ocean --package @acme/themes\n\nMore: \u0001 docs cli/commands/theme-add\n",
+      "json": true,
+      "responseTypes": [
+       "theme.app"
+      ],
+      "examples": [
+       "astryx theme add ocean",
+       "astryx theme add ocean --package @acme/themes"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the theme is listed or added"
+       },
+       {
+        "code": 1,
+        "when": "the theme, its built imports, its record, or the option combination is invalid"
+       }
+      ],
+      "outsideProject": "own",
+      "commands": []
+     },
+     {
+      "name": "remove",
+      "fullName": "theme remove",
+      "aliases": [],
+      "description": "Remove a non-default theme from the app",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "slug",
+        "required": true,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the module is regenerated without the theme\n  1  the theme is not added, is the default, or state is invalid\n\nExamples:\n  # Remove an added theme\n  \u0001 theme remove ocean\n\nMore: \u0001 docs cli/commands/theme-remove\n",
+      "json": true,
+      "responseTypes": [
+       "theme.app"
+      ],
+      "examples": [
+       "astryx theme remove ocean"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the module is regenerated without the theme"
+       },
+       {
+        "code": 1,
+        "when": "the theme is not added, is the default, or state is invalid"
+       }
+      ],
+      "outsideProject": "refuse",
+      "commands": []
+     },
+     {
+      "name": "use",
+      "fullName": "theme use",
+      "aliases": [],
+      "description": "Choose the app default from its added themes",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "slug",
+        "required": true,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the module is regenerated with the selected default\n  1  the theme is not added or state is invalid\n\nExamples:\n  # Choose the default theme\n  \u0001 theme use ocean\n\nMore: \u0001 docs cli/commands/theme-use\n",
+      "json": true,
+      "responseTypes": [
+       "theme.app"
+      ],
+      "examples": [
+       "astryx theme use ocean"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the module is regenerated with the selected default"
+       },
+       {
+        "code": 1,
+        "when": "the theme is not added or state is invalid"
+       }
+      ],
+      "outsideProject": "refuse",
+      "commands": []
+     },
+     {
+      "name": "eject",
+      "fullName": "theme eject",
+      "aliases": [],
+      "description": "Fork a theme as editable local source",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "slug",
+        "required": true,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       },
+       {
+        "name": "path",
+        "required": false,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "-f, --overwrite",
+        "long": "--overwrite",
+        "short": "-f",
+        "attributeName": "overwrite",
+        "description": "Replace existing files. Without it, an existing file fails with ERR_FILE_EXISTS and nothing is written",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--package <package>",
+        "long": "--package",
+        "short": null,
+        "attributeName": "package",
+        "description": "Select the package that owns the theme",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  all source and descriptor files are written\n  1  the theme is unknown or ambiguous, a path escapes, a source file is missing, or a destination exists\n\nExamples:\n  # Fork a theme into the local root\n  \u0001 theme eject ocean\n  # Fork one package theme elsewhere\n  \u0001 theme eject ocean src/themes/my-ocean --package @acme/themes\n\nMore: \u0001 docs cli/commands/theme-eject\n",
+      "json": true,
+      "responseTypes": [
+       "theme.eject"
+      ],
+      "examples": [
+       "astryx theme eject ocean",
+       "astryx theme eject ocean src/themes/my-ocean --package @acme/themes"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "all source and descriptor files are written"
+       },
+       {
+        "code": 1,
+        "when": "the theme is unknown or ambiguous, a path escapes, a source file is missing, or a destination exists"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     },
+     {
+      "name": "template",
+      "fullName": "theme template",
+      "aliases": [],
+      "description": "Write the annotated theme template into your project",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "path",
+        "required": false,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "-f, --overwrite",
+        "long": "--overwrite",
+        "short": "-f",
+        "attributeName": "overwrite",
+        "description": "Replace an existing file",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  success, including when an existing file was left untouched\n  1  the target path escapes the project, or the file cannot be written\n\nExamples:\n  # Write it at the project root\n  \u0001 theme template\n  # Somewhere else\n  \u0001 theme template src/themes/starter.ts\n\nMore: \u0001 docs cli/commands/theme-template\n",
+      "json": true,
+      "responseTypes": [
+       "theme.template"
+      ],
+      "examples": [
+       "astryx theme template",
+       "astryx theme template src/themes/starter.ts"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "success, including when an existing file was left untouched"
+       },
+       {
+        "code": 1,
+        "when": "the target path escapes the project, or the file cannot be written"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     },
+     {
+      "name": "targets",
+      "fullName": "theme targets",
+      "aliases": [],
+      "description": "List the component theming targets a theme can override",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "filter",
+        "required": false,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  success\n  1  a filter matches no target, or core cannot be resolved\n\nExamples:\n  # The whole themeable surface\n  \u0001 theme targets\n  # One component's targets\n  \u0001 theme targets Switch\n  # Search keys\n  \u0001 theme targets thumb\n  # For a lint or an audit script\n  \u0001 --json theme targets\n\nMore: \u0001 docs cli/commands/theme-targets\n",
+      "json": true,
+      "responseTypes": [
+       "theme.targets"
+      ],
+      "examples": [
+       "astryx theme targets",
+       "astryx theme targets Switch",
+       "astryx theme targets thumb",
+       "astryx --json theme targets"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "success"
+       },
+       {
+        "code": 1,
+        "when": "a filter matches no target, or core cannot be resolved"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     }
+    ]
+   },
+   {
+    "name": "integration",
+    "fullName": "integration",
+    "aliases": [],
+    "description": "Author and verify an Astryx integration package",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": true,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand is provided\n\nExamples:\n  # Add a component\n  \u0001 integration add component AcmeWidget\n  # Check the package in CI, as part of its build\n  \u0001 integration check --strict\n  # Check the package before publishing\n  \u0001 integration verify\n\nMore: \u0001 docs cli/commands/integration\n",
+    "json": false,
+    "responseTypes": [],
+    "examples": [
+     "astryx integration add component AcmeWidget",
+     "astryx integration check --strict",
+     "astryx integration verify"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "help is shown or a subcommand succeeds"
+     },
+     {
+      "code": 1,
+      "when": "an unknown subcommand is provided"
+     }
+    ],
+    "outsideProject": null,
+    "commands": [
+     {
+      "name": "add",
+      "fullName": "integration add",
+      "aliases": [],
+      "description": "Add one working contribution to an integration package",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": false,
+      "args": [
+       {
+        "name": "kind",
+        "required": true,
+        "variadic": false,
+        "description": "component, doc, template, codemod, agent-doc, or theme",
+        "choices": null
+       },
+       {
+        "name": "name",
+        "required": true,
+        "variadic": false,
+        "description": "Contribution name: PascalCase for component (AcmeWidget); lowercase kebab-case for template, codemod, and theme (account-card); letters, digits, _ and - for doc; the literal guidance line for agent-doc",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "--dry-run",
+        "long": "--dry-run",
+        "short": null,
+        "attributeName": "dryRun",
+        "description": "Validate and show planned writes without changing files",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--type <type>",
+        "long": "--type",
+        "short": null,
+        "attributeName": "type",
+        "description": "Template type: page (default) or block; only valid for template",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--replaces <topic>",
+        "long": "--replaces",
+        "short": null,
+        "attributeName": "replaces",
+        "description": "Existing doc topic this one replaces (letters, digits, _ and -); only valid for doc and not with --extends",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--extends <topic>",
+        "long": "--extends",
+        "short": null,
+        "attributeName": "extends",
+        "description": "Existing doc topic this one extends (letters, digits, _ and -); only valid for doc and not with --replaces",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--parent <namespace>",
+        "long": "--parent",
+        "short": null,
+        "attributeName": "parent",
+        "description": "Namespace of this package to place the doc in, as a guide in its `guides` slot; writes the namespace doc when it is missing, and declares the CLI that reads it as an optional `@astryxdesign/cli` peer. Only valid for doc, and not with --replaces or --extends",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--from <theme>",
+        "long": "--from",
+        "short": null,
+        "attributeName": "from",
+        "description": "Existing theme slug to fork as a starting point instead of a blank scaffold; the new theme copies the base and has no link back, and package.json `dependencies` gains the npm packages the copied files import (other than Core and React). Only valid for theme",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--to <version>",
+        "long": "--to",
+        "short": null,
+        "attributeName": "to",
+        "description": "Exact semver of the @astryxdesign/core version whose upgrade runs the codemod (e.g. 0.7.0); required for codemod and only valid there",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the contribution is written or the dry run succeeds\n  1  the kind, name, options, package, or target files are invalid or conflict\n\nExamples:\n  # Preview\n  \u0001 integration add component AcmeWidget --dry-run --json\n  # Add a component\n  \u0001 integration add component AcmeWidget\n  # Add a doc topic\n  \u0001 integration add doc deploying\n  # Add a page template\n  \u0001 integration add template acme-dashboard\n  # Add a block template\n  \u0001 integration add template account-card --type block\n  # Replace a doc topic\n  \u0001 integration add doc acme-getting-started --replaces getting-started\n  # Extend a doc topic\n  \u0001 integration add doc acme-theming --extends theme\n  # Add a guide to the package's own docs section\n  \u0001 integration add doc releasing --parent acme\n  # Add a codemod\n  \u0001 integration add codemod rename-widget --to 1.2.0\n  # Add agent guidance\n  \u0001 integration add agent-doc 'Run acme verify before finishing.'\n  # Add a source theme\n  \u0001 integration add theme ocean\n  # Fork an existing theme\n  \u0001 integration add theme ocean --from neutral\n\nMore: \u0001 docs cli/commands/integration-add\n",
+      "json": true,
+      "responseTypes": [
+       "integration.add"
+      ],
+      "examples": [
+       "astryx integration add component AcmeWidget --dry-run --json",
+       "astryx integration add component AcmeWidget",
+       "astryx integration add doc deploying",
+       "astryx integration add template acme-dashboard",
+       "astryx integration add template account-card --type block",
+       "astryx integration add doc acme-getting-started --replaces getting-started",
+       "astryx integration add doc acme-theming --extends theme",
+       "astryx integration add doc releasing --parent acme",
+       "astryx integration add codemod rename-widget --to 1.2.0",
+       "astryx integration add agent-doc 'Run acme verify before finishing.'",
+       "astryx integration add theme ocean",
+       "astryx integration add theme ocean --from neutral"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the contribution is written or the dry run succeeds"
+       },
+       {
+        "code": 1,
+        "when": "the kind, name, options, package, or target files are invalid or conflict"
+       }
+      ],
+      "outsideProject": "refuse",
+      "commands": []
+     },
+     {
+      "name": "check",
+      "fullName": "integration check",
+      "aliases": [],
+      "description": "The CI check for an integration package's own build: every source check, run in continuous integration or a typecheck script, against the package in the current folder",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": false,
+      "args": [],
+      "options": [
+       {
+        "flags": "--strict",
+        "long": "--strict",
+        "short": null,
+        "attributeName": "strict",
+        "description": "Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` is reported as a note (`invalid_cli_command`) that fails nothing.",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--next",
+        "long": "--next",
+        "short": null,
+        "attributeName": "next",
+        "description": "Also count the findings the next minor release turns into warnings (the notes marked `next`) as warnings now, so `--strict --next` fails on them. Run it to fix them ahead of the release; every run says how many there are.",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  no check fails on its own; with --strict, also no warning, and every check ran\n  1  a check fails on its own (an error); with --strict, also any warning, or a check that did not run\n\nExamples:\n  # In CI, as the typecheck script: add \"typecheck\": \"tsc --noEmit && astryx integration check --strict\" to package.json\n  \u0001 integration check --strict\n  # Errors only, while you fix the warnings a package already has\n  \u0001 integration check\n  # Fix ahead: fail on the findings the next minor release will fail on\n  \u0001 integration check --strict --next\n  # Read the result as JSON\n  \u0001 integration check --strict --json\n  # Before you publish: check that the packed package works in an app\n  \u0001 integration verify\n\nMore: \u0001 docs cli/commands/integration-check\n",
+      "json": true,
+      "responseTypes": [
+       "integration.check"
+      ],
+      "examples": [
+       "integration check --strict",
+       "integration check",
+       "integration check --strict --next",
+       "integration check --strict --json",
+       "integration verify"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "no check fails on its own; with --strict, also no warning, and every check ran"
+       },
+       {
+        "code": 1,
+        "when": "a check fails on its own (an error); with --strict, also any warning, or a check that did not run"
+       }
+      ],
+      "outsideProject": "own",
+      "commands": []
+     },
+     {
+      "name": "verify",
+      "fullName": "integration verify",
+      "aliases": [],
+      "description": "Check the package the way npm will publish it, before you publish",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the packed package exposes the same valid contributions\n  1  the tarball is incomplete or invalid\n\nExamples:\n  # Check before publishing\n  \u0001 integration verify\n  # Machine-readable result\n  \u0001 integration verify --json\n\nMore: \u0001 docs cli/commands/integration-verify\n",
+      "json": true,
+      "responseTypes": [
+       "integration.pack-check"
+      ],
+      "examples": [
+       "astryx integration verify",
+       "astryx integration verify --json"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the packed package exposes the same valid contributions"
+       },
+       {
+        "code": 1,
+        "when": "the tarball is incomplete or invalid"
+       }
+      ],
+      "outsideProject": "own",
+      "commands": []
+     },
+     {
+      "name": "pack",
+      "fullName": "integration pack",
+      "aliases": [],
+      "description": "Deprecated: the old name of `integration verify`",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [],
+      "options": [
+       {
+        "flags": "--check",
+        "long": "--check",
+        "short": null,
+        "attributeName": "check",
+        "description": "Run the check. Required, as before.",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the packed package exposes the same valid contributions\n  1  --check is omitted or the tarball is incomplete or invalid\n\nExamples:\n  # The old spelling\n  \u0001 integration pack --check\n\nMore: \u0001 docs cli/commands/integration-pack\n",
+      "json": true,
+      "responseTypes": [
+       "integration.pack-check"
+      ],
+      "examples": [
+       "astryx integration pack --check"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the packed package exposes the same valid contributions"
+       },
+       {
+        "code": 1,
+        "when": "--check is omitted or the tarball is incomplete or invalid"
+       }
+      ],
+      "outsideProject": "own",
+      "commands": []
+     }
+    ]
+   },
+   {
+    "name": "hook",
+    "fullName": "hook",
+    "aliases": [],
+    "description": "List hooks or print hook docs",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "name",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--list",
+      "long": "--list",
+      "short": null,
+      "attributeName": "list",
+      "description": "List all hooks grouped by category",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--category <category>",
+      "long": "--category",
+      "short": null,
+      "attributeName": "category",
+      "description": "List hooks in a specific category",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--params",
+      "long": "--params",
+      "short": null,
+      "attributeName": "params",
+      "description": "Print only the parameters table",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown hook or category, or @astryxdesign/core cannot be resolved\n\nExamples:\n  # Browse the catalog\n  \u0001 hook --list\n  # One hook as JSON\n  \u0001 hook useFocusTrap --json\n\nMore: \u0001 docs cli/commands/hook\n",
+    "json": true,
+    "responseTypes": [
+     "hook.list",
+     "hook.detail",
+     "hook.detail.params"
+    ],
+    "examples": [
+     "astryx hook --list",
+     "astryx hook useFocusTrap --json"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown hook or category, or @astryxdesign/core cannot be resolved"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "discover",
+    "fullName": "discover",
+    "aliases": [],
+    "description": "Browse and search integrations: the ones you have and the ones you could add",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "query",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--components",
+      "long": "--components",
+      "short": null,
+      "attributeName": "components",
+      "description": "In the package list, print every component, and every other item, of each package instead of the first 10 and a \"+N more\" count. No effect on --json output or on a package, component, or search query.",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--type <kind>",
+      "long": "--type",
+      "short": null,
+      "attributeName": "type",
+      "description": "Only one kind: component, template, doc, theme, codemod, or agent-doc. In the list, only packages that add it; in a search, only items of that kind.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--installed",
+      "long": "--installed",
+      "short": null,
+      "attributeName": "installed",
+      "description": "Only what this project has. Cannot be set with --available.",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--available",
+      "long": "--available",
+      "short": null,
+      "attributeName": "available",
+      "description": "Only what this project could add. Cannot be set with --installed.",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--limit <n>",
+      "long": "--limit",
+      "short": null,
+      "attributeName": "limit",
+      "description": "Max number of search results, a positive integer (default 20).",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  unknown package, version, component, or item; a malformed doc; an invalid --type or --limit; --installed with --available; or a blank query when packages are discovered\n\nExamples:\n  # List what you have and what you could add\n  \u0001 discover\n  # List every component of each package\n  \u0001 discover --components\n  # Only packages that add themes\n  \u0001 discover --type theme\n  # Browse a package and its versions\n  \u0001 discover @acme/ui\n  # See one version\n  \u0001 discover @acme/ui@2.1.0\n  # Search templates you could add\n  \u0001 discover dashboard --type template --available\n\nMore: \u0001 docs cli/commands/discover\n",
+    "json": true,
+    "responseTypes": [
+     "discover.list",
+     "discover.detail",
+     "discover.detail.doc",
+     "discover.item",
+     "discover.search"
+    ],
+    "examples": [
+     "astryx discover",
+     "astryx discover --components",
+     "astryx discover --type theme",
+     "astryx discover @acme/ui",
+     "astryx discover @acme/ui@2.1.0",
+     "astryx discover dashboard --type template --available"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "unknown package, version, component, or item; a malformed doc; an invalid --type or --limit; --installed with --available; or a blank query when packages are discovered"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "search",
+    "fullName": "search",
+    "aliases": [],
+    "description": "Search components, hooks, docs, templates, and themes in one ranked list",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "query",
+      "required": true,
+      "variadic": true,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--type <domain>",
+      "long": "--type",
+      "short": null,
+      "attributeName": "type",
+      "description": "Filter to one domain (component|hook|doc|template|theme)",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--limit <n>",
+      "long": "--limit",
+      "short": null,
+      "attributeName": "limit",
+      "description": "Max number of results, a positive integer (default 20)",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--verbose",
+      "long": "--verbose",
+      "short": null,
+      "attributeName": "verbose",
+      "description": "Also print each result's score and match reason",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success (including zero matches)\n  1  invalid --type, a --limit that is not a positive integer, or --type component, hook, or template where @astryxdesign/core cannot be found\n\nExamples:\n  # Ranked results\n  \u0001 search button\n  # Several words, no quotes\n  \u0001 search dark mode --type doc\n  # Filter + JSON\n  \u0001 search \"data table\" --type template --json\n  # Themes you can add\n  \u0001 search warm --type theme\n\nMore: \u0001 docs cli/commands/search\n",
+    "json": true,
+    "responseTypes": [
+     "search"
+    ],
+    "examples": [
+     "astryx search button",
+     "astryx search dark mode --type doc",
+     "astryx search \"data table\" --type template --json",
+     "astryx search warm --type theme"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success (including zero matches)"
+     },
+     {
+      "code": 1,
+      "when": "invalid --type, a --limit that is not a positive integer, or --type component, hook, or template where @astryxdesign/core cannot be found"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "build",
+    "fullName": "build",
+    "aliases": [],
+    "description": "Build a page: the template to start from, or the workflow playbook (no query)",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [
+     {
+      "name": "query",
+      "required": false,
+      "variadic": false,
+      "description": "",
+      "choices": null
+     }
+    ],
+    "options": [
+     {
+      "flags": "--type <domain>",
+      "long": "--type",
+      "short": null,
+      "attributeName": "type",
+      "description": "Filter the kit to one domain (component|hook|doc|template|theme); doc and theme give an empty kit",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--limit <n>",
+      "long": "--limit",
+      "short": null,
+      "attributeName": "limit",
+      "description": "Max candidates to draw from (default 60)",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     },
+     {
+      "flags": "--verbose",
+      "long": "--verbose",
+      "short": null,
+      "attributeName": "verbose",
+      "description": "Verbose output (every block and component, full descriptions, import paths and match reason)",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success (including zero matches)\n  1  invalid --type, a --limit that is not a positive integer, or a query when @astryxdesign/core cannot be found (the playbook needs no core)\n\nExamples:\n  # Get the playbook\n  \u0001 build\n  # Find the template to start from\n  \u0001 build \"analytics dashboard\" --json\n\nMore: \u0001 docs cli/commands/build\n",
+    "json": true,
+    "responseTypes": [
+     "build.help",
+     "build.kit"
+    ],
+    "examples": [
+     "astryx build",
+     "astryx build \"analytics dashboard\" --json"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success (including zero matches)"
+     },
+     {
+      "code": 1,
+      "when": "invalid --type, a --limit that is not a positive integer, or a query when @astryxdesign/core cannot be found (the playbook needs no core)"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "doctor",
+    "fullName": "doctor",
+    "aliases": [],
+    "description": "Diagnose Astryx projects and integration packages",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [
+     {
+      "flags": "--built <path>",
+      "long": "--built",
+      "short": null,
+      "attributeName": "built",
+      "description": "Also check a finished build before you deliver it: a project folder, a build output folder, or one built HTML file. Fails when it does not use Astryx at all, and warns with each raw element, icon or custom style in its source.",
+      "required": true,
+      "optional": false,
+      "variadic": false,
+      "negate": false,
+      "mandatory": false,
+      "hidden": false,
+      "defaultValueDescription": null,
+      "choices": null,
+      "collect": false
+     }
+    ],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  no checks failed (warnings are allowed)\n  1  one or more checks failed\n\nExamples:\n  # Run project diagnostics\n  \u0001 doctor\n  # Machine-readable project report\n  \u0001 doctor --json\n  # Before you deliver a build: check that it uses Astryx\n  \u0001 doctor --built dist\n  # Validate an integration\n  \u0001 doctor integration validate @acme/widgets\n  # Check template ids against Core\n  \u0001 doctor integration templates @acme/widgets\n  # Check component names against Core\n  \u0001 doctor integration components @acme/widgets\n  # Classify doc overlaps with Core\n  \u0001 doctor integration docs @acme/widgets\n\nMore: \u0001 docs cli/commands/doctor\n",
+    "json": true,
+    "responseTypes": [
+     "doctor"
+    ],
+    "examples": [
+     "astryx doctor",
+     "astryx doctor --json",
+     "astryx doctor --built dist",
+     "astryx doctor integration validate @acme/widgets",
+     "astryx doctor integration templates @acme/widgets",
+     "astryx doctor integration components @acme/widgets",
+     "astryx doctor integration docs @acme/widgets"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "no checks failed (warnings are allowed)"
+     },
+     {
+      "code": 1,
+      "when": "one or more checks failed"
+     }
+    ],
+    "outsideProject": "own",
+    "commands": [
+     {
+      "name": "integration",
+      "fullName": "doctor integration",
+      "aliases": [],
+      "description": "Check an integration package while authoring it",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [],
+      "options": [],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  help is shown or the selected check has no errors\n  1  the selected check reports an error\n\nExamples:\n  # Validate a local integration\n  \u0001 doctor integration validate\n  # Check template ids against Core\n  \u0001 doctor integration templates\n  # Check component names against Core\n  \u0001 doctor integration components\n  # Classify doc overlaps with Core\n  \u0001 doctor integration docs\n\nMore: \u0001 docs cli/commands/doctor-integration\n",
+      "json": false,
+      "responseTypes": [],
+      "examples": [
+       "astryx doctor integration validate",
+       "astryx doctor integration templates",
+       "astryx doctor integration components",
+       "astryx doctor integration docs"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "help is shown or the selected check has no errors"
+       },
+       {
+        "code": 1,
+        "when": "the selected check reports an error"
+       }
+      ],
+      "outsideProject": null,
+      "commands": [
+       {
+        "name": "validate",
+        "fullName": "doctor integration validate",
+        "aliases": [],
+        "description": "Validate an integration manifest and its contributions",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "package",
+          "required": false,
+          "variadic": false,
+          "description": "Installed integration package name; omit to validate the package in the current directory.",
+          "choices": null
+         }
+        ],
+        "options": [],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  no error-severity issues (warnings, including doc type findings, are allowed)\n  1  one or more error-severity issues\n\nExamples:\n  # Validate the local package\n  \u0001 doctor integration validate\n  # Validate an installed package\n  \u0001 doctor integration validate @acme/widgets --json\n\nMore: \u0001 docs cli/commands/doctor-integration-validate\n",
+        "json": true,
+        "responseTypes": [
+         "integration.validate"
+        ],
+        "examples": [
+         "astryx doctor integration validate",
+         "astryx doctor integration validate @acme/widgets --json"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "no error-severity issues (warnings, including doc type findings, are allowed)"
+         },
+         {
+          "code": 1,
+          "when": "one or more error-severity issues"
+         }
+        ],
+        "outsideProject": "own",
+        "commands": []
+       },
+       {
+        "name": "templates",
+        "fullName": "doctor integration templates",
+        "aliases": [],
+        "description": "Validate integration template replacements and Core id overlaps",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "package",
+          "required": false,
+          "variadic": false,
+          "description": "Installed integration package name; omit to check the package in the current directory.",
+          "choices": null
+         }
+        ],
+        "options": [],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  replacement declarations are valid; undeclared id conflicts are warnings\n  1  the integration, a template, or a replacement declaration is invalid\n\nExamples:\n  # Check the local integration\n  \u0001 doctor integration templates\n  # Check an installed integration\n  \u0001 doctor integration templates @acme/widgets --json\n\nMore: \u0001 docs cli/commands/doctor-integration-templates\n",
+        "json": true,
+        "responseTypes": [
+         "integration.template-conflicts"
+        ],
+        "examples": [
+         "astryx doctor integration templates",
+         "astryx doctor integration templates @acme/widgets --json"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "replacement declarations are valid; undeclared id conflicts are warnings"
+         },
+         {
+          "code": 1,
+          "when": "the integration, a template, or a replacement declaration is invalid"
+         }
+        ],
+        "outsideProject": "same",
+        "commands": []
+       },
+       {
+        "name": "components",
+        "fullName": "doctor integration components",
+        "aliases": [],
+        "description": "Check integration component names, replacements, and documented props",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "package",
+          "required": false,
+          "variadic": false,
+          "description": "Installed integration package name; omit to check the package in the current directory.",
+          "choices": null
+         }
+        ],
+        "options": [],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  the check completed; component name conflicts, replaces findings for a package without the CLI range, props that differ from the code, and links that name no doc are warnings\n  1  the integration is invalid, Core cannot be resolved, or a package that declares the CLI range has an invalid replaces\n\nExamples:\n  # Check the local integration\n  \u0001 doctor integration components\n  # Check an installed integration\n  \u0001 doctor integration components @acme/widgets --json\n\nMore: \u0001 docs cli/commands/doctor-integration-components\n",
+        "json": true,
+        "responseTypes": [
+         "integration.component-conflicts"
+        ],
+        "examples": [
+         "astryx doctor integration components",
+         "astryx doctor integration components @acme/widgets --json"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "the check completed; component name conflicts, replaces findings for a package without the CLI range, props that differ from the code, and links that name no doc are warnings"
+         },
+         {
+          "code": 1,
+          "when": "the integration is invalid, Core cannot be resolved, or a package that declares the CLI range has an invalid replaces"
+         }
+        ],
+        "outsideProject": "same",
+        "commands": []
+       },
+       {
+        "name": "docs",
+        "fullName": "doctor integration docs",
+        "aliases": [],
+        "description": "Check an integration's docs: the docs tree they add, every link, and overlaps with Core topics",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "package",
+          "required": false,
+          "variadic": false,
+          "description": "Installed integration package name; omit to check the package in the current directory.",
+          "choices": null
+         }
+        ],
+        "options": [],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  all Core overlaps are explicitly declared or no overlap exists\n  1  an overlap is accidental, a doc is invalid, a namespace or placement fails, or a reference block cannot include what it names. A link that names no doc is a warning, and does not change the exit code\n\nExamples:\n  # Check the local integration\n  \u0001 doctor integration docs\n  # Check an installed integration\n  \u0001 doctor integration docs @acme/widgets --json\n\nMore: \u0001 docs cli/commands/doctor-integration-docs\n",
+        "json": true,
+        "responseTypes": [
+         "integration.doc-conflicts"
+        ],
+        "examples": [
+         "astryx doctor integration docs",
+         "astryx doctor integration docs @acme/widgets --json"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "all Core overlaps are explicitly declared or no overlap exists"
+         },
+         {
+          "code": 1,
+          "when": "an overlap is accidental, a doc is invalid, a namespace or placement fails, or a reference block cannot include what it names. A link that names no doc is a warning, and does not change the exit code"
+         }
+        ],
+        "outsideProject": "same",
+        "commands": []
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "experimental",
+    "fullName": "experimental",
+    "aliases": [],
+    "description": "[experimental] Try features that may change in a patch release: icon sets (find icons, build an icon-set package)",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List the experiments\n  \u0001 experimental\n  # Find an icon by meaning\n  \u0001 experimental icon delete\n  # Render a page to one HTML file\n  \u0001 experimental render page.tsx\n\nMore: \u0001 docs cli/commands/experimental\n",
+    "json": false,
+    "responseTypes": [],
+    "examples": [
+     "astryx experimental",
+     "astryx experimental icon delete",
+     "astryx experimental render page.tsx"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "help is shown or a subcommand succeeds"
+     },
+     {
+      "code": 1,
+      "when": "an unknown subcommand or a subcommand failure"
+     }
+    ],
+    "outsideProject": null,
+    "commands": [
+     {
+      "name": "icon",
+      "fullName": "experimental icon",
+      "aliases": [],
+      "description": "[experimental] Find an icon by meaning, or build an icon set from a library (guide: astryx docs cli/experimental/icon-sets)",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "query",
+        "required": false,
+        "variadic": true,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "--list",
+        "long": "--list",
+        "short": null,
+        "attributeName": "list",
+        "description": "List the installed icon sets and do nothing else; a query is refused",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--set <name>",
+        "long": "--set",
+        "short": null,
+        "attributeName": "set",
+        "description": "Search one set, by name or <package>/<set>",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--limit <n>",
+        "long": "--limit",
+        "short": null,
+        "attributeName": "limit",
+        "description": "Max number of matches, a positive integer (default 10)",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--definitions",
+        "long": "--definitions",
+        "short": null,
+        "attributeName": "definitions",
+        "description": "Every Astryx icon definition, one line each: name, built in or not, description, words",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--all-icons",
+        "long": "--all-icons",
+        "short": null,
+        "attributeName": "allIcons",
+        "description": "With --set and no words: every icon of that set, one line each (id, words, definitions)",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  success (including zero matches)\n  1  no query and no --list, a query with --list, a --limit that is not a positive integer, or a set or icon that is not installed\n\nExamples:\n  # Find by meaning\n  \u0001 experimental icon delete\n  # One icon and its variants\n  \u0001 experimental icon outline/trash\n  # Installed sets\n  \u0001 experimental icon --list --json\n  # Every icon of one set\n  \u0001 experimental icon --set outline --all-icons\n  # One set, top 3\n  \u0001 experimental icon arrow --set outline --limit 3\n\nMore: \u0001 docs cli/commands/experimental-icon\n",
+      "json": true,
+      "responseTypes": [
+       "icon.search",
+       "icon.detail",
+       "icon.definitions",
+       "icon.setIcons",
+       "icon.list"
+      ],
+      "examples": [
+       "astryx experimental icon delete",
+       "astryx experimental icon outline/trash",
+       "astryx experimental icon --list --json",
+       "astryx experimental icon --set outline --all-icons",
+       "astryx experimental icon arrow --set outline --limit 3"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "success (including zero matches)"
+       },
+       {
+        "code": 1,
+        "when": "no query and no --list, a query with --list, a --limit that is not a positive integer, or a set or icon that is not installed"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": [
+       {
+        "name": "use",
+        "fullName": "experimental icon use",
+        "aliases": [],
+        "description": "[experimental] Choose the project's icon set",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "set",
+          "required": true,
+          "variadic": false,
+          "description": "",
+          "choices": null
+         }
+        ],
+        "options": [],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  experimental.iconSet is written, or already names the set\n  1  the set is not installed, two packages ship it, the config cannot be updated (not a static object literal, or it spreads another object, which you then edit by hand), or the config is protected (a symbolic link, or marked generated, vendored, or ignored: `ERR_CODEMOD_PROTECTED`, naming the declaration)\n\nExamples:\n  # Use a set\n  \u0001 experimental icon use outline\n  # Name its package\n  \u0001 experimental icon use @acme/icons/outline\n\nMore: \u0001 docs cli/commands/experimental-icon-use\n",
+        "json": true,
+        "responseTypes": [
+         "icon.use"
+        ],
+        "examples": [
+         "astryx experimental icon use outline",
+         "astryx experimental icon use @acme/icons/outline"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "experimental.iconSet is written, or already names the set"
+         },
+         {
+          "code": 1,
+          "when": "the set is not installed, two packages ship it, the config cannot be updated (not a static object literal, or it spreads another object, which you then edit by hand), or the config is protected (a symbolic link, or marked generated, vendored, or ignored: `ERR_CODEMOD_PROTECTED`, naming the declaration)"
+         }
+        ],
+        "outsideProject": "refuse",
+        "commands": []
+       },
+       {
+        "name": "map",
+        "fullName": "experimental icon map",
+        "aliases": [],
+        "description": "[experimental] Register which icon of your set draws an icon definition",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "definition",
+          "required": false,
+          "variadic": false,
+          "description": "",
+          "choices": null
+         },
+         {
+          "name": "icon",
+          "required": false,
+          "variadic": false,
+          "description": "",
+          "choices": null
+         }
+        ],
+        "options": [
+         {
+          "flags": "--set <name>",
+          "long": "--set",
+          "short": null,
+          "attributeName": "set",
+          "description": "The set to edit, when the package ships several",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--remove",
+          "long": "--remove",
+          "short": null,
+          "attributeName": "remove",
+          "description": "Remove the definition's entry; takes no icon",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--pairs <list>",
+          "long": "--pairs",
+          "short": null,
+          "attributeName": "pairs",
+          "description": "Many entries in one write: <definition>=<icon> pairs, comma-separated; checked together, all or none; an existing entry is replaced",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         }
+        ],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  the entry is written, removed, or already as asked\n  1  the definition is unknown, the set has no such icon, or no set is found\n\nExamples:\n  # Map a definition\n  \u0001 experimental icon map delete trash\n  # Map many at once\n  \u0001 experimental icon map --pairs close=x-mark,error=x-circle,search=magnifying-glass\n  # Remove an entry\n  \u0001 experimental icon map delete --remove\n\nMore: \u0001 docs cli/commands/experimental-icon-map\n",
+        "json": true,
+        "responseTypes": [
+         "icon.mapMany",
+         "icon.map"
+        ],
+        "examples": [
+         "astryx experimental icon map delete trash",
+         "astryx experimental icon map --pairs close=x-mark,error=x-circle,search=magnifying-glass",
+         "astryx experimental icon map delete --remove"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "the entry is written, removed, or already as asked"
+         },
+         {
+          "code": 1,
+          "when": "the definition is unknown, the set has no such icon, or no set is found"
+         }
+        ],
+        "outsideProject": "refuse",
+        "commands": []
+       },
+       {
+        "name": "add",
+        "fullName": "experimental icon add",
+        "aliases": [],
+        "description": "[experimental] Register one icon you chose from a library in your icon set",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": true,
+        "args": [
+         {
+          "name": "export",
+          "required": false,
+          "variadic": false,
+          "description": "",
+          "choices": null
+         }
+        ],
+        "options": [
+         {
+          "flags": "--from <module>",
+          "long": "--from",
+          "short": null,
+          "attributeName": "from",
+          "description": "The module the icon is exported from: a package, a subpath, or a ./ path to a file inside this package",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--definition <name>",
+          "long": "--definition",
+          "short": null,
+          "attributeName": "definition",
+          "description": "Map the icon to this icon definition",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--new-definition <name>",
+          "long": "--new-definition",
+          "short": null,
+          "attributeName": "newDefinition",
+          "description": "Add your set's own definition, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--description <text>",
+          "long": "--description",
+          "short": null,
+          "attributeName": "description",
+          "description": "With --new-definition: what the icon is for",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--words <list>",
+          "long": "--words",
+          "short": null,
+          "attributeName": "words",
+          "description": "With --new-definition: comma-separated words people search for",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--default",
+          "long": "--default",
+          "short": null,
+          "attributeName": "default",
+          "description": "The module's default export is the icon; your set's module must re-export it under <export>",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--variant <name>",
+          "long": "--variant",
+          "short": null,
+          "attributeName": "variant",
+          "description": "Add the export as this variant of an existing icon: one of the set's declared variants, such as solid",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--all",
+          "long": "--all",
+          "short": null,
+          "attributeName": "all",
+          "description": "With --variant and --from, and no export: add that variant for every icon whose id the module exports, in one run",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--id <id>",
+          "long": "--id",
+          "short": null,
+          "attributeName": "id",
+          "description": "The icon's id, instead of the one its name gives",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--set <name>",
+          "long": "--set",
+          "short": null,
+          "attributeName": "set",
+          "description": "The set to edit, when the package ships several",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         }
+        ],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  the icon is added, already present, or the matching definitions are listed\n  1  the export is missing or is data, the definition is unknown, the id is taken, or the variant is not one the set declares\n\nExamples:\n  # Which definitions fit\n  \u0001 experimental icon add Bin --from @acme/glyph-library\n  # Add and map\n  \u0001 experimental icon add Bin --from @acme/glyph-library --definition delete\n  # Add the solid variant of every icon\n  \u0001 experimental icon add --variant solid --from @heroicons/react/24/solid --all\n  # Add your own definition\n  \u0001 experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance\n  # Add a solid variant\n  \u0001 experimental icon add Bin --from @acme/glyph-library/solid --id bin --variant solid\n\nMore: \u0001 docs cli/commands/experimental-icon-add\n",
+        "json": true,
+        "responseTypes": [
+         "icon.add",
+         "icon.addVariants",
+         "icon.definitionMatches"
+        ],
+        "examples": [
+         "astryx experimental icon add Bin --from @acme/glyph-library",
+         "astryx experimental icon add Bin --from @acme/glyph-library --definition delete",
+         "astryx experimental icon add --variant solid --from @heroicons/react/24/solid --all",
+         "astryx experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance",
+         "astryx experimental icon add Bin --from @acme/glyph-library/solid --id bin --variant solid"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "the icon is added, already present, or the matching definitions are listed"
+         },
+         {
+          "code": 1,
+          "when": "the export is missing or is data, the definition is unknown, the id is taken, or the variant is not one the set declares"
+         }
+        ],
+        "outsideProject": "refuse",
+        "commands": []
+       },
+       {
+        "name": "new-set",
+        "fullName": "experimental icon new-set",
+        "aliases": [],
+        "description": "[experimental] Start an icon set in your integration package",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": false,
+        "args": [
+         {
+          "name": "name",
+          "required": true,
+          "variadic": false,
+          "description": "The set name, in lowercase kebab-case (outline)",
+          "choices": null
+         }
+        ],
+        "options": [
+         {
+          "flags": "--dry-run",
+          "long": "--dry-run",
+          "short": null,
+          "attributeName": "dryRun",
+          "description": "Validate and show planned writes without changing files",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--from <module>",
+          "long": "--from",
+          "short": null,
+          "attributeName": "from",
+          "description": "A module whose every icon component the set wraps (a package, a subpath, or a ./ path); run again to refresh",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--exclude <names>",
+          "long": "--exclude",
+          "short": null,
+          "attributeName": "exclude",
+          "description": "With --from: comma-separated export names of the library that are not icons",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--variants <list>",
+          "long": "--variants",
+          "short": null,
+          "attributeName": "variants",
+          "description": "Comma-separated variants the set supplies, such as outline,solid",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--default-variant <variant>",
+          "long": "--default-variant",
+          "short": null,
+          "attributeName": "defaultVariant",
+          "description": "With --variants: the variant each icon's own export draws. When omitted: in a library whose export names encode looks, the look the icons draw (the library's usual default for a new set), which --variants must list; otherwise the set's current default, which --variants must list when the set has icons, else, on a set without icons, the first variant. A set with icons changes it only with --from, and only in a library whose export names encode looks",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--display-name <text>",
+          "long": "--display-name",
+          "short": null,
+          "attributeName": "displayName",
+          "description": "The set's display name (the name in title case when omitted)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--description <text>",
+          "long": "--description",
+          "short": null,
+          "attributeName": "description",
+          "description": "The set's one-line description",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         }
+        ],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  the set is written or the dry run succeeds\n  1  the name, options, package, or target files are invalid or conflict\n\nExamples:\n  # Start an icon set\n  \u0001 experimental icon new-set outline\n  # Wrap a whole icon library\n  \u0001 experimental icon new-set outline --from @acme/glyph-library\n  # Wrap a library with two variants\n  \u0001 experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,solid --default-variant outline\n  # Preview the files\n  \u0001 experimental icon new-set outline --dry-run --json\n\nMore: \u0001 docs cli/commands/experimental-icon-new-set\n",
+        "json": true,
+        "responseTypes": [
+         "icon.newSet"
+        ],
+        "examples": [
+         "astryx experimental icon new-set outline",
+         "astryx experimental icon new-set outline --from @acme/glyph-library",
+         "astryx experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,solid --default-variant outline",
+         "astryx experimental icon new-set outline --dry-run --json"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "the set is written or the dry run succeeds"
+         },
+         {
+          "code": 1,
+          "when": "the name, options, package, or target files are invalid or conflict"
+         }
+        ],
+        "outsideProject": "refuse",
+        "commands": []
+       },
+       {
+        "name": "new-definition",
+        "fullName": "experimental icon new-definition",
+        "aliases": [],
+        "description": "[experimental] Add your icon set's own icon definition",
+        "summary": "",
+        "hidden": false,
+        "usage": null,
+        "hasAction": true,
+        "allowUnknownOption": false,
+        "allowExcessArguments": false,
+        "args": [
+         {
+          "name": "name",
+          "required": true,
+          "variadic": false,
+          "description": "The definition name, in camelCase (rocketLaunch) or kebab-case (rocket-launch)",
+          "choices": null
+         }
+        ],
+        "options": [
+         {
+          "flags": "--dry-run",
+          "long": "--dry-run",
+          "short": null,
+          "attributeName": "dryRun",
+          "description": "Validate and show planned writes without changing files",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--set <name>",
+          "long": "--set",
+          "short": null,
+          "attributeName": "set",
+          "description": "The icon set to add it to, when the package ships several",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--description <text>",
+          "long": "--description",
+          "short": null,
+          "attributeName": "description",
+          "description": "One sentence on what an icon with this definition is for",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--words <list>",
+          "long": "--words",
+          "short": null,
+          "attributeName": "words",
+          "description": "Comma-separated words people search for",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         },
+         {
+          "flags": "--icon <id>",
+          "long": "--icon",
+          "short": null,
+          "attributeName": "icon",
+          "description": "Also map it to this icon of the set (its `map` entry)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "negate": false,
+          "mandatory": false,
+          "hidden": false,
+          "defaultValueDescription": null,
+          "choices": null,
+          "collect": false
+         }
+        ],
+        "beforeHelp": "",
+        "afterHelp": "\nExit codes:\n  0  the definition is written or the dry run succeeds\n  1  the name is invalid or taken, the description or words are missing, or the set or icon is not found\n\nExamples:\n  # Add a set's own icon definition\n  \u0001 experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5\n\nMore: \u0001 docs cli/commands/experimental-icon-new-definition\n",
+        "json": true,
+        "responseTypes": [
+         "icon.newDefinition"
+        ],
+        "examples": [
+         "astryx experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5"
+        ],
+        "exitCodes": [
+         {
+          "code": 0,
+          "when": "the definition is written or the dry run succeeds"
+         },
+         {
+          "code": 1,
+          "when": "the name is invalid or taken, the description or words are missing, or the set or icon is not found"
+         }
+        ],
+        "outsideProject": "refuse",
+        "commands": []
+       }
+      ]
+     },
+     {
+      "name": "render",
+      "fullName": "experimental render",
+      "aliases": [],
+      "description": "[experimental] Render a page to one self-contained HTML file, or turn one back into a page",
+      "summary": "",
+      "hidden": false,
+      "usage": null,
+      "hasAction": true,
+      "allowUnknownOption": false,
+      "allowExcessArguments": true,
+      "args": [
+       {
+        "name": "file",
+        "required": false,
+        "variadic": false,
+        "description": "",
+        "choices": null
+       }
+      ],
+      "options": [
+       {
+        "flags": "--out <file>",
+        "long": "--out",
+        "short": null,
+        "attributeName": "out",
+        "description": "Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--reverse",
+        "long": "--reverse",
+        "short": null,
+        "attributeName": "reverse",
+        "description": "Turn a rendered HTML file back into a page module",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--title <text>",
+        "long": "--title",
+        "short": null,
+        "attributeName": "title",
+        "description": "The page's title (default: its first top-level heading, else the file name)",
+        "required": true,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       },
+       {
+        "flags": "--overwrite",
+        "long": "--overwrite",
+        "short": null,
+        "attributeName": "overwrite",
+        "description": "With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)",
+        "required": false,
+        "optional": false,
+        "variadic": false,
+        "negate": false,
+        "mandatory": false,
+        "hidden": false,
+        "defaultValueDescription": null,
+        "choices": null,
+        "collect": false
+       }
+      ],
+      "beforeHelp": "",
+      "afterHelp": "\nExit codes:\n  0  the file was written (warnings included)\n  1  no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, or HTML that is not an Astryx page\n\nExamples:\n  # Render a page\n  \u0001 experimental render src/app/page.tsx --out page.html\n  # Give it back\n  \u0001 experimental render --reverse page.html --out page.tsx\n  # As JSON\n  \u0001 --json experimental render page.tsx\n\nMore: \u0001 docs cli/commands/experimental-render\n",
+      "json": true,
+      "responseTypes": [
+       "render.page",
+       "render.reverse"
+      ],
+      "examples": [
+       "astryx experimental render src/app/page.tsx --out page.html",
+       "astryx experimental render --reverse page.html --out page.tsx",
+       "astryx --json experimental render page.tsx"
+      ],
+      "exitCodes": [
+       {
+        "code": 0,
+        "when": "the file was written (warnings included)"
+       },
+       {
+        "code": 1,
+        "when": "no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, or HTML that is not an Astryx page"
+       }
+      ],
+      "outsideProject": "same",
+      "commands": []
+     }
+    ]
+   },
+   {
+    "name": "manifest",
+    "fullName": "manifest",
+    "aliases": [],
+    "description": "Print the full CLI capability manifest (use with --json)",
+    "summary": "",
+    "hidden": false,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n  1  the manifest cannot be generated\n\nExamples:\n  # Full manifest\n  \u0001 manifest --json\n  # The same manifest, under data.manifest (type \"help\")\n  \u0001 --json\n\nMore: \u0001 docs cli/commands/manifest\n",
+    "json": true,
+    "responseTypes": [],
+    "examples": [
+     "astryx manifest --json",
+     "astryx --json"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     },
+     {
+      "code": 1,
+      "when": "the manifest cannot be generated"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   },
+   {
+    "name": "postinstall",
+    "fullName": "postinstall",
+    "aliases": [],
+    "description": "Print the welcome message shown after install",
+    "summary": "",
+    "hidden": true,
+    "usage": null,
+    "hasAction": true,
+    "allowUnknownOption": false,
+    "allowExcessArguments": true,
+    "args": [],
+    "options": [],
+    "beforeHelp": "",
+    "afterHelp": "\nExit codes:\n  0  success\n\nExamples:\n  # Print the welcome box\n  \u0001 postinstall\n\nMore: \u0001 docs cli/commands/postinstall\n",
+    "json": false,
+    "responseTypes": [],
+    "examples": [
+     "astryx postinstall"
+    ],
+    "exitCodes": [
+     {
+      "code": 0,
+      "when": "success"
+     }
+    ],
+    "outsideProject": "same",
+    "commands": []
+   }
+  ],
+  "helpCommand": {
+   "name": "help",
+   "description": "Show all commands"
+  },
+  "helpOption": {
+   "flags": null,
+   "description": null
+  },
+  "version": "0.7.12",
+  "versionOption": "version"
+ }
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatComposerDrawer_--zh_@large",
+ "args": [
+  "component",
+  "ChatComposerDrawer",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# ChatComposerDrawer\n\n位于聊天输入上方的可折叠抽屉面板。传入 ChatComposer 的 `drawer` 插槽，用于显示附件、上下文标签或预览内容。提供 `count` 时启用折叠切换。\n\n**Import:** `import {ChatComposerDrawer} from '@astryxdesign/core/Chat';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Root surface | Yes | The drawer surface that composes above the ChatComposer body. |\n| Disclosure toggle | No | The keyboard- and pointer-operable collapse control rendered when count is provided. |\n| Collapsed summary | No | The default count Badge and label, or caller-provided visual content, presented while the drawer is collapsed. |\n| Content area | Yes | The caller-provided supplementary content; collapsed descendants are unavailable to keyboard and assistive technology. |\n\n## Best Practices\n\n- **Do:** Give label a concrete plural noun such as \"Attachments\" so the expand and collapse actions have a useful accessible name.\n- **Do:** Use controlled isCollapsed with onCollapsedChange when another part of the page owns drawer state; otherwise use defaultIsCollapsed.\n- **Don't:** Put primary composer actions in the drawer; use ChatComposer footer or send-action slots so those controls remain available when the drawer is collapsed.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 抽屉内渲染的内容——标记、标签、预览或任何 React 元素。 **(required)** |\n| `count` | `number` | - | 折叠徽章中显示的总数。提供时，抽屉获得折叠/展开切换。 |\n| `label` | `string` | `'Items'` | 默认折叠摘要中显示在数量旁边的标签，并用于命名展开/折叠操作。 |\n| `collapsedSummary` | `ReactNode` | - | 折叠摘要解剖部分的自定义视觉内容。提供 count 时替换默认的徽章和标签；组件仍负责折叠行为与无障碍命名，该内容仅用于展示。 |\n| `isCollapsed` | `boolean` | - | 受控折叠状态。与 onCollapsedChange 一起使用。 |\n| `defaultIsCollapsed` | `boolean` | `false` | 非受控模式的初始折叠状态。 |\n| `onCollapsedChange` | `(isCollapsed: boolean) => void` | - | 用户切换抽屉时触发的回调。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-chat-composer-drawer` | `data-collapsed` | collapsed | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'chat-composer-drawer': {\n    base: { /* CSS properties */ },\n    'collapsed:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

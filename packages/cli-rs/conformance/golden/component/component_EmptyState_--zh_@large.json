@@ -1,0 +1,20 @@
+{
+ "id": "component_EmptyState_--zh_@large",
+ "args": [
+  "component",
+  "EmptyState",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# EmptyState\n\nEmptyState shows a placeholder when a content area has no data. Use it for empty lists, zero search results, first-time setups, or cleared inboxes. Always include a title and a next step so the user is not stuck.\n\n**Import:** `import {EmptyState} from '@astryxdesign/core/EmptyState';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Container | Yes | The centered root that owns spacing, reading order, and the compact layout variant. |\n| Icon | No | A visual cue above the title that reinforces the context, like a search icon for no results. |\n| Title | Yes | Primary message explaining what is empty: \"No projects yet\" not \"No data\". |\n| Description | No | Additional context explaining why it is empty or what the user can do. |\n| Actions | No | One or two buttons guiding the user to a next step, like \"Create project\" or \"Clear filters\". |\n\n## Best Practices\n\n- **Do:** Include a clear title and a call-to-action button so users know how to proceed.\n- **Do:** Use an illustration or icon that reinforces the context of the empty state.\n- **Do:** Use the compact variant inside cards or sidebars where space is limited.\n- **Don't:** Leave an empty state without guidance; always explain what happened and what the user can do next.\n- **Don't:** Use a generic message like \"No data\"; be specific about what is empty and why.\n- **Don't:** Use an EmptyState for error messages that require immediate action; use a Banner instead.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `string` | - | 在空状态内部按配置的标题级别渲染主要信息。 **(required)** |\n| `description` | `string` | - | 可选的辅助文本，在标题下方提供额外上下文。 |\n| `icon` | `ReactNode` | - | 可选的图标或插图，显示在标题上方；渲染为装饰性元素（aria-hidden=\"true\"）。 |\n| `actions` | `ReactNode` | - | 可选的操作按钮，显示在描述下方，默认水平排列，isCompact 为 true 时垂直堆叠。 |\n| `headingLevel` | `1 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6` | `3` | 仅控制渲染的 HTML 标题标签（h1-h6），使标题适配文档大纲。这是用于无障碍的语义变化，不会改变标题的视觉大小，标题大小始终固定，与级别无关。 |\n| `isCompact` | `boolean` | `false` | 启用紧凑变体，减少间距，适用于空间受限的内容区域。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义（外边距、定位、尺寸）的 StyleX 样式。必须是 stylex.create() 的值，而非内联样式对象如 style={{}}。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-empty-state` | `data-variant` | variant | - |\n| `astryx-empty-state-title` | `data-variant` | variant | - |\n| `astryx-empty-state-description` | `data-variant` | variant | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'empty-state': {\n    base: { /* CSS properties */ },\n    'variant:value': { /* variant-specific */ },\n  },\n  'empty-state-title': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

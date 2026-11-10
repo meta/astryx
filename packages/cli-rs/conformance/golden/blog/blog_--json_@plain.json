@@ -1,0 +1,13 @@
+{
+ "id": "blog_--json_@plain",
+ "args": [
+  "blog",
+  "--json"
+ ],
+ "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\",\n  \"code\": \"ERR_FETCH_FAILED\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

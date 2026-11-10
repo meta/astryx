@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_nav-heading-menu_--json",
+ "args": [
+  "theme",
+  "targets",
+  "nav-heading-menu",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"nav-heading-menu\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"nav-heading-menu\",\n        \"className\": \"astryx-nav-heading-menu\",\n        \"component\": \"NavHeadingMenu\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"nav-heading-menu-item\",\n        \"className\": \"astryx-nav-heading-menu-item\",\n        \"component\": \"NavHeadingMenu\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

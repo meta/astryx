@@ -1,0 +1,20 @@
+{
+ "id": "component_MoreMenu_--zh_@large",
+ "args": [
+  "component",
+  "MoreMenu",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# MoreMenu\n\nMoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don't need to be always visible, like in table rows, card headers, or toolbars.\n\n**Import:** `import {MoreMenu} from '@astryxdesign/core/MoreMenu';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Trigger button | Yes | Icon-only Button that provides the visible overflow-menu entry point. |\n| Icon-resolved trigger icon | No | Default semantic three-dot artwork resolved from the active Icon registry. |\n| Caller-rendered trigger content | No | Arbitrary React content supplied directly as the trigger icon override. |\n| Menu surface | Yes | DropdownMenu panel that also carries MoreMenu’s current public target. |\n| Pointer action row | No | Action or nested-action trigger row rendered by DropdownMenu in the anchored presentation. |\n| Touch action row | No | ListItem button rendered by DropdownMenu in the BottomSheet presentation. |\n\n## Best Practices\n\n- **Do:** Use for overflow or secondary actions; keep primary actions visible outside the menu.\n- **Do:** Use dividers or sections to group related actions when the menu has many items.\n- **Do:** Use `presentation=\"adaptive\"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.\n- **Don't:** Hide primary actions inside a MoreMenu; they should be directly visible.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `items` | `DropdownMenuOption[]` | - | 菜单项，由操作、分割线和分组组成的数据数组。类型与 DropdownMenu 的 items 属性相同。 **(required)** |\n| `label` | `string` | `'More options'` | 触发按钮的无障碍标签（aria-label）和工具提示文本。 |\n| `variant` | `ButtonVariant` | `'ghost'` | 触发按钮的视觉样式变体。 |\n| `size` | `ButtonSize` | `'md'` | 触发按钮的尺寸。 |\n| `icon` | `ReactNode` | - | 覆盖默认的三点图标。接受任何 ReactNode。 |\n| `isDisabled` | `boolean` | `false` | 菜单触发器是否禁用。 |\n| `placement` | `'above' \\| 'below' \\| 'start' \\| 'end'` | `'below'` | 菜单相对于触发按钮的位置。逻辑方向：start/end 依据菜单自身继承的书写方向解析（RTL 自动镜像）。 |\n| `alignment` | `'start' \\| 'center' \\| 'end'` | `'start'` | 沿放置轴的对齐方式。使用 'end' 让菜单与触发器的尾部边缘对齐，这通常是溢出菜单所需的效果。 |\n| `presentation` | `'popover' \\| 'bottom-sheet' \\| 'adaptive'` | - | 菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于主题的 `md` 断点（默认 768px）或高度小于 500px 时使用 BottomSheet。省略时，菜单为锚定浮层；在任何设备上用手指操作时，打开菜单的手指移动 10 px 后才会选择菜单项。传入 'popover' 可在所有设备上保持指针行为，包括稳定规则。 |\n| `onOpenChange` | `(isOpen: boolean) => void` | - | Callback fired when the menu opens or closes. |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式（边距、定位、尺寸）。必须是 stylex.create() 的值，不能是内联样式对象如 style={{}}。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-more-menu` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'more-menu': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

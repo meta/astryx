@@ -1,0 +1,11 @@
+import type {AstryxIntegration} from '@astryxdesign/cli/authoring';
+
+export default {
+  docs: './docs',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+} satisfies AstryxIntegration;

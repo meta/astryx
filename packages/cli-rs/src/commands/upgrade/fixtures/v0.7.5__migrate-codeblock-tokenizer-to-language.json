@@ -1,0 +1,82 @@
+[
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language=\"zig\" tokenizer={zigTokens} />;\nconst b = <CodeBlock code={src} language={'nim'} tokenizer={(c) => tokens(c)} />;",
+  "output": "import { CodeBlock, createCodeLanguage } from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock\n  code={src}\n  language={zigTokens ? createCodeLanguage({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: zigTokens\n  }) : 'zig'} />;\nconst b = <CodeBlock\n  code={src}\n  language={createCodeLanguage({\n    name: 'nim',\n    identifiers: ['nim'],\n    tokenize: (c) => tokens(c)\n  })} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock as Code} from '@astryxdesign/core';\nconst a = <Code code={src} language=\"zig\" tokenizer={zigTokens} />;",
+  "output": "import {CodeBlock as Code} from '@astryxdesign/core';\nimport { createCodeLanguage } from '@astryxdesign/core/CodeBlock';\nconst a = <Code\n  code={src}\n  language={zigTokens ? createCodeLanguage({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: zigTokens\n  }) : 'zig'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as CB from '@astryxdesign/core/CodeBlock';\nconst a = <CB.CodeBlock code={src} language=\"zig\" tokenizer={zigTokens} />;",
+  "output": "import * as CB from '@astryxdesign/core/CodeBlock';\nimport { createCodeLanguage } from '@astryxdesign/core/CodeBlock';\nconst a = <CB.CodeBlock\n  code={src}\n  language={zigTokens ? createCodeLanguage({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: zigTokens\n  }) : 'zig'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language=\"zig\" tokenizer={props.tokenizer} />;",
+  "output": "import { CodeBlock, createCodeLanguage } from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock\n  code={src}\n  language={props.tokenizer ? createCodeLanguage({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: props.tokenizer\n  }) : 'zig'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nimport {createCodeLanguage} from './my-languages';\nconst a = <CodeBlock code={src} language=\"zig\" tokenizer={(c) => t(c)} />;",
+  "output": "import { CodeBlock, createCodeLanguage as createCodeLanguage2 } from '@astryxdesign/core/CodeBlock';\nimport {createCodeLanguage} from './my-languages';\nconst a = <CodeBlock\n  code={src}\n  language={createCodeLanguage2({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: (c) => t(c)\n  })} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nfunction createCodeLanguage() {}\nconst a = <CodeBlock code={src} language=\"zig\" tokenizer={(c) => t(c)} />;",
+  "output": "import { CodeBlock, createCodeLanguage as createCodeLanguage2 } from '@astryxdesign/core/CodeBlock';\nfunction createCodeLanguage() {}\nconst a = <CodeBlock\n  code={src}\n  language={createCodeLanguage2({\n    name: 'zig',\n    identifiers: ['zig'],\n    tokenize: (c) => t(c)\n  })} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language=\"zig\" tokenizer={registry.get('zig').tokenize} />;\nconst b = <CodeBlock code={src} language=\"zig\" tokenizer={enabled ? t : undefined} />;",
+  "output": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={registry.get('zig').tokenize} />;\nconst b = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={enabled ? t : undefined} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language={lang} tokenizer={t} />;\nconst b = <CodeBlock code={src} tokenizer={t} />;\nconst c = <CodeBlock code={src} language=\"plaintext\" tokenizer={t} />;\nconst d = <CodeBlock {...rest} code={src} language=\"zig\" tokenizer={t} />;\nconst e = <CodeBlock code={src} language=\"zig\" tokenizer={enabled ? t : undefined} />;\nconst f = <CodeBlock code={src} language=\"zig\" tokenizer={enabled && t} />;",
+  "output": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language={lang} /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst b = <CodeBlock code={src} /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst c = <CodeBlock code={src} language=\"plaintext\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst d = <CodeBlock {...rest} code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated, but this CodeBlock also spreads props that may set language or tokenizer, so it was left unchanged. Pass language={createCodeLanguage({name, identifiers, tokenize})} by hand. */\ntokenizer={t} />;\nconst e = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={enabled ? t : undefined} />;\nconst f = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={enabled && t} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language={lang} /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst b = <CodeBlock code={src} /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst c = <CodeBlock code={src} language=\"plaintext\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead, with this function as tokenize; the language here is computed, missing, or plaintext, so it was left unchanged. */\ntokenizer={t} />;\nconst d = <CodeBlock {...rest} code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated, but this CodeBlock also spreads props that may set language or tokenizer, so it was left unchanged. Pass language={createCodeLanguage({name, identifiers, tokenize})} by hand. */\ntokenizer={t} />;\nconst e = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={enabled ? t : undefined} />;\nconst f = <CodeBlock code={src} language=\"zig\" /* TODO(astryx upgrade): tokenizer is deprecated. Pass language={createCodeLanguage({name, identifiers, tokenize})} instead; this tokenizer value is computed (not a function, a name, or a call-free property), so it was left unchanged. */\ntokenizer={enabled && t} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.5/migrate-codeblock-tokenizer-to-language",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {CodeBlock} from '@astryxdesign/core/CodeBlock';\nconst a = <CodeBlock code={src} language=\"ts\" />;",
+  "output": null,
+  "error": null
+ }
+]

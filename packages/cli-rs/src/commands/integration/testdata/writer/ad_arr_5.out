@@ -1,0 +1,9 @@
+export default {
+  name: 'x',
+  agentDocs: {
+    append: [
+      'First line.',
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ],
+  },
+};

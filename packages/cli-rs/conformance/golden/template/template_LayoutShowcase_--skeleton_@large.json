@@ -1,0 +1,20 @@
+{
+ "id": "template_LayoutShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "LayoutShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# LayoutShowcase\n# Components: Badge, Layout, List, Section\n\n<Section padding={4}>\n  <Layout hasDivider height=\"fill\">\n    /* header: */\n    <LayoutHeader hasDivider>\n      <HStack gap={2}>\n        <Heading />\n        <Badge variant=\"info\" />\n      </HStack>\n    </LayoutHeader>\n    /* start: */\n    <LayoutPanel hasDivider width={140}>\n      <List>\n        <ListItem />\n        <ListItem />\n        <ListItem />\n      </List>\n    </LayoutPanel>\n    /* content: */\n    <LayoutContent>\n      <VStack gap={2}>\n        <Heading />\n        <Text />\n      </VStack>\n    </LayoutContent>\n    /* footer: */\n    <LayoutFooter hasDivider>\n      <HStack gap={2}>\n        <Button variant=\"primary\" />\n      </HStack>\n    </LayoutFooter>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_VisuallyHiddenShowcase_@large",
+ "args": [
+  "template",
+  "VisuallyHiddenShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';\nimport {IconButton} from '@astryxdesign/core/IconButton';\nimport {Card} from '@astryxdesign/core/Card';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {\n  ArrowDownTrayIcon,\n  ShareIcon,\n  TrashIcon,\n} from '@heroicons/react/24/outline';\nimport {SpeakerWaveIcon} from '@heroicons/react/24/solid';\n\nconst actions = [\n  {label: 'Download', icon: ArrowDownTrayIcon},\n  {label: 'Share', icon: ShareIcon},\n  {label: 'Delete', icon: TrashIcon},\n] as const;\n\n/**\n * VisuallyHidden is invisible by design, so this hero teaches the concept by\n * contrast: the icon-only buttons are all a sighted user sees, while the\n * caption spells out the accessible name each one exposes. A live\n * <VisuallyHidden> region below announces the same names to assistive tech,\n * so the demo genuinely exercises the component it documents.\n */\nexport default function VisuallyHiddenShowcase() {\n  return (\n    <VStack gap={5} hAlign=\"center\">\n      <HStack gap={6} vAlign=\"stretch\" wrap=\"wrap\" hAlign=\"center\">\n        <Card variant=\"muted\">\n          <VStack gap={4} hAlign=\"center\">\n            <Text type=\"supporting\" color=\"secondary\">\n              What you see\n            </Text>\n            <HStack gap={2}>\n              {actions.map(({label, icon}) => (\n                <IconButton\n                  key={label}\n                  label={label}\n                  icon={<Icon icon={icon} />}\n                  variant=\"ghost\"\n                />\n              ))}\n            </HStack>\n          </VStack>\n        </Card>\n\n        <Card variant=\"muted\">\n          <VStack gap={4} hAlign=\"start\">\n            <HStack gap={2} vAlign=\"center\">\n              <Icon icon={SpeakerWaveIcon} size=\"sm\" />\n              <Text type=\"supporting\" color=\"secondary\">\n                What a screen reader hears\n              </Text>\n            </HStack>\n            <VStack gap={2}>\n              {actions.map(({label}) => (\n                <Text key={label} type=\"body\">\n                  {label}, button\n                </Text>\n              ))}\n            </VStack>\n          </VStack>\n        </Card>\n      </HStack>\n\n      {/* A real live region: silent to sighted users, announced by AT. */}\n      <VisuallyHidden as=\"div\" aria-live=\"polite\">\n        Actions available: Download, Share, Delete.\n      </VisuallyHidden>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

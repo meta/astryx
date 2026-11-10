@@ -1,0 +1,14 @@
+{
+ "id": "template_TextTruncation_--json_@large",
+ "args": [
+  "template",
+  "TextTruncation",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TextTruncation\",\n    \"description\": \"Single-line and multi-line text truncation with ellipsis using maxLines in a width-constrained container.\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst LONG_TEXT =\\n  'The design system provides a consistent set of typography tokens, spacing scales, and color palettes that ensure every surface in the product feels cohesive regardless of which team built it.';\\n\\nconst LINES = [\\n  {maxLines: 1, label: '1 line'},\\n  {maxLines: 2, label: '2 lines'},\\n  {maxLines: 3, label: '3 lines'},\\n];\\n\\nexport default function TextTruncation() {\\n  return (\\n    <div\\n      style={{\\n        display: 'flex',\\n        flexDirection: 'column',\\n        gap: 16,\\n        maxWidth: 300,\\n      }}>\\n      {LINES.map(({maxLines, label}) => (\\n        <div key={maxLines}>\\n          <Text type=\\\"supporting\\\" color=\\\"secondary\\\" display=\\\"block\\\">\\n            {label}\\n          </Text>\\n          <div style={{border: '1px solid #ccc', padding: 8}}>\\n            <Text type=\\\"body\\\" maxLines={maxLines}>\\n              {LONG_TEXT}\\n            </Text>\\n          </div>\\n        </div>\\n      ))}\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

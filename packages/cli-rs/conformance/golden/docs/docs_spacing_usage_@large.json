@@ -1,0 +1,20 @@
+{
+ "id": "docs_spacing_usage_@large",
+ "args": [
+  "docs",
+  "spacing",
+  "usage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Usage\n\nStack, HStack, VStack, Grid, Toolbar, OverflowList, and ChatMessageList take a `gap` step: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, or 10 (×4px). Carousel takes the steps from 0 to 4. For custom layouts, use the spacing tokens in StyleX.\n\nSpacing via component props vs StyleX:\n```tsx\n// Via component props (preferred)\n<Stack gap={4}>{/* 16px gap */}</Stack>\n\n// Via StyleX tokens (custom layouts)\nimport {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  custom: {\n    padding: spacingVars['--spacing-4'],\n    gap: spacingVars['--spacing-3'],\n  },\n});\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs spacing --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs spacing scale\nNext: npx @astryxdesign/cli@0.7.12 docs spacing best-practices\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

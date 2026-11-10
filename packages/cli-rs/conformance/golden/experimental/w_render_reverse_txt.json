@@ -1,0 +1,15 @@
+{
+ "id": "w_render_reverse_txt",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "notes.txt"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --reverse reads a rendered .html file; notes.txt is not one\n\n  npx @astryxdesign/cli@0.7.12 experimental render notes.txt  (render the page instead)\n",
+ "exit": 1,
+ "files": []
+}

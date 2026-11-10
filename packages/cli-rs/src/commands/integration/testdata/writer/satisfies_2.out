@@ -1,0 +1,6 @@
+import type {AstryxIntegration} from '@astryxdesign/cli/authoring';
+
+export default {
+  docs: './docs',
+  components: './components'
+} satisfies AstryxIntegration;

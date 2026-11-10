@@ -1,0 +1,19 @@
+{
+ "id": "w2_verify_after_agentdoc_author",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/widgets@0.1.0\n\n5 packed files; 4/4 required files present.\n\n- [fail] Component \"WidgetCard\" advertises import \"@acme/widgets\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n\n  agentDocs: {\n    append: ['Run acme verify.']\n  }\n};\n"
+  }
+ ]
+}

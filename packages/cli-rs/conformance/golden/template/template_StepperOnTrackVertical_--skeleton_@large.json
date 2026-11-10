@@ -1,0 +1,20 @@
+{
+ "id": "template_StepperOnTrackVertical_--skeleton_@large",
+ "args": [
+  "template",
+  "StepperOnTrackVertical",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# StepperOnTrackVertical - The on-track layout in vertical orientation: indicators sit inline on a continuous connector rail, with each label and description beside its node. Compare with the separated layout, where the indicator sits alongside its own bar segment instead of on a shared rail.\n# Components: Step, Stepper\n\n/* div: maxWidth: 400 */\n<Stepper />\n<Step />\n<Step />\n<Step />\n<Step />\n<Step />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

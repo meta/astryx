@@ -1,0 +1,14 @@
+{
+ "id": "sweep_targets_baddoc_zany",
+ "args": [
+  "theme",
+  "targets",
+  "zany"
+ ],
+ "fixture": "sweep-baddoc",
+ "fixtureHash": "6688a94604b47a6c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No theming target matches \"zany\". Run `theme targets` with no filter for the whole list.\n",
+ "exit": 1,
+ "files": []
+}

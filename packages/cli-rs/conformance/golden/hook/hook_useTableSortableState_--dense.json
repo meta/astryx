@@ -1,0 +1,20 @@
+{
+ "id": "hook_useTableSortableState_--dense",
+ "args": [
+  "hook",
+  "useTableSortableState",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useTableSortableState\n\nOwns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.\n\n## Best Practices\n\n- **Do:** Use it when the full data set is in memory, and pass sortedData to Table.\n- **Do:** Add a comparator for values whose order is not their string or number value, such as a status rank.\n- **Don't:** Use it for server-side or paginated-on-server data; the hook only sorts the rows it is given.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `config` | `UseTableSortableStateConfig<T, TSortKey>` | - | The rows to sort and how the sort state is owned. **(required)** |\n| `config.data` | `T[]` | - | Rows to sort. The hook returns a sorted copy and never mutates the array. **(required)** |\n| `config.defaultSort` | `Array<{sortKey: TSortKey, direction: 'ascending' \\| 'descending'}>` | `[]` | Initial sort state when the hook owns it. Ignored when sort is passed. |\n| `config.sort` | `Array<{sortKey: TSortKey, direction: 'ascending' \\| 'descending'}>` | - | Controlled sort state. Pass it with onSortChange to own the state yourself. |\n| `config.onSortChange` | `(sort: Array<{sortKey: TSortKey, direction: 'ascending' \\| 'descending'}>) => void` | - | Called with the next sort state. Required when sort is passed. |\n| `config.comparators` | `Partial<Record<TSortKey, (a: T, b: T) => number>>` | - | Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending. |\n| `config.allowUnsortedState` | `boolean` | `true` | Passed to useTableSortable: a third click on a header returns the column to unsorted instead of 'ascending'. |\n| `config.isMultiSortEnabled` | `boolean` | `false` | Passed to useTableSortable: Shift+click on a header adds that column as the next sort key, or steps its direction if it is already sorted, instead of replacing the sort. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `sortedData` | `T[]` | A sorted copy of data, memoized on data and the sort state. Ties keep their order in data. |\n| `sort` | `Array<{sortKey: TSortKey, direction: 'ascending' \\| 'descending'}>` | The current sort state, first entry first. |\n| `sortConfig` | `UseTableSortableConfig<TSortKey>` | Pass to useTableSortable(sortConfig) and give the resulting plugin to Table. |\n| `applySort` | `(data: T[]) => T[]` | Sorts another array with the current sort state and comparators, for a second data source or a subset. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Table\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

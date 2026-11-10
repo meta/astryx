@@ -1,0 +1,15 @@
+{
+ "id": "w_agent_doc_blank",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "   "
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: agentDocs is invalid: append.0: must not be blank\n",
+ "exit": 1,
+ "files": []
+}

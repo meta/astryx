@@ -1,0 +1,14 @@
+{
+ "id": "template_BadgeShowcase_--json_@large",
+ "args": [
+  "template",
+  "BadgeShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BadgeShowcase\",\n    \"description\": \"All semantic and color badge variants in a single view. Use semantic variants for status and color variants for categories.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Stack} from '@astryxdesign/core/Layout';\\n\\nexport default function BadgeShowcase() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={4} hAlign=\\\"center\\\">\\n      <Stack direction=\\\"horizontal\\\" gap={2}>\\n        <Badge label=\\\"Neutral\\\" variant=\\\"neutral\\\" />\\n        <Badge label=\\\"Info\\\" variant=\\\"info\\\" />\\n        <Badge label=\\\"Success\\\" variant=\\\"success\\\" />\\n        <Badge label=\\\"Warning\\\" variant=\\\"warning\\\" />\\n        <Badge label=\\\"Error\\\" variant=\\\"error\\\" />\\n      </Stack>\\n      <Stack direction=\\\"horizontal\\\" gap={2}>\\n        <Badge label=\\\"Blue\\\" variant=\\\"blue\\\" />\\n        <Badge label=\\\"Purple\\\" variant=\\\"purple\\\" />\\n        <Badge label=\\\"Pink\\\" variant=\\\"pink\\\" />\\n        <Badge label=\\\"Teal\\\" variant=\\\"teal\\\" />\\n        <Badge label=\\\"Orange\\\" variant=\\\"orange\\\" />\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

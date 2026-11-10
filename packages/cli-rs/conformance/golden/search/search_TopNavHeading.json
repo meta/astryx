@@ -1,0 +1,19 @@
+{
+ "id": "search_TopNavHeading",
+ "args": [
+  "search",
+  "TopNavHeading"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"TopNavHeading\" (8)\n\nname:        TopNavHeading\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: Product/suite/account heading for the TopNav heading slot. Supports smart interaction boundary logic: logo, heading text, superheading/subheading with independent links, and an optional menu popover with automatic chevron indicator.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavHeading\n\nname:        TopNavHeadingBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavHeading - Basic\nkind:        block\ndescription: A product heading with a logo inside a TopNav, linked to the home page. Use as the leading brand element of a top navigation bar.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavHeadingBasic --type block\n\nname:        TopNavHeadingShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavHeading\nkind:        block\ndescription: Demonstrates TopNavHeading with a logo and text, both as a plain display and as a clickable link.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavHeadingShowcase --type block\n\nname:        TopNavItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavItem - Basic\nkind:        block\ndescription: Navigation links inside a TopNav with one item marked as selected. Use for top-level pages of an application.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavItemBasic --type block\n\nname:        TopNavMegaMenuBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenu - Basic\nkind:        block\ndescription: A mega menu trigger inside a TopNav that opens a panel of rich link items. Use when a navigation section has multiple destinations worth describing.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuBasic --type block\n\nname:        TopNavMenuBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMenu - Basic\nkind:        block\ndescription: A dropdown menu inside a TopNav built from an items array with icons and descriptions. Use to group related destinations under a single trigger.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMenuBasic --type block\n\nname:        NavIcon\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/NavIcon\ndescription: NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.\ncommand:     npx @astryxdesign/cli@0.7.12 component NavIcon\n\nname:        NavIconBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NavIcon - Basic\nkind:        block\ndescription: Circular icon containers wrapping semantic icons. Use as logos or accent icons in navigation headers such as TopNavHeading.\ncommand:     npx @astryxdesign/cli@0.7.12 template NavIconBasic --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover TopNavHeading\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

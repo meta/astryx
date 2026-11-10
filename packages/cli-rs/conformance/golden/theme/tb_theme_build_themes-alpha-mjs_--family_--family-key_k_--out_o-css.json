@@ -1,0 +1,19 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_--family_--family-key_k_--out_o-css",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "--family",
+  "--family-key",
+  "k",
+  "--out",
+  "o.css"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --family cannot be combined with --out\n",
+ "exit": 1,
+ "files": []
+}

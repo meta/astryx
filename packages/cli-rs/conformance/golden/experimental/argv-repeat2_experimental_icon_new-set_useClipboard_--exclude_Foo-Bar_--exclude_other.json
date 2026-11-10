@@ -1,0 +1,19 @@
+{
+ "id": "argv-repeat2_experimental_icon_new-set_useClipboard_--exclude_Foo-Bar_--exclude_other",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--exclude",
+  "Foo,Bar",
+  "--exclude",
+  "other"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --exclude names library exports to leave out, so it needs --from.\n",
+ "exit": 1,
+ "files": []
+}

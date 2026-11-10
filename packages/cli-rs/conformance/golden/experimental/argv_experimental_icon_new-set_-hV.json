@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_new-set_-hV",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "-hV"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '-hV'\n",
+ "exit": 1,
+ "files": []
+}

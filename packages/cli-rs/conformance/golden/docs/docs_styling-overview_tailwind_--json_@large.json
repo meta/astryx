@@ -1,0 +1,15 @@
+{
+ "id": "docs_styling-overview_tailwind_--json_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "tailwind",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"tailwind\",\n    \"title\": \"Tailwind\",\n    \"content\": [\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral\",\n        \"label\": \"Install\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"css\",\n        \"code\": \"@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;\\n\\n@import \\\"tailwindcss/theme.css\\\" layer(theme);\\n@import \\\"tailwindcss/preflight.css\\\" layer(base);\\n@import \\\"@astryxdesign/core/reset.css\\\";\\n@import \\\"@astryxdesign/core/astryx.css\\\";\\n@import \\\"@astryxdesign/theme-neutral/theme.css\\\";\\n@import \\\"@astryxdesign/core/tailwind-theme.css\\\";\\n@import \\\"tailwindcss/utilities.css\\\" layer(utilities);\",\n        \"label\": \"globals.css\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"The `@layer` declaration is critical — without it, component styles outrank Tailwind utilities and `className` overrides stop working. The bridge (`tailwind-theme.css`) maps classes like `text-primary`, `bg-surface`, and `rounded-lg` to design tokens with no JS.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"A project with Tailwind already set up needs a smaller change, which `astryx docs styling-libraries/tailwind` shows. For Tailwind v3, see the layer workaround in `astryx docs migration/migration-setup`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs styling-overview --index\",\n      \"previous\": \"astryx docs styling-overview plain\",\n      \"next\": \"astryx docs styling-overview stylex-own-code\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

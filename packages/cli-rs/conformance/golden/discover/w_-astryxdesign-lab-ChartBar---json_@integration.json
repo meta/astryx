@@ -1,0 +1,14 @@
+{
+ "id": "w_-astryxdesign-lab-ChartBar---json_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/lab/ChartBar",
+  "--json"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Package \\\"@astryxdesign/lab\\\" not found\",\n  \"code\": \"ERR_UNKNOWN_PACKAGE\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

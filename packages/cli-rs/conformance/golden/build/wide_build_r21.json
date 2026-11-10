@@ -1,0 +1,21 @@
+{
+ "id": "wide_build_r21",
+ "args": [
+  "build",
+  "side for responsive and Edge-to-edge sets inside the imxing the kbd on of the Own Rather steps an viewers",
+  "--limit",
+  "4"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"side for responsive and Edge-to-edge sets inside the imxing the kbd on of the Own Rather steps an viewers\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        side-gallery\npackage:     @astryxdesign/core\ndescription: Asymmetric split section: a copy column of headline, supporting text, and links held against a clustered image collage opposite.\ncommand:     npx @astryxdesign/cli@0.7.12 template side-gallery --type page <path>\n\nname:        shell-side-nav\npackage:     @astryxdesign/core\ndescription: Application frame with a single collapsible, resizable left rail carrying grouped history and search, wrapping the main content.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-side-nav --type page <path>\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 4; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        DividerFullBleed\npackage:     @astryxdesign/core\ndescription: Divider that extends past container padding to span the full width.\n\nname:        LayoutFullBleedContent\npackage:     @astryxdesign/core\ndescription: A layout where content extends edge-to-edge with zero padding, ideal for tables or images.\n\nname:        ScrollableAreaOverscrollChaining\npackage:     @astryxdesign/core\ndescription: The same section, two edge policies: the default overscroll=\"allow\" hands a gesture that reaches the end to the panel behind it, while overscroll=\"contain\" stops it at the section edge.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

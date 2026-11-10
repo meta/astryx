@@ -1,0 +1,14 @@
+{
+ "id": "template_EmojiPickerShowcase_--json_@large",
+ "args": [
+  "template",
+  "EmojiPickerShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": {\n    \"template\": \"EmojiPickerShowcase\",\n    \"description\": \"An emoji picker inline in a Card: search by name or keyword, move with the arrow keys, and pick; the last pick shows above it.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"EmojiPicker\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\n/**\\n * @input The picked emoji, kept in local state\\n * @output An inline emoji picker in a Card, naming the last pick\\n * @position Lab EmojiPicker's docsite showcase and copyable CLI block\\n */\\n\\nimport {useState} from 'react';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {EmojiPicker, type EmojiOption} from '@astryxdesign/lab';\\n\\nexport default function EmojiPickerShowcase() {\\n  const [picked, setPicked] = useState<EmojiOption | null>(null);\\n\\n  return (\\n    <VStack gap={3} width={352}>\\n      <HStack gap={2} align=\\\"center\\\">\\n        <Text type=\\\"label\\\">Picked:</Text>\\n        <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n          {picked == null ? 'Nothing yet' : `${picked.emoji} ${picked.name}`}\\n        </Text>\\n      </HStack>\\n      <Card padding={0} width=\\\"100%\\\">\\n        <EmojiPicker onSelect={(_, option) => setPicked(option)} />\\n      </Card>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

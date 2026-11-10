@@ -1,0 +1,19 @@
+{
+ "id": "template_PopoverConfirmAction_@large",
+ "args": [
+  "template",
+  "PopoverConfirmAction"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Popover} from '@astryxdesign/core/Popover';\nimport {Button} from '@astryxdesign/core/Button';\nimport {VStack, HStack} from '@astryxdesign/core/Layout';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nexport default function PopoverConfirmAction() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <Popover\n      placement=\"below\"\n      label=\"Confirm deletion\"\n      width={300}\n      isOpen={isOpen}\n      onOpenChange={setIsOpen}\n      content={\n        <VStack gap={3}>\n          <Heading level={4}>Delete project?</Heading>\n          <Text type=\"body\">\n            This will permanently delete the project and all its data. This\n            action cannot be undone.\n          </Text>\n          <HStack gap={2} hAlign=\"end\">\n            <Button\n              label=\"Delete\"\n              variant=\"destructive\"\n              onClick={() => setIsOpen(false)}>\n              Delete\n            </Button>\n            <Button\n              label=\"Cancel\"\n              variant=\"ghost\"\n              onClick={() => setIsOpen(false)}>\n              Cancel\n            </Button>\n          </HStack>\n        </VStack>\n      }>\n      <Button label=\"Delete project\" variant=\"destructive\">\n        Delete project\n      </Button>\n    </Popover>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

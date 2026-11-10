@@ -1,0 +1,40 @@
+{
+ "id": "w_all_InteractiveRoleContext",
+ "args": [
+  "swizzle",
+  "InteractiveRoleContext",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"swizzle.copy\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"component\": \"InteractiveRoleContext\",\n    \"package\": \"@astryxdesign/core\",\n    \"outputDir\": \"components/astryx/InteractiveRoleContext\",\n    \"filesCopied\": 4,\n    \"files\": [\n      \"index.ts\",\n      \"InteractiveRoleContext.ts\",\n      \"../utils/sharedContext.ts\",\n      \"../utils/sharedRealm.ts\"\n    ],\n    \"usesStyleX\": false,\n    \"dependencies\": {\n      \"react\": \">=19.0.0\"\n    },\n    \"marker\": {\n      \"path\": \"components/astryx/astryx-swizzle.json\",\n      \"written\": true\n    },\n    \"feedback\": {\n      \"issuesUrl\": \"https://github.com/meta/astryx/issues/new\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/InteractiveRoleContext/InteractiveRoleContext.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file InteractiveRoleContext.ts\n * @input createSharedContext, use\n * @output Exports InteractiveRoleContext, useInteractiveRoleContext\n * @position Context primitive; consumed by useInteractiveRole hook\n *\n * Provides a role override to optionally-interactive child components.\n * When a parent (Popover, DropdownMenu, etc.) needs its child to render\n * as a button, it wraps the child in this context with role = 'button'.\n *\n * Components don't consume this directly — they use `useInteractiveRole`\n * which checks this context as one of its decision inputs.\n *\n * Follows the same pattern as SizeContext:\n *   SizeContext provides size → useSize resolves it\n *   InteractiveRoleContext provides role → useInteractiveRole resolves it\n *\n * SYNC: When modified, update:\n * - /packages/core/src/InteractiveRoleContext/index.ts\n */\n\nimport {use} from 'react';\nimport type {InteractiveRole} from '@astryxdesign/core/hooks';\nimport {createSharedContext} from '../utils/sharedContext';\n\n/**\n * Context that provides a role override to child components.\n *\n * Provided by containers that need their child to be interactive:\n * - Popover → 'button' (click to open popover)\n * - DropdownMenu → 'button' (click to open menu)\n * - Any future component that wraps an optionally-interactive trigger\n *\n * `null` means no parent is overriding — resolve based on own props.\n */\nexport const InteractiveRoleContext =\n  createSharedContext<InteractiveRole | null>(\n    'InteractiveRoleContext',\n    1,\n    null,\n  );\nInteractiveRoleContext.displayName = 'InteractiveRoleContext';\n\n/**\n * Read the role override from context, if any.\n *\n * Most components should use `useInteractiveRole` instead of calling\n * this directly — it incorporates this signal alongside href/onClick.\n *\n * @returns The overridden role, or `null` if no parent is providing one.\n */\nexport function useInteractiveRoleContext(): InteractiveRole | null {\n  return use(InteractiveRoleContext);\n}\n"
+  },
+  {
+   "path": "app/components/astryx/InteractiveRoleContext/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file index.ts\n * @input InteractiveRoleContext\n * @output Exports InteractiveRoleContext module public API\n * @position Entry point for InteractiveRoleContext module\n */\n\nexport {\n  InteractiveRoleContext,\n  useInteractiveRoleContext,\n} from './InteractiveRoleContext';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "app/components/astryx/utils/sharedContext.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file sharedContext.ts\n * @input A registered name and its protocol version\n * @output A React context per key and React, shared by every copy of Core\n *   that runs on that React\n * @position Shared runtime state: a swizzled copy and the package use the same\n *   contexts and stores when their protocol versions match\n */\n\nimport {createContext, type Context} from 'react';\nimport {realmValue, sharedKey} from './sharedRealm';\n\n/**\n * A React context registered under a versioned key, so a provider in one copy\n * of Core reaches consumers in another. Each React gets its own context under\n * the key: a server can load two Reacts, and a streaming render leaves context\n * values that only its own React restores, so requests on two Reacts must not\n * share a context.\n */\nexport function createSharedContext<T>(\n  name: string,\n  version: number,\n  defaultValue: T,\n): Context<T> {\n  const byReact = realmValue(\n    sharedKey(`context/${name}`, version),\n    () => new WeakMap<typeof createContext, Context<unknown>>(),\n    value => value instanceof WeakMap,\n  );\n  const existing = byReact.get(createContext);\n  if (existing != null) {\n    return existing as Context<T>;\n  }\n  const SharedContext = createContext(defaultValue);\n  SharedContext.displayName = name;\n  byReact.set(createContext, SharedContext as Context<unknown>);\n  return SharedContext;\n}\n"
+  },
+  {
+   "path": "app/components/astryx/utils/sharedRealm.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file sharedRealm.ts\n * @input A registered name and its protocol version\n * @output One value per key in the JavaScript realm, shared by every copy of\n *   Core\n * @position Shared runtime state for stores and contexts; no React and no\n *   client directive, so server-safe modules can use it\n */\n\n/**\n * The registered key of a shared value. The version names the value's shape.\n * Change it when a copy built against the old shape cannot read the value.\n * Each copy then keeps its own value.\n */\nexport function sharedKey(name: string, version: number): symbol {\n  return Symbol.for(`@astryxdesign/core/${name}/v${version}`);\n}\n\n/**\n * The value under `key` in this JavaScript realm, created on first use. Every\n * copy of Core that asks for the same key gets the same value.\n *\n * The key names the protocol version, so a value found under it has this\n * protocol's shape. `accepts` guards against a key collision: a value it\n * rejects is left in place, and this copy keeps a value of its own.\n */\nexport function realmValue<T>(\n  key: symbol,\n  create: () => T,\n  accepts: (value: unknown) => boolean = () => true,\n): T {\n  const realm = globalThis as typeof globalThis & {[key: symbol]: unknown};\n  if (Object.hasOwn(realm, key)) {\n    const existing = realm[key];\n    return accepts(existing) ? (existing as T) : create();\n  }\n  const value = create();\n  realm[key] = value;\n  return value;\n}\n"
+  }
+ ]
+}

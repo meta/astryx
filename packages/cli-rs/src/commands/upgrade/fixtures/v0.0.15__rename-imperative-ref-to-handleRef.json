@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSCalendar ref={handleRef} />",
+  "output": "<XDSCalendar handleRef={handleRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChatComposerInput ref={handleRef} />",
+  "output": "<XDSChatComposerInput handleRef={handleRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSPowerSearch ref={handleRef} />",
+  "output": "<XDSPowerSearch handleRef={handleRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSTokenizer ref={handleRef} />",
+  "output": "<XDSTokenizer handleRef={handleRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSChartStreamGL ref={handleRef} />",
+  "output": "<XDSChartStreamGL handleRef={handleRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSSideNavCollapseButton sideNavRef={sideNavRef} />",
+  "output": "<XDSSideNavCollapseButton handleRef={sideNavRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "\n      <>\n        <div ref={rootRef} />\n        <XDSButton ref={buttonRef} label=\"Save\" />\n      </>\n    ",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-imperative-ref-to-handleRef",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "\n      <>\n        <XDSCalendar ref={calendarRef} />\n        <XDSSideNavCollapseButton sideNavRef={sideNavRef} />\n      </>\n    ",
+  "output": "\n      <>\n        <XDSCalendar handleRef={calendarRef} />\n        <XDSSideNavCollapseButton handleRef={sideNavRef} />\n      </>\n    ",
+  "error": null
+ }
+]

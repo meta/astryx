@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_tonavmegamenufeaturedcard",
+ "args": [
+  "search",
+  "tonavmegamenufeaturedcard"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"tonavmegamenufeaturedcard\" (4)\n\nname:        TopNavMegaMenuFeaturedCard\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: Standard featured card for the TopNavMegaMenu featured slot. Provides a consistent card with optional image, title, description, and CTA link.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavMegaMenuFeaturedCard\n\nname:        TopNavMegaMenuFeaturedCardBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenuFeaturedCard - Basic\nkind:        block\ndescription: A promotional card with a title, description, and call-to-action link. Pass it to the featured slot of a TopNavMegaMenu to highlight announcements.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuFeaturedCardBasic --type block\n\nname:        TopNavMegaMenuFeaturedCardShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenuFeaturedCard\nkind:        block\ndescription: Demonstrates TopNavMegaMenuFeaturedCard with a title, description, and CTA link inside a mega menu.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuFeaturedCardShowcase --type block\n\nname:        TopNavMegaMenuShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenu\nkind:        block\ndescription: Demonstrates TopNavMegaMenu with items and a featured card in the mega menu panel.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover tonavmegamenufeaturedcard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

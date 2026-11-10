@@ -1,0 +1,19 @@
+{
+ "id": "template_DateInputDateRange_@large",
+ "args": [
+  "template",
+  "DateInputDateRange"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {DateInput} from '@astryxdesign/core/DateInput';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\ntype DateString =\n  `${number}${number}${number}${number}-${number}${number}-${number}${number}`;\n\nconst pad = (n: number) => String(n).padStart(2, '0');\nconst today = new Date();\nconst year = today.getFullYear();\nconst month = today.getMonth();\nconst startDay = 8;\nconst endDay = 21;\nconst min = `${year}-${pad(month + 1)}-${pad(startDay)}` as DateString;\nconst max = `${year}-${pad(month + 1)}-${pad(endDay)}` as DateString;\nconst monthName = new Date(year, month, 1).toLocaleString('en-US', {\n  month: 'short',\n});\nconst description = `Available dates: ${monthName} ${startDay} – ${endDay}, ${year}`;\n\nexport default function DateInputDateRange() {\n  const [value, setValue] = useState<DateString | undefined>(undefined);\n\n  return (\n    <Stack\n      direction=\"vertical\"\n      gap={4}\n      width=\"100%\"\n      style={{minWidth: 240, maxWidth: 400}}>\n      <Text type=\"supporting\" color=\"secondary\">\n        {value ? `Booked: ${value}` : 'Pick a date in the available range'}\n      </Text>\n      <DateInput\n        label=\"Booking date\"\n        min={min}\n        max={max}\n        description={description}\n        placeholder=\"Select a booking date\"\n        presentation=\"adaptive-bottom-sheet\"\n        value={value}\n        onChange={setValue}\n      />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

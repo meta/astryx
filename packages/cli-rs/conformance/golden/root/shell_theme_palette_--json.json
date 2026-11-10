@@ -1,0 +1,14 @@
+{
+ "id": "shell_theme_palette_--json",
+ "args": [
+  "theme",
+  "palette",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"JSON output is not supported for the 'theme palette' command\",\n  \"code\": \"ERR_INVALID_OPTION\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

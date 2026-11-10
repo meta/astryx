@@ -1,0 +1,13 @@
+{
+ "id": "cols60_component_Buton_tty",
+ "args": [
+  "component",
+  "Buton"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Error: No component named \"Buton\"\r\n\r\n  Button  (similar name (distance 1))\r\n  IconButton  (keyword \"button\" (distance 1))\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

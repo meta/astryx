@@ -1,0 +1,14 @@
+{
+ "id": "w_guide_--json_@integration-packjson-noname",
+ "args": [
+  "docs",
+  "guide",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Provider ID \\\"(local integration)\\\" must be a bare npm package name.\",\n  \"code\": \"ERR_UNKNOWN\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

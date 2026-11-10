@@ -1,0 +1,15 @@
+{
+ "id": "argv-booleq_theme_build_theme.ts_--watch-yes",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--watch=yes"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--watch=yes'\n",
+ "exit": 1,
+ "files": []
+}

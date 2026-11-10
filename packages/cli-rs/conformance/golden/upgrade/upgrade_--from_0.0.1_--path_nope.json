@@ -1,0 +1,22 @@
+{
+ "id": "upgrade_--from_0.0.1_--path_nope",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--path",
+  "nope"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.0.1\nInstalled target: 0.7.12 (@astryxdesign/core)\n!! Source path not found: /tmp/astryx-conformance/work/app/nope\n74 codemods to run (dry run)\nDry run complete, but nope does not exist, so no source files were scanned. Pass --path <your source directory> if your code does not live in ./src.\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

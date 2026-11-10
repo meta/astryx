@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fuzz_template_centered-hero_deep-a-b-c@discover-iconsets_8e6426",
+    "args": [
+      "template",
+      "centered-hero",
+      "deep/a/b/c"
+    ],
+    "fixture": "discover-iconsets",
+    "cwd": "discover-iconsets/app"
+  },
+  {
+    "id": "fuzz_template__--cdn_@author_ac5e16",
+    "args": [
+      "template",
+      "",
+      "--cdn",
+      ""
+    ],
+    "fixture": "author"
+  }
+]

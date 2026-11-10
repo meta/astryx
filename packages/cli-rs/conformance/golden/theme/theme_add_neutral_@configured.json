@@ -1,0 +1,14 @@
+{
+ "id": "theme_add_neutral_@configured",
+ "args": [
+  "theme",
+  "add",
+  "neutral"
+ ],
+ "fixture": "configured",
+ "fixtureHash": "f772c62f2e9bb22e+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-neutral\" is not installed. Run `npm install @astryxdesign/theme-neutral` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add neutral`.\n",
+ "exit": 1,
+ "files": []
+}

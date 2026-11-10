@@ -1,0 +1,20 @@
+{
+ "id": "component_ButtonGroup_--zh_@large",
+ "args": [
+  "component",
+  "ButtonGroup",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# ButtonGroup\n\nButtonGroup 将相关操作连接成一个控件。当多个按钮表示对同一对象的相关操作时使用，如复制/剪切/粘贴，或撤销/重做。\n\n**Import:** `import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Button | Yes | One or more Button or IconButton children that form the connected group. |\n| Divider | No | A thin border between buttons, rendered automatically by the group. |\n\n## Best Practices\n\n- **Do:** 将对同一对象执行相关操作的按钮分组，如对选中文本的复制、剪切、粘贴。\n- **Do:** 组内所有按钮使用相同的变体，使其看起来像一个连接的整体。\n- **Do:** 保持组较小（2-4 个按钮）。更多操作请使用工具栏或下拉菜单。\n- **Don't:** 不要混合差异很大的操作，将保存按钮和删除按钮放在同一组中会令人困惑。\n- **Don't:** 不要使用 ButtonGroup 进行导航，使用 SegmentedControl 或 TabList 切换视图。\n- **Don't:** 不要嵌套 ButtonGroup。如需多个组，请并排放置并留有间隔。\n- **Do:** 按钮组的标签应说明这些按钮作用于什么。该标签是按钮组的无障碍名称，屏幕阅读器会在每个成员之前朗读它。\n- **Do:** 按钮组是单个 Tab 停靠点。方向键沿排列方向在成员间移动焦点，Home/End 跳到首尾，禁用成员会被跳过——即 WAI-ARIA APG 的 roving tabindex 技术。\n- **Don't:** 不要用禁用整个按钮组来表示操作进行中。请保持按钮组可用，并在发起操作的按钮上显示进度。\n\n## Accessibility\n\n- **Text label:** Text in each button must have at least 4.5:1 contrast with its background in every state. For Hover and Pointer down, measure the final background after the overlay is applied.\n- **Essential icon or spinner arc:** An icon used instead of text must have at least 3:1 contrast with the button background. The moving spinner arc must also meet 3:1. An icon beside a visible label does not need its own check.\n- **Visible control boundary:** Some groups need a divider or edge to show each button. That divider or edge must have at least 3:1 contrast.\n- **Keyboard focus indicator:** The focus outline must have at least 3:1 contrast with the area around it.\n- **Disabled appearance:** Disabled controls do not need to meet these contrast ratios.\n\n## Components\n\n### ButtonGroup\n\n将多个按钮组合在一起，带有连接样式：共享边框、正确的圆角处理（仅外边缘），以及水平或垂直方向。在触摸呈现下（主要指针为粗指针时），按下时按钮组像菜单一样跟踪按压：按下一个按钮并滑过其他按钮，高亮随之移动。松开时所在的按钮执行，在组外松开则什么都不执行。鼠标按下与原生按钮相同。使用手指时，每个按钮的触控目标向 44 px 扩展，最多到与相邻按钮间距的一半，按钮本身不变大。组内的菜单触发器保留自己的打开方式。\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Button 或 IconButton 子元素。 **(required)** |\n| `label` | `string` | - | 按钮组的无障碍标签 (aria-label)。 **(required)** |\n| `orientation` | `'horizontal' \\| 'vertical'` | `'horizontal'` | 按钮组的布局方向。 |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | 组内按钮的默认尺寸。单个按钮可覆盖。 |\n| `isDisabled` | `boolean` | `false` | 组内所有按钮是否禁用。 |\n| `elevation` | `'none' \\| 'low' \\| 'med' \\| 'high'` | `'none'` | 整个组的静止阴影深度。连接的按钮共享一个表面，阴影将它们作为整体抬起。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到根元素的引用。 |\n| `xstyle` | `StyleXStyles` | - | StyleX 样式，用于布局自定义。必须是 stylex.create() 的值。 |\n| `data-testid` | `string` | - | 自动化测试的选择器。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-button-group` | `data-size`, `data-orientation`, `data-elevation` | size, orientation, elevation | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'button-group': {\n    base: { /* CSS properties */ },\n    'size:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

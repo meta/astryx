@@ -1,0 +1,18 @@
+{
+ "id": "manifest_@configured",
+ "args": [
+  "manifest"
+ ],
+ "fixture": "configured",
+ "fixtureHash": "f772c62f2e9bb22e+4e418a0c2575d9ce",
+ "stdout": "astryx v0.7.12 (17 commands)\n\nname:        blog\njson:        yes\ndescription: Read the Astryx blog from the published feed\n\nname:        build\njson:        yes\ndescription: Build a page: the template to start from, or the workflow playbook (no query)\n\nname:        component\njson:        yes\ndescription: List components or print component docs\n\nname:        discover\njson:        yes\ndescription: Browse and search integrations: the ones you have and the ones you could add\n\nname:        docs\njson:        yes\ndescription: Print reference docs\n\nname:        doctor\njson:        yes\ndescription: Diagnose Astryx projects and integration packages\n\nname:        experimental\ndescription: [experimental] Try features that may change in a patch release: icon sets (find icons, build an icon-set package)\n\nname:        gap-report\njson:        yes\ndescription: Report a missing component or feature to the package that owns it\n\nname:        hook\njson:        yes\ndescription: List hooks or print hook docs\n\nname:        init\njson:        yes\ndescription: Initialize the design system in your project\n\nname:        integration\ndescription: Author and verify an Astryx integration package\n\nname:        manifest\njson:        yes\ndescription: Print the full CLI capability manifest (use with --json)\n\nname:        search\njson:        yes\ndescription: Search components, hooks, docs, templates, and themes in one ranked list\n\nname:        swizzle\njson:        yes\ndescription: Copy component source for customization\n\nname:        template\njson:        yes\ndescription: List, show, or scaffold page and block templates\n\nname:        theme\ndescription: Add, switch, build, and author themes\n\nname:        upgrade\njson:        yes\ndescription: Update your code after upgrading Astryx, and refresh ShadCN-copied components\n\nRun `npx @astryxdesign/cli@0.7.12 manifest --json` for the full structured manifest.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/configured\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

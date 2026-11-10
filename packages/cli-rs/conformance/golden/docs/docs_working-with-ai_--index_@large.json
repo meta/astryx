@@ -1,0 +1,20 @@
+{
+ "id": "docs_working-with-ai_--index_@large",
+ "args": [
+  "docs",
+  "working-with-ai",
+  "--index"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "Working with AI\nHow to set up AI coding tools to generate correct component code.\n\npackage: @astryxdesign/cli\n\noverview             Overview - The design system is built to be AI-friendly: consistent naming, predictable prop\n                     patterns, and a CLI that feeds structured documentation directly into AI context windows. But\n                     models still need the right context to avoid falling back to...\nquick-start          Set up agent docs - Tell your AI to install the CLI and set itself up:\nwhat-gets-generated  What Gets Generated - The generated context teaches your AI a 3-step workflow before writing any UI\n                     code:\ncursor-setup         Cursor Setup - Cursor reads project rules from `.cursor/rules/`. To keep the Astryx context in a\n                     rule of its own, write it there. Give a path relative to the project root, such as\n                     `.cursor/rules/astryx.mdc`; an absolute path is refused.\nchecking-your-setup  Checking Your Setup - Paste this into your AI before writing any component code. If your AI can't\n                     answer these questions, it'll know to install the agent docs first.\nthe-astryx-pattern   The astryx Pattern - AI agents frequently invoke the CLI with incorrect paths (e.g.\n                     node_modules/@astryxdesign/cli/bin/docs.mjs instead of astryx.mjs), leading to silent failures.\n                     Adding an npm script alias with the correct path eliminates this entirely.\nthe-dense-flag       Shorter output: --detail and --dense - For a shorter read, add `--detail brief` (one line per\n                     section) or `--detail compact`. `--dense` swaps in a shorter text where a doc ships one. Use them\n                     when pasting CLI output into a web-based AI tool like ChatGPT or Claude.\nmcp-server           MCP Server - Astryx ships a Model Context Protocol (MCP) server that any MCP-compatible AI tool can\n                     connect to. Instead of manually pasting CLI output, the AI can query the Astryx design system\n                     directly, searching for components, reading full...\nglobal-mode          In global mode - In global mode: your global install keeps one Astryx skill in your home folder,\n                     linked into the folders agent tools read, so agents outside any project know Astryx is there;\n                     inside a project, its own agent docs come first. See `astryx...\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs working-with-ai <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs working-with-ai --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-integrations\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

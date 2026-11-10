@@ -1,0 +1,15 @@
+{
+ "id": "argv-before_gap-report_--category_Layout_Button",
+ "args": [
+  "gap-report",
+  "--category",
+  "Layout",
+  "Button"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown gap category \"Layout\".\n\n  missing_component  (Missing component)\n  missing_variant  (Missing variant or prop)\n  layout_gap  (Layout gap)\n  styling_gap  (Styling gap)\n  a11y_gap  (Accessibility gap)\n  api_friction  (API friction)\n  docs_gap  (Documentation gap)\n  other  (Other)\n",
+ "exit": 1,
+ "files": []
+}

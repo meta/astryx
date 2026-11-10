@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_app_use_missing",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "nope"
+ ],
+ "fixture": "iconapp",
+ "fixtureHash": "16b85bc0821a8935+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"nope\"\n\n  glyphs  (installed icon set)\n  outline  (installed icon set)\n  @acme/glyphs/glyphs  (installed icon set)\n  @acme/outline/outline  (installed icon set)\n  @acme/twin/glyphs  (installed icon set)\n",
+ "exit": 1,
+ "files": []
+}

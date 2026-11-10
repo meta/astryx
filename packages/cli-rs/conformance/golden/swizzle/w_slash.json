@@ -1,0 +1,13 @@
+{
+ "id": "w_slash",
+ "args": [
+  "swizzle",
+  "a/b"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"a/b\": must not contain path separators ('/' or '\\\\').\n",
+ "exit": 1,
+ "files": []
+}

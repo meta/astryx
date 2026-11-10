@@ -1,0 +1,14 @@
+{
+ "id": "template_BadgeCategoryTags_--json_@large",
+ "args": [
+  "template",
+  "BadgeCategoryTags",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BadgeCategoryTags\",\n    \"description\": \"Tag items with color-coded categories like teams, priorities, or topics. Use the 9 non-semantic color variants when you need to distinguish groups visually.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function BadgeCategoryTags() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={6}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Teams\\n        </Text>\\n        <Stack direction=\\\"horizontal\\\" gap={2} style={{flexWrap: 'wrap'}}>\\n          <Badge variant=\\\"blue\\\" label=\\\"Design\\\" />\\n          <Badge variant=\\\"cyan\\\" label=\\\"DevOps\\\" />\\n          <Badge variant=\\\"green\\\" label=\\\"Backend\\\" />\\n          <Badge variant=\\\"pink\\\" label=\\\"Marketing\\\" />\\n          <Badge variant=\\\"purple\\\" label=\\\"Engineering\\\" />\\n          <Badge variant=\\\"teal\\\" label=\\\"Research\\\" />\\n        </Stack>\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Priority\\n        </Text>\\n        <Stack direction=\\\"horizontal\\\" gap={2}>\\n          <Badge variant=\\\"orange\\\" label=\\\"Urgent\\\" />\\n          <Badge variant=\\\"red\\\" label=\\\"Critical\\\" />\\n          <Badge variant=\\\"yellow\\\" label=\\\"Review\\\" />\\n        </Stack>\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

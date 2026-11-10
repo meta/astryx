@@ -1,0 +1,15 @@
+{
+ "id": "argv-negate_experimental_icon_map_--no-remove",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--no-remove"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-remove'\n(Did you mean --remove?)\n",
+ "exit": 1,
+ "files": []
+}

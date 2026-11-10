@@ -1,0 +1,14 @@
+{
+ "id": "ex_experimental_icon_delete_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "delete"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "No icons match \"delete\".\n\nSee the installed sets: npx @astryxdesign/cli@0.7.12 experimental icon --list\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

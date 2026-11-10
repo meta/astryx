@@ -1,0 +1,20 @@
+{
+ "id": "docs_working-with-ai_cursor-setup_@large",
+ "args": [
+  "docs",
+  "working-with-ai",
+  "cursor-setup"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Cursor Setup\n\nCursor reads project rules from `.cursor/rules/`. To keep the Astryx context in a rule of its own, write it there. Give a path relative to the project root, such as `.cursor/rules/astryx.mdc`; an absolute path is refused.\n\nInstall as a Cursor project rule:\n```bash\nnpx @astryxdesign/cli@0.7.12 init --features agents --agent-docs-path .cursor/rules/astryx.mdc\n```\n\nRerunning the same command rewrites only the Astryx block, so frontmatter you add above it (such as `alwaysApply: true`) stays.\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai what-gets-generated\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai checking-your-setup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "id": "after-template-AspectRatioImageGallery-src-page.ts_template_AspectRatioImageGallery_src-page.tsx_--overwrite_@large",
+ "args": [
+  "template",
+  "AspectRatioImageGallery",
+  "src/page.tsx",
+  "--overwrite"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "Copied template to src/page.tsx\n\npackage: @astryxdesign/core\n\nReplaced 1 Astryx demo media reference in src/page.tsx: images now show a neutral placeholder and videos have an empty source. Supply your own media there.\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AspectRatio} from '@astryxdesign/core/AspectRatio';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Grid} from '@astryxdesign/core/Grid';\n\nconst images = [\n  {id: 1, alt: 'Mountain landscape'},\n  {id: 2, alt: 'Ocean sunset'},\n  {id: 3, alt: 'Forest trail'},\n  {id: 4, alt: 'City skyline'},\n  {id: 5, alt: 'Desert dunes'},\n  {id: 6, alt: 'Snowy peaks'},\n];\n\nexport default function AspectRatioImageGallery() {\n  // Anchor a definite width so the grid renders in shrink-to-fit contexts\n  // (e.g. the docsite example preview, which wraps blocks in a\n  // `min-width: fit-content` container). Without a fixed-width ancestor,\n  // the `width=\"100%\"` grid collapses to zero — AspectRatio positions its\n  // child absolutely, so it has no intrinsic width to size the grid from.\n  return (\n    <Center width={600}>\n      <Grid columns={3} gap={4} width=\"100%\">\n        {images.map(({id, alt}) => (\n          <AspectRatio key={id} ratio={4 / 3} fit=\"cover\">\n            <img\n              src=\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23f5f6f8%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23c2cad6%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23c2cad6%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E\"\n              alt={alt}\n              style={{borderRadius: 'var(--radius-element)'}}\n            />\n          </AspectRatio>\n        ))}\n      </Grid>\n    </Center>\n  );\n}\n"
+  }
+ ]
+}

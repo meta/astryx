@@ -1,0 +1,19 @@
+{
+ "id": "component_TopNavMegaMenu_@large",
+ "args": [
+  "component",
+  "TopNavMegaMenu"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# TopNavMegaMenu\n\nNavigation item that displays a full-width mega menu panel on hover. Uses a slots API with items and featured props. TopNavMegaMenuItem renders itself in both desktop and mobile drawer modes. Supports inline collapsible drawer via render mode context.\n\n**Import:** `import {TopNavMegaMenu} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Visible label for the trigger button. **(required)** |\n| `items` | `ReactNode` | - | Menu items slot: typically TopNavMegaMenuItem components, but accepts any ReactNode. |\n| `featured` | `ReactNode` | - | Featured content slot: rendered in the right panel on desktop, below items in the mobile drawer. |\n| `delay` | `number` | `150` | Delay in milliseconds before showing the menu on hover. |\n| `hideDelay` | `number` | `250` | Delay in milliseconds before hiding the menu after the mouse leaves. |\n| `onOpenChange` | `(isOpen: boolean) => void` | - | Callback fired when the mega menu opens or closes. Useful for coordinating wrapper styles. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

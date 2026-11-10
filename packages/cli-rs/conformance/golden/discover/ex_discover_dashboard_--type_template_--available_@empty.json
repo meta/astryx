@@ -1,0 +1,16 @@
+{
+ "id": "ex_discover_dashboard_--type_template_--available_@empty",
+ "args": [
+  "discover",
+  "dashboard",
+  "--type",
+  "template",
+  "--available"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "Available\nfrom Astryx\n\nname:        @astryxdesign/richtext\npackage:     @astryxdesign/richtext\ncomponents:  RichTextEditor, RichTextEditorAutoLinkPlugin, RichTextEditorToolbar, RichTextView\nversion:     0.7.12\ndescription: Astryx rich text - a Lexical-based rich text editor and viewer, styled with Astryx design tokens.\ntemplates:   RichTextEditorShowcase\nsource:      Astryx\ninstall:     npm install @astryxdesign/richtext@0.7.12\n\nThis project loads no integration and has no discover source of its own, so discover lists everything instead of answering \"dashboard\".\n\nTo add a package, run its install command.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "docs_styling-overview_plain_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "plain"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Plain CSS\n\nInstall:\n```bash\nnpm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral\n```\n\nglobals.css:\n```css\n@import \"@astryxdesign/core/reset.css\";\n@import \"@astryxdesign/core/astryx.css\";\n@import \"@astryxdesign/theme-neutral/theme.css\";\n```\n\nDone. Components work out of the box — style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`npx @astryxdesign/cli@0.7.12 theme list` shows what's available).\n\nUp: npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview pick-a-path\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview tailwind\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

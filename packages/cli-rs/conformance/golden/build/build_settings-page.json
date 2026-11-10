@@ -1,0 +1,19 @@
+{
+ "id": "build_settings-page",
+ "args": [
+  "build",
+  "settings page"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"settings page\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        settings\npackage:     @astryxdesign/core\ndescription: Preferences as one continuously scrolling form, sections stacked in order with no navigation between them.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        settings-sidebar\npackage:     @astryxdesign/core\ndescription: Preferences split into nav-switched panels: a persistent section list swaps the pane beside it, and rows edit in place rather than opening a separate form.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-sidebar --type page <path>\n\nname:        settings-dialog\npackage:     @astryxdesign/core\ndescription: Preferences inside a modal container with searchable section navigation, so configuration happens without leaving whatever is underneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-dialog --type page <path>\n\nKeyword search matched these page templates: settings (@astryxdesign/core), settings-dialog (@astryxdesign/core), settings-sidebar (@astryxdesign/core).\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useTableColumnSettingsState\npackage:     @astryxdesign/core\ndescription: Headless column visibility and ordering state management for Table.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

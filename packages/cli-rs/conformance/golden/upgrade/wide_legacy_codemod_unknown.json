@@ -1,0 +1,16 @@
+{
+ "id": "wide_legacy_codemod_unknown",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--codemod",
+  "no-such-codemod"
+ ],
+ "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.0.1\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-legacy/src for source files...\nFound 5 source files\nApplying v0.0.2 codemods...\nApplying v0.0.6 codemods...\nApplying v0.0.7 codemods...\nApplying v0.0.8 codemods...\nApplying v0.0.10 codemods...\nApplying v0.0.12 codemods...\nApplying v0.0.13 codemods...\nApplying v0.0.14 codemods...\nApplying v0.0.15 codemods...\nApplying v0.1.0 codemods...\nApplying v0.1.2 codemods...\nApplying v0.1.3 codemods...\nApplying v0.1.5 codemods...\nApplying v0.1.7 codemods...\nApplying v0.1.8 codemods...\nApplying v0.2.0 codemods...\nApplying v0.2.1 codemods...\nApplying v0.3.0 codemods...\nApplying v0.4.0 codemods...\nApplying v0.5.0 codemods...\nApplying v0.6.0 codemods...\nApplying v0.6.4 codemods...\nApplying v0.6.7 codemods...\nApplying v0.7.0 codemods...\nApplying v0.7.2 codemods...\nApplying v0.7.5 codemods...\nApplying v0.7.8 codemods...\n\n[ok] No changes needed - your code is already up to date!\nAborted\n\n",
+ "stderr": "Codemod \"no-such-codemod\" not found. Use --list to see available codemods.\n",
+ "exit": 1,
+ "files": []
+}

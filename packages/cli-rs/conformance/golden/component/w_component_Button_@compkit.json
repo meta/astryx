@@ -1,0 +1,13 @@
+{
+ "id": "w_component_Button_@compkit",
+ "args": [
+  "component",
+  "Button"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Component \"Button\" is provided by multiple packages. Re-run with --package <pkg> to choose one.\n\n  @astryxdesign/core  (provides this component)\n  @comp/kit  (provides this component)\n",
+ "exit": 1,
+ "files": []
+}

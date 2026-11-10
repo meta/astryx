@@ -1,0 +1,14 @@
+{
+ "id": "w_guide_--json_@integration-packjson-noversion",
+ "args": [
+  "docs",
+  "guide",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail\",\n  \"package\": \"@acme/noversion\",\n  \"data\": {\n    \"name\": \"guide\",\n    \"description\": \"Guide.\",\n    \"type\": \"generic\",\n    \"title\": \"Guide\",\n    \"sections\": [\n      {\n        \"id\": \"intro\",\n        \"title\": \"Intro\",\n        \"package\": \"@acme/noversion\",\n        \"content\": [\n          {\n            \"type\": \"prose\",\n            \"text\": \"Hello.\"\n          }\n        ]\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs guides\",\n      \"previous\": \"astryx docs working-with-ai\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

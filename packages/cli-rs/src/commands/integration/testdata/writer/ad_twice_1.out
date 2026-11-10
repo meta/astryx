@@ -1,0 +1,5 @@
+export default {
+  agentDocs: {},
+  'agentDocs': {},
+  docs: './docs'
+};

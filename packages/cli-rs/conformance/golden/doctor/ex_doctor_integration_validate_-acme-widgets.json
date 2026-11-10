@@ -1,0 +1,15 @@
+{
+ "id": "ex_doctor_integration_validate_-acme-widgets",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "@acme/widgets"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Validating integration: @acme/widgets\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"@acme/widgets\" at /tmp/astryx-conformance/work/app/node_modules/@acme/widgets/package.json. Install it first.\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

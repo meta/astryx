@@ -1,0 +1,20 @@
+{
+ "id": "hook_useLongPress_--params",
+ "args": [
+  "hook",
+  "useLongPress",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseLongPressOptions` | - | Configuration object. **(required)** |\n| `options.onLongPress` | `(point: {x: number; y: number}) => void` | - | Fired with the touch start point once the press is held for delayMs. **(required)** |\n| `options.disabled` | `boolean` | `false` | When true, the returned touch handlers are inert. |\n| `options.delayMs` | `number` | `500` | Hold duration before the press fires, in milliseconds. |\n| `options.moveCancelPx` | `number` | `10` | Movement past this distance on either axis cancels the press, treating it as a scroll or drag. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

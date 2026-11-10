@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_stepper_--json",
+ "args": [
+  "theme",
+  "targets",
+  "stepper",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"stepper\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"step\",\n        \"className\": \"astryx-step\",\n        \"component\": \"Stepper\",\n        \"props\": [\n          \"progress\",\n          \"status\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"step-bar\",\n        \"className\": \"astryx-step-bar\",\n        \"component\": \"Stepper\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"step-connector\",\n        \"className\": \"astryx-step-connector\",\n        \"component\": \"Stepper\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"step-description\",\n        \"className\": \"astryx-step-description\",\n        \"component\": \"Stepper\",\n        \"props\": [\n          \"progress\",\n          \"status\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"step-indicator\",\n        \"className\": \"astryx-step-indicator\",\n        \"component\": \"Stepper\",\n        \"props\": [\n          \"progress\",\n          \"status\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"step-label\",\n        \"className\": \"astryx-step-label\",\n        \"component\": \"Stepper\",\n        \"props\": [\n          \"progress\",\n          \"status\",\n          \"disabled\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"stepper\",\n        \"className\": \"astryx-stepper\",\n        \"component\": \"Stepper\",\n        \"props\": [\n          \"orientation\",\n          \"indicatorPosition\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"stepper-frame\",\n        \"className\": \"astryx-stepper-frame\",\n        \"component\": \"Stepper\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"stepper-summary\",\n        \"className\": \"astryx-stepper-summary\",\n        \"component\": \"Stepper\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

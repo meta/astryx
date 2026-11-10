@@ -1,0 +1,19 @@
+{
+ "id": "template_ChatLayoutScrollButtonLabels_@large",
+ "args": [
+  "template",
+  "ChatLayoutScrollButtonLabels"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatLayoutScrollButton} from '@astryxdesign/core/Chat';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function ChatLayoutScrollButtonLabels() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Labels expand the button to give context\n      </Text>\n      <Stack direction=\"vertical\" gap={3}>\n        <ChatLayoutScrollButton isVisible={true} onClick={() => {}} />\n        <ChatLayoutScrollButton\n          isVisible={true}\n          label=\"New messages\"\n          onClick={() => {}}\n        />\n        <ChatLayoutScrollButton\n          isVisible={true}\n          label=\"3 unread replies\"\n          onClick={() => {}}\n        />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

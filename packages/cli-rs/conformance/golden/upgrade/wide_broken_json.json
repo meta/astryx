@@ -1,0 +1,17 @@
+{
+ "id": "wide_broken_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--codemod",
+  "rename-selector-items-to-options",
+  "--json"
+ ],
+ "fixture": "upgrade-broken",
+ "fixtureHash": "31eddb4b9a9b997c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 1,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"current\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"none\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 1,\n    \"transformsApplied\": 1,\n    \"modifiedFiles\": [\n      \"src/ok.tsx\"\n    ],\n    \"protectedFiles\": [\n      {\n        \"file\": \"src/gen/panel.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"reasons\": [\n          \"generated\"\n        ],\n        \"declarations\": [\n          \"@generated in the leading comment block\"\n        ],\n        \"commands\": [\n          \"pnpm run gen:panel\"\n        ]\n      }\n    ],\n    \"declinedCandidates\": [],\n    \"regenerate\": [\n      {\n        \"file\": \"src/gen/panel.tsx\",\n        \"codemods\": [\n          \"core:rename-selector-items-to-options\"\n        ],\n        \"commands\": [\n          \"pnpm run gen:panel\"\n        ],\n        \"messages\": []\n      }\n    ],\n    \"complete\": false,\n    \"errorCode\": \"ERR_CODEMOD_PROTECTED\",\n    \"errors\": [\n      {\n        \"file\": \"src/broken.tsx\",\n        \"codemod\": \"core:rename-selector-items-to-options\",\n        \"error\": \"Unterminated JSX contents. (2:44)\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

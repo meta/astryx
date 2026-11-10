@@ -1,0 +1,21 @@
+{
+ "id": "w_render_rebuild_default",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "proj/stripped.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "Rebuilt proj/stripped-restored/page.tsx\n\ninput:      proj/stripped.html\nmode:       rebuilt\nexact:      false\noutput:     proj/stripped-restored/page.tsx\nfiles:      proj/stripped-restored/page.tsx\ncomponents: Badge, Button, Card, Divider, Field, FieldLabel, HStack, Heading, Link, Text, TextInput, VStack\nelements:   14\n\nThe file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "renderpages/proj/stripped-restored/page.tsx",
+   "status": "created",
+   "text": "// Rebuilt by astryx experimental render --reverse from rendered markup: Dash {x} & co.\n// Text and layout come from the markup; styling, state and behavior do not,\n// so review it before use.\n\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Divider} from '@astryxdesign/core/Divider';\nimport {Field, FieldLabel} from '@astryxdesign/core/Field';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {Link} from '@astryxdesign/core/Link';\nimport {Text} from '@astryxdesign/core/Text';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {VStack} from '@astryxdesign/core/VStack';\n\nexport default function Page() {\n  return (\n    <>\n      <VStack gap={4}>\n        <Heading level={1} color=\"primary\">Dash {'{'}x{'}'}</Heading>\n        <HStack>\n          <Badge label=\"New\" variant=\"neutral\" />\n          <Text type=\"body\" color=\"primary\">Hello \"q\" bold</Text>\n        </HStack>\n        <Card variant=\"default\" elevation=\"none\">\n          <Text type=\"body\" color=\"primary\">In card</Text>\n          <Button variant=\"primary\" size=\"md\" elevation=\"none\" label=\"Save\">Save</Button>\n          <Link color=\"accent\" href=\"/x\">\n            <Text type=\"body\" color=\"inherit\">Go</Text>\n          </Link>\n        </Card>\n        <Field label=\"Name\" inputID=\"\">\n          <FieldLabel label=\"Name\" inputID=\"\" />\n          <TextInput size=\"md\" label=\"\" value=\"\" />\n        </Field>\n        <Divider variant=\"subtle\" orientation=\"horizontal\" />\n        <p>plain</p>\n        <img src=\"data:image/png;base64,AA\" alt=\"i\" />\n      </VStack>\n    </>\n  );\n}\n"
+  }
+ ]
+}

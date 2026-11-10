@@ -1,0 +1,15 @@
+{
+ "id": "w_th_eject_abs",
+ "args": [
+  "theme",
+  "eject",
+  "stone",
+  "/tmp/x"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid theme target path \"/tmp/x\": absolute paths are not allowed. Use a path relative to the project root.\n",
+ "exit": 1,
+ "files": []
+}

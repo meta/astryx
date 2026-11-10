@@ -1,0 +1,14 @@
+{
+ "id": "ex_experimental_render_page.tsx_@integration",
+ "args": [
+  "experimental",
+  "render",
+  "page.tsx"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

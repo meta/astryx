@@ -1,0 +1,19 @@
+{
+ "id": "w_doc_both",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "topic",
+  "--replaces",
+  "a",
+  "--extends",
+  "b"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: A topic either replaces another or extends it, not both.\n",
+ "exit": 1,
+ "files": []
+}

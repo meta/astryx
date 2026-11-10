@@ -1,0 +1,16 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--icons-specifier_.-icons.mjs_@integration",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--icons-specifier",
+  "./icons.mjs"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/integration/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_int_templates_nope-absent_configured",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "@nope/absent"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "Checking integration templates: @nope/absent\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"@nope/absent\" at /tmp/astryx-conformance/work/doctor-integrations/configured/node_modules/@nope/absent/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

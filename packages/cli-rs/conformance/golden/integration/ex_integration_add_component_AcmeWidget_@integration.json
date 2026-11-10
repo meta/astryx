@@ -1,0 +1,36 @@
+{
+ "id": "ex_integration_add_component_AcmeWidget_@integration",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "AcmeWidget"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "component contribution added\n\n[ok] AcmeWidget\n\nDeclare component root ./components in astryx.integration.mjs.\n\n- components/AcmeWidget.doc.mjs\n- components/AcmeWidget.tsx\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "integration/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  components: './components'\n};\n"
+  },
+  {
+   "path": "integration/components/AcmeWidget.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'AcmeWidget',\n  displayName: 'AcmeWidget',\n  import: \"golden-consumer/components/AcmeWidget\",\n  usage: {description: 'AcmeWidget component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "integration/components/AcmeWidget.tsx",
+   "status": "created",
+   "text": "export function AcmeWidget() {\n  return <div>AcmeWidget</div>;\n}\n"
+  }
+ ]
+}

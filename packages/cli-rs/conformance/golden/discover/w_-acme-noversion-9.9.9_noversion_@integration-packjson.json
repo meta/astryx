@@ -1,0 +1,13 @@
+{
+ "id": "w_-acme-noversion-9.9.9_noversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/noversion@9.9.9"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Version \"9.9.9\" of @acme/noversion not found\n",
+ "exit": 1,
+ "files": []
+}

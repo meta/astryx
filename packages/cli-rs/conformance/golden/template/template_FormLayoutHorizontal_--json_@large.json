@@ -1,0 +1,14 @@
+{
+ "id": "template_FormLayoutHorizontal_--json_@large",
+ "args": [
+  "template",
+  "FormLayoutHorizontal",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"FormLayoutHorizontal\",\n    \"description\": \"Two fields side by side for naturally paired inputs like first and last name\",\n    \"type\": \"block\",\n    \"components\": [\n      \"FormLayout\",\n      \"TextInput\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {FormLayout} from '@astryxdesign/core/FormLayout';\\nimport {TextInput} from '@astryxdesign/core/TextInput';\\n\\nexport default function FormLayoutHorizontal() {\\n  const [first, setFirst] = useState('Jordan');\\n  const [last, setLast] = useState('Rivera');\\n\\n  return (\\n    <FormLayout direction=\\\"horizontal\\\" style={{width: '100%', maxWidth: 400}}>\\n      <TextInput label=\\\"First Name\\\" value={first} onChange={setFirst} />\\n      <TextInput label=\\\"Last Name\\\" value={last} onChange={setLast} />\\n    </FormLayout>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

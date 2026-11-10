@@ -1,0 +1,10 @@
+export default {
+  title: 'Café ☕ 😀',
+  name: 'x',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

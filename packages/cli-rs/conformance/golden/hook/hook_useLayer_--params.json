@@ -1,0 +1,20 @@
+{
+ "id": "hook_useLayer_--params",
+ "args": [
+  "hook",
+  "useLayer",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `mode` | `'context' \\| 'fixed'` | - | Positioning strategy: context uses CSS anchor positioning relative to a trigger ref; fixed uses explicit x/y coordinates. **(required)** |\n| `onShow` | `() => void` | - | Callback fired when the layer becomes visible. |\n| `onHide` | `() => void` | - | Callback fired when the layer is hidden. |\n| `lightDismiss` | `boolean` | `false` | Whether clicking outside should dismiss the layer using native popover light-dismiss behavior. |\n| `lazyMount` | `boolean` | `false` | Context mode only. Wait until show() to resolve the inline/portal position and mount content; hide unmounts the content while the inert marker remains. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

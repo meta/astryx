@@ -1,0 +1,19 @@
+{
+ "id": "template_OverflowListOverflowBadges_@large",
+ "args": [
+  "template",
+  "OverflowListOverflowBadges"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {OverflowList} from '@astryxdesign/core/OverflowList';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Card} from '@astryxdesign/core/Card';\n\nexport default function OverflowListOverflowBadges() {\n  return (\n    <Card\n      padding={2}\n      style={{\n        resize: 'horizontal',\n        overflow: 'hidden',\n        minWidth: 80,\n        width: 300,\n      }}>\n      <OverflowList\n        gap={1}\n        overflowRenderer={overflowItems => (\n          <Badge variant=\"neutral\" label={`+${overflowItems.length}`} />\n        )}>\n        <Badge variant=\"info\" label=\"React\" />\n        <Badge variant=\"success\" label=\"TypeScript\" />\n        <Badge variant=\"warning\" label=\"StyleX\" />\n        <Badge variant=\"neutral\" label=\"Storybook\" />\n        <Badge variant=\"error\" label=\"Vitest\" />\n      </OverflowList>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

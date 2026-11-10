@@ -1,0 +1,14 @@
+{
+ "id": "ex_upgrade_--registry_--apply_@empty",
+ "args": [
+  "upgrade",
+  "--registry",
+  "--apply"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nNo ShadCN composition receipts found.\nRegistry upgrade complete\n\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

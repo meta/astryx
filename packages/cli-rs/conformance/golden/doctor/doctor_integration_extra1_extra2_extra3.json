@@ -1,0 +1,16 @@
+{
+ "id": "doctor_integration_extra1_extra2_extra3",
+ "args": [
+  "doctor",
+  "integration",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor integration extra1'\n\n  validate  (available subcommand)\n  templates  (available subcommand)\n  components  (available subcommand)\n  docs  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

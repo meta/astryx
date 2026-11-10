@@ -1,0 +1,19 @@
+{
+ "id": "template_DrawerWidths_@large",
+ "args": [
+  "template",
+  "DrawerWidths"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @input A pixel, rem, or percentage width and controlled open state\n * @output A Drawer demonstrating the selected width budget\n * @position Copyable Drawer example\n */\n\nimport {useState} from 'react';\nimport {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\nimport {HStack} from '@astryxdesign/core/Stack';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function DrawerWidths() {\n  const [isOpen, setIsOpen] = useState(false);\n  const [width, setWidth] = useState<number | string>(320);\n\n  function openAtWidth(value: number | string) {\n    setWidth(value);\n    setIsOpen(true);\n  }\n\n  return (\n    <>\n      <HStack gap={2}>\n        <Button label=\"320px\" onClick={() => openAtWidth(320)} />\n        <Button label=\"32rem\" onClick={() => openAtWidth('32rem')} />\n        <Button label=\"50%\" onClick={() => openAtWidth('50%')} />\n      </HStack>\n      <Drawer\n        isOpen={isOpen}\n        onOpenChange={setIsOpen}\n        label=\"Width budget\"\n        width={width}>\n        <Layout\n          header={\n            <DrawerHeader title=\"Width budget\" onOpenChange={setIsOpen} />\n          }\n          content={\n            <LayoutContent>\n              <Text type=\"body\">\n                Width: {typeof width === 'number' ? `${width}px` : width}\n              </Text>\n            </LayoutContent>\n          }\n        />\n      </Drawer>\n    </>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

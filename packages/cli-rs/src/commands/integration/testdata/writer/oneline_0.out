@@ -1,0 +1,8 @@
+export default {
+  name: 'acme',
+  themes: './themes',
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

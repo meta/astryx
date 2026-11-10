@@ -1,0 +1,1154 @@
+[
+  {
+    "id": "w_render_inputs_page_app",
+    "args": [
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "page.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_render_inputs_page_json_app",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_render_inputs_page_empty",
+    "args": [
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "page.html"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_render_inputs_page_json_empty",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "w_render_inputs_page_large",
+    "args": [
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "page.html"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_render_inputs_page_json_large",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "w_render_inputs_page_plain",
+    "args": [
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "page.html"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_render_inputs_page_json_plain",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "../inputs/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "w_render_basic",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_basic_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "basic.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_heading",
+    "args": [
+      "experimental",
+      "render",
+      "heading.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_heading_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "heading.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_local",
+    "args": [
+      "experimental",
+      "render",
+      "local.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_local_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "local.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_styled",
+    "args": [
+      "experimental",
+      "render",
+      "styled.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_styled_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "styled.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_image",
+    "args": [
+      "experimental",
+      "render",
+      "image.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_image_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "image.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_logs",
+    "args": [
+      "experimental",
+      "render",
+      "logs.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_logs_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "logs.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_nodefault",
+    "args": [
+      "experimental",
+      "render",
+      "nodefault.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_nodefault_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "nodefault.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_syntax",
+    "args": [
+      "experimental",
+      "render",
+      "syntax.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_syntax_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "syntax.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_browser",
+    "args": [
+      "experimental",
+      "render",
+      "browser.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_browser_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "browser.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_throws",
+    "args": [
+      "experimental",
+      "render",
+      "throws.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_throws_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "throws.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_missing",
+    "args": [
+      "experimental",
+      "render",
+      "missing.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_missing_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "missing.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_missinglocal",
+    "args": [
+      "experimental",
+      "render",
+      "missinglocal.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_missinglocal_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "missinglocal.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_dropped",
+    "args": [
+      "experimental",
+      "render",
+      "dropped.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_dropped_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "dropped.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_script",
+    "args": [
+      "experimental",
+      "render",
+      "script.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_script_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "script.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_sass",
+    "args": [
+      "experimental",
+      "render",
+      "sass.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_sass_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "sass.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_title",
+    "args": [
+      "experimental",
+      "render",
+      "heading.tsx",
+      "--title",
+      "My <Title> & co",
+      "--out",
+      "t.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_default_out",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_out_subdir",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "build/x/page.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_out_outside",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "../escape.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_out_existing",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "page.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_out_txt",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "notes.txt"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_reverse_plain",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "page.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_reverse_txt",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "notes.txt"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_reverse_title",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "page.html",
+      "--title",
+      "x"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_overwrite_forward",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--overwrite"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_html_forward",
+    "args": [
+      "experimental",
+      "render",
+      "page.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_same_out",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "basic.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_missing_file",
+    "args": [
+      "experimental",
+      "render",
+      "nothere.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_reverse_out_bad",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "page.html",
+      "--out",
+      "x.css"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_reverse_out_config",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "page.html",
+      "--out",
+      "vite.config.ts"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_imports",
+    "args": [
+      "experimental",
+      "render",
+      "imports.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_imports_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "imports.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_badimport",
+    "args": [
+      "experimental",
+      "render",
+      "badimport.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_badimport_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "badimport.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_proj",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "proj/stripped.html",
+      "--out",
+      "proj/rebuilt/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_proj_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "--reverse",
+      "proj/stripped.html",
+      "--out",
+      "proj/rebuilt/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_default",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "proj/stripped.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_nocore",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "stripped.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_gen_only",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "gen-only.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_existing",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "stripped.html",
+      "--out",
+      "basic.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_overwrite",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "stripped.html",
+      "--out",
+      "basic.tsx",
+      "--overwrite"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_rebuild_runner",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "stripped.html",
+      "--out",
+      "x.test.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_forward",
+    "args": [
+      "experimental",
+      "render",
+      "alias/page.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_broken",
+    "args": [
+      "experimental",
+      "render",
+      "alias/broken.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_default",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_alias_reverse_recv_existing",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "recv/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_generated",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "gen.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_ignored",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "ignored.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_vendored",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "vendor/v.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_replace_own",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "mine.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_symlink",
+    "args": [
+      "experimental",
+      "render",
+      "basic.tsx",
+      "--out",
+      "linkdir/x.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_reverse_generated",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "vendor/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_protect_reverse_symlink",
+    "args": [
+      "experimental",
+      "render",
+      "--reverse",
+      "aliased.html",
+      "--out",
+      "linkdir/new/page.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_basic",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/basic.tsx",
+      "--out",
+      "stylex/basic.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_values",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/values.tsx",
+      "--out",
+      "stylex/values.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_when",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/when.tsx",
+      "--out",
+      "stylex/when.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_media",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/media.tsx",
+      "--out",
+      "stylex/media.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_dynamic",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/dynamic.tsx",
+      "--out",
+      "stylex/dynamic.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_vars",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/vars.tsx",
+      "--out",
+      "stylex/vars.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_localfn",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/localfn.tsx",
+      "--out",
+      "stylex/localfn.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_nonstatic",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/nonstatic.tsx",
+      "--out",
+      "stylex/nonstatic.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_local",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/local.tsx",
+      "--out",
+      "stylex/local.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_conditional",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/conditional.tsx",
+      "--out",
+      "stylex/conditional.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_evaluate",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/evaluate.tsx",
+      "--out",
+      "stylex/evaluate.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_reassigned",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/reassigned.tsx",
+      "--out",
+      "stylex/reassigned.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_random",
+    "args": [
+      "experimental",
+      "render",
+      "stylex/random.tsx",
+      "--out",
+      "stylex/random.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_values_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "stylex/values.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_stylex_nonstatic_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "stylex/nonstatic.tsx"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_chart_line",
+    "args": [
+      "experimental",
+      "render",
+      "src/line.tsx",
+      "--out",
+      "line.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_fixed",
+    "args": [
+      "experimental",
+      "render",
+      "src/fixed.tsx",
+      "--out",
+      "fixed.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_legend",
+    "args": [
+      "experimental",
+      "render",
+      "src/legend.tsx",
+      "--out",
+      "legend.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_kinds",
+    "args": [
+      "experimental",
+      "render",
+      "src/kinds.tsx",
+      "--out",
+      "kinds.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_sparkline",
+    "args": [
+      "experimental",
+      "render",
+      "src/sparkline.tsx",
+      "--out",
+      "sparkline.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_changing",
+    "args": [
+      "experimental",
+      "render",
+      "src/changing.tsx",
+      "--out",
+      "changing.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_aliased",
+    "args": [
+      "experimental",
+      "render",
+      "src/aliased.tsx",
+      "--out",
+      "aliased.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_namespace",
+    "args": [
+      "experimental",
+      "render",
+      "src/namespace.tsx",
+      "--out",
+      "namespace.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_throws",
+    "args": [
+      "experimental",
+      "render",
+      "src/throws.tsx",
+      "--out",
+      "throws.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_local",
+    "args": [
+      "experimental",
+      "render",
+      "src/local.tsx",
+      "--out",
+      "local.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_package",
+    "args": [
+      "experimental",
+      "render",
+      "src/package.tsx",
+      "--out",
+      "package.html"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_line_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "src/line.tsx"
+    ],
+    "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_chart_package_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "src/package.tsx"
+    ],
+    "fixture": "rendercharts"
+  }
+]

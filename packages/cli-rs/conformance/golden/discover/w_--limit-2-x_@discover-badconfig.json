@@ -1,0 +1,15 @@
+{
+ "id": "w_--limit-2-x_@discover-badconfig",
+ "args": [
+  "discover",
+  "--limit",
+  "2",
+  "x"
+ ],
+ "fixture": "discover-badconfig",
+ "fixtureHash": "dd284ede60f6160e+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: config exploded\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,21 @@
+{
+ "id": "component_ChartGrid_--detail_compact_@large",
+ "args": [
+  "component",
+  "ChartGrid",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/charts\n\n# ChartGrid\n\nChartGrid draws horizontal and vertical guide lines from the scales owned by a parent Chart. Use it in the Chart grid slot so guides share the plot dimensions and tick values used by the chart.\n\nAnatomy: Grid lines (optional)\n\n## Import\n\n```tsx\nimport { ChartGrid } from '@astryxdesign/charts';\n```\n\n## Best Practices\n\n- **Do:** Pair ChartGrid with ChartAxis when readers need labelled values beside the guide lines.\n- **Do:** Use horizontal guides for value comparison and add vertical guides only when they help readers align categories or continuous x values.\n- **Don't:** Use grid lines as the only way to communicate a value or distinction. Keep meaningful chart information in labels, marks, and the parent Chart alternative.\n- **Don't:** Expect tickCount to thin categorical band centers. It requests density only for continuous scales; categorical vertical guides render once per band.\n\n## Accessibility\n\n- **Chart alternative:** Chart owns the accessible image name and supported small-data table. Grid lines supplement that chart-level alternative rather than replacing it.\n- **Visual-only guides:** Grid lines are supporting guides. Preserve visible labels, marks, or another qualifying cue so understanding does not depend on the grid alone.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `horizontal` | `boolean` | `true` | Whether to draw horizontal guides at continuous y ticks other than zero. |\n| `vertical` | `boolean` | `false` | Whether to draw vertical guides at continuous x ticks or categorical band centers. |\n| `tickCount` | `number` | `5` | Approximate guide count requested from continuous scales. It does not thin categorical band centers. |\n\n## Usage\n\n### Horizontal guides\n\n```tsx\nimport {Chart, ChartGrid, bar} from '@astryxdesign/charts';\n\n<Chart\n  data={monthlyRevenue}\n  xKey=\"month\"\n  series={[bar('revenue')]}\n  grid={<ChartGrid />}\n/>;\n```\n\n### Horizontal and vertical guides\n\n```tsx\n<Chart\n  data={monthlyRevenue}\n  xKey=\"month\"\n  series={[bar('revenue')]}\n  grid={<ChartGrid horizontal vertical tickCount={6} />}\n/>;\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

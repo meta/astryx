@@ -1,0 +1,14 @@
+{
+ "id": "template_MoreMenuWithSections_--json_@large",
+ "args": [
+  "template",
+  "MoreMenuWithSections",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"MoreMenuWithSections\",\n    \"description\": \"A three-dot menu with actions organized into labeled groups.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"MoreMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {MoreMenu} from '@astryxdesign/core/MoreMenu';\\nimport {\\n  PencilIcon,\\n  DocumentDuplicateIcon,\\n  TrashIcon,\\n} from '@heroicons/react/24/outline';\\n\\nexport default function MoreMenuWithSections() {\\n  return (\\n    <MoreMenu\\n      variant=\\\"secondary\\\"\\n      label=\\\"Document actions\\\"\\n      items={[\\n        {\\n          type: 'section',\\n          title: 'Actions',\\n          items: [\\n            {label: 'Edit', icon: PencilIcon, onClick: () => {}},\\n            {\\n              label: 'Duplicate',\\n              icon: DocumentDuplicateIcon,\\n              onClick: () => {},\\n            },\\n          ],\\n        },\\n        {\\n          type: 'section',\\n          title: 'Danger zone',\\n          items: [{label: 'Delete', icon: TrashIcon, onClick: () => {}}],\\n        },\\n      ]}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

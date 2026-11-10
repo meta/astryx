@@ -1,0 +1,13 @@
+{
+ "id": "theme_remove_@plain",
+ "args": [
+  "theme",
+  "remove"
+ ],
+ "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

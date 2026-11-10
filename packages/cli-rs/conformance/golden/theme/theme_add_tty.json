@@ -1,0 +1,19 @@
+{
+ "id": "theme_add_tty",
+ "args": [
+  "theme",
+  "add"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Themes\r\n\r\n- butter (example, @astryxdesign/cli)\r\n  Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\r\n\r\n- chocolate (example, @astryxdesign/cli)\r\n  Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\r\n\r\n- gothic (example, @astryxdesign/cli)\r\n  Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\r\n\r\n- matcha (example, @astryxdesign/cli)\r\n  Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.\r\n\r\n- neutral (maintained, @astryxdesign/cli)\r\n  Restrained warm grays. Minimal and quiet, so the content stays the focus.\r\n\r\n- stone (example, @astryxdesign/cli)\r\n  Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\r\n\r\n- y2k (example, @astryxdesign/cli)\r\n  Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.\r\n\r\nImport one: npx @astryxdesign/cli@0.7.12 theme add <slug> [--package <package>]\r\nFork source: npx @astryxdesign/cli@0.7.12 theme eject <slug> [target-path]\r\n\r\nMore themes in packages you could add: npx @astryxdesign/cli@0.7.12 discover theme\r\n\r\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

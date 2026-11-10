@@ -1,0 +1,20 @@
+{
+ "id": "component_--category_Navigation",
+ "args": [
+  "component",
+  "--category",
+  "Navigation"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Navigation\n\nname:   MobileNav\nimport: @astryxdesign/core/MobileNav\n\nname:   NavIcon\nimport: @astryxdesign/core/NavIcon\n\nname:   SideNav\nimport: @astryxdesign/core/SideNav\n\nname:   SideNavCollapseButton\nimport: @astryxdesign/core/SideNav\n\nname:   SideNavHeading\nimport: @astryxdesign/core/SideNav\n\nname:   SideNavItem\nimport: @astryxdesign/core/SideNav\n\nname:   SideNavSection\nimport: @astryxdesign/core/SideNav\n\nname:   TopNav\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavHeading\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavItem\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavMegaMenu\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavMegaMenuFeaturedCard\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavMegaMenuItem\nimport: @astryxdesign/core/TopNav\n\nname:   TopNavMenu\nimport: @astryxdesign/core/TopNav\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

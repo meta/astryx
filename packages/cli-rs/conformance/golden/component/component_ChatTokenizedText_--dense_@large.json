@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatTokenizedText_--dense_@large",
+ "args": [
+  "component",
+  "ChatTokenizedText",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# ChatTokenizedText\n\nUse for stored chat text containing serialized token values; unmatched text is preserved.\n\n**Import:** `import {ChatTokenizedText} from '@astryxdesign/core/Chat';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Tokenized text | Yes | The inline root that preserves unmatched text and carries the chat-tokenized-text theme target. |\n| Rendered token | No | Inline token content rendered by Badge for structured tokens or by the caller for custom tokens. |\n\n## Best Practices\n\n- **Do:** Reuse composer token definitions for display.\n- **Do:** Use stable non-empty serialized values.\n- **Don't:** Replace the surrounding message meaning with token labels.\n- **Don't:** Move component-owned behavior into custom token renderers.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `string` | - | plain text msg w/ serialized token values; matching patterns become inline content **(required)** |\n| `tokens` | `ChatComposerToken[]` | - | token defs; literal values matched in caller order; empty values ignored |\n| `xstyle` | `StyleXStyles` | - | additional StyleX styles for root wrapper |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-chat-tokenized-text` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'chat-tokenized-text': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

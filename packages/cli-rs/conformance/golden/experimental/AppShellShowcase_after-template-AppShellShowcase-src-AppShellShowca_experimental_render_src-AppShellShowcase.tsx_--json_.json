@@ -1,0 +1,26 @@
+{
+ "id": "AppShellShowcase_after-template-AppShellShowcase-src-AppShellShowca_experimental_render_src-AppShellShowcase.tsx_--json_",
+ "args": [
+  "experimental",
+  "render",
+  "src/AppShellShowcase.tsx",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"The page imports @heroicons/react, which is not installed\",\n  \"code\": \"ERR_RENDER_MISSING_DEPENDENCY\",\n  \"suggestions\": [\n    {\n      \"name\": \"npm install @heroicons/react\",\n      \"reason\": \"install the package the page imports\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/AppShellShowcase.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AppShell} from '@astryxdesign/core/AppShell';\nimport {VStack} from '@astryxdesign/core/Stack';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\nimport {\n  SideNav,\n  SideNavHeading,\n  SideNavItem,\n  SideNavSection,\n} from '@astryxdesign/core/SideNav';\nimport {\n  ChartBarIcon,\n  DocumentTextIcon,\n  UsersIcon,\n} from '@heroicons/react/24/outline';\nimport {HomeIcon} from '@heroicons/react/24/solid';\nimport {CubeIcon} from '@heroicons/react/24/outline';\n\nexport default function AppShellShowcase() {\n  return (\n    <AppShell\n      contentPadding={6}\n      style={{height: '100%', minHeight: 0, width: '100%'}}\n      sideNav={\n        <SideNav\n          header={\n            <SideNavHeading\n              icon={\n                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />\n              }\n              heading=\"App Shell\"\n              headingHref=\"#\"\n            />\n          }>\n          <SideNavSection title=\"Main\" isHeaderHidden>\n            <SideNavItem label=\"Home\" icon={HomeIcon} isSelected href=\"#\" />\n            <SideNavItem label=\"Reports\" icon={ChartBarIcon} href=\"#\" />\n            <SideNavItem label=\"Documents\" icon={DocumentTextIcon} href=\"#\" />\n            <SideNavItem label=\"Team\" icon={UsersIcon} href=\"#\" />\n          </SideNavSection>\n        </SideNav>\n      }>\n      <VStack gap={4}>\n        <Heading level={3}>Page Content</Heading>\n        <Text type=\"body\">\n          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do\n          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad\n          minim veniam, quis nostrud exercitation ullamco laboris.\n        </Text>\n      </VStack>\n    </AppShell>\n  );\n}\n"
+  }
+ ]
+}

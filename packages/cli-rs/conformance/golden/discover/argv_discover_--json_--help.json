@@ -1,0 +1,14 @@
+{
+ "id": "argv_discover_--json_--help",
+ "args": [
+  "discover",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx discover\",\n    \"description\": \"Browse and search integrations: the ones you have and the ones you could add\",\n    \"usage\": \"astryx discover [options] [query]\",\n    \"options\": [\n      {\n        \"flags\": \"--components\",\n        \"description\": \"In the package list, print every component, and every other item, of each package instead of the first 10 and a \\\"+N more\\\" count. No effect on --json output or on a package, component, or search query.\"\n      },\n      {\n        \"flags\": \"--type <kind>\",\n        \"description\": \"Only one kind: component, template, doc, theme, codemod, or agent-doc. In the list, only packages that add it; in a search, only items of that kind.\"\n      },\n      {\n        \"flags\": \"--installed\",\n        \"description\": \"Only what this project has. Cannot be set with --available.\"\n      },\n      {\n        \"flags\": \"--available\",\n        \"description\": \"Only what this project could add. Cannot be set with --installed.\"\n      },\n      {\n        \"flags\": \"--limit <n>\",\n        \"description\": \"Max number of search results, a positive integer (default 20).\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

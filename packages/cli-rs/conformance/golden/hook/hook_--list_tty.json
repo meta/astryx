@@ -1,0 +1,19 @@
+{
+ "id": "hook_--list_tty",
+ "args": [
+  "hook",
+  "--list"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\r\nAccessibility\r\n\r\n- useAnnounce\r\n\r\nFocus\r\n\r\n- useCombobox\r\n- useFocusTrap\r\n- useGridFocus\r\n- useIndicatorFocusRing\r\n- useKeyboardHint\r\n- useListFocus\r\n- useMultiCombobox\r\n- useTreeFocus\r\n- useTypeahead\r\n\r\nInteraction\r\n\r\n- createReorderable\r\n- useClickableContainer\r\n- useClipboard\r\n- useCollapsible\r\n- useContainerReveal\r\n- useDragToSnapPoints\r\n- useHotkeys\r\n- useHoverCard\r\n- useInputContainer\r\n- useInputStatusIcon\r\n- useInteractiveRole\r\n- useLayer\r\n- useLightbox\r\n- useLongPress\r\n- useMenuPress\r\n- useOverlay\r\n- usePopover\r\n- useToast\r\n- useTooltip\r\n\r\nLayout\r\n\r\n- useAppShellMobile\r\n- useOverflow\r\n- useResizable\r\n- useScrollLock\r\n- useScrollOverflow\r\n- useScrollableArea\r\n\r\nLink\r\n\r\n- useLinkify\r\n\r\nMedia\r\n\r\n- useImageMode\r\n- useMediaQuery\r\n\r\nMotion & gestures\r\n\r\n- useAnimatedLayout\r\n- useAnimator\r\n- useEntryAnimation\r\n- usePanGesture\r\n- usePressFeedback\r\n- useSnapPaging\r\n\r\nNavigation\r\n\r\n- useOutlineFromMarkdown\r\n\r\nStreaming\r\n\r\n- useStreamingText\r\n\r\nUtilities\r\n\r\n- useCalendarConstraints\r\n- useCalendarDays\r\n- useCalendarNavigation\r\n- useCollator\r\n- useIcon\r\n- useLinkComponent\r\n- useLocale\r\n- usePowerSearchConfig\r\n- useTableColumnSettingsState\r\n- useTableSortableState\r\n- useTranslator\r\n\r\nUtility\r\n\r\n- useDevWarning\r\n- useMergedRefs\r\n- useTheme\r\n\r\nOther\r\n\r\n- useImperativeAlertDialog\r\n- useImperativeDialog\r\n- useTableColumnResize\r\n- useTableColumnSettings\r\n- useTableFilterState\r\n- useTableFiltering\r\n- useTableGroupedRows\r\n- useTablePagination\r\n- useTableRowExpansion\r\n- useTableRowIndex\r\n- useTableRowStatus\r\n- useTableRowsVirtualization\r\n- useTableSelection\r\n- useTableSelectionState\r\n- useTableSortable\r\n- useTableStickyColumns\r\n- useTableTreeData\r\n- useTableTreeState\r\n\r\nUsage: npx @astryxdesign/cli@0.7.12 hook <name>\r\n\r\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "id": "w_icon_app_use_ambiguous",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "glyphs"
+ ],
+ "fixture": "iconapp",
+ "fixtureHash": "16b85bc0821a8935+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Two installed packages ship an icon set named \"glyphs\"; name it with its package.\n\n  @acme/glyphs/glyphs  (the set in @acme/glyphs)\n  @acme/twin/glyphs  (the set in @acme/twin)\n",
+ "exit": 1,
+ "files": []
+}

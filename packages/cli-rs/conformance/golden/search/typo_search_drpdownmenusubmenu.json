@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_drpdownmenusubmenu",
+ "args": [
+  "search",
+  "drpdownmenusubmenu"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"drpdownmenusubmenu\" (1)\n\nname:        DropdownMenuSubMenu\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: A single menu row that reveals a nested flyout of its own items. The row adopts DropdownMenuItem semantics (label / icon / description / isDisabled); its children become the flyout content. Opens inline-end with viewport auto-flip; Right/Enter/Space opens and focuses the first item, Left/Escape closes and returns focus to the trigger (Right/Left swap in RTL). On a phone (a coarse pointer, decided when the menu opened) the row drills in instead: its rows replace the menu's rows in the same box, led by a Back row named \"Back to <parent>\", and Back, Escape or ArrowLeft return to the row. Host attributes and DOM event handlers (aria-*, data-*, id) reach the trigger row, the element carrying role=\"menuitem\" and aria-haspopup=\"menu\"; a caller's handlers run after the row's own, except for the keys that open the flyout (the open arrow, Enter, Space) and a click on a disabled row. For data-driven menus, give a menu item a nested `items` array instead of using this component directly.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuSubMenu\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover drpdownmenusubmenu\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

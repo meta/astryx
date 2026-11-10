@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector label=\"Role\" options={options} value={value} onChange={setValue}>\n  {option => <XDSSelectorOption label={option.label} />}\n</XDSSelector>",
+  "output": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector\n  label=\"Role\"\n  options={options}\n  value={value}\n  onChange={setValue}\n  renderOption={option => <XDSSelectorOption label={option.label} />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSMultiSelector} from '@xds/core/MultiSelector';\n<XDSMultiSelector label=\"Tags\" options={options} value={value} onChange={setValue}>\n  {option => <span>{option.label}</span>}\n</XDSMultiSelector>",
+  "output": "import {XDSMultiSelector} from '@xds/core/MultiSelector';\n<XDSMultiSelector\n  label=\"Tags\"\n  options={options}\n  value={value}\n  onChange={setValue}\n  renderOption={option => <span>{option.label}</span>} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector} from '@xds/core';\n<XDSSelector label=\"Queue\" options={options} value={value} onChange={setValue}>\n  {renderOption}\n</XDSSelector>",
+  "output": "import {XDSSelector} from '@xds/core';\n<XDSSelector\n  label=\"Queue\"\n  options={options}\n  value={value}\n  onChange={setValue}\n  renderOption={renderOption} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector label=\"Queue\" options={options} value={value} onChange={setValue} children={renderOption} />",
+  "output": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector label=\"Queue\" options={options} value={value} onChange={setValue} renderOption={renderOption} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector as Selector} from '@xds/core/Selector';\n<Selector label=\"Role\" options={options} value={value} onChange={setValue}>\n  {option => <span>{option.label}</span>}\n</Selector>",
+  "output": "import {XDSSelector as Selector} from '@xds/core/Selector';\n<Selector\n  label=\"Role\"\n  options={options}\n  value={value}\n  onChange={setValue}\n  renderOption={option => <span>{option.label}</span>} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as XDS from '@xds/core';\n<XDS.XDSSelector label=\"Role\" options={options} value={value} onChange={setValue}>\n  {option => <span>{option.label}</span>}\n</XDS.XDSSelector>",
+  "output": "import * as XDS from '@xds/core';\n<XDS.XDSSelector\n  label=\"Role\"\n  options={options}\n  value={value}\n  onChange={setValue}\n  renderOption={option => <span>{option.label}</span>} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector label=\"Role\" options={options} value={value} onChange={setValue} renderOption={renderOption}>\n  {oldRenderOption}\n</XDSSelector>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector, XDSSelectorItem} from '@acme/legacy';\n<XDSSelector label=\"Role\" value={value} onChange={setValue}>\n  <XDSSelectorItem label=\"Admin\" value=\"admin\" />\n</XDSSelector>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/migrate-selector-children-to-render-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSelector} from '@xds/core/Selector';\n<XDSSelector label=\"Role\" options={options} value={value} onChange={setValue}>\n  <XDSSelectorOption label=\"Admin\" />\n</XDSSelector>",
+  "output": null,
+  "error": null
+ }
+]

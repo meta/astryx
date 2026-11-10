@@ -1,0 +1,17 @@
+{
+ "id": "w_theme_from_unknown",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "ocean",
+  "--from",
+  "nope"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown base theme \"nope\". Available themes: butter, chocolate, gothic, matcha, neutral, stone, y2k.\n\n  butter  (bundled theme)\n  chocolate  (bundled theme)\n  gothic  (bundled theme)\n  matcha  (bundled theme)\n  neutral  (bundled theme)\n  stone  (bundled theme)\n  y2k  (bundled theme)\n",
+ "exit": 1,
+ "files": []
+}

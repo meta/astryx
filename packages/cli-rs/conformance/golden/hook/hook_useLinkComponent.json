@@ -1,0 +1,19 @@
+{
+ "id": "hook_useLinkComponent",
+ "args": [
+  "hook",
+  "useLinkComponent"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useLinkComponent\n\nResolves which component renders a link, so a custom component's links follow the app's router the same way Astryx's own links do. The order is the as argument, then the nearest LinkProvider's component, then a native anchor. Render the returned component with href (and to, for a router that reads it). Before rendering it checks both destinations under the Link href rule: a rejected destination renders an anchor with no destination, and a custom router is never invoked with it. A custom component receives to={href} unless to is passed explicitly.\n\n## Best Practices\n\n- **Do:** Use it for links inside a custom component, so a LinkProvider wired to the router reaches them without a prop on every link.\n- **Do:** Pass as='a' for a destination the router cannot handle, such as a file download or a page outside the app.\n- **Don't:** Import the router's link directly in a shared component; the component then ignores LinkProvider and the destination check.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `as` | `LinkComponentType` | - | Component to render the link with, such as a router's link or 'a'. When set it wins over any LinkProvider. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `LinkComponent` | `LinkComponentType` | The resolved component: as, else the nearest LinkProvider's component, else a native 'a'. It is stable while the resolved component is the same. It checks href and to under the Link href rule before rendering; when either is rejected it renders an anchor with no destination and never invokes the router. A custom component receives to={href} unless an explicit to is passed. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Link, LinkProvider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "argv_experimental_--_--json",
+ "args": [
+  "experimental",
+  "--",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'experimental --json'\n\n  icon  (available subcommand)\n  render  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_Avatar_--props_@large",
+ "args": [
+  "component",
+  "Avatar",
+  "--props"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `src` | `string` | - | Primary image source URL. |\n| `fallbackSrc` | `string` | - | Fallback image when primary fails. |\n| `name` | `string` | - | User name for initials and alt text. |\n| `alt` | `string` | - | Alt text (falls back to name). |\n| `size` | `'xsm' \\| 'sm' \\| 'md' \\| 'lg' \\| 'xl' \\| 16 \\| 20 \\| 24 \\| 32 \\| 36 \\| 40 \\| 48 \\| 60 \\| 64 \\| 72 \\| 96 \\| 128 \\| 144 \\| 180` | `'md'` | Avatar size: named sizes are 'xsm' (20px), 'sm' (24px), 'md' (36px), 'lg' (48px), and 'xl' (128px); numeric sizes must be one of the pixel values listed in the type. Inside an AvatarGroup, the group's size always overrides this prop, including when the group uses its default size. |\n| `shape` | `'circle' \\| 'rounded' \\| 'square'` | `'circle'` | Shape variant of the avatar. 'circle' (default) stays fully round. 'rounded' uses the element radius token so it matches UI corner rounding and can be set globally via theme. 'square' has no radius. Status dot positioning adapts automatically: 4-o'clock on circle, bottom-right corner on rounded/square. |\n| `status` | `ReactNode` | - | Corner content for status indicators. AvatarStatusDot reports its `label` to the avatar, which composes it into the accessible name (e.g. \"Jane Doe, Online\") so screen readers announce the status. Reporting goes through context, so it still works when the dot sits inside a wrapper component of your own. |\n| `tooltip` | `string \\| boolean` | `true` | Tooltip shown on hover and keyboard focus. Omitted or true shows the avatar's name; a string shows that text instead; false shows no tooltip. Not auto-disabled when wrapped in your own Tooltip/HoverCard. Set tooltip={false} if you supply your own overlay. No tooltip is shown when tooltip is true/omitted and there is no name. |\n| `href` | `string` | - | When set, the avatar renders as an interactive link (`<a>` or a custom link component) pointing here. This follows the same element-swap rule as Button. Requires a meaningful accessible name via `alt` or `name`: an interactive avatar without one warns in development. Inside an AvatarGroup, interactive avatars share a single Tab stop and are reached with arrow keys. |\n| `as` | `ElementType` | - | Custom link component used when `href` is set (e.g. `next/link`). Overrides the provider-level LinkProvider default. Only applies with `href`. |\n| `target` | `string` | - | Link target attribute. Only applies with `href`. |\n| `rel` | `string` | - | Link rel attribute. Only applies with `href`. |\n| `onClick` | `(e: MouseEvent) => void` | - | Click handler. When set without `href`, the avatar renders as a focusable `<button type=\"button\">`. Requires a meaningful accessible name via `alt` or `name`: an interactive avatar without one warns in development. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

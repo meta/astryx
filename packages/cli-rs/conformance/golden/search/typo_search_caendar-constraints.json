@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_caendar-constraints",
+ "args": [
+  "search",
+  "caendar — constraints"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"caendar - constraints\" (7)\n\nname:        useCalendarConstraints\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Calendar\ndescription: Provides date constraint validation for calendar views and custom range pickers. It combines boundary dates, span limits measured from an in-progress range start, and custom rules (such as weekly closures or blackout dates) into an isDateDisabled predicate. Calendar uses it internally to disable day buttons; use it directly when building bespoke scheduling interfaces or range pickers.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useCalendarConstraints\n\nname:        CalendarConstraints\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Calendar - Constraints\nkind:        block\ndescription: Limit which dates can be selected using min/max bounds and custom rules like weekdays only. Use for scheduling UIs where certain dates are unavailable.\ncommand:     npx @astryxdesign/cli@0.7.12 template CalendarConstraints --type block\n\nname:        NumberInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/NumberInput\ndescription: A form input for numeric values with built-in validation, min/max constraints, and step controls. Use NumberInput for quantities, measurements, percentages, and similar inputs.\ncommand:     npx @astryxdesign/cli@0.7.12 component NumberInput\n\nname:        cli/api/enums/error-codes\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › API › Enums › Error Codes\ndescription: Stable, append-only machine-readable error codes on the --json error envelope (envelope.code). Codes never change or get removed; branch on these, not on prose.\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/api/enums/error-codes\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/api/enums\n\nname:        FieldWithDescription\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Field - Description\nkind:        block\ndescription: Fields with helper text below the label. Use descriptions to explain format requirements, constraints, or what happens with the data, like \"At least 8 characters\" or \"We will send a confirmation link\".\ncommand:     npx @astryxdesign/cli@0.7.12 template FieldWithDescription --type block\n\nname:        NumberInputClearableNumberInput\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput - Clearable\nkind:        block\ndescription: Number input with a clear button, unit suffix, and min/max constraint\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputClearableNumberInput --type block\n\nname:        TimeInputConstrained\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TimeInput - Constrained\nkind:        block\ndescription: Time inputs with min/max constraints limiting selection to specific windows. Use to prevent out-of-bounds selections for appointments, reservations, or shift scheduling.\ncommand:     npx @astryxdesign/cli@0.7.12 template TimeInputConstrained --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'caendar - constraints'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

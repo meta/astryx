@@ -1,0 +1,17 @@
+{
+ "id": "argv-repeat_experimental_render_--title_hello-world_--title_hello-world",
+ "args": [
+  "experimental",
+  "render",
+  "--title",
+  "hello world",
+  "--title",
+  "hello world"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: A page file is required\n\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx  (render a page to one HTML file)\n",
+ "exit": 1,
+ "files": []
+}

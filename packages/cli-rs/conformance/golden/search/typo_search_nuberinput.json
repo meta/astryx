@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_nuberinput",
+ "args": [
+  "search",
+  "nuberinput"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"nuberinput\" (6)\n\nname:        NumberInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/NumberInput\ndescription: A form input for numeric values with built-in validation, min/max constraints, and step controls. Use NumberInput for quantities, measurements, percentages, and similar inputs.\ncommand:     npx @astryxdesign/cli@0.7.12 component NumberInput\n\nname:        NumberInputClearableNumberInput\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput - Clearable\nkind:        block\ndescription: Number input with a clear button, unit suffix, and min/max constraint\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputClearableNumberInput --type block\n\nname:        NumberInputRangeNumberInput\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput - Range Constrained\nkind:        block\ndescription: Number input with min/max boundaries and a helper description\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputRangeNumberInput --type block\n\nname:        NumberInputShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput\nkind:        block\ndescription: A number input for quantity entry.\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputShowcase --type block\n\nname:        NumberInputStatuses\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput - Status Variants\nkind:        block\ndescription: Number inputs showing error, warning, and success validation states\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputStatuses --type block\n\nname:        NumberInputWithUnits\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NumberInput - With Units\nkind:        block\ndescription: Number input with a percentage unit suffix and valid range\ncommand:     npx @astryxdesign/cli@0.7.12 template NumberInputWithUnits --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover nuberinput\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

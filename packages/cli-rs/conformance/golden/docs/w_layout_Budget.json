@@ -1,0 +1,14 @@
+{
+ "id": "w_layout_Budget",
+ "args": [
+  "docs",
+  "layout",
+  "Budget"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Section \"Budget\" is not in any guide under \"layout\". Open one of its guides instead.\n\n  layout/scaffold  (Pick the shell, budget each region, and choose navigation, before any content exists.)\n  layout/structure  (Rank the content in each region, then pick the weakest container that groups it.)\n  layout/headers-and-footers  (Pin a header or footer while the body scrolls, so the title and commit actions stay reachable.)\n  layout/side-panels  (Add a master-detail side panel that opens on row select instead of navigating away.)\n  layout/layout-spacing  (Hold one content line per region, then tune gaps and density.)\n  layout/responsive  (Decide what each region does as width changes: divide, reveal, resize, or swap.)\n",
+ "exit": 1,
+ "files": []
+}

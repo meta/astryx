@@ -1,0 +1,13 @@
+{
+ "id": "template_--type-bogus",
+ "args": [
+  "template",
+  "--type=bogus"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown template type \"bogus\". Valid types: page, block.\n\n  page  (valid type)\n  block  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_DrawerWidths_--json_@large",
+ "args": [
+  "template",
+  "DrawerWidths",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DrawerWidths\",\n    \"description\": \"Compare a numeric pixel width with rem and percentage lengths. The width budget also caps the drawer on mobile.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Drawer\",\n      \"Layout\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\n/**\\n * @input A pixel, rem, or percentage width and controlled open state\\n * @output A Drawer demonstrating the selected width budget\\n * @position Copyable Drawer example\\n */\\n\\nimport {useState} from 'react';\\nimport {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\\nimport {HStack} from '@astryxdesign/core/Stack';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function DrawerWidths() {\\n  const [isOpen, setIsOpen] = useState(false);\\n  const [width, setWidth] = useState<number | string>(320);\\n\\n  function openAtWidth(value: number | string) {\\n    setWidth(value);\\n    setIsOpen(true);\\n  }\\n\\n  return (\\n    <>\\n      <HStack gap={2}>\\n        <Button label=\\\"320px\\\" onClick={() => openAtWidth(320)} />\\n        <Button label=\\\"32rem\\\" onClick={() => openAtWidth('32rem')} />\\n        <Button label=\\\"50%\\\" onClick={() => openAtWidth('50%')} />\\n      </HStack>\\n      <Drawer\\n        isOpen={isOpen}\\n        onOpenChange={setIsOpen}\\n        label=\\\"Width budget\\\"\\n        width={width}>\\n        <Layout\\n          header={\\n            <DrawerHeader title=\\\"Width budget\\\" onOpenChange={setIsOpen} />\\n          }\\n          content={\\n            <LayoutContent>\\n              <Text type=\\\"body\\\">\\n                Width: {typeof width === 'number' ? `${width}px` : width}\\n              </Text>\\n            </LayoutContent>\\n          }\\n        />\\n      </Drawer>\\n    </>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

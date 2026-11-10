@@ -1,0 +1,19 @@
+{
+ "id": "oldcore_docs_principles_@core-0.7.11",
+ "args": [
+  "docs",
+  "principles"
+ ],
+ "fixture": "core-0.7.11",
+ "fixtureHash": "a77beea787bca06f+4e418a0c2575d9ce",
+ "stdout": "Principles\nCore design principles and rules for building with the design system.\n\npackage: @astryxdesign/cli\n\ndesign-philosophy  Design Philosophy - A design system that prioritizes consistency, adaptability, and developer\n                   experience. Every decision flows from a few core ideas:\nrules              Rules - Eight rules that keep app code on-system.\nstyling-approach   Styling Approach - The design system supports multiple styling approaches. Every component accepts an\n                   `xstyle` prop for StyleX style overrides via `stylex.create()`. For layout and wrapper styling\n                   outside of components, use StyleX or Tailwind utilities;...\nanti-patterns      Anti-Patterns - Patterns that break theming, routing, or layout, and what to use instead.\ndesign-tokens      Design Tokens - The design system provides semantic design tokens for spacing, color, radius, shadow,\n                   typography, and size. Tokens adapt to the active theme and color mode. Run `npx\n                   @astryxdesign/cli@0.7.12 docs tokens` for the full reference with all values.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs principles <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs principles --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs is-my-code-good\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.7.11`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.7.11\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

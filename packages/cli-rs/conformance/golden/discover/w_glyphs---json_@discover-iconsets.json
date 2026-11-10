@@ -1,0 +1,14 @@
+{
+ "id": "w_glyphs---json_@discover-iconsets",
+ "args": [
+  "discover",
+  "glyphs",
+  "--json"
+ ],
+ "fixture": "discover-iconsets",
+ "fixtureHash": "214fcf2cdc8216c2+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"glyphs\",\n    \"matches\": [\n      {\n        \"package\": \"@acme/glyphs\",\n        \"component\": \"glyphs\",\n        \"kind\": \"icon-set\",\n        \"installed\": true\n      },\n      {\n        \"package\": \"@acme/glyphs\",\n        \"component\": \"@acme/glyphs\",\n        \"kind\": \"package\",\n        \"installed\": true\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

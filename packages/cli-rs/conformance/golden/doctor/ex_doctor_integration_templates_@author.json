@@ -1,0 +1,14 @@
+{
+ "id": "ex_doctor_integration_templates_@author",
+ "args": [
+  "doctor",
+  "integration",
+  "templates"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "Checking integration templates: @acme/widgets@0.1.0\n\n[ok] No template ids conflict with Core.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

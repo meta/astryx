@@ -1,0 +1,102 @@
+[
+  {
+    "id": "fuzz_theme_remove_chocolate-_--json_a36913",
+    "args": [
+      "theme",
+      "remove",
+      "chocolate ",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_build_..-inputs-page.tsx_2e4ced",
+    "args": [
+      "theme",
+      "build",
+      "../inputs/page.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_build_src_e17eb3",
+    "args": [
+      "theme",
+      "build",
+      "src"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_palette_generate_._69651b",
+    "args": [
+      "theme",
+      "palette",
+      "generate",
+      "."
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_--json_theme_palette_generate_._e3832b",
+    "args": [
+      "--json",
+      "theme",
+      "palette",
+      "generate",
+      "."
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_eject_--json_neutral_package.json_84d58f",
+    "args": [
+      "theme",
+      "eject",
+      "--json",
+      "neutral",
+      "package.json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_build_package.json_ed6455",
+    "args": [
+      "theme",
+      "build",
+      "package.json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_--json_theme_build_._--family-key__96a890",
+    "args": [
+      "--json",
+      "theme",
+      "build",
+      ".",
+      "--family-key",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_template_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_7a84f8",
+    "args": [
+      "theme",
+      "template",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_build_..-inputs-not-json.json_--json@fuzzodd_f84b20",
+    "args": [
+      "theme",
+      "build",
+      "../inputs/not-json.json",
+      "--json"
+    ],
+    "fixture": "fuzzodd"
+  }
+]

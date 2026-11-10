@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_use_ocean_@empty",
+ "args": [
+  "theme",
+  "use",
+  "ocean"
+ ],
+ "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No package.json found. Run this command inside an app project.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,16 @@
+{
+ "id": "experimental_render_src-App.tsx_--out_page.txt",
+ "args": [
+  "experimental",
+  "render",
+  "src/App.tsx",
+  "--out",
+  "page.txt"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --out must be an .html file\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "docs_getting-started_quick-start-with-ai_--json_@large",
+ "args": [
+  "docs",
+  "getting-started",
+  "quick-start-with-ai",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Quick Start with AI\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Paste this into your AI coding tool and let it handle the setup:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"text\",\n        \"code\": \"Install @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `astryx init` to set up agent docs. Read the generated files to learn the conventions.\",\n        \"label\": \"Set up the design system\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Then give it a look. Every app gets a theme whether or not anyone picks one, so it is worth one question at setup rather than revisiting screens later that were built around the wrong look:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"text\",\n        \"code\": \"Ask me what look and feel this app should have. Run `astryx theme list`, install the closest theme package, and run `theme add <slug>`; use `--package` when owners share a slug. Import `themes` and `defaultThemeSlug` from the generated module once and pass `themes[defaultThemeSlug]` to `<Theme>`. Customize with `defineTheme({extends: importedTheme, ...})`. Use `theme eject` only when I ask for an independent source fork. Default to neutral if I have no preference, and show me the result before moving on.\",\n        \"label\": \"Give it a look\"\n      }\n    ],\n    \"id\": \"quick-start-with-ai\",\n    \"links\": {\n      \"up\": \"astryx docs getting-started --index\",\n      \"next\": \"astryx docs getting-started install\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

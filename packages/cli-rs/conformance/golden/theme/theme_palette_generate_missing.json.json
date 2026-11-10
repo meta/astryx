@@ -1,0 +1,15 @@
+{
+ "id": "theme_palette_generate_missing.json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "missing.json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: missing.json\n",
+ "exit": 1,
+ "files": []
+}

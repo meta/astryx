@@ -1,0 +1,19 @@
+{
+ "id": "hook_useSnapPaging",
+ "args": [
+  "hook",
+  "useSnapPaging"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useSnapPaging\n\nGives a Carousel iOS paging on native snap's stops: pass the value as hasSnap={useSnapPaging()}. Under a finger and on a trackpad swipe, a flick moves one view, or one item with {pages: 'item'}, and the row rests on an item's start edge. A mouse wheel keeps native snapping. Only a carousel given the value loads the paging code.\n\n## Best Practices\n\n- **Do:** Use it for a row read one view at a time, such as onboarding screens or a photo strip, where a fast flick must not skip past the next view.\n- **Do:** Pass {pages: 'item'} when several items show at once and each flick should move only one of them.\n- **Don't:** Use it for a row people scan quickly; plain hasSnap keeps native momentum, which can pass several items in one swipe.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `{pages?: 'view' \\| 'item'}` | `{pages: 'view'}` | What one flick moves. 'view' moves one view and lands on the item start edge nearest one viewport on; 'item' moves one item. A new value applies from the next flick. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `paging` | `SnapPaging` | Snap paging for Carousel's hasSnap. The value is the same for the component's life, and Carousel keeps the value it first attached. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Carousel\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

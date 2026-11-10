@@ -1,0 +1,20 @@
+{
+ "id": "oldcore_component_Button_--props_@core-0.4.7",
+ "args": [
+  "component",
+  "Button",
+  "--props"
+ ],
+ "fixture": "core-0.4.7",
+ "fixtureHash": "8198fefbb18714e1+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Accessible label. Rendered as visible text by default; used as aria-label when isIconOnly is true. **(required)** |\n| `variant` | `'primary' \\| 'secondary' \\| 'ghost' \\| 'destructive'` | `'secondary'` | Visual style variant. |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | Size variant. |\n| `elevation` | `'none' \\| 'low' \\| 'med' \\| 'high'` | `'none'` | Resting shadow depth for floating buttons (e.g. a FAB). `none` is the default flat button; `low`/`med`/`high` map to the shadow token scale. Ignored inside a ButtonGroup, where elevation is owned by the group. |\n| `type` | `'button' \\| 'submit' \\| 'reset'` | `'button'` | HTML button type attribute. |\n| `name` | `string` | - | HTML name attribute for form submission. |\n| `value` | `string \\| number \\| readonly string[]` | - | HTML value attribute for form submission. |\n| `form` | `string` | - | Associates the button with a form element by ID. |\n| `isLoading` | `boolean` | `false` | Shows a loading spinner and disables interaction. Announces \"Loading\" via a live region. |\n| `isInterruptible` | `boolean` | `false` | Keep the button clickable while a clickAction is pending: the spinner and aria-busy still show, but the button is not disabled and the action is not deduped, so a re-click lands and interrupts the in-flight action with a fresh one. |\n| `isDisabled` | `boolean` | `false` | Disables the button. When a tooltip is present, uses aria-disabled instead of native disabled so the button stays focusable. |\n| `icon` | `ReactNode` | - | Icon element rendered before the label text. |\n| `isIconOnly` | `boolean` | `false` | When true, renders as a square icon-only button with label as aria-label. Requires icon. Tip: for a dedicated icon-only button component, use IconButton from '@astryxdesign/core/IconButton' instead. |\n| `width` | `SizeValue` | - | Width of the button. Numbers are treated as pixels, strings are used as-is (e.g., '100%' for a full-width button). By default the button sizes to its content. |\n| `children` | `ReactNode` | - | Optional override for visible text. When provided, displayed instead of label, but label is still required (it provides the accessible name). For most cases, just use label alone: <Button label=\"Save\" />. |\n| `endContent` | `ReactElement<IconProps> \\| ReactElement<BadgeProps>` | - | Trailing icon or badge rendered after the label. Ignored when isIconOnly is true. Color is inherited from the button variant. |\n| `tooltip` | `string` | - | Tooltip text shown on hover. |\n| `onClick` | `(e: MouseEvent) => void` | - | Standard click handler (passed through from ButtonHTMLAttributes). |\n| `clickAction` | `(e: MouseEvent) => void \\| Promise<void>` | - | Async click handler. Shows loading state while the returned promise is pending. |\n\n",
+ "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.4.7`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.4.7\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

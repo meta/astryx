@@ -1,0 +1,19 @@
+{
+ "id": "template_CodeBlockTerminal_@large",
+ "args": [
+  "template",
+  "CodeBlockTerminal"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {SyntaxTheme} from '@astryxdesign/core/theme';\nimport {githubDark} from '@astryxdesign/core/theme/syntax';\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\n\nconst commands = `$ astryx init --features agents\n✓ AI agent docs installed → AGENTS.md\n$ pnpm astryx component CodeBlock --dense`;\n\nexport default function CodeBlockTerminal() {\n  return (\n    <SyntaxTheme theme={githubDark}>\n      <CodeBlock\n        code={commands}\n        language=\"bash\"\n        hasCopyButton\n        style={{width: '100%', maxWidth: 480}}\n      />\n    </SyntaxTheme>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

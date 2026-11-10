@@ -1,0 +1,14 @@
+{
+ "id": "template_StackItemFill_--json_@large",
+ "args": [
+  "template",
+  "StackItemFill",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"StackItemFill\",\n    \"description\": \"A static-width item next to one that fills the remaining space. Wrap stack children in StackItem when an item needs explicit sizing control.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {HStack, StackItem} from '@astryxdesign/core/Layout';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function StackItemFill() {\\n  return (\\n    <HStack gap={3} vAlign=\\\"center\\\" width=\\\"100%\\\" style={{maxWidth: 400}}>\\n      <StackItem size=\\\"static\\\">\\n        <Card padding={3}>\\n          <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n            Static\\n          </Text>\\n        </Card>\\n      </StackItem>\\n      <StackItem size=\\\"fill\\\">\\n        <Card padding={3}>\\n          <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n            Fills remaining space\\n          </Text>\\n        </Card>\\n      </StackItem>\\n    </HStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

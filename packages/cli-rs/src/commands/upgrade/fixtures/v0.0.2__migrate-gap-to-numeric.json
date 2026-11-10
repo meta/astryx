@@ -1,0 +1,178 @@
+[
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"vertical\" gap=\"space0\"><div /></XDSStack>",
+  "output": "<XDSStack direction=\"vertical\" gap={0}><div /></XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHStack gap=\"space0.5\"><div /></XDSHStack>",
+  "output": "<XDSHStack gap={0.5}><div /></XDSHStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSVStack gap=\"space4\"><div /></XDSVStack>",
+  "output": "<XDSVStack gap={4}><div /></XDSVStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"horizontal\" gap=\"space10\"><div /></XDSStack>",
+  "output": "<XDSStack direction=\"horizontal\" gap={10}><div /></XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSGrid columns={3} rowGap=\"space2\" columnGap=\"space6\"><div /></XDSGrid>",
+  "output": "<XDSGrid columns={3} rowGap={2} columnGap={6}><div /></XDSGrid>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSGrid columns={3} gap=\"space4\"><div /></XDSGrid>",
+  "output": "<XDSGrid columns={3} gap={4}><div /></XDSGrid>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"vertical\" gap={\"space4\"}><div /></XDSStack>",
+  "output": "<XDSStack direction=\"vertical\" gap={4}><div /></XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"vertical\" gap=\"space2\" wrap=\"wrap\"><div /></XDSStack>",
+  "output": "<XDSStack direction=\"vertical\" gap={2} wrap=\"wrap\"><div /></XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSHStack gap=\"space2\"><div /></XDSHStack>\n        <XDSVStack gap=\"space4\"><div /></XDSVStack>\n        <XDSGrid columns={3} gap=\"space6\"><div /></XDSGrid>\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSHStack gap={2}><div /></XDSHStack>\n        <XDSVStack gap={4}><div /></XDSVStack>\n        <XDSGrid columns={3} gap={6}><div /></XDSGrid>\n      </div>\n    ",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"vertical\" gap={4}><div /></XDSStack>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack direction=\"vertical\" gap=\"custom\"><div /></XDSStack>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<CustomComponent gap=\"space3\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<div gap=\"space4\"><span /></div>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<MyGrid rowGap=\"space2\" columnGap=\"space6\"><div /></MyGrid>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Foo.Bar gap=\"space4\"><div /></Foo.Bar>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSStack gap=\"space2\"><div /></XDSStack>\n        <CustomComponent gap=\"space3\" />\n        <div gap=\"space4\" />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSStack gap={2}><div /></XDSStack>\n        <CustomComponent gap=\"space3\" />\n        <div gap=\"space4\" />\n      </div>\n    ",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack gap=\"space5\"><div /></XDSStack>",
+  "output": "<XDSStack gap={5}><div /></XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHStack gap=\"space5\"><div /></XDSHStack>",
+  "output": "<XDSHStack gap={5}><div /></XDSHStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSVStack gap=\"space5\"><div /></XDSVStack>",
+  "output": "<XDSVStack gap={5}><div /></XDSVStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSGrid gap=\"space5\"><div /></XDSGrid>",
+  "output": "<XDSGrid gap={5}><div /></XDSGrid>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSGridSpan gap=\"space5\"><div /></XDSGridSpan>",
+  "output": "<XDSGridSpan gap={5}><div /></XDSGridSpan>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-gap-to-numeric",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStackItem gap=\"space5\"><div /></XDSStackItem>",
+  "output": "<XDSStackItem gap={5}><div /></XDSStackItem>",
+  "error": null
+ }
+]

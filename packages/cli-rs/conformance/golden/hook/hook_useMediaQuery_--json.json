@@ -1,0 +1,14 @@
+{
+ "id": "hook_useMediaQuery_--json",
+ "args": [
+  "hook",
+  "useMediaQuery",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useMediaQuery\",\n    \"displayName\": \"useMediaQuery\",\n    \"keywords\": [\n      \"responsive\",\n      \"breakpoint\",\n      \"media\",\n      \"mobile\",\n      \"desktop\",\n      \"screen\",\n      \"matchmedia\"\n    ],\n    \"params\": [\n      {\n        \"name\": \"query\",\n        \"type\": \"string\",\n        \"description\": \"CSS media query string to evaluate.\",\n        \"required\": true\n      }\n    ],\n    \"returns\": [\n      {\n        \"name\": \"matches\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether the media query currently matches. Always false on first render (SSR-safe).\"\n      }\n    ],\n    \"usage\": {\n      \"description\": \"SSR-safe media query hook that subscribes to window.matchMedia changes. Returns whether the given media query matches. Always returns false on first render for SSR compatibility. Where `window.matchMedia` is missing, it returns its server default and never throws.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Use for responsive layout switching based on viewport width, color scheme, or motion preferences.\"\n        },\n        {\n          \"guidance\": true,\n          \"description\": \"Prefer Astryx responsive tokens and component props over manual breakpoint logic when possible.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Use for server-rendered content that must match on first paint; the hook always returns false initially.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [],\n    \"relatedHooks\": [\n      \"useImageMode\"\n    ],\n    \"importPath\": \"@astryxdesign/core/hooks\",\n    \"category\": \"media\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

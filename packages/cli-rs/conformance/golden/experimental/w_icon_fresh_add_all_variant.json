@@ -1,0 +1,19 @@
+{
+ "id": "w_icon_fresh_add_all_variant",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--variant",
+  "solid",
+  "--from",
+  "./lib/icons.js",
+  "--all"
+ ],
+ "fixture": "iconfresh",
+ "fixtureHash": "322dba8308a7044c+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"outline\" declares no variant \"solid\". Declare it first, and name the look its icons draw now as the default variant in place of <default>.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set outline --variants <default>,solid --default-variant <default>  (declare the variants; fill <default> with the look the icons draw)\n",
+ "exit": 1,
+ "files": []
+}

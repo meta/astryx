@@ -1,0 +1,386 @@
+[
+  {
+    "id": "oldcore_docs_@core-0.7.11",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.7.11",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.7.11",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.7.11",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.7.11",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.7.11",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.7.11",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_@core-0.7.5",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.7.5",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.7.5",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.7.5",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.7.5",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.7.5",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.7.5",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_@core-0.6.8",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.6.8",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.6.8",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.6.8",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.6.8",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.6.8",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.6.8",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_@core-0.5.4",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.5.4",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.5.4",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.5.4",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.5.4",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.5.4",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.5.4",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_@core-0.4.7",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.4.7",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.4.7",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.4.7",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.4.7",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.4.7",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.4.7",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_@core-0.3.0",
+    "args": [
+      "docs"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_--json_@core-0.3.0",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_@core-0.3.0",
+    "args": [
+      "docs",
+      "principles"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_principles_--index_@core-0.3.0",
+    "args": [
+      "docs",
+      "principles",
+      "--index"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_tokens_--dense_@core-0.3.0",
+    "args": [
+      "docs",
+      "tokens",
+      "--dense"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_theme_@core-0.3.0",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_docs_cli_@core-0.3.0",
+    "args": [
+      "docs",
+      "cli"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

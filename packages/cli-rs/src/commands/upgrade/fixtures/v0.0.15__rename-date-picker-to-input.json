@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSDateTimePicker } from '@xds/core/DateTimePicker';",
+  "output": "import { XDSDateTimeInput } from \"@xds/core/DateTimeInput\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSDateRangePicker } from '@xds/core/DateRangePicker';",
+  "output": "import { XDSDateRangeInput } from \"@xds/core/DateRangeInput\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDateTimePicker label=\"Pick\" value={v} onChange={fn} />",
+  "output": "<XDSDateTimeInput label=\"Pick\" value={v} onChange={fn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSDateTimePickerProps, XDSDateTimePickerSize } from '@xds/core/DateTimePicker';",
+  "output": "import type { XDSDateTimeInputProps, XDSDateTimeInputSize } from \"@xds/core/DateTimeInput\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSDateRangePickerProps, XDSDateRangePickerSize } from '@xds/core/DateRangePicker';",
+  "output": "import type { XDSDateRangeInputProps, XDSDateRangeInputSize } from \"@xds/core/DateRangeInput\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const fmt: XDSDateTimePickerHourFormat = '12h';",
+  "output": "const fmt: XDSDateTimeInputHourFormat = '12h';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const s: XDSDateTimePickerStatus = { type: 'error', message: 'bad' };\nconst t: XDSDateRangePickerStatusType = 'warning';",
+  "output": "const s: XDSDateTimeInputStatus = { type: 'error', message: 'bad' };\nconst t: XDSDateRangeInputStatusType = 'warning';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSDateTimePicker } from '@xds/core/DateTimePicker';\nimport { XDSDateRangePicker } from '@xds/core/DateRangePicker';\n\nfunction DateForm() {\n  return (\n    <div>\n      <XDSDateTimePicker label=\"Start\" value={start} onChange={setStart} />\n      <XDSDateRangePicker label=\"Range\" value={range} onChange={setRange} />\n    </div>\n  );\n}",
+  "output": "import { XDSDateTimeInput } from \"@xds/core/DateTimeInput\";\nimport { XDSDateRangeInput } from \"@xds/core/DateRangeInput\";\n\nfunction DateForm() {\n  return (\n    <div>\n      <XDSDateTimeInput label=\"Start\" value={start} onChange={setStart} />\n      <XDSDateRangeInput label=\"Range\" value={range} onChange={setRange} />\n    </div>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-date-picker-to-input",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDateInput label=\"Date\" value={v} onChange={fn} />",
+  "output": null,
+  "error": null
+ }
+]

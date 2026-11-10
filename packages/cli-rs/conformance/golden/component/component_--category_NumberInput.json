@@ -1,0 +1,20 @@
+{
+ "id": "component_--category_NumberInput",
+ "args": [
+  "component",
+  "--category",
+  "NumberInput"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "NumberInput\n\nname:   NumberInput\nimport: @astryxdesign/core/NumberInput\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "id": "oldcore_@core-0.7.11",
+    "args": [],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.7.11",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.7.11",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_@core-0.7.5",
+    "args": [],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.7.5",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.7.5",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_@core-0.6.8",
+    "args": [],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.6.8",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.6.8",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_@core-0.5.4",
+    "args": [],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.5.4",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.5.4",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_@core-0.4.7",
+    "args": [],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.4.7",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.4.7",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_@core-0.3.0",
+    "args": [],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--help_@core-0.3.0",
+    "args": [
+      "--help"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_--version_@core-0.3.0",
+    "args": [
+      "--version"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

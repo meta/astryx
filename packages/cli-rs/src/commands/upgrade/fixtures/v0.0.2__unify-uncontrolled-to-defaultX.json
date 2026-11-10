@@ -1,0 +1,66 @@
+[
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAppShell initialIsSideNavCollapsed={true} />",
+  "output": "<XDSAppShell defaultIsSideNavCollapsed={true} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCollapsible initialIsOpen={false} title=\"Section\" />",
+  "output": "<XDSCollapsible defaultIsOpen={false} title=\"Section\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner initialIsExpanded={true} />",
+  "output": "<XDSBanner defaultIsExpanded={true} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAppShell initialIsSideNavCollapsed={true} topNav={<Nav />} />",
+  "output": "<XDSAppShell defaultIsSideNavCollapsed={true} topNav={<Nav />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Collapsible initialIsOpen={true} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAppShell topNav={<Nav />} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCollapsible defaultIsOpen={true} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-uncontrolled-to-defaultX",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSCollapsible initialIsOpen={true} />\n        <XDSBanner initialIsExpanded={false} />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSCollapsible defaultIsOpen={true} />\n        <XDSBanner defaultIsExpanded={false} />\n      </div>\n    ",
+  "error": null
+ }
+]

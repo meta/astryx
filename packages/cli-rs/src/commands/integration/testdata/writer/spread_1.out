@@ -1,0 +1,6 @@
+const base = {a: 1};
+export default {
+  ...base,
+  name: 'x',
+  docs: './docs'
+};

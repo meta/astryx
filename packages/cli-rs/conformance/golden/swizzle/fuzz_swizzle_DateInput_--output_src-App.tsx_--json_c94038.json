@@ -1,0 +1,16 @@
+{
+ "id": "fuzz_swizzle_DateInput_--output_src-App.tsx_--json_c94038",
+ "args": [
+  "swizzle",
+  "DateInput",
+  "--output",
+  "src/App.tsx",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"ENOTDIR: not a directory, unlink '/tmp/astryx-conformance/work/app/src/App.tsx/DateInput'\",\n  \"code\": \"ERR_UNKNOWN\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

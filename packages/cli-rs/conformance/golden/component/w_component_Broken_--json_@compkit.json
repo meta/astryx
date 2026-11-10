@@ -1,0 +1,14 @@
+{
+ "id": "w_component_Broken_--json_@compkit",
+ "args": [
+  "component",
+  "Broken",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Cannot load component metadata: /tmp/astryx-conformance/work/compkit/node_modules/@comp/kit/components/Broken.doc.mjs is invalid: (root): Invalid input\",\n  \"code\": \"ERR_INVALID_DOC\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

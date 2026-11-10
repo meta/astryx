@@ -1,0 +1,14 @@
+{
+ "id": "argv-negate_experimental_icon_--no-definitions",
+ "args": [
+  "experimental",
+  "icon",
+  "--no-definitions"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-definitions'\n(Did you mean --definitions?)\n",
+ "exit": 1,
+ "files": []
+}

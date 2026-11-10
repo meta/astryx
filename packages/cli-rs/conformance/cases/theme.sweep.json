@@ -1,0 +1,128 @@
+[
+  {
+    "id": "sweep_targets_core-0.3.0",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.3.0"
+  },
+  {
+    "id": "sweep_targets_button_core-0.3.0",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.3.0"
+  },
+  {
+    "id": "sweep_targets_core-0.4.7",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.4.7"
+  },
+  {
+    "id": "sweep_targets_button_core-0.4.7",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.4.7"
+  },
+  {
+    "id": "sweep_targets_core-0.5.4",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.5.4"
+  },
+  {
+    "id": "sweep_targets_button_core-0.5.4",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.5.4"
+  },
+  {
+    "id": "sweep_targets_core-0.6.8",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.6.8"
+  },
+  {
+    "id": "sweep_targets_button_core-0.6.8",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.6.8"
+  },
+  {
+    "id": "sweep_targets_core-0.7.5",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.7.5"
+  },
+  {
+    "id": "sweep_targets_button_core-0.7.5",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.7.5"
+  },
+  {
+    "id": "sweep_targets_core-0.7.11",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "core-0.7.11"
+  },
+  {
+    "id": "sweep_targets_button_core-0.7.11",
+    "args": [
+      "theme",
+      "targets",
+      "button"
+    ],
+    "fixture": "core-0.7.11"
+  },
+  {
+    "id": "sweep_targets_baddoc",
+    "args": [
+      "theme",
+      "targets",
+      "--json"
+    ],
+    "fixture": "sweep-baddoc"
+  },
+  {
+    "id": "sweep_targets_baddoc_zany",
+    "args": [
+      "theme",
+      "targets",
+      "zany"
+    ],
+    "fixture": "sweep-baddoc"
+  }
+]

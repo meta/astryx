@@ -1,0 +1,21 @@
+{
+ "id": "w_theme_quick-start_--zh",
+ "args": [
+  "docs",
+  "theme",
+  "quick-start",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## 为应用添加主题\n\n安装主题包，用 `<Theme>`（`import {Theme} from '@astryxdesign/core/theme'`）包裹应用，选择浅色或深色模式。完整指南——可用主题、集成主题、深色模式、嵌套主题和生产构建——请参阅 `npx @astryxdesign/cli@0.7.12 docs use-a-theme`。\n\nWire the generated module once:\n```tsx\nimport {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\n\nfunction App() {\n  return (\n    <Theme theme={themes[defaultThemeSlug]}>\n      <YourApp />\n    </Theme>\n  );\n}\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nNext: npx @astryxdesign/cli@0.7.12 docs theme creating-a-custom-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

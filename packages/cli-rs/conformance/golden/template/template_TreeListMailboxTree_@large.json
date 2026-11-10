@@ -1,0 +1,19 @@
+{
+ "id": "template_TreeListMailboxTree_@large",
+ "args": [
+  "template",
+  "TreeListMailboxTree"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {TreeList} from '@astryxdesign/core/TreeList';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nconst noop = () => {};\n\nexport default function TreeListMailboxTree() {\n  return (\n    <TreeList\n      items={[\n        {\n          id: 'inbox',\n          label: 'Inbox',\n          isExpanded: true,\n          endContent: <Badge label=\"3\" />,\n          children: [\n            {\n              id: 'unread',\n              label: 'Unread',\n              onClick: noop,\n              endContent: <Badge label=\"3\" />,\n            },\n            {id: 'starred', label: 'Starred', onClick: noop},\n          ],\n        },\n        {id: 'sent', label: 'Sent', onClick: noop},\n        {\n          id: 'drafts',\n          label: 'Drafts',\n          onClick: noop,\n          endContent: <Badge label=\"1\" />,\n        },\n      ]}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,17 @@
+{
+ "id": "experimental_icon_map_random_--pairs_a-b",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "random",
+  "--pairs",
+  "a,b"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: --pairs and a definition cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "w_handbook_@docsbroken",
+ "args": [
+  "search",
+  "handbook"
+ ],
+ "fixture": "docsbroken",
+ "fixtureHash": "1cbb060d64af0f86+4e418a0c2575d9ce",
+ "stdout": "Results for \"handbook\" (1)\n\nname:        documentation\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Documentation Catalog\nkind:        page\ndescription: Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.\ncommand:     npx @astryxdesign/cli@0.7.12 template documentation --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover handbook\n",
+ "stderr": "Warning: @acme/docs has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsbroken\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

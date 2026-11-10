@@ -1,0 +1,21 @@
+{
+ "id": "integration_add_doc_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "Thing"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "doc contribution added\n\n[ok] Thing\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/Thing.doc.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/docs/Thing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'Thing',\n  title: 'Thing',\n  description: 'Thing documentation.',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Thing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

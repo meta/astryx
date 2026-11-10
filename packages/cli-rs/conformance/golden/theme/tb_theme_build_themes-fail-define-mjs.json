@@ -1,0 +1,14 @@
+{
+ "id": "tb_theme_build_themes-fail-define-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/fail-define.mjs"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: defineTheme(\"faildef\"): `extends` must be a theme from defineTheme(), got number. Check that the import naming your base theme resolves to its source and exports that name — a generated `<theme>.js` artifact sitting next to the source exports `<name>Theme`, not the source's own export.\n",
+ "exit": 1,
+ "files": []
+}

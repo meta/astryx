@@ -1,0 +1,20 @@
+{
+ "id": "hook_useInputStatusIcon_--dense",
+ "args": [
+  "hook",
+  "useInputStatusIcon",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useInputStatusIcon\n\nBuilds the on-field status affordance for a bordered input and its accessibility wiring, so every input in the family behaves the same for a given status. The attached variant renders a plain glyph and leaves the text to the message box; the detached variant renders nothing here, because the message box already carries its own icon; the tooltip variant renders a real focusable button whose tooltip is reachable by keyboard, pointer, touch and assistive tech. Use it when building a bordered input, not for field-level messaging.\n\n## Best Practices\n\n- **Do:** Render statusIcon inside the input container and merge describedBy into the control's aria-describedby list.\n- **Do:** Let it decide when nothing should render; pass isInGroup and the variant through rather than branching at the call site.\n- **Don't:** Use it to convey the status by icon alone; the tooltip variant is the only one that carries the message, so the others still need a message box.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInputStatusIconOptions` | - | Configuration object. **(required)** |\n| `options.status` | `InputStatus` | - | The input's status (type plus message), or undefined when there is none. |\n| `options.statusVariant` | `'attached' \\| 'detached' \\| 'tooltip'` | `'attached'` | How the status is presented relative to the input. |\n| `options.isInGroup` | `boolean` | `false` | Whether the input sits inside an InputGroup, which owns status rendering itself. |\n| `options.size` | `IconSize` | `'md'` | Size of the on-field icon. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `statusIcon` | `ReactNode` | The affordance to render inside the input container: a plain icon, or a focusable info-tip button with its tooltip. Null when no icon should render. |\n| `describedBy` | `string \\| undefined` | ID to add to the input's aria-describedby, present exactly when a tooltip element is in the DOM, so there is never a dangling reference. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for TextInput, TextArea, NumberInput, DateInput, FileInput, FieldStatus, InputGroup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

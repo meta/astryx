@@ -1,0 +1,21 @@
+{
+ "id": "w_doctor_integration_validate_charts_large",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "@astryxdesign/charts"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "Validating integration: @astryxdesign/charts@0.1.9\n\n[ok] No integration issues found.\n\nnote (template_import_not_exported): [next minor] Template \"ChartShowcase\" has public import \"@astryxdesign/charts/blocks/ChartShowcase\", but package.json \"exports\" does not declare \"./blocks/ChartShowcase\", so it cannot be imported once published. Fix: add \"./blocks/ChartShowcase\": \"./blocks/ChartShowcase.tsx\" to package.json \"exports\" (or the built file it compiles to).\n\nnote (template_import_not_exported): [next minor] Template \"ChartTrendComparison\" has public import \"@astryxdesign/charts/blocks/ChartTrendComparison\", but package.json \"exports\" does not declare \"./blocks/ChartTrendComparison\", so it cannot be imported once published. Fix: add \"./blocks/ChartTrendComparison\": \"./blocks/ChartTrendComparison.tsx\" to package.json \"exports\" (or the built file it compiles to).\n\nSummary: 0 errors, 0 warnings\n\n[skip] Docs not type-checked: TypeScript is not installed in this project, so docs were not checked against the authoring types. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

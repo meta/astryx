@@ -1,0 +1,15 @@
+{
+ "id": "doctor_integration_components_nosuchsub",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: nosuchsub\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"nosuchsub\" at /tmp/astryx-conformance/work/app/node_modules/nosuchsub/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

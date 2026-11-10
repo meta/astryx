@@ -1,0 +1,17 @@
+{
+ "id": "argv_integration_add_component_useClipboard_--_-h",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--",
+  "-h"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'add'. Expected 2 arguments but got 3.\n",
+ "exit": 1,
+ "files": []
+}

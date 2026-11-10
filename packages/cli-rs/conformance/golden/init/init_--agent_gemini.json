@@ -1,0 +1,14 @@
+{
+ "id": "init_--agent_gemini",
+ "args": [
+  "init",
+  "--agent",
+  "gemini"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown agent \"gemini\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
+ "exit": 1,
+ "files": []
+}

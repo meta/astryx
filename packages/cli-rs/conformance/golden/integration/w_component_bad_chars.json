@@ -1,0 +1,16 @@
+{
+ "id": "w_component_bad_chars",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "Acme-Widget",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Invalid component name \\\"Acme-Widget\\\": use PascalCase starting with an uppercase letter (e.g. MyWidget).\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

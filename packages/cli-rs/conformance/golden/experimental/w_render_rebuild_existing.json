@@ -1,0 +1,17 @@
+{
+ "id": "w_render_rebuild_existing",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "stripped.html",
+  "--out",
+  "basic.tsx"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: basic.tsx already exists; nothing was written. Pass --overwrite to replace it.\n",
+ "exit": 1,
+ "files": []
+}

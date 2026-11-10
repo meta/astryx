@@ -1,0 +1,13 @@
+{
+ "id": "hook_--help",
+ "args": [
+  "hook",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx hook [options] [name]\n\nList hooks or print hook docs\n\nOptions:\n  --list                 List all hooks grouped by category\n  --category <category>  List hooks in a specific category\n  --params               Print only the parameters table\n  -h, --help             display help for command\n\nExit codes:\n  0  success\n  1  unknown hook or category, or @astryxdesign/core cannot be resolved\n\nExamples:\n  # Browse the catalog\n  npx @astryxdesign/cli@0.7.12 hook --list\n  # One hook as JSON\n  npx @astryxdesign/cli@0.7.12 hook useFocusTrap --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/hook\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

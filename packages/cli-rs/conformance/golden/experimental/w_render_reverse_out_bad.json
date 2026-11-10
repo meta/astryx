@@ -1,0 +1,17 @@
+{
+ "id": "w_render_reverse_out_bad",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "page.html",
+  "--out",
+  "x.css"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --out for --reverse must be a page module (.tsx, .jsx, .ts, .js, .mjs)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,93 @@
+[
+  {
+    "id": "w_tpl_copy_under_file",
+    "args": [
+      "template",
+      "login",
+      "package.json/x.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_dir_is_file_json",
+    "args": [
+      "template",
+      "login",
+      "package.json",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_copy_target_is_dir",
+    "args": [
+      "template",
+      "login",
+      "src.tsx"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "template",
+        "login",
+        "src.tsx/inner"
+      ]
+    ]
+  },
+  {
+    "id": "w_tpl_copy_name_too_long",
+    "args": [
+      "template",
+      "login",
+      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.tsx"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_name_too_long",
+    "args": [
+      "template",
+      "--cdn",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.html"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_empty_name_cdn_empty",
+    "args": [
+      "template",
+      "",
+      "--cdn",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_empty_value",
+    "args": [
+      "template",
+      "--cdn",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_cdn_empty_eq_json",
+    "args": [
+      "template",
+      "--cdn=",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_tpl_name_cdn_empty",
+    "args": [
+      "template",
+      "login",
+      "--cdn",
+      ""
+    ],
+    "fixture": "app"
+  }
+]

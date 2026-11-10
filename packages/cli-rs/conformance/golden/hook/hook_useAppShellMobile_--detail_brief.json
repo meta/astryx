@@ -1,0 +1,21 @@
+{
+ "id": "hook_useAppShellMobile_--detail_brief",
+ "args": [
+  "hook",
+  "useAppShellMobile",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nuseAppShellMobile(): { isMobile, isMobileNavOpen, mobileNavId, toggleMobileNav, openMobileNav, closeMobileNav, isMobileNavEnabled, hasAutoToggle }  <- from '@astryxdesign/core/AppShell'\n  Hook for reading and controlling AppShell mobile navigation state from descen...\n  Related: AppShell, MobileNav, MobileNavToggle, TopNav, SideNav\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for AppShell, MobileNav, MobileNavToggle, TopNav, SideNav\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

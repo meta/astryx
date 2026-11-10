@@ -1,0 +1,34 @@
+{
+ "id": "fuzz_integration_verify_pre_a36f53",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] app@1.0.0\n\n5 packed files; 3/3 required files present.\n\n- [fail] Component \"Fancy\" advertises import \"app/components/Fancy\", but that packed module does not export \"Fancy\". Add or correct the package export before publishing.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  components: './components'\n};\n"
+  },
+  {
+   "path": "app/components/Fancy.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Fancy',\n  displayName: 'Fancy',\n  import: \"app/components/Fancy\",\n  usage: {description: 'Fancy component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "app/components/Fancy.tsx",
+   "status": "created",
+   "text": "export function Fancy() {\n  return <div>Fancy</div>;\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

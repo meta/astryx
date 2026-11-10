@@ -1,0 +1,17 @@
+{
+ "id": "gap-report_AcmeCard_--category_missing_variant_--reason_x_@integration",
+ "args": [
+  "gap-report",
+  "AcmeCard",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Package \"@acme/kit\" provides neither a report handler nor an issues URL.\n",
+ "exit": 1,
+ "files": []
+}

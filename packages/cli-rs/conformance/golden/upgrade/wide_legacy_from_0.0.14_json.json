@@ -1,0 +1,15 @@
+{
+ "id": "wide_legacy_from_0.0.14_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.14",
+  "--json"
+ ],
+ "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.14\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 46,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 5,\n    \"transformsApplied\": 15,\n    \"modifiedFiles\": [\n      \"src/App.tsx\",\n      \"src/legacy.jsx\",\n      \"src/nested/deep/Badge.tsx\",\n      \"src/theme.css\",\n      \"src/modern.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

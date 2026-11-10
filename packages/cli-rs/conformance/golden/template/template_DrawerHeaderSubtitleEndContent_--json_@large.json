@@ -1,0 +1,14 @@
+{
+ "id": "template_DrawerHeaderSubtitleEndContent_--json_@large",
+ "args": [
+  "template",
+  "DrawerHeaderSubtitleEndContent",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DrawerHeaderSubtitleEndContent\",\n    \"description\": \"Add a subtitle under the title and put a status, such as a Badge, in endContent. The close button stays at the end of the row.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Drawer\",\n      \"Layout\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\n/**\\n * @input Controlled open state for a modal Drawer\\n * @output A DrawerHeader with a subtitle, a status badge in its end slot, and a close button\\n * @position Copyable DrawerHeader example\\n */\\n\\nimport {useState} from 'react';\\nimport {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function DrawerHeaderSubtitleEndContent() {\\n  const [isOpen, setIsOpen] = useState(false);\\n\\n  return (\\n    <>\\n      <Button label=\\\"Open host details\\\" onClick={() => setIsOpen(true)} />\\n      <Drawer\\n        isOpen={isOpen}\\n        onOpenChange={setIsOpen}\\n        label=\\\"web-prod-04\\\"\\n        width={360}>\\n        <Layout\\n          header={\\n            <DrawerHeader\\n              title=\\\"web-prod-04\\\"\\n              subtitle=\\\"us-east-1\\\"\\n              endContent={<Badge label=\\\"Healthy\\\" variant=\\\"success\\\" />}\\n              onOpenChange={setIsOpen}\\n            />\\n          }\\n          content={\\n            <LayoutContent>\\n              <Text type=\\\"body\\\">\\n                All 6 instances are passing readiness checks.\\n              </Text>\\n            </LayoutContent>\\n          }\\n        />\\n      </Drawer>\\n    </>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

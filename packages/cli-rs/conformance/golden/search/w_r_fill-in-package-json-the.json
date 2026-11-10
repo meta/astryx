@@ -1,0 +1,20 @@
+{
+ "id": "w_r_fill-in-package-json-the",
+ "args": [
+  "search",
+  "fill-in-package-json",
+  "the"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"fill-in-package-json the\" (2)\n\nname:        authoring/quick-start\nsection:     fill-in-package-json\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Quick Start › Fill in package.json\ndescription: An integration is an ordinary npm package. These six fields control how it is named, developed, checked, and published.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/quick-start fill-in-package-json\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/quick-start --index\n\nname:        authoring/building-blocks/docs/extend-or-replace\nsection:     replace-or-extend-a-cli-guide\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Docs › Extend or replace a topic › Replace or extend a CLI guide\ndescription: A guide in the CLI's docs tree has a route rather than a topic name. Set `replaces` or `extends` to that route to change the guide for every app that installs your package: say what differs for your users on the page agents already read.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs/extend-or-replace replace-or-extend-a-cli-guide\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs/extend-or-replace --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'fill-in-package-json the'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

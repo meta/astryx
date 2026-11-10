@@ -1,0 +1,7 @@
+export default {
+  name: 'acme',
+
+  agentDocs: {
+    append: ['Run acme verify before finishing.']
+  }
+};

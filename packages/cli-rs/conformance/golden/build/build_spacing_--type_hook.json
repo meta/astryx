@@ -1,0 +1,21 @@
+{
+ "id": "build_spacing_--type_hook",
+ "args": [
+  "build",
+  "spacing",
+  "--type",
+  "hook"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"spacing\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n\nFEW MATCHES\nFew matches. This is keyword search, not semantic - try other wordings.\nBrowse instead:\nnpx @astryxdesign/cli@0.7.12 component --list\nnpx @astryxdesign/cli@0.7.12 template --list\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

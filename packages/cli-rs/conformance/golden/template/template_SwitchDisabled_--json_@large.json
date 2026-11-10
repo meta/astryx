@@ -1,0 +1,14 @@
+{
+ "id": "template_SwitchDisabled_--json_@large",
+ "args": [
+  "template",
+  "SwitchDisabled",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SwitchDisabled\",\n    \"description\": \"Disabled switch with label and description for gated features.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Switch\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Switch} from '@astryxdesign/core/Switch';\\n\\nexport default function SwitchDisabled() {\\n  const [value, setValue] = useState(false);\\n  return (\\n    <Switch\\n      label=\\\"Premium feature\\\"\\n      description=\\\"Upgrade to enable this option\\\"\\n      value={value}\\n      onChange={setValue}\\n      isDisabled\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

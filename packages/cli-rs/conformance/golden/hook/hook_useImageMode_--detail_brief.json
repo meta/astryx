@@ -1,0 +1,21 @@
+{
+ "id": "hook_useImageMode_--detail_brief",
+ "args": [
+  "hook",
+  "useImageMode",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nuseImageMode(src: string | null | undefined, options?: UseImageModeOptions): { mode }  <- from '@astryxdesign/core/hooks'\n  Detects whether an image is predominantly dark or light by sampling pixels vi...\n  Related: MediaTheme\n  src: string, options\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for MediaTheme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

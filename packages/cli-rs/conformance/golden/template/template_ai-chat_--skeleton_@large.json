@@ -1,0 +1,20 @@
+{
+ "id": "template_ai-chat_--skeleton_@large",
+ "args": [
+  "template",
+  "ai-chat",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# ai-chat - Transcript of alternating turns carrying mixed rich content inline (markdown, code blocks, collapsible tool-call output) beside a resizable artifact panel that holds generated output while the stream keeps scrolling.\n# Components: Avatar, Card, ChatComposer, ChatComposerInput, ChatLayout, ChatMessage, ChatMessageBubble, ChatMessageList, ChatMessageMetadata, ChatSystemMessage, ChatTokenizedText, ChatToolCalls, ClickableCard, CodeBlock, Dialog, DropdownMenu, Layout, Markdown, MoreMenu, ResizeHandle, Section, Timestamp, Token, Toolbar\n\n<Layout padding={0} height=\"fill\">\n  /* content: */\n  <LayoutContent padding={0}>\n    <HStack height=\"100%\">\n      <ChatLayout density=\"spacious\" />\n      <ChatComposer />\n      <Button variant=\"ghost\" />\n      <Button variant=\"ghost\" />\n      <DropdownMenu />\n      <ChatMessageList />\n      <ChatSystemMessage variant=\"divider\" />\n      <ChatMessage />\n      <HStack gap={1}>\n        <Token />\n        <Token />\n      </HStack>\n      <ChatMessageBubble />\n      <ChatMessageMetadata />\n      <Timestamp />\n      <ChatTokenizedText />\n      <ChatMessage />\n      <ChatMessageBubble variant=\"ghost\" />\n      <ChatToolCalls />\n      <ChatMessageBubble variant=\"ghost\" />\n      <Markdown density=\"compact\" />\n      <ChatMessageBubble variant=\"ghost\" />\n      <CodeBlock />\n      <ChatToolCalls />\n      <ChatMessageMetadata />\n      <Timestamp />\n      /* footer: */\n      <Text />\n      <ChatMessage />\n      <ChatMessageBubble />\n      <ChatMessageBubble />\n      ...\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

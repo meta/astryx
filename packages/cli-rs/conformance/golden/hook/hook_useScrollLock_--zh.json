@@ -1,0 +1,20 @@
+{
+ "id": "hook_useScrollLock_--zh",
+ "args": [
+  "hook",
+  "useScrollLock",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useScrollLock\n\nLocks page scroll while active and keeps the page where it is. The page gets overflow: hidden (on the root, or on body when its own overflow is the one the viewport uses), which stops wheel, keyboard and scrollbar scrolling, and overscroll-behavior-y: none on the root and body, which stops the overscroll bounce while the lock holds. Where the primary pointer is coarse (phones and tablets), a one-finger pan that would scroll the page is cancelled, because iOS Safari scrolls an overflow: hidden page under a finger; pans that a scroller inside the overlay can take, drags on a native range input, pinch-zoom, and one-finger drags on a pinch-zoomed page (which pan the zoomed view) still work. The scroll offset never changes, so nothing jumps when the lock starts or ends, and iOS Safari keeps its toolbar as it was. Where the hidden scrollbar takes layout space (desktop), the hook holds its gutter open with scrollbar-gutter: stable, so the page, including any position: fixed chrome, does not shift sideways.\n\n## Best Practices\n\n- **Do:** Use when opening full-screen modals or dialogs to prevent background content from scrolling.\n- **Do:** Pass the same boolean that controls dialog visibility (e.g., isOpen) as the isLocked parameter.\n- **Don't:** Use for non-modal overlays like popovers or tooltips; users should be able to scroll away from those.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `isLocked` | `boolean` | - | whether page scroll should be locked. **(required)** |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Dialog\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

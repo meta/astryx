@@ -1,0 +1,26 @@
+{
+ "id": "w2_add_twice_component_author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "Fancy"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Refusing to overwrite existing file src/components/Fancy.doc.mjs.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/src/components/Fancy.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Fancy',\n  displayName: 'Fancy',\n  import: \"@acme/widgets/src/components/Fancy\",\n  usage: {description: 'Fancy component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/Fancy.tsx",
+   "status": "created",
+   "text": "export function Fancy() {\n  return <div>Fancy</div>;\n}\n"
+  }
+ ]
+}

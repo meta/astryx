@@ -1,0 +1,13 @@
+{
+ "id": "gap-report_-h",
+ "args": [
+  "gap-report",
+  "-h"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx gap-report [options] [component]\n\nReport a missing component or feature to the package that owns it\n\nArguments:\n  component                    Component or design-system area the gap is about, up to 120 characters. Required unless --list-categories is set.\n\nOptions:\n  --category <category>        Gap category (run --list-categories for values). Required unless --list-categories is set.\n  --reason <reason>            What capability was missing or difficult, up to 2000 characters. Required unless --list-categories is set.\n  --additional-context <text>  Optional additional context, up to 8000 characters\n  --package <pkg>              Package that owns the gap: @astryxdesign/core or a loaded integration. Overrides automatic routing, which picks the integration whose component replaces the named Core component, else the one package that provides it, else Core; needed when more than one package provides the component\n  --confirm-public             Allow public delivery: public handlers run, and a GitHub issues URL gets an issue filed with your gh login\n  --to <package>               Send the report only to this loaded integration's issues URL, as the person chose; the destinations the output lists are the choices\n  --list-categories            List valid report categories, and the destinations when there is more than one, without filing; the component and the other gap-report options are refused with ERR_INVALID_ARGUMENT\n  -h, --help                   display help for command\n\nExit codes:\n  0  filed, routed-only, confirmation required, skipped, or categories listed\n  1  failed or partial delivery, invalid input, or ambiguous routing\n\nExamples:\n  # List categories\n  npx @astryxdesign/cli@0.7.12 gap-report --list-categories\n  # Prepare a report (nothing public happens without --confirm-public)\n  npx @astryxdesign/cli@0.7.12 gap-report Button --category missing_variant --reason 'Need a compact size'\n  # File where the person chose\n  npx @astryxdesign/cli@0.7.12 gap-report Button --category missing_variant --reason 'Need a compact size' --to @acme/widgets\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/gap-report\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

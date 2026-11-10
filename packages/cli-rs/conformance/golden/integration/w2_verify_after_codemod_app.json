@@ -1,0 +1,29 @@
+{
+ "id": "w2_verify_after_codemod_app",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Integration package ready\n\n[ok] app@1.0.0\n\n4 packed files; 2/2 required files present.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  codemods: './codemods'\n};\n"
+  },
+  {
+   "path": "app/codemods/1.0.0/rename-widget.mjs",
+   "status": "created",
+   "text": "export default {\n  type: 'code',\n  title: 'Rename Widget',\n  transform(file, api) {\n    // Replace this with your transform logic.\n    return file.source;\n  },\n};\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

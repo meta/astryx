@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector items={options} />",
+  "output": "<XDSSelector options={options} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector items={data.map(d => ({label: d.name, value: d.id}))} />",
+  "output": "<XDSSelector options={data.map(d => ({label: d.name, value: d.id}))} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector items={opts} onChange={handleChange} label=\"Pick one\" />",
+  "output": "<XDSSelector options={opts} onChange={handleChange} label=\"Pick one\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Select items={options} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenu items={menuItems} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector options={opts} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-selector-items-to-options",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSSelector items={a} />\n        <XDSSelector items={b} label=\"second\" />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSSelector options={a} />\n        <XDSSelector options={b} label=\"second\" />\n      </div>\n    ",
+  "error": null
+ }
+]

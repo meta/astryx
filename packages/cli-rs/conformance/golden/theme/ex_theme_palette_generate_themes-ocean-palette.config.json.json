@@ -1,0 +1,15 @@
+{
+ "id": "ex_theme_palette_generate_themes-ocean-palette.config.json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "themes/ocean/palette.config.json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: themes/ocean/palette.config.json\n",
+ "exit": 1,
+ "files": []
+}

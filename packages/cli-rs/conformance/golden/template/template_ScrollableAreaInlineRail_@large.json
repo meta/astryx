@@ -1,0 +1,19 @@
+{
+ "id": "template_ScrollableAreaInlineRail_@large",
+ "args": [
+  "template",
+  "ScrollableAreaInlineRail"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ScrollableArea} from '@astryxdesign/core/ScrollableArea';\nimport {Card} from '@astryxdesign/core/Card';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {Link} from '@astryxdesign/core/Link';\n\nconst FILES = [\n  {id: 'brief', title: 'Q3 launch brief', meta: 'Edited 2 days ago'},\n  {id: 'pricing', title: 'Pricing rework', meta: 'Edited 3 days ago'},\n  {id: 'onboarding', title: 'Onboarding flow v4', meta: 'Edited 4 days ago'},\n  {id: 'macros', title: 'Support macros', meta: 'Edited last week'},\n  {id: 'brand', title: 'Brand refresh', meta: 'Priya Raman'},\n  {id: 'checkout', title: 'Checkout audit', meta: 'Tomas Lindqvist'},\n  {id: 'partner', title: 'Partner deck', meta: 'Ines Okafor'},\n];\n\nexport default function ScrollableAreaInlineRail() {\n  return (\n    <Card width={460} padding={4}>\n      <VStack gap={3}>\n        <HStack hAlign=\"between\" vAlign=\"center\">\n          <VStack gap={0.5}>\n            <Heading level={3}>Workspace files</Heading>\n            <Text type=\"supporting\">Recently opened</Text>\n          </VStack>\n          <Link href=\"#files\">View all</Link>\n        </HStack>\n        {/* isFullBleed lets the rail reach the card's edges, while the content\n            padding keeps the first card aligned with the heading above it and\n            leaves room under the cards for the scrollbar. */}\n        <ScrollableArea\n          axis=\"inline\"\n          role=\"region\"\n          label=\"Recently opened files\"\n          isFullBleed\n          paddingInline={4}\n          paddingBlockStart={0.5}\n          paddingBlockEnd={4}>\n          <HStack gap={2}>\n            {FILES.map(file => (\n              <Card key={file.id} variant=\"muted\" padding={3} width={170}>\n                <VStack gap={1}>\n                  <Text weight=\"medium\" maxLines={1}>\n                    {file.title}\n                  </Text>\n                  <Text type=\"supporting\" maxLines={1}>\n                    {file.meta}\n                  </Text>\n                </VStack>\n              </Card>\n            ))}\n          </HStack>\n        </ScrollableArea>\n      </VStack>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

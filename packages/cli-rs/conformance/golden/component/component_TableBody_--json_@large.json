@@ -1,0 +1,14 @@
+{
+ "id": "component_TableBody_--json_@large",
+ "args": [
+  "component",
+  "TableBody",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"TableBody\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"Table Body\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"<tbody> wrapper for children mode. Holds the data rows. A row must sit inside a section: <table> cannot contain a <tr> directly, because the HTML parser inserts an implied <tbody> when it parses server-rendered markup and React does not when it renders on the client, so rows written straight into Table mismatch on hydration. The data-driven data={...} mode renders this element itself; in children mode it is yours to supply.\",\n    \"props\": [\n      {\n        \"name\": \"children\",\n        \"type\": \"ReactNode\",\n        \"description\": \"The <tbody> rows.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"xstyle\",\n        \"type\": \"StyleXStyles\",\n        \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value: not an inline style object like style={{}}.\"\n      }\n    ],\n    \"theming\": {\n      \"targets\": [\n        {\n          \"className\": \"astryx-table-body\"\n        }\n      ]\n    },\n    \"package\": \"@astryxdesign/core\",\n    \"import\": \"@astryxdesign/core/Table\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

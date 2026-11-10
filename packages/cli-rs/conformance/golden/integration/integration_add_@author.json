@@ -1,0 +1,13 @@
+{
+ "id": "integration_add_@author",
+ "args": [
+  "integration",
+  "add"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'kind'\n",
+ "exit": 1,
+ "files": []
+}

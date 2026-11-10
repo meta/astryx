@@ -1,0 +1,18 @@
+{
+ "id": "ex_experimental_icon_arrow_--set_outline_--limit_3",
+ "args": [
+  "experimental",
+  "icon",
+  "arrow",
+  "--set",
+  "outline",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"outline\"\n",
+ "exit": 1,
+ "files": []
+}

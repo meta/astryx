@@ -1,0 +1,20 @@
+{
+ "id": "template_work-item-detail_--skeleton_@large",
+ "args": [
+  "template",
+  "work-item-detail",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# work-item-detail - Single work-item detail in two columns: a title with a status selector, a description, a subtask checklist with progress, an attachments block, and a comment and activity feed in the main column, plus a property rail with assignee, dates, labels, and linked items. The shape for any tracked item with children, properties, and a comment history - a task, ticket, issue, story, bug, card, request, or work item.\n# Components: AspectRatio, Avatar, Badge, Card, CheckboxList, ClickableCard, Dialog, Divider, IconButton, Layout, List, MetadataList, MoreMenu, ProgressBar, Section, Selector, StatusDot, TextArea, Timestamp, Token, Tokenizer\n\n<Layout height=\"fill\" />\n/* header: */\n<PageHeader />\n/* content: */\n<LayoutContent padding={6} role=\"main\">\n  <VStack gap={6}>\n    <DescriptionSection />\n    <Divider />\n    <SubtasksSection />\n    <Divider />\n    <AttachmentsSection />\n    <Divider />\n    <ActivitySection />\n  </VStack>\n</LayoutContent>\n/* end: */\n<LayoutPanel padding={6} hasDivider role=\"complementary\" width={340}>\n  <DetailsPanel />\n</LayoutPanel>\n<Dialog variant=\"fullscreen\">\n  <Layout />\n  /* header: */\n  <DialogHeader />\n  /* content: */\n  <LayoutContent padding={4}>\n    <DetailsPanel />\n  </LayoutContent>\n</Dialog>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

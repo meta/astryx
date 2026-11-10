@@ -1,0 +1,116 @@
+[
+  {
+    "id": "oldcore_discover_chart_@core-0.7.11",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.7.11",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.7.11",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_chart_@core-0.7.5",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.7.5",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.7.5",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_chart_@core-0.6.8",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.6.8",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.6.8",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_chart_@core-0.5.4",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.5.4",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.5.4",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_chart_@core-0.4.7",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.4.7",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.4.7",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_chart_@core-0.3.0",
+    "args": [
+      "discover",
+      "chart"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  },
+  {
+    "id": "oldcore_discover_table_--json_@core-0.3.0",
+    "args": [
+      "discover",
+      "table",
+      "--json"
+    ],
+    "fixture": "core-0.3.0",
+    "gen": true
+  }
+]

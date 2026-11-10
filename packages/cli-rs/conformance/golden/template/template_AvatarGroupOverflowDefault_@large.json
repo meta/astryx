@@ -1,0 +1,19 @@
+{
+ "id": "template_AvatarGroupOverflowDefault_@large",
+ "args": [
+  "template",
+  "AvatarGroupOverflowDefault"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n'use client';\n\nimport {Avatar} from '@astryxdesign/core/Avatar';\nimport {AvatarGroup, AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst REVIEWERS = [\n  {\n    name: 'Alex Daniels',\n  },\n  {\n    name: 'Ann Smith',\n  },\n  {\n    name: 'Carol Davis',\n  },\n];\n\nexport default function AvatarGroupOverflowDefault() {\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Reviewers\n      </Text>\n      <AvatarGroup size=\"lg\">\n        {REVIEWERS.map(reviewer => (\n          <Avatar key={reviewer.name} name={reviewer.name} />\n        ))}\n        <AvatarGroupOverflow count={2} />\n      </AvatarGroup>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_remove_ocean",
+ "args": [
+  "theme",
+  "remove",
+  "ocean"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme \"ocean\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add ocean` first.\n",
+ "exit": 1,
+ "files": []
+}

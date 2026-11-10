@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_author_docs_twomanifests",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
+ "stdout": "Checking integration docs: @acme/two@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     multiple_manifests\nmessage:  Multiple root manifests present (astryx.integration.mjs, astryx.integration.js). Keep exactly one.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_Overlay_--dense_@large",
+ "args": [
+  "component",
+  "Overlay",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# Overlay\n\nOverlay layers compact actions or supporting content over media, cards, or bounded surfaces with optional dark/light scrim and hover/focus/controlled reveal. Host attributes and DOM handlers reach the root element.\n\n**Import:** `import {Overlay} from '@astryxdesign/core/Overlay';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Base content | No | The media, card, or bounded surface that the overlay sits on top of. |\n| Scrim | No | Optional dark or light overlay background that improves content contrast. |\n| Overlay content | Yes | Actions, labels, or supporting content rendered above the base surface. |\n\n## Best Practices\n\n- **Do:** Use for short contextual actions/labels tied to the underlying surface.\n- **Do:** Keep content compact and legible over the scrim.\n- **Don't:** Do not use for floating anchored surfaces; use Popover, Tooltip, or Dialog.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `content` | `ReactNode` | - | overlay content inside scrim; required **(required)** |\n| `children` | `ReactNode` | - | base media/card/surface beneath overlay |\n| `showOn` | `'hover' \\| 'always' \\| 'focus' \\| 'hover-or-focus'` | `'always'` | visibility trigger; hover also focus-visible; default always |\n| `isOpen` | `boolean` | - | controlled visibility override |\n| `scrim` | `'dark' \\| 'light' \\| false` | `'dark'` | dark/light scrim or false for no scrim; default dark |\n| `position` | `'fill' \\| 'bottom' \\| 'top'` | `'fill'` | scrim placement: fill, bottom strip, or top strip |\n| `align` | `'start' \\| 'center' \\| 'end'` | `'end'` | content alignment inside scrim |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles; must be stylex.create() value |\n| `className` | `string` | - | additional root class names |\n| `style` | `React.CSSProperties` | - | inline root styles; prefer xstyle |\n| `ref` | `Ref<HTMLDivElement>` | - | forwarded root div ref |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-overlay` | - | - | - |\n| `astryx-overlay-scrim` | `data-position` | position | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'overlay': {\n    base: { /* CSS properties */ },\n  },\n  'overlay-scrim': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

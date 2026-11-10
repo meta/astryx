@@ -1,0 +1,14 @@
+{
+ "id": "experimental_render_-h",
+ "args": [
+  "experimental",
+  "render",
+  "-h"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx experimental render [options] [file]\n\n[experimental] Render a page to one self-contained HTML file, or turn one back into a page\n\nOptions:\n  --out <file>    Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)\n  --reverse       Turn a rendered HTML file back into a page module\n  --title <text>  The page's title (default: its first top-level heading, else the file name)\n  --overwrite     With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)\n  -h, --help      display help for command\n\nExit codes:\n  0  the file was written (warnings included)\n  1  no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, or HTML that is not an Astryx page\n\nExamples:\n  # Render a page\n  npx @astryxdesign/cli@0.7.12 experimental render src/app/page.tsx --out page.html\n  # Give it back\n  npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html --out page.tsx\n  # As JSON\n  npx @astryxdesign/cli@0.7.12 --json experimental render page.tsx\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-render\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

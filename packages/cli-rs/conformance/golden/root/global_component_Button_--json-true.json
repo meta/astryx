@@ -1,0 +1,14 @@
+{
+ "id": "global_component_Button_--json-true",
+ "args": [
+  "component",
+  "Button",
+  "--json=true"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: unknown option '--json=true'\n",
+ "exit": 1,
+ "files": []
+}

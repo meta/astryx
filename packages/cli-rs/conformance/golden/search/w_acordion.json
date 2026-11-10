@@ -1,0 +1,19 @@
+{
+ "id": "w_acordion",
+ "args": [
+  "search",
+  "acordion"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"acordion\" (3)\n\nname:        Collapsible\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Collapsible\ndescription: Collapsible hides and reveals content behind a trigger button. Use it in settings panels, FAQ pages, or detail views to keep the page scannable while letting users drill into sections they care about. Wrap multiple collapsibles in CollapsibleGroup for accordion behavior. For custom collapsible components, use the `useCollapsible` hook directly (`astryx hook useCollapsible`).\ncommand:     npx @astryxdesign/cli@0.7.12 component Collapsible\n\nname:        TreeList\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TreeList\ndescription: An expandable tree structure for displaying hierarchical data with branch connector lines. Use it for file explorers, nested category browsers, or any interface that visualizes parent-child relationships. Under a finger, expanding a row glides the rows below it while its children fade in on the same timing, and a collapse plays it back; pass an `animatedLayout` handle for content after the tree to glide too.\ncommand:     npx @astryxdesign/cli@0.7.12 component TreeList\n\nname:        useCollapsible\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Collapsible\ndescription: Reusable hook that encapsulates the collapsible state machine. Supports three modes: group-controlled (inside CollapsibleGroup), controlled (isOpen + onOpenChange), and uncontrolled (self-managed with defaultIsOpen). Used internally by Card and Section.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useCollapsible\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover acordion\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

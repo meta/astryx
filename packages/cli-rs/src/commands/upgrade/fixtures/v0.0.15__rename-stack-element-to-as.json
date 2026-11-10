@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack element=\"nav\">Content</XDSStack>",
+  "output": "<XDSStack as=\"nav\">Content</XDSStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHStack element=\"section\">Content</XDSHStack>",
+  "output": "<XDSHStack as=\"section\">Content</XDSHStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSVStack element=\"main\">Content</XDSVStack>",
+  "output": "<XDSVStack as=\"main\">Content</XDSVStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStackItem element=\"li\">Content</XDSStackItem>",
+  "output": "<XDSStackItem as=\"li\">Content</XDSStackItem>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHStack element=\"nav\"><XDSStackItem element=\"li\">Item</XDSStackItem></XDSHStack>",
+  "output": "<XDSHStack as=\"nav\"><XDSStackItem as=\"li\">Item</XDSStackItem></XDSHStack>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton element=\"a\">Link</XDSButton>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.15/rename-stack-element-to-as",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStack as=\"nav\">Content</XDSStack>",
+  "output": null,
+  "error": null
+ }
+]

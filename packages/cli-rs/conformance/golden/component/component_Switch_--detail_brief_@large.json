@@ -1,0 +1,21 @@
+{
+ "id": "component_Switch_--detail_brief_@large",
+ "args": [
+  "component",
+  "Switch",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nSwitch(changeAction: (checked: boolean, e: ChangeEvent<HTMLInputElement>) => void|Promise<void>, size: sm|md, status: {type: warning|error|success, message?: string}, labelPosition: start|end, labelSpacing: hug|spread)  <- from '@astryxdesign/core/Switch'\n  A toggle control for on/off states that take effect immediately. Supports lab...\n  Targets: astryx-switch preferred attrs: data-size, data-checked, data-disabled variants: size states: checked, disabled | astryx-switch-thumb preferred attrs: data-size, data-checked variants: size states: checked | astryx-switch-field preferred attrs: data-label-position, data-label-spacing variants: labelPosition, labelSpacing | astryx-switch-label\n  value: boolean, label: string, ref, onChange, isLoading, isLabelHidden, description, isDisabled, htmlName, disabledMessage, isOptional, isRequired, onFocus, onBlur, labelIcon, labelTooltip, width\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

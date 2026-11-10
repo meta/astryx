@@ -1,0 +1,15 @@
+{
+ "id": "component_ChartLegend_--props_--json_@large",
+ "args": [
+  "component",
+  "ChartLegend",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/charts\",\n  \"data\": [\n    {\n      \"name\": \"items\",\n      \"type\": \"LegendItem[]\",\n      \"description\": \"Series entries to render. Each entry supplies a label, color, and optional mark type. An omitted or empty array renders nothing.\",\n      \"default\": \"[]\"\n    },\n    {\n      \"name\": \"position\",\n      \"type\": \"'top' | 'bottom' | 'start' | 'end'\",\n      \"description\": \"Logical placement used by Chart and the legend orientation: top and bottom are horizontal; start and end are vertical.\",\n      \"default\": \"'bottom'\"\n    },\n    {\n      \"name\": \"alignment\",\n      \"type\": \"'start' | 'center' | 'end'\",\n      \"description\": \"For top and bottom, distributes the row along its inline axis. For start and end, aligns each entry horizontally within the vertical list.\",\n      \"default\": \"'start'\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

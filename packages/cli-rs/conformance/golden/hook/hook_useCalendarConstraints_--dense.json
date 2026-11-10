@@ -1,0 +1,20 @@
+{
+ "id": "hook_useCalendarConstraints_--dense",
+ "args": [
+  "hook",
+  "useCalendarConstraints",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useCalendarConstraints\n\nProvides date constraint validation for calendar views and custom range pickers. It combines boundary dates, span limits measured from an in-progress range start, and custom rules (such as weekly closures or blackout dates) into an isDateDisabled predicate. Calendar uses it internally to disable day buttons; use it directly when building bespoke scheduling interfaces or range pickers.\n\n## Best Practices\n\n- **Do:** Pass rangeAnchor only after the user selects an initial range start, so all eligible start dates remain selectable before the first click.\n- **Do:** Use dateConstraints for recurring or dynamic rules, such as disabling closed weekdays, past holidays, or sold-out dates.\n- **Don't:** Perform slow network calls or heavy calculations inside dateConstraints predicates, because isDateDisabled is evaluated synchronously for each day rendered in the grid.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseCalendarConstraintsOptions` | - | Configuration for date bounds, range-span limits, and custom rules. **(required)** |\n| `options.min` | `ISODateString` | - | Earliest selectable date in ISO format (YYYY-MM-DD). Dates strictly before this are disabled. |\n| `options.max` | `ISODateString` | - | Latest selectable date in ISO format (YYYY-MM-DD). Dates strictly after this are disabled. |\n| `options.dateConstraints` | `ReadonlyArray<(date: Date) => boolean>` | - | Custom date constraint predicates. Receives a native Date; if any returns false, the date is disabled. |\n| `options.maxRangeSpan` | `number` | - | Maximum days a range may span, counting both endpoints (a value of 7 allows a 7-day window). Inactive until rangeAnchor is set. |\n| `options.minRangeSpan` | `number` | - | Minimum days a range must span, counting both endpoints. Disables dates that would make the range shorter than minRangeSpan days (except rangeAnchor itself, which remains enabled so pickers forbidding single-day selections must refuse a second click on the anchor). |\n| `options.rangeAnchor` | `PlainDate \\| null` | - | The in-progress range start date. Span constraints are measured from this date. Null when no selection is underway. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `isDateDisabled` | `(date: PlainDate) => boolean` | Predicate returning true when a PlainDate falls outside min/max bounds, is closer to rangeAnchor than minRangeSpan allows (except rangeAnchor itself), exceeds maxRangeSpan relative to rangeAnchor, or fails any dateConstraints predicate. |\n| `minDate` | `PlainDate \\| null` | Parsed minimum date as a PlainDate object, or null if min was not provided. |\n| `maxDate` | `PlainDate \\| null` | Parsed maximum date as a PlainDate object, or null if max was not provided. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Calendar\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

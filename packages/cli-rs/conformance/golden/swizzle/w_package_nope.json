@@ -1,0 +1,15 @@
+{
+ "id": "w_package_nope",
+ "args": [
+  "swizzle",
+  "Button",
+  "--package",
+  "nope-pkg"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Component \"Button\" is not provided by package \"nope-pkg\".\n\n  @astryxdesign/core  (provides this component)\n",
+ "exit": 1,
+ "files": []
+}

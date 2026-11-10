@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_pagination-dot_--json",
+ "args": [
+  "theme",
+  "targets",
+  "pagination-dot",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"pagination-dot\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"pagination-dot\",\n        \"className\": \"astryx-pagination-dot\",\n        \"component\": \"Pagination\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": [\n          \"active\"\n        ]\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

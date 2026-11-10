@@ -1,0 +1,21 @@
+{
+ "id": "build_form-validation_--type_template",
+ "args": [
+  "build",
+  "form validation",
+  "--type",
+  "template"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"form validation\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `checkout-wizard` by name, but the idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        contact-form\npackage:     @astryxdesign/core\ndescription: Flat single-column form mixing control types (text, pill toggles, dropdowns, long free-text) landing on one full-width submit.\ncommand:     npx @astryxdesign/cli@0.7.12 template contact-form --type page <path>\n\nname:        form-wizard\npackage:     @astryxdesign/core\ndescription: Linear multi-step form that moves through one panel at a time, with a horizontal progress track pinned above rather than running down a rail, so every step keeps the full content width for its fields.\ncommand:     npx @astryxdesign/cli@0.7.12 template form-wizard --type page <path>\n\nKeyword search matched these page templates: checkout-wizard (@astryxdesign/core), contact-form (@astryxdesign/core), form-two-column (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        TextInputStates\npackage:     @astryxdesign/core\ndescription: Error, warning, and success validation states with status...\n\nname:        DateInputWithValidation\npackage:     @astryxdesign/core\ndescription: Date input in all three status states: error, warning, and success.\n\nname:        FieldStatusVariants\npackage:     @astryxdesign/core\ndescription: All three validation states: error, warning, and success.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

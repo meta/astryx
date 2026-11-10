@@ -1,0 +1,20 @@
+{
+ "id": "hook_useInputContainer_--dense",
+ "args": [
+  "hook",
+  "useInputContainer",
+  "--dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useInputContainer\n\nMakes an input container wrapper clickable, delegating focus to the inner input/textarea when the user clicks non-interactive areas (icons, padding, status indicators). Built on top of useClickableContainer, so nested interactive elements (clear buttons, calendar toggles, links) are handled safely; clicking them does NOT steal focus from the input. Automatically detects input type: text-like inputs receive .focus(), while other types (checkbox, radio, file) receive .click().\n\n## Best Practices\n\n- **Do:** Use inside input wrapper components (TextInput, NumberInput, TimeInput, TextArea) to make the full container area clickable.\n- **Do:** Attach both onClick and onMouseUp to the wrapper div for full interaction handling.\n- **Don't:** Use on bare inputs without a wrapper; there is no benefit if the input already fills the full clickable area.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInputContainerOptions` | - | Configuration object for the input container. **(required)** |\n| `options.containerRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the outer container/wrapper element. **(required)** |\n| `options.inputRef` | `RefObject<HTMLInputElement \\| HTMLTextAreaElement \\| HTMLElement \\| null>` | - | Ref to the inner input or textarea element. **(required)** |\n| `options.disabled` | `boolean` | `false` | Whether the input is disabled. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `onClick` | `(event: MouseEvent<HTMLElement>) => void` | Click handler to attach to the container wrapper. |\n| `onMouseUp` | `(event: MouseEvent<HTMLElement>) => void` | Mouse up handler to attach to the container wrapper. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for TextInput, NumberInput, TimeInput, TextArea\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

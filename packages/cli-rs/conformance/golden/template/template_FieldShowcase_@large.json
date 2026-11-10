@@ -1,0 +1,19 @@
+{
+ "id": "template_FieldShowcase_@large",
+ "args": [
+  "template",
+  "FieldShowcase"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Field} from '@astryxdesign/core/Field';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function FieldShowcase() {\n  const [email, setEmail] = useState('');\n\n  const status =\n    email.length > 0 && !email.includes('@')\n      ? {type: 'error' as const, message: 'Enter a valid email address.'}\n      : undefined;\n\n  return (\n    <Stack direction=\"vertical\" gap={3} style={{width: 320}}>\n      <Field\n        label=\"Email\"\n        inputID=\"field-email\"\n        description=\"We will never share your email.\"\n        isRequired\n        status={status}>\n        <TextInput\n          label=\"Email\"\n          isLabelHidden\n          value={email}\n          onChange={setEmail}\n          placeholder=\"you@example.com\"\n        />\n      </Field>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

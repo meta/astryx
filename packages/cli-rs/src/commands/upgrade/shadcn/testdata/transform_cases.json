@@ -1,0 +1,413 @@
+[
+ {
+  "src": "'use client';\n\nimport type {ReactNode} from 'react';\nconst value: ReactNode = null;\nexport default function Example() { return value; }\n",
+  "out": "'use client';;\nconst value = null;\nexport default function Example() { return value; }\n"
+ },
+ {
+  "src": "export default function Example() { return <Component label='A long label' value='A long value' onChange={() => {}} />; }\n",
+  "out": "export default function Example() { return <Component label='A long label' value='A long value' onChange={() => {}} />; }\n"
+ },
+ {
+  "src": "export const value: string = 'old';\n",
+  "out": "export const value = 'old';\n"
+ },
+ {
+  "src": "const title: string = 'title';\nconst body: string = 'body';\nconst spacer: string = 'spacer';\nconst footer: string = 'footer';\nexport {title, body, spacer, footer};\n",
+  "out": "const title = 'title';\nconst body = 'body';\nconst spacer = 'spacer';\nconst footer = 'footer';\nexport {title, body, spacer, footer};\n"
+ },
+ {
+  "src": "export default function CompiledExample() { return 'old'; }\n",
+  "out": "export default function CompiledExample() { return 'old'; }\n"
+ },
+ {
+  "src": "'use client';\nimport {a} from 'x';\nconst v = 1;\n",
+  "out": "'use client';;\nconst v = 1;\nexport {};\n"
+ },
+ {
+  "src": "import {a} from 'x';\n\nconst v = 1;\n",
+  "out": "const v = 1;\nexport {};\n"
+ },
+ {
+  "src": "import {a, type B} from 'x';\nconst v: B = a;\n",
+  "out": "import { a } from 'x';\nconst v = a;\n"
+ },
+ {
+  "src": "import React from 'react';\nexport const X = () => <div/>;\n",
+  "out": "import React from 'react';\nexport const X = () => <div/>;\n"
+ },
+ {
+  "src": "import React from 'react';\nexport const X = () => 1;\n",
+  "out": "export const X = () => 1;\n"
+ },
+ {
+  "src": "import React, {useState} from 'react';\nexport const X = () => { const [a,b] = useState<number>(0); return a; };\n",
+  "out": "import { useState } from 'react';\nexport const X = () => { const [a,b] = useState(0); return a; };\n"
+ },
+ {
+  "src": "interface P { a: string }\n\nexport function F({a}: P) {\n  return a as string;\n}\n",
+  "out": "export function F({\n  a\n}) {\n  return a;\n}\n"
+ },
+ {
+  "src": "type T = string;\nexport const x = 1!;\nexport type {T};\n",
+  "out": "export const x = 1;\n"
+ },
+ {
+  "src": "const x = <T,>(a: T): T => a;\n",
+  "out": "const x = a => a;\n"
+ },
+ {
+  "src": "class A { private x: number; y = 2; constructor(public z: number) {} }\n",
+  "out": "class A {\n  y = 2;constructor(z) {\n    this.z = z;\n  }\n}\n"
+ },
+ {
+  "src": "// note\nimport type {X} from 'x';\nconst a = 1;\n",
+  "out": "const a = 1;\nexport {};\n"
+ },
+ {
+  "src": "const a = 1;\n// trailing note\ntype X = string;\nconst b = 2;\n",
+  "out": "const a = 1;\nconst b = 2;\n"
+ },
+ {
+  "src": "/** Props */\nexport interface Props {\n  a: string;\n}\n\n/** The thing */\nexport function Thing({a}: Props) {\n  return <div>{a}</div>;\n}\n",
+  "out": "/** The thing */\nexport function Thing(\n  {\n    a\n  }\n) {\n  return <div>{a}</div>;\n}\n"
+ },
+ {
+  "src": "export type Props = {a: string};\nexport default function Thing(props: Props): JSX.Element {\n  return <div {...props} />;\n}\n",
+  "out": "export default function Thing(props) {\n  return <div {...props} />;\n}\n"
+ },
+ {
+  "src": "import * as React from 'react';\nimport type {FC} from 'react';\nexport const C: FC = () => <React.Fragment />;\n",
+  "out": "import * as React from 'react';\nexport const C = () => <React.Fragment />;\n"
+ },
+ {
+  "src": "import {useState} from 'react';\nexport function C() {\n  const [v, setV] = useState<string | null>(null);\n  const ref = useRef<HTMLDivElement>(null);\n  return <input value={v ?? ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setV(e.target.value)} />;\n}\n",
+  "out": "import {useState} from 'react';\nexport function C() {\n  const [v, setV] = useState(null);\n  const ref = useRef(null);\n  return <input value={v ?? ''} onChange={(e) => setV(e.target.value)} />;\n}\n"
+ },
+ {
+  "src": "const items = [1, 2, 3] as const;\nconst m = new Map<string, number>();\nconst x = (window as any).foo;\nconst y = foo satisfies Bar;\nconst z = <Generic<string> prop={1} />;\n",
+  "out": "const items = [1, 2, 3];\nconst m = new Map();\nconst x = (window).foo;\nconst y = foo;\nconst z = <Generic prop={1} />;\n"
+ },
+ {
+  "src": "function f(this: Window, a?: number, ...rest: string[]): void {}\nconst o = { m(a: number): string { return ''; } };\n",
+  "out": "function f(a, ...rest) {}\nconst o = { m(a) { return ''; } };\n"
+ },
+ {
+  "src": "export default interface Foo { a: number }\nexport const x = 1;\n",
+  "out": "export const x = 1;\n"
+ },
+ {
+  "src": "declare const g: number;\ndeclare function h(): void;\nexport const x = g;\n",
+  "out": "export const x = g;\n"
+ },
+ {
+  "src": "function over(a: string): void;\nfunction over(a: number): void;\nfunction over(a: any) {}\nexport {over};\n",
+  "out": "function over(a) {}\nexport {over};\n"
+ },
+ {
+  "src": "import {type A, type B} from 'x';\nexport const x = 1;\n",
+  "out": "export const x = 1;\n"
+ },
+ {
+  "src": "import {A} from 'x';\nexport type {A};\nexport const y = 2;\n",
+  "out": "export const y = 2;\n"
+ },
+ {
+  "src": "import {A} from 'x';\nexport {A};\n",
+  "out": "import {A} from 'x';\nexport {A};\n"
+ },
+ {
+  "src": "import type {A} from 'x';\nexport {A};\nexport const z = 1;\n",
+  "out": "export const z = 1;\n"
+ },
+ {
+  "src": "import {A} from 'x';\nlet v: typeof A;\n",
+  "out": "let v;\nexport {};\n"
+ },
+ {
+  "src": "import {A} from 'x';\nclass K implements A {}\n",
+  "out": "class K {}\nexport {};\n"
+ },
+ {
+  "src": "import {A} from 'x';\nconst q: A.B = 1;\nexport {};\n",
+  "out": "const q = 1;\nexport {};\n"
+ },
+ {
+  "src": "import 'side-effect';\nconst a: number = 1;\n",
+  "out": "import 'side-effect';\nconst a = 1;\n"
+ },
+ {
+  "src": "import Def, * as NS from 'x';\nconst y: NS.T = Def;\n",
+  "out": "import Def from 'x';\nconst y = Def;\n"
+ },
+ {
+  "src": "export * from 'x';\nexport type * from 'y';\nimport {u} from 'z';\n",
+  "out": "export * from 'x';\nexport {};\n"
+ },
+ {
+  "src": "class B<T> extends A<T> implements I, J {\n  declare x: number;\n  readonly r = 1;\n  static s?: string;\n  #p: number;\n  abstract m(): void;\n  protected n(): void {}\n  [key: string]: any;\n  definite!: string;\n}\n",
+  "err": "Abstract methods can only appear within an abstract class. (6:2)"
+ },
+ {
+  "src": "abstract class C { abstract x: number; }\n",
+  "out": "class C {}\n"
+ },
+ {
+  "src": "enum E { A, B }\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  E[E[\"B\"] = 1] = \"B\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "namespace N { export const a = 1; }\n",
+  "out": "let N;\n\n(function(_N) {\n  const a = _N.a = 1;\n})(N || (N = {}));\n"
+ },
+ {
+  "src": "declare module 'x' { const a: number; }\nexport const b = 1;\n",
+  "out": "export const b = 1;\n"
+ },
+ {
+  "src": "declare global { interface Window { a: number } }\nexport {};\n",
+  "out": "export {};\n"
+ },
+ {
+  "src": "const fn = async <T,>(x: T): Promise<T> => { return x; };\nfn<number>(1);\nnew Foo<Bar>();\ntag<T>`x`;\n",
+  "out": "const fn = async x => { return x; };\nfn(1);\nnew Foo();\ntag`x`;\n"
+ },
+ {
+  "src": "let a!: number;\nlet b: number | undefined = undefined;\n",
+  "out": "let a;\nlet b = undefined;\n"
+ },
+ {
+  "src": "const {a, b}: {a: number; b: string} = obj;\nconst [c]: number[] = arr;\nfunction g({x}: {x: number} = {x: 1}) {}\n",
+  "out": "const {\n  a,\n  b\n} = obj;\nconst [c] = arr;\nfunction g({\n  x\n} = {x: 1}) {}\n"
+ },
+ {
+  "src": "try {} catch (e: unknown) {}\nfor (const k of keys as string[]) {}\n",
+  "out": "try {} catch (e) {}\nfor (const k of keys) {}\n"
+ },
+ {
+  "src": "export const C = forwardRef<HTMLDivElement, Props>(function C(props, ref) {\n  return <div ref={ref} {...props} />;\n});\n",
+  "out": "export const C = forwardRef(function C(props, ref) {\n  return <div ref={ref} {...props} />;\n});\n"
+ },
+ {
+  "src": "const x = y!.z!;\nconst w = (a as unknown as B).c;\nconst v = <T>x;\n",
+  "err": "Unterminated JSX contents. (3:13)"
+ },
+ {
+  "src": "/* @jsx h */\nimport {h} from 'preact';\nexport const X = () => <div/>;\n",
+  "out": "export const X = () => <div/>;\n"
+ },
+ {
+  "src": "import React from 'react';\nimport type {ReactNode} from 'react';\n\ntype Props = {\n  children?: ReactNode;\n};\n\nexport default function Box({children}: Props) {\n  return <div>{children}</div>;\n}\n",
+  "out": "import React from 'react';\n\nexport default function Box({\n  children\n}) {\n  return <div>{children}</div>;\n}\n"
+ },
+ {
+  "src": "export function useThing<T extends object>(value: T): [T, (v: T) => void] {\n  return [value, () => {}];\n}\n",
+  "out": "export function useThing(value) {\n  return [value, () => {}];\n}\n"
+ },
+ {
+  "src": "const styles = stylex.create({\n  root: {\n    color: 'red',\n  },\n});\n\nexport default function A(): React.ReactElement {\n  return <div {...stylex.props(styles.root)} />;\n}\n",
+  "out": "const styles = stylex.create({\n  root: {\n    color: 'red',\n  },\n});\n\nexport default function A() {\n  return <div {...stylex.props(styles.root)} />;\n}\n"
+ },
+ {
+  "src": "function a(x: number) { return x; }\n\n\nfunction b(): void {}\n",
+  "out": "function a(x) { return x; }\n\n\nfunction b() {}\n"
+ },
+ {
+  "src": "export {type A, B} from 'x';\nexport {type C} from 'y';\n",
+  "out": "export { B } from 'x';\n"
+ },
+ {
+  "src": "import {B} from 'b';\nexport {B as default};\n",
+  "out": "import {B} from 'b';\nexport {B as default};\n"
+ },
+ {
+  "src": "const a = 1;\nexport default a;\nimport type {T} from 't';\n",
+  "out": "const a = 1;\nexport default a;\n"
+ },
+ {
+  "src": "type T = 1;\nexport default T;\n",
+  "out": "export {};\n"
+ },
+ {
+  "src": "const x = foo(a,b) as any;\n",
+  "out": "const x = foo(a, b);\n"
+ },
+ {
+  "src": "const y = (foo(a,b)!);\nconst z = bar<T>(1,2);\n",
+  "out": "const y = (foo(a, b));\nconst z = bar(1, 2);\n"
+ },
+ {
+  "src": "// a\ntype A = 1;\n// b\ntype B = 2;\nconst c = {x:1};\n",
+  "out": "const c = {x:1};\n"
+ },
+ {
+  "src": "const a = {y:2};\ntype T = 1; // t\nconst b = {x:1};\n",
+  "out": "const a = {y:2};\nconst b = {x:1};\n"
+ },
+ {
+  "src": "import {a} from 'a'; // why\nimport {b} from 'b';\nexport {a, b};\n",
+  "out": "import {a} from 'a'; // why\nimport {b} from 'b';\nexport {a, b};\n"
+ },
+ {
+  "src": "/** doc */\nimport type {X} from 'x';\nexport function f({p}) { return p; }\n",
+  "out": "export function f({p}) { return p; }\n"
+ },
+ {
+  "src": "class A {\n  // note\n  x: number;\n  y = {a:1};\n}\n",
+  "out": "class A {\n  y = {a:1};\n}\n"
+ },
+ {
+  "src": "export function g({a}: {a: number}) {\n  return a;\n}\n",
+  "out": "export function g({\n  a\n}) {\n  return a;\n}\n"
+ },
+ {
+  "src": "const fn = (a: number, b: string) => a;\n",
+  "out": "const fn = (a, b) => a;\n"
+ },
+ {
+  "src": "const v = {a: (foo(1,2) as X), b: <div>{(c as any)}</div>};\n",
+  "out": "const v = {a: (foo(1, 2)), b: <div>{(c)}</div>};\n"
+ },
+ {
+  "src": "function h() {\n  return (x as Y);\n}\n",
+  "out": "function h() {\n  return x;\n}\n"
+ },
+ {
+  "src": "function k() {\n  // keep\n  return foo<T>(1,2);\n}\n",
+  "out": "function k() {\n  // keep\n  return foo(1, 2);\n}\n"
+ },
+ {
+  "src": "enum E { A, B = 2, C }\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  E[E[\"B\"] = 2] = \"B\";\n  E[E[\"C\"] = 3] = \"C\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "export enum Color { Red = 'red', Green = 'green' }\n",
+  "out": "export let Color = ((function(Color) {\n  Color[\"Red\"] = \"red\";\n  Color[\"Green\"] = \"green\";\n  return Color;\n})({}));\n"
+ },
+ {
+  "src": "const enum Size { Small, Large }\nexport const s = Size.Small;\n",
+  "out": "var Size = ((function(Size) {\n  Size[Size[\"Small\"] = 0] = \"Small\";\n  Size[Size[\"Large\"] = 1] = \"Large\";\n  return Size;\n})(Size || {}));\n\nexport const s = Size.Small;\n"
+ },
+ {
+  "src": "declare enum D { X }\nexport const y = 1;\n",
+  "out": "export const y = 1;\n"
+ },
+ {
+  "src": "enum Mixed { A = 1, B = A * 2, C = 'c'.length, D }\n",
+  "out": "var Mixed = ((function(Mixed) {\n  Mixed[Mixed[\"A\"] = 1] = \"A\";\n  Mixed[Mixed[\"B\"] = 2] = \"B\";\n  Mixed[Mixed[\"C\"] = 'c'.length] = \"C\";\n  Mixed[Mixed[\"D\"] = 1 + Mixed[\"C\"]] = \"D\";\n  return Mixed;\n})(Mixed || {}));\n"
+ },
+ {
+  "src": "export default function App() {\n  return <div>{Dir.Up}</div>;\n}\nenum Dir {\n  Up = 1,\n  Down,\n}\n",
+  "out": "export default function App() {\n  return <div>{Dir.Up}</div>;\n}\n\nvar Dir = ((function(Dir) {\n  Dir[Dir[\"Up\"] = 1] = \"Up\";\n  Dir[Dir[\"Down\"] = 2] = \"Down\";\n  return Dir;\n})(Dir || {}));\n"
+ },
+ {
+  "src": "namespace N {\n  export const x = 1;\n  const y = 2;\n  export function f() { return y; }\n}\n",
+  "out": "let N;\n\n(function(_N) {\n  const x = _N.x = 1;\n  const y = 2;\n  function f() { return y; }\n  _N.f = f;\n})(N || (N = {}));\n"
+ },
+ {
+  "src": "export namespace Outer {\n  export namespace Inner {\n    export const v = 'v';\n  }\n}\n",
+  "out": "export let Outer;\n\n(function(_Outer) {\n  let Inner;\n\n  (function(_Inner) {\n    const v = _Inner.v = 'v';\n  })(Inner || (Inner = (_Outer.Inner || (_Outer.Inner = {}))));\n})(Outer || (Outer = {}));\n"
+ },
+ {
+  "src": "declare namespace Ambient { const z: number; }\nexport const q = 2;\n",
+  "out": "export const q = 2;\n"
+ },
+ {
+  "src": "namespace Types { export type T = string; export interface I { a: T } }\nexport const t = 1;\n",
+  "out": "export const t = 1;\n"
+ },
+ {
+  "src": "enum E { A }\nenum E { B = 1 }\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  return E;\n})(E || {}));\n\nE = ((function(E) {\n  E[E[\"B\"] = 1] = \"B\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "enum Str { A = `a`, B = 'b' + 'c' }\n",
+  "out": "var Str = ((function(Str) {\n  Str[\"A\"] = \"a\";\n  Str[\"B\"] = \"bc\";\n  return Str;\n})(Str || {}));\n"
+ },
+ {
+  "src": "enum E {\n  // first\n  A, /* b */ B,\n  C = 5, // five\n}\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  E[E[\"B\"] = 1] = \"B\";\n  E[E[\"C\"] = 5] = \"C\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "enum N { A = -1, B, C = 1.5, D = Infinity, E = -Infinity, F = NaN, G = 1 << 3, H = ~0, I = 7 % 4, J = 2 ** 3, K = 10 / 4 }\n",
+  "out": "var N = ((function(N) {\n  N[N[\"A\"] = -1] = \"A\";\n  N[N[\"B\"] = 0] = \"B\";\n  N[N[\"C\"] = 1.5] = \"C\";\n  N[N[\"D\"] = Infinity] = \"D\";\n  N[N[\"E\"] = -Infinity] = \"E\";\n  N[N[\"F\"] = NaN] = \"F\";\n  N[N[\"G\"] = 8] = \"G\";\n  N[N[\"H\"] = -1] = \"H\";\n  N[N[\"I\"] = 3] = \"I\";\n  N[N[\"J\"] = 8] = \"J\";\n  N[N[\"K\"] = 2.5] = \"K\";\n  return N;\n})(N || {}));\n"
+ },
+ {
+  "src": "enum S { A = 'a', B = `${A}-b`, C = A + 'c' }\n",
+  "out": "var S = ((function(S) {\n  S[\"A\"] = \"a\";\n  S[\"B\"] = \"a-b\";\n  S[\"C\"] = \"ac\";\n  return S;\n})(S || {}));\n"
+ },
+ {
+  "src": "enum O { X = 1 }\nenum P { Y = O.X + 1, Z = O['X'] }\n",
+  "out": "var O = ((function(O) {\n  O[O[\"X\"] = 1] = \"X\";\n  return O;\n})(O || {}));\n\nvar P = ((function(P) {\n  P[P[\"Y\"] = 2] = \"Y\";\n  P[P[\"Z\"] = O['X']] = \"Z\";\n  return P;\n})(P || {}));\n"
+ },
+ {
+  "src": "const BASE = 10;\nenum Q { A = BASE, B }\n",
+  "out": "const BASE = 10;\n\nvar Q = ((function(Q) {\n  Q[Q[\"A\"] = 10] = \"A\";\n  Q[Q[\"B\"] = 11] = \"B\";\n  return Q;\n})(Q || {}));\n"
+ },
+ {
+  "src": "declare function f(x: number): number;\nenum R { A = 1, B = f(A), C }\n",
+  "out": "var R = ((function(R) {\n  R[R[\"A\"] = 1] = \"A\";\n  R[R[\"B\"] = f(R.A)] = \"B\";\n  R[R[\"C\"] = 1 + R[\"B\"]] = \"C\";\n  return R;\n})(R || {}));\n"
+ },
+ {
+  "src": "enum T { 'a-b' = 1, 'c d', }\n",
+  "out": "var T = ((function(T) {\n  T[T[\"a-b\"] = 1] = \"a-b\";\n  T[T[\"c d\"] = 2] = \"c d\";\n  return T;\n})(T || {}));\n"
+ },
+ {
+  "src": "enum Empty {}\n",
+  "out": "var Empty = ((function(Empty) {\n  return Empty;\n})(Empty || {}));\n"
+ },
+ {
+  "src": "function g() {\n  enum Local { A, B }\n  return Local.B;\n}\n",
+  "out": "function g() {\n  let Local = ((function(Local) {\n    Local[Local[\"A\"] = 0] = \"A\";\n    Local[Local[\"B\"] = 1] = \"B\";\n    return Local;\n  })({}));\n\n  return Local.B;\n}\n"
+ },
+ {
+  "src": "export const enum CE { A = 'a' }\n",
+  "out": "export let CE = ((function(CE) {\n  CE[\"A\"] = \"a\";\n  return CE;\n})({}));\n"
+ },
+ {
+  "src": "namespace M { export enum Inner { A, B } }\n",
+  "out": "let M;\n\n(function(_M) {\n  let Inner = ((function(Inner) {\n    Inner[Inner[\"A\"] = 0] = \"A\";\n    Inner[Inner[\"B\"] = 1] = \"B\";\n    return Inner;\n  })({}));\n\n  _M.Inner = Inner;\n})(M || (M = {}));\n"
+ },
+ {
+  "src": "namespace M { export class K {} }\nnamespace M { export const z = 1; }\n",
+  "out": "let M;\n\n(function(_M) {\n  class K {}\n  _M.K = K;\n})(M || (M = {}));\n\n(function(_M2) {\n  const z = _M2.z = 1;\n})(M || (M = {}));\n"
+ },
+ {
+  "src": "function H() {}\nnamespace H { export const prop = 1; }\n",
+  "out": "function H() {}\n\n(function(_H) {\n  const prop = _H.prop = 1;\n})(H || (H = {}));\n"
+ },
+ {
+  "src": "const _N = 0;\nnamespace N { export const a = _N; }\n",
+  "out": "const _N = 0;\nlet N;\n\n(function(_N2) {\n  const a = _N2.a = _N;\n})(N || (N = {}));\n"
+ },
+ {
+  "src": "namespace A.B.C { export const deep = 1; }\n",
+  "out": "let A;\n\n(function(_A) {\n  let B;\n\n  (function(_B) {\n    let C;\n\n    (function(_C) {\n      const deep = _C.deep = 1;\n    })(C || (C = (_B.C || (_B.C = {}))));\n  })(B || (B = (_A.B || (_A.B = {}))));\n})(A || (A = {}));\n"
+ },
+ {
+  "src": "namespace D { export const {a, b: [c]} = obj; }\n",
+  "out": "let D;\n\n(function(_D) {\n  const {a, b: [c]} = obj;\n  _D.a = a, _D.c = c;\n})(D || (D = {}));\n"
+ },
+ {
+  "src": "namespace L { export let bad = 1; }\n"
+ },
+ {
+  "src": "namespace Ty { export type X = 1; declare const y: number; }\nexport const u = 1;\n",
+  "out": "let Ty;\n(function(_Ty) {})(Ty || (Ty = {}));\nexport const u = 1;\n"
+ },
+ {
+  "src": "namespace EmptyNs {}\nexport const w = 1;\n",
+  "out": "export const w = 1;\n"
+ },
+ {
+  "src": "export namespace Ex { export function f() {} export namespace Sub { export const s = 1 } }\n",
+  "out": "export let Ex;\n\n(function(_Ex) {\n  function f() {}\n  _Ex.f = f;\n  let Sub;\n\n  (function(_Sub) {\n    const s = _Sub.s = 1;\n  })(Sub || (Sub = (_Ex.Sub || (_Ex.Sub = {}))));\n})(Ex || (Ex = {}));\n"
+ },
+ {
+  "src": "namespace V {\n  // leading comment\n  export const x = 1; // trailing\n}\n",
+  "out": "let V;\n\n(function(_V) {\n  const x = _V.x = 1;\n})(V || (V = {}));\n"
+ },
+ {
+  "src": "export enum Tone {\n  Neutral,\n  Accent = 4,\n  Strong,\n}\n\nconst enum Size { Small = 'sm', Large = 'lg' }\n\nexport namespace Layout {\n  export const gap = 8;\n  export function pad(n: number): number { return n * gap; }\n  export namespace Grid {\n    export const columns = 12;\n  }\n}\n\nexport default function Example() {\n  return <div data-size={Size.Small}>{Tone.Accent + Layout.pad(1) + Layout.Grid.columns}</div>;\n}\n",
+  "out": "export let Tone = ((function(Tone) {\n  Tone[Tone[\"Neutral\"] = 0] = \"Neutral\";\n  Tone[Tone[\"Accent\"] = 4] = \"Accent\";\n  Tone[Tone[\"Strong\"] = 5] = \"Strong\";\n  return Tone;\n})({}));\n\nvar Size = ((function(Size) {\n  Size[\"Small\"] = \"sm\";\n  Size[\"Large\"] = \"lg\";\n  return Size;\n})(Size || {}));\n\nexport let Layout;\n\n(function(_Layout) {\n  const gap = _Layout.gap = 8;\n  function pad(n) { return n * gap; }\n  _Layout.pad = pad;\n  let Grid;\n\n  (function(_Grid) {\n    const columns = _Grid.columns = 12;\n  })(Grid || (Grid = (_Layout.Grid || (_Layout.Grid = {}))));\n})(Layout || (Layout = {}));\n\nexport default function Example() {\n  return <div data-size={Size.Small}>{Tone.Accent + Layout.pad(1) + Layout.Grid.columns}</div>;\n}\n"
+ }
+]

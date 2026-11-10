@@ -1,0 +1,20 @@
+{
+ "id": "docs_is-my-code-good_choose-the-review_@large",
+ "args": [
+  "docs",
+  "is-my-code-good",
+  "choose-the-review"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Choose the review\n\nReview one exact revision and one named product surface, route, or component in its app context. Pick the smallest review that can answer your question.\n\nReview                     | Use it for                                                                          | What it can prove                                                                                                                                                                                                     \n-------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\nSource check               | A fast check for raw elements, direct icons, custom styles, and unsupported imports | Source findings plus app context visible in the project. It cannot call the rendered product good.                                                                                                                    \nFull product review        | Calling a surface done                                                              | App fit and task completion plus source quality, rendered layout, states, assets, project checks, and accessibility evidence.                                                                                         \nTemplate publication grade | An integration template that people copy                                            | The shared criteria plus versioned scoring, metadata, packaging, copy, and clean-app checks in `npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/templates/write-good-templates/grade-template-with-agent`.\n\nIf all you have is one source file, run the source check anyway and use any project context that is available. Report clear source blockers; list missing app purpose, route, sibling patterns, shell, theme and density, installed components and versions, real states and roles, locale and mobile needs, revision, runnable app, rendered states, and project checks; and do not call the full product good.\n\n`npx @astryxdesign/cli@0.7.12` in this guide means the project's installed CLI invocation, such as its local binary or existing package script. If the project has no installed invocation, report that evidence gap instead of downloading a different CLI version for the review.\n\nA screenshot can prove a visible result, but it cannot prove which imports, components, or styles produced it. Source alone cannot prove responsive behavior, interaction, color modes, or whether an asset loads. Mark anything outside the supplied evidence as `not inspected`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs is-my-code-good --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs is-my-code-good understand-the-app\nNext: npx @astryxdesign/cli@0.7.12 docs is-my-code-good apply-the-rubric\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

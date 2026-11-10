@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_author_components_absolute",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/abs@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     root_outside_package\nmessage:  The components root \"/tmp/elsewhere\" is an absolute path, so Astryx reads nothing from it: a root is relative to the package, so it resolves the same wherever the package is installed. It also points outside the package. Fix: move the files into the package and set `components` to their folder relative to package.json, such as './components'.\n\nseverity: [fail]\ncode:     root_outside_package\nmessage:  The contribution root \"../outside\" resolves outside the integration package directory. Contribution roots must stay within the package.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

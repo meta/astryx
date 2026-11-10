@@ -1,0 +1,16 @@
+{
+ "id": "theme_use_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "use",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Theme \"extra1\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add extra1` first.\n",
+ "exit": 1,
+ "files": []
+}

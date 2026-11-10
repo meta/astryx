@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_use",
+ "args": [
+  "experimental",
+  "icon",
+  "use"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'set'\n",
+ "exit": 1,
+ "files": []
+}

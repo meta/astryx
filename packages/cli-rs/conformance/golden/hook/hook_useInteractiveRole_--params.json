@@ -1,0 +1,20 @@
+{
+ "id": "hook_useInteractiveRole_--params",
+ "args": [
+  "hook",
+  "useInteractiveRole",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInteractiveRoleOptions` | - | The interactivity inputs the component received. **(required)** |\n| `options.href` | `string` | - | URL for navigation. Highest priority: with an href the component is a link. |\n| `options.onClick` | `((...args: never[]) => unknown) \\| null` | - | Click handler. Resolves to a button, ahead of any context-provided role. |\n| `options.isDisabled` | `boolean` | `false` | When true, href is ignored for role resolution (a disabled link is an anti-pattern), so the role comes from onClick, then context, then inert. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

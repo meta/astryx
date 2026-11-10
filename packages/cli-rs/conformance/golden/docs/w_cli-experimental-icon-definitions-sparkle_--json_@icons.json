@@ -1,0 +1,14 @@
+{
+ "id": "w_cli-experimental-icon-definitions-sparkle_--json_@icons",
+ "args": [
+  "docs",
+  "cli/experimental/icon-definitions/sparkle",
+  "--json"
+ ],
+ "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.node\",\n  \"package\": \"@acme/glyphs\",\n  \"data\": {\n    \"id\": \"astryx:artifact:v1/%40acme%2Fglyphs/icon-definition/sparkle\",\n    \"route\": \"cli/experimental/icon-definitions/sparkle\",\n    \"kind\": \"icon-definition\",\n    \"package\": \"@acme/glyphs\",\n    \"title\": \"sparkle\",\n    \"summary\": \"The sparkle icon. (from @acme/glyphs, icon set \\\"glyphs\\\")\",\n    \"stability\": \"experimental\",\n    \"breadcrumb\": [\n      {\n        \"route\": \"cli\",\n        \"title\": \"Astryx CLI\"\n      },\n      {\n        \"route\": \"cli/experimental\",\n        \"title\": \"Experimental features\"\n      },\n      {\n        \"route\": \"cli/experimental/icon-definitions\",\n        \"title\": \"Icon definitions\"\n      }\n    ],\n    \"slots\": [],\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"The sparkle icon.\"\n      },\n      {\n        \"type\": \"table\",\n        \"headers\": [\n          \"Field\",\n          \"Value\"\n        ],\n        \"rows\": [\n          [\n            \"Words\",\n            \"`magic`, `new`\"\n          ]\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"An icon set registers the icon that draws this definition in its data file: `\\\"map\\\": {\\\"sparkle\\\": \\\"<icon id>\\\"}`. Find it in each installed set: `astryx experimental icon sparkle`.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Icon definitions are experimental: they may change or be removed in a patch release.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs cli/experimental/icon-definitions\",\n      \"previous\": \"astryx docs cli/experimental/icon-definitions/shopping-bag\",\n      \"next\": \"astryx docs cli/experimental/icon-definitions/sparkles\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "docs_icons_custom-icons_--json_@large",
+ "args": [
+  "docs",
+  "icons",
+  "custom-icons",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Custom Icons\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"For icons not in the semantic list, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import { PhotoIcon } from '@heroicons/react/24/outline';\\nimport { HeartIcon } from 'lucide-react';\\n\\n<Icon icon={PhotoIcon} size=\\\"lg\\\" />\\n<Icon icon={HeartIcon} color=\\\"error\\\" />\",\n        \"label\": \"Using custom SVG components\"\n      }\n    ],\n    \"id\": \"custom-icons\",\n    \"links\": {\n      \"up\": \"astryx docs icons --index\",\n      \"previous\": \"astryx docs icons available-names\",\n      \"next\": \"astryx docs icons theme-overrides\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

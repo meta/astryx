@@ -1,0 +1,20 @@
+{
+ "id": "hook_useOverflow_--zh",
+ "args": [
+  "hook",
+  "useOverflow",
+  "--zh"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useOverflow\n\nMeasures children rendered in a hidden container to determine how many fit in the available width without flickering. Uses ResizeObserver to react to container and measured-child size changes. The measurement container should hold all items plus an optional overflow indicator element (identified by a data-overflow-indicator attribute).\n\n## Best Practices\n\n- **Do:** Render all items into the measureRef container (hidden) and only the first visibleCount items into the containerRef container (visible).\n- **Do:** Include an overflow indicator (e.g., \"+N more\" button) as the last child of the measurement container with a data-overflow-indicator attribute.\n- **Don't:** Use for vertical overflow; this hook measures horizontal width only.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `itemCount` | `number` | - | Total number of items to measure for overflow. **(required)** |\n| `options` | `UseOverflowOptions` | - | Configuration object for overflow behavior. |\n| `options.gap` | `number` | `0` | Gap between items in pixels. Used in width calculations. |\n| `options.minVisibleItems` | `number` | `0` | Minimum number of items to always show, even if they don't fit. |\n| `options.collapseFrom` | `'start' \\| 'end'` | `'end'` | which end to collapse items from. |\n| `options.behavior` | `'observeParent' \\| 'observeSelf'` | `'observeSelf'` | Which element to observe for overflow calculations. 'observeParent' uses the container's parent element width, allowing the visible container to remain content-sized. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `containerRef` | `React.RefCallback<HTMLElement>` | Ref callback to attach to the visible container element. |\n| `measureRef` | `React.RefCallback<HTMLElement>` | Ref callback to attach to the hidden measurement container that holds all items. |\n| `visibleCount` | `number` | Number of items that fit in the visible container. |\n| `hasOverflow` | `boolean` | Whether any items are overflowing (visibleCount < itemCount). |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for OverflowList, Breadcrumb\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "id": "docs_working-with-ai_the-dense-flag_--json_@large",
+ "args": [
+  "docs",
+  "working-with-ai",
+  "the-dense-flag",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"the-dense-flag\",\n    \"title\": \"Shorter output: --detail and --dense\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"For a shorter read, add `--detail brief` (one line per section) or `--detail compact`. `--dense` swaps in a shorter text where a doc ships one. Use them when pasting CLI output into a web-based AI tool like ChatGPT or Claude.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx docs styling --full --detail brief\\nastryx component Dialog --detail compact\\nastryx docs principles --dense\",\n        \"label\": \"Short output for pasting into AI conversations\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs working-with-ai --index\",\n      \"previous\": \"astryx docs working-with-ai the-astryx-pattern\",\n      \"next\": \"astryx docs working-with-ai mcp-server\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

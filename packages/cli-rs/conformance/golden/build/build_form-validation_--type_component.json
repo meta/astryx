@@ -1,0 +1,21 @@
+{
+ "id": "build_form-validation_--type_component",
+ "args": [
+  "build",
+  "form validation",
+  "--type",
+  "component"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"form validation\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        TextInput\npackage:     @astryxdesign/core\ndescription: TextInput collects short-form text like names, emails, or search queries.\n\nname:        Field\npackage:     @astryxdesign/core\ndescription: Field is a low-level wrapper for custom, native, or third-party controls that do not already provide field label, description, and status UI.\n\nname:        BottomSheet\npackage:     @astryxdesign/core\ndescription: A mobile touch surface for filters, actions, forms, and detail views that should rise from the bottom of the viewport.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

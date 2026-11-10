@@ -1,0 +1,21 @@
+{
+ "id": "tb_family_check_missing",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "fam/themes/ocean.mjs",
+  "fam/themes/.hidden/ocean-calm.mjs",
+  "fam/themes/.hidden/ocean-calm-deep.mjs",
+  "fam/themes/ocean-midnight.mjs",
+  "--family-key",
+  "ocean-family",
+  "--check"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm-deep.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n",
+ "stderr": "\n[fail] 3 theme family output(s) are out of date:\n  missing: fam/themes/ocean-family.css\n  missing: fam/themes/ocean-family.js\n  missing: fam/themes/ocean-family.d.ts\n\n  Rebuild with: npx @astryxdesign/cli@0.7.12 theme build --family fam/themes/ocean.mjs fam/themes/.hidden/ocean-calm.mjs fam/themes/.hidden/ocean-calm-deep.mjs fam/themes/ocean-midnight.mjs --family-key ocean-family\n",
+ "exit": 1,
+ "files": []
+}

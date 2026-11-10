@@ -1,0 +1,14 @@
+{
+ "id": "in-large.src_theme_targets_button_@large",
+ "args": [
+  "theme",
+  "targets",
+  "button"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "Theming targets\n1 across 1 component\n(key - component - props - states - className)\n\nbutton  Button - size, variant, elevation - astryx-button\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "theme_targets_progress-bar",
+ "args": [
+  "theme",
+  "targets",
+  "progress-bar"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Theming targets\n4 across 1 component\n(key - component - props - states - className)\n\nprogress-bar        ProgressBar - variant - astryx-progress-bar\nprogress-bar-fill   ProgressBar - variant - astryx-progress-bar-fill\nprogress-bar-mark   ProgressBar - variant, placement - astryx-progress-bar-mark\nprogress-bar-track  ProgressBar - astryx-progress-bar-track\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

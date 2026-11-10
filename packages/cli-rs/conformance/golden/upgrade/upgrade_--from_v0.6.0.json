@@ -1,0 +1,14 @@
+{
+ "id": "upgrade_--from_v0.6.0",
+ "args": [
+  "upgrade",
+  "--from",
+  "v0.6.0"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Invalid --from value: \"v0.6.0\". Expected a semver string like 0.0.5.\n",
+ "exit": 1,
+ "files": []
+}

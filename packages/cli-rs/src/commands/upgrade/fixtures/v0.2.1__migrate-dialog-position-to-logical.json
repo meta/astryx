@@ -1,0 +1,90 @@
+[
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog isOpen position={{left: 20, right: 40, top: 10}}>x</Dialog>;",
+  "output": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog isOpen position={{start: 20, end: 40, top: 10}}>x</Dialog>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{left: 5, top: 0}}>x</Dialog>;",
+  "output": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{start: 5, top: 0}}>x</Dialog>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog as Modal} from '@astryxdesign/core';\nconst d = <Modal position={{right: 8}}>x</Modal>;",
+  "output": "import {Dialog as Modal} from '@astryxdesign/core';\nconst d = <Modal position={{end: 8}}>x</Modal>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core/Dialog';\nconst d = <Dialog position={{left: 1, right: 2}}>x</Dialog>;",
+  "output": "import {Dialog} from '@astryxdesign/core/Dialog';\nconst d = <Dialog position={{start: 1, end: 2}}>x</Dialog>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@xds/core';\nconst d = <Dialog position={{left: 3}}>x</Dialog>;",
+  "output": "import {Dialog} from '@xds/core';\nconst d = <Dialog position={{start: 3}}>x</Dialog>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{left: '5vw', right: '10%'}}>x</Dialog>;",
+  "output": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{start: '5vw', end: '10%'}}>x</Dialog>;",
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{start: 20, end: 40}}>x</Dialog>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <Dialog position={{left: 20, start: 5}}>x</Dialog>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst pos = {left: 20};\nconst d = <Dialog position={pos}>x</Dialog>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Dialog} from '@astryxdesign/core';\nconst d = <SomeOther position={{left: 20, right: 40}} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.2.1/migrate-dialog-position-to-logical",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nconst b = <Button label=\"x\" />;",
+  "output": null,
+  "error": null
+ }
+]

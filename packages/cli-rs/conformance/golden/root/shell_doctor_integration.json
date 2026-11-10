@@ -1,0 +1,19 @@
+{
+ "id": "shell_doctor_integration",
+ "args": [
+  "doctor",
+  "integration"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx doctor integration [options] [command]\n\nCheck an integration package while authoring it\n\nOptions:\n  -h, --help            display help for command\n\nCommands:\n  validate [package]    Validate an integration manifest and its contributions\n  templates [package]   Validate integration template replacements and Core id overlaps\n  components [package]  Check integration component names, replacements, and documented props\n  docs [package]        Check an integration's docs: the docs tree they add, every link, and overlaps with Core topics\n\nExit codes:\n  0  help is shown or the selected check has no errors\n  1  the selected check reports an error\n\nExamples:\n  # Validate a local integration\n  npx @astryxdesign/cli@0.7.12 doctor integration validate\n  # Check template ids against Core\n  npx @astryxdesign/cli@0.7.12 doctor integration templates\n  # Check component names against Core\n  npx @astryxdesign/cli@0.7.12 doctor integration components\n  # Classify doc overlaps with Core\n  npx @astryxdesign/cli@0.7.12 doctor integration docs\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor-integration\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

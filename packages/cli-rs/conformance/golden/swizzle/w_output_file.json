@@ -1,0 +1,15 @@
+{
+ "id": "w_output_file",
+ "args": [
+  "swizzle",
+  "DateInput",
+  "--output",
+  "src/App.tsx"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: ENOTDIR: not a directory, unlink '/tmp/astryx-conformance/work/app/src/App.tsx/DateInput'\n",
+ "exit": 1,
+ "files": []
+}

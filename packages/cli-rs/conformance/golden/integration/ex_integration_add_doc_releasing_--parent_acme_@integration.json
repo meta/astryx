@@ -1,0 +1,43 @@
+{
+ "id": "ex_integration_add_doc_releasing_--parent_acme_@integration",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "releasing",
+  "--parent",
+  "acme"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "doc contribution added\n\n[ok] releasing\n\nDeclare doc root ./docs in astryx.integration.mjs.\n\n- docs/releasing.doc.mjs\n- docs/acme.doc.mjs\n- package.json\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "integration/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "integration/docs/acme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: 'acme',\n  title: 'Acme',\n  summary: 'Guides for Acme.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n"
+  },
+  {
+   "path": "integration/docs/releasing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'releasing',\n  title: 'Releasing',\n  description: 'Releasing documentation.',\n  placement: {parent: 'namespace:acme', slot: 'guides'},\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Releasing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  },
+  {
+   "path": "integration/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"golden-consumer\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"dependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"@stylexjs/stylex\": \"^0.19.0\",\n    \"@acme/kit\": \"^1.0.0\"\n  },\n  \"peerDependencies\": {\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  }
+ ]
+}

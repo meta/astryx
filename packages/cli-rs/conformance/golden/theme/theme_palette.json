@@ -1,0 +1,13 @@
+{
+ "id": "theme_palette",
+ "args": [
+  "theme",
+  "palette"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Usage: astryx theme palette [options] [command]\n\nCreate and work with theme-owned color palettes\n\nOptions:\n  -h, --help                   display help for command\n\nCommands:\n  generate [options] <config>  Generate an OKLCH palette candidate for human review\n\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand is provided\n\nExamples:\n  # Generate a candidate\n  npx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-palette\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

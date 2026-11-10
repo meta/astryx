@@ -1,0 +1,16 @@
+{
+ "id": "w_component_LegacyThing_--package_@comp-legacy_--json_@compkit",
+ "args": [
+  "component",
+  "LegacyThing",
+  "--package",
+  "@comp/legacy",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@comp/legacy\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"LegacyThing\",\n    \"usage\": {\n      \"description\": \"A component documented the old way.\"\n    },\n    \"props\": [\n      {\n        \"name\": \"size\",\n        \"type\": \"'sm' | 'lg'\",\n        \"description\": \"Size.\"\n      }\n    ],\n    \"package\": \"@comp/legacy\",\n    \"import\": \"@comp/legacy\",\n    \"sourceAvailable\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,21 @@
+{
+ "id": "search_typography_--limit_3",
+ "args": [
+  "search",
+  "typography",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"typography\" (3 of 28)\n\nname:        typography\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Typography\ndescription: Font families, geometric type scale, weight, line-height, and semantic text tokens for consistent, accessible text styling.\ncommand:     npx @astryxdesign/cli@0.7.12 docs typography\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nname:        Text\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Text\ndescription: Text renders styled body text and headings from the theme. Use Text with a semantic type for body copy, labels, and captions, and Heading for section titles that output the correct h1-h6 element.\ncommand:     npx @astryxdesign/cli@0.7.12 component Text\n\nname:        authoring/building-blocks/themes/fonts-and-assets\nsection:     name-the-font\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Themes › Fonts and assets › Name the font\ndescription: A theme names its typefaces in `typography`: `body`, `heading`, and `code`, each with a `family` and `fallbacks`. These set the `--font-family-*` tokens every component reads. Always give real `fallbacks` so text stays readable before the...\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/themes/fonts-and-assets name-the-font\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/themes/fonts-and-assets --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover typography\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

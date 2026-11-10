@@ -1,0 +1,6183 @@
+[
+  {
+    "id": "build_--help",
+    "args": [
+      "build",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build",
+    "args": [
+      "build"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--json",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_-h",
+    "args": [
+      "build",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_build",
+    "args": [
+      "help",
+      "build"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--bogus-flag",
+    "args": [
+      "build",
+      "--bogus-flag"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--bogus-flag_--json",
+    "args": [
+      "build",
+      "--bogus-flag",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_extra1_extra2_extra3",
+    "args": [
+      "build",
+      "extra1",
+      "extra2",
+      "extra3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_extra1_extra2_extra3_--json",
+    "args": [
+      "build",
+      "extra1",
+      "extra2",
+      "extra3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_@empty",
+    "args": [
+      "build"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@empty",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "build_@nocore",
+    "args": [
+      "build"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@nocore",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "build_@brokencore",
+    "args": [
+      "build"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@brokencore",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "build_@plain",
+    "args": [
+      "build"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@plain",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "build_@large",
+    "args": [
+      "build"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@large",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_@integration",
+    "args": [
+      "build"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "build_--json_@integration",
+    "args": [
+      "build",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_build_analytics-dashboard_--json",
+    "args": [
+      "build",
+      "analytics dashboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_build_analytics-dashboard_--json_@empty",
+    "args": [
+      "build",
+      "analytics dashboard",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_build_analytics-dashboard_--json_@integration",
+    "args": [
+      "build",
+      "analytics dashboard",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_build_analytics-dashboard_--json_@large",
+    "args": [
+      "build",
+      "analytics dashboard",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_--type_component",
+    "args": [
+      "build",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_component_--json",
+    "args": [
+      "build",
+      "--type",
+      "component",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-component",
+    "args": [
+      "build",
+      "--type=component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_hook",
+    "args": [
+      "build",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_hook_--json",
+    "args": [
+      "build",
+      "--type",
+      "hook",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-hook",
+    "args": [
+      "build",
+      "--type=hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_doc",
+    "args": [
+      "build",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_doc_--json",
+    "args": [
+      "build",
+      "--type",
+      "doc",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-doc",
+    "args": [
+      "build",
+      "--type=doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_template",
+    "args": [
+      "build",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_template_--json",
+    "args": [
+      "build",
+      "--type",
+      "template",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-template",
+    "args": [
+      "build",
+      "--type=template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_theme",
+    "args": [
+      "build",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_theme_--json",
+    "args": [
+      "build",
+      "--type",
+      "theme",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-theme",
+    "args": [
+      "build",
+      "--type=theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_bogus",
+    "args": [
+      "build",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_bogus_--json",
+    "args": [
+      "build",
+      "--type",
+      "bogus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type-bogus",
+    "args": [
+      "build",
+      "--type=bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type",
+    "args": [
+      "build",
+      "--type"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_--json",
+    "args": [
+      "build",
+      "--type",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_component",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--type_component_--help",
+    "args": [
+      "build",
+      "--type",
+      "component",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_3",
+    "args": [
+      "build",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_3_--json",
+    "args": [
+      "build",
+      "--limit",
+      "3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit-3",
+    "args": [
+      "build",
+      "--limit=3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_0",
+    "args": [
+      "build",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_0_--json",
+    "args": [
+      "build",
+      "--limit",
+      "0",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit-0",
+    "args": [
+      "build",
+      "--limit=0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_-1",
+    "args": [
+      "build",
+      "--limit",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_-1_--json",
+    "args": [
+      "build",
+      "--limit",
+      "-1",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit--1",
+    "args": [
+      "build",
+      "--limit=-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_abc",
+    "args": [
+      "build",
+      "--limit",
+      "abc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_abc_--json",
+    "args": [
+      "build",
+      "--limit",
+      "abc",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit-abc",
+    "args": [
+      "build",
+      "--limit=abc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_1.5",
+    "args": [
+      "build",
+      "--limit",
+      "1.5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_1.5_--json",
+    "args": [
+      "build",
+      "--limit",
+      "1.5",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit-1.5",
+    "args": [
+      "build",
+      "--limit=1.5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit",
+    "args": [
+      "build",
+      "--limit"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_--json",
+    "args": [
+      "build",
+      "--limit",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--limit_3",
+    "args": [
+      "build",
+      "table",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--limit_3_--help",
+    "args": [
+      "build",
+      "--limit",
+      "3",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--verbose",
+    "args": [
+      "build",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--verbose_--json",
+    "args": [
+      "build",
+      "--verbose",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--verbose",
+    "args": [
+      "build",
+      "table",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_--verbose_--help",
+    "args": [
+      "build",
+      "--verbose",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--json_--json",
+    "args": [
+      "build",
+      "--json",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--help_--json",
+    "args": [
+      "build",
+      "--help",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--json_--help",
+    "args": [
+      "build",
+      "--json",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-h_--bogus",
+    "args": [
+      "build",
+      "-h",
+      "--bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--bogus_-h",
+    "args": [
+      "build",
+      "--bogus",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-V",
+    "args": [
+      "build",
+      "-V"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--version",
+    "args": [
+      "build",
+      "--version"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--JSON",
+    "args": [
+      "build",
+      "--JSON"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--jso",
+    "args": [
+      "build",
+      "--jso"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--no-json",
+    "args": [
+      "build",
+      "--no-json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--json-1",
+    "args": [
+      "build",
+      "--json=1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-x",
+    "args": [
+      "build",
+      "-x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-hV",
+    "args": [
+      "build",
+      "-hV"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--_--json",
+    "args": [
+      "build",
+      "--",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_--_-h",
+    "args": [
+      "build",
+      "--",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_x",
+    "args": [
+      "build",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-",
+    "args": [
+      "build",
+      "ü中文"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_-5",
+    "args": [
+      "build",
+      "-5"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_---x",
+    "args": [
+      "build",
+      "--=x"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv_build_---json",
+    "args": [
+      "build",
+      "---json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_build_--type_component_table",
+    "args": [
+      "build",
+      "--type",
+      "component",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_build_--type_component_--type_component",
+    "args": [
+      "build",
+      "--type",
+      "component",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_build_--type_component_--type_hook",
+    "args": [
+      "build",
+      "--type",
+      "component",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_build_--type_x",
+    "args": [
+      "build",
+      "--type",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_build_--type-",
+    "args": [
+      "build",
+      "--type="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negval_build_--type_-1",
+    "args": [
+      "build",
+      "--type",
+      "-1"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_build_--limit_3_table",
+    "args": [
+      "build",
+      "--limit",
+      "3",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_build_--limit_3_--limit_3",
+    "args": [
+      "build",
+      "--limit",
+      "3",
+      "--limit",
+      "3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat2_build_--limit_3_--limit_0",
+    "args": [
+      "build",
+      "--limit",
+      "3",
+      "--limit",
+      "0"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyval_build_--limit_x",
+    "args": [
+      "build",
+      "--limit",
+      ""
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-emptyeq_build_--limit-",
+    "args": [
+      "build",
+      "--limit="
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-before_build_--verbose_table",
+    "args": [
+      "build",
+      "--verbose",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-repeat_build_--verbose_--verbose",
+    "args": [
+      "build",
+      "--verbose",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-booleq_build_--verbose-yes",
+    "args": [
+      "build",
+      "--verbose=yes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "argv-negate_build_--no-verbose",
+    "args": [
+      "build",
+      "--no-verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_nosuchsub",
+    "args": [
+      "build",
+      "nosuchsub"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button",
+    "args": [
+      "build",
+      "button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--json",
+    "args": [
+      "build",
+      "button",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table",
+    "args": [
+      "build",
+      "table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--json",
+    "args": [
+      "build",
+      "table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table",
+    "args": [
+      "build",
+      "data table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--json",
+    "args": [
+      "build",
+      "data table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--json",
+    "args": [
+      "build",
+      "dashboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation",
+    "args": [
+      "build",
+      "form validation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--json",
+    "args": [
+      "build",
+      "form validation",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker",
+    "args": [
+      "build",
+      "date picker"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--json",
+    "args": [
+      "build",
+      "date picker",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode",
+    "args": [
+      "build",
+      "dark mode"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--json",
+    "args": [
+      "build",
+      "dark mode",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens",
+    "args": [
+      "build",
+      "color tokens"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--json",
+    "args": [
+      "build",
+      "color tokens",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing",
+    "args": [
+      "build",
+      "spacing"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--json",
+    "args": [
+      "build",
+      "spacing",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog",
+    "args": [
+      "build",
+      "modal dialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--json",
+    "args": [
+      "build",
+      "modal dialog",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar",
+    "args": [
+      "build",
+      "navigation sidebar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--json",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page",
+    "args": [
+      "build",
+      "login page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page",
+    "args": [
+      "build",
+      "settings page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--json",
+    "args": [
+      "build",
+      "settings page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart",
+    "args": [
+      "build",
+      "chart"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--json",
+    "args": [
+      "build",
+      "chart",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon",
+    "args": [
+      "build",
+      "icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--json",
+    "args": [
+      "build",
+      "icon",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme",
+    "args": [
+      "build",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--json",
+    "args": [
+      "build",
+      "theme",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography",
+    "args": [
+      "build",
+      "typography"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--json",
+    "args": [
+      "build",
+      "typography",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast",
+    "args": [
+      "build",
+      "toast"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--json",
+    "args": [
+      "build",
+      "toast",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton",
+    "args": [
+      "build",
+      "buton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--json",
+    "args": [
+      "build",
+      "buton",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel",
+    "args": [
+      "build",
+      "tabel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--json",
+    "args": [
+      "build",
+      "tabel",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashbord",
+    "args": [
+      "build",
+      "dashbord"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashbord_--json",
+    "args": [
+      "build",
+      "dashbord",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_zorblax",
+    "args": [
+      "build",
+      "zorblax"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_zorblax_--json",
+    "args": [
+      "build",
+      "zorblax",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_xyzzy",
+    "args": [
+      "build",
+      "xyzzy"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_xyzzy_--json",
+    "args": [
+      "build",
+      "xyzzy",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ai-chat",
+    "args": [
+      "build",
+      "ai chat"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ai-chat_--json",
+    "args": [
+      "build",
+      "ai chat",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_file-upload",
+    "args": [
+      "build",
+      "file upload"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_file-upload_--json",
+    "args": [
+      "build",
+      "file upload",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_avatar-group",
+    "args": [
+      "build",
+      "avatar group"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_avatar-group_--json",
+    "args": [
+      "build",
+      "avatar group",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_empty-state",
+    "args": [
+      "build",
+      "empty state"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_empty-state_--json",
+    "args": [
+      "build",
+      "empty state",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tooltip",
+    "args": [
+      "build",
+      "tooltip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tooltip_--json",
+    "args": [
+      "build",
+      "tooltip",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_accessibility",
+    "args": [
+      "build",
+      "accessibility"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_accessibility_--json",
+    "args": [
+      "build",
+      "accessibility",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_keyboard-shortcuts",
+    "args": [
+      "build",
+      "keyboard shortcuts"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_keyboard-shortcuts_--json",
+    "args": [
+      "build",
+      "keyboard shortcuts",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_useClipboard",
+    "args": [
+      "build",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_useClipboard_--json",
+    "args": [
+      "build",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Card",
+    "args": [
+      "build",
+      "Card"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Card_--json",
+    "args": [
+      "build",
+      "Card",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_how-do-I-make-a-landing-page",
+    "args": [
+      "build",
+      "how do I make a landing page"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_how-do-I-make-a-landing-page_--json",
+    "args": [
+      "build",
+      "how do I make a landing page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_pricing-table",
+    "args": [
+      "build",
+      "pricing table"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_pricing-table_--json",
+    "args": [
+      "build",
+      "pricing table",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_kanban-board",
+    "args": [
+      "build",
+      "kanban board"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_kanban-board_--json",
+    "args": [
+      "build",
+      "kanban board",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_calendar",
+    "args": [
+      "build",
+      "calendar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_calendar_--json",
+    "args": [
+      "build",
+      "calendar",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_search-input",
+    "args": [
+      "build",
+      "search input"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_search-input_--json",
+    "args": [
+      "build",
+      "search input",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_responsive-layout",
+    "args": [
+      "build",
+      "responsive layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_responsive-layout_--json",
+    "args": [
+      "build",
+      "responsive layout",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_grid",
+    "args": [
+      "build",
+      "grid"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_grid_--json",
+    "args": [
+      "build",
+      "grid",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_stylex",
+    "args": [
+      "build",
+      "stylex"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_stylex_--json",
+    "args": [
+      "build",
+      "stylex",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tailwind",
+    "args": [
+      "build",
+      "tailwind"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tailwind_--json",
+    "args": [
+      "build",
+      "tailwind",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_a",
+    "args": [
+      "build",
+      "a"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_a_--json",
+    "args": [
+      "build",
+      "a",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_-",
+    "args": [
+      "build",
+      "中文"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_-_--json",
+    "args": [
+      "build",
+      "中文",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button-",
+    "args": [
+      "build",
+      "button   "
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button-_--json",
+    "args": [
+      "build",
+      "button   ",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_@large",
+    "args": [
+      "build",
+      "button"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_button_--verbose",
+    "args": [
+      "build",
+      "button",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_@large",
+    "args": [
+      "build",
+      "table"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_@large",
+    "args": [
+      "build",
+      "data table"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--verbose",
+    "args": [
+      "build",
+      "data table",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@large",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--verbose",
+    "args": [
+      "build",
+      "dashboard",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_@large",
+    "args": [
+      "build",
+      "form validation"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--verbose",
+    "args": [
+      "build",
+      "form validation",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_@large",
+    "args": [
+      "build",
+      "date picker"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--verbose",
+    "args": [
+      "build",
+      "date picker",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_@large",
+    "args": [
+      "build",
+      "dark mode"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--verbose",
+    "args": [
+      "build",
+      "dark mode",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_@large",
+    "args": [
+      "build",
+      "color tokens"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--verbose",
+    "args": [
+      "build",
+      "color tokens",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_@large",
+    "args": [
+      "build",
+      "spacing"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--verbose",
+    "args": [
+      "build",
+      "spacing",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_@large",
+    "args": [
+      "build",
+      "modal dialog"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--verbose",
+    "args": [
+      "build",
+      "modal dialog",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_@large",
+    "args": [
+      "build",
+      "navigation sidebar"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--verbose",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_@large",
+    "args": [
+      "build",
+      "login page"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--verbose",
+    "args": [
+      "build",
+      "login page",
+      "--verbose"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell",
+    "args": [
+      "build",
+      "AppShell"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio",
+    "args": [
+      "build",
+      "AspectRatio"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar",
+    "args": [
+      "build",
+      "Avatar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarGroup",
+    "args": [
+      "build",
+      "AvatarGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarGroupOverflow",
+    "args": [
+      "build",
+      "AvatarGroupOverflow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarStatusDot",
+    "args": [
+      "build",
+      "AvatarStatusDot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Badge",
+    "args": [
+      "build",
+      "Badge"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner",
+    "args": [
+      "build",
+      "Banner"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Blockquote",
+    "args": [
+      "build",
+      "Blockquote"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BottomSheet",
+    "args": [
+      "build",
+      "BottomSheet"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BottomSheetSwitcher",
+    "args": [
+      "build",
+      "BottomSheetSwitcher"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BreadcrumbItem",
+    "args": [
+      "build",
+      "BreadcrumbItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs",
+    "args": [
+      "build",
+      "Breadcrumbs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button",
+    "args": [
+      "build",
+      "Button"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ButtonGroup",
+    "args": [
+      "build",
+      "ButtonGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_IconButton",
+    "args": [
+      "build",
+      "IconButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ToggleButton",
+    "args": [
+      "build",
+      "ToggleButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ToggleButtonGroup",
+    "args": [
+      "build",
+      "ToggleButtonGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Calendar",
+    "args": [
+      "build",
+      "Calendar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ClickableCard",
+    "args": [
+      "build",
+      "ClickableCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SelectableCard",
+    "args": [
+      "build",
+      "SelectableCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Carousel",
+    "args": [
+      "build",
+      "Carousel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatComposer",
+    "args": [
+      "build",
+      "ChatComposer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatComposerDrawer",
+    "args": [
+      "build",
+      "ChatComposerDrawer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatComposerInput",
+    "args": [
+      "build",
+      "ChatComposerInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatDictationButton",
+    "args": [
+      "build",
+      "ChatDictationButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatLayout",
+    "args": [
+      "build",
+      "ChatLayout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatLayoutScrollButton",
+    "args": [
+      "build",
+      "ChatLayoutScrollButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatMessage",
+    "args": [
+      "build",
+      "ChatMessage"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatMessageBubble",
+    "args": [
+      "build",
+      "ChatMessageBubble"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatMessageList",
+    "args": [
+      "build",
+      "ChatMessageList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatMessageMetadata",
+    "args": [
+      "build",
+      "ChatMessageMetadata"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatSendButton",
+    "args": [
+      "build",
+      "ChatSendButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatSystemMessage",
+    "args": [
+      "build",
+      "ChatSystemMessage"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatTokenizedText",
+    "args": [
+      "build",
+      "ChatTokenizedText"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ChatToolCalls",
+    "args": [
+      "build",
+      "ChatToolCalls"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CheckboxInput",
+    "args": [
+      "build",
+      "CheckboxInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CheckboxList",
+    "args": [
+      "build",
+      "CheckboxList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CheckboxListItem",
+    "args": [
+      "build",
+      "CheckboxListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Citation",
+    "args": [
+      "build",
+      "Citation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Code",
+    "args": [
+      "build",
+      "Code"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CodeBlock",
+    "args": [
+      "build",
+      "CodeBlock"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Collapsible",
+    "args": [
+      "build",
+      "Collapsible"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CollapsibleGroup",
+    "args": [
+      "build",
+      "CollapsibleGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPalette",
+    "args": [
+      "build",
+      "CommandPalette"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteEmpty",
+    "args": [
+      "build",
+      "CommandPaletteEmpty"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteFooter",
+    "args": [
+      "build",
+      "CommandPaletteFooter"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteGroup",
+    "args": [
+      "build",
+      "CommandPaletteGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteInput",
+    "args": [
+      "build",
+      "CommandPaletteInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteItem",
+    "args": [
+      "build",
+      "CommandPaletteItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_CommandPaletteList",
+    "args": [
+      "build",
+      "CommandPaletteList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ContextMenu",
+    "args": [
+      "build",
+      "ContextMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DateInput",
+    "args": [
+      "build",
+      "DateInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DateRangeInput",
+    "args": [
+      "build",
+      "DateRangeInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DateTimeInput",
+    "args": [
+      "build",
+      "DateTimeInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AlertDialog",
+    "args": [
+      "build",
+      "AlertDialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Dialog",
+    "args": [
+      "build",
+      "Dialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DialogHeader",
+    "args": [
+      "build",
+      "DialogHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Divider",
+    "args": [
+      "build",
+      "Divider"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Drawer",
+    "args": [
+      "build",
+      "Drawer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DrawerHeader",
+    "args": [
+      "build",
+      "DrawerHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenu",
+    "args": [
+      "build",
+      "DropdownMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuCheckboxItem",
+    "args": [
+      "build",
+      "DropdownMenuCheckboxItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuDivider",
+    "args": [
+      "build",
+      "DropdownMenuDivider"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuGroup",
+    "args": [
+      "build",
+      "DropdownMenuGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuItem",
+    "args": [
+      "build",
+      "DropdownMenuItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuRadioGroup",
+    "args": [
+      "build",
+      "DropdownMenuRadioGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuRadioItem",
+    "args": [
+      "build",
+      "DropdownMenuRadioItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_DropdownMenuSubMenu",
+    "args": [
+      "build",
+      "DropdownMenuSubMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_EmptyState",
+    "args": [
+      "build",
+      "EmptyState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Field",
+    "args": [
+      "build",
+      "Field"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_FieldLabel",
+    "args": [
+      "build",
+      "FieldLabel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_FieldStatus",
+    "args": [
+      "build",
+      "FieldStatus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_InputGroup",
+    "args": [
+      "build",
+      "InputGroup"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_InputGroupText",
+    "args": [
+      "build",
+      "InputGroupText"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_FileInput",
+    "args": [
+      "build",
+      "FileInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Heading",
+    "args": [
+      "build",
+      "Heading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_HoverCard",
+    "args": [
+      "build",
+      "HoverCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Icon",
+    "args": [
+      "build",
+      "Icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_InfoTip",
+    "args": [
+      "build",
+      "InfoTip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Item",
+    "args": [
+      "build",
+      "Item"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Kbd",
+    "args": [
+      "build",
+      "Kbd"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Center",
+    "args": [
+      "build",
+      "Center"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_FormLayout",
+    "args": [
+      "build",
+      "FormLayout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Grid",
+    "args": [
+      "build",
+      "Grid"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_GridSpan",
+    "args": [
+      "build",
+      "GridSpan"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_HStack",
+    "args": [
+      "build",
+      "HStack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Layout",
+    "args": [
+      "build",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_LayoutContent",
+    "args": [
+      "build",
+      "LayoutContent"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_LayoutFooter",
+    "args": [
+      "build",
+      "LayoutFooter"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_LayoutHeader",
+    "args": [
+      "build",
+      "LayoutHeader"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_LayoutPanel",
+    "args": [
+      "build",
+      "LayoutPanel"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Section",
+    "args": [
+      "build",
+      "Section"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Stack",
+    "args": [
+      "build",
+      "Stack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_VStack",
+    "args": [
+      "build",
+      "VStack"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Lightbox",
+    "args": [
+      "build",
+      "Lightbox"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Link",
+    "args": [
+      "build",
+      "Link"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_List",
+    "args": [
+      "build",
+      "List"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ListItem",
+    "args": [
+      "build",
+      "ListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Markdown",
+    "args": [
+      "build",
+      "Markdown"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_MetadataList",
+    "args": [
+      "build",
+      "MetadataList"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_MetadataListItem",
+    "args": [
+      "build",
+      "MetadataListItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_MoreMenu",
+    "args": [
+      "build",
+      "MoreMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_MobileNav",
+    "args": [
+      "build",
+      "MobileNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_NavIcon",
+    "args": [
+      "build",
+      "NavIcon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SideNav",
+    "args": [
+      "build",
+      "SideNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SideNavCollapseButton",
+    "args": [
+      "build",
+      "SideNavCollapseButton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SideNavHeading",
+    "args": [
+      "build",
+      "SideNavHeading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SideNavItem",
+    "args": [
+      "build",
+      "SideNavItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_SideNavSection",
+    "args": [
+      "build",
+      "SideNavSection"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNav",
+    "args": [
+      "build",
+      "TopNav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavHeading",
+    "args": [
+      "build",
+      "TopNavHeading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavItem",
+    "args": [
+      "build",
+      "TopNavItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavMegaMenu",
+    "args": [
+      "build",
+      "TopNavMegaMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavMegaMenuFeaturedCard",
+    "args": [
+      "build",
+      "TopNavMegaMenuFeaturedCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavMegaMenuItem",
+    "args": [
+      "build",
+      "TopNavMegaMenuItem"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_TopNavMenu",
+    "args": [
+      "build",
+      "TopNavMenu"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_NumberInput",
+    "args": [
+      "build",
+      "NumberInput"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Outline",
+    "args": [
+      "build",
+      "Outline"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AI-Chat-Conversation",
+    "args": [
+      "build",
+      "AI Chat Conversation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AI-Chat-Landing",
+    "args": [
+      "build",
+      "AI Chat Landing"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AlertDialog-Delete",
+    "args": [
+      "build",
+      "AlertDialog — Delete"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AlertDialog-Loading",
+    "args": [
+      "build",
+      "AlertDialog — Loading"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Analytics-Dashboard",
+    "args": [
+      "build",
+      "Analytics Dashboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell-Content-Only",
+    "args": [
+      "build",
+      "AppShell — Content Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell-Side-Nav-Only",
+    "args": [
+      "build",
+      "AppShell — Side Nav Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell-Top-Nav-Only",
+    "args": [
+      "build",
+      "AppShell — Top Nav Only"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell-Top-Nav-with-Side-Nav",
+    "args": [
+      "build",
+      "AppShell — Top Nav with Side Nav"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AppShell-With-Banner",
+    "args": [
+      "build",
+      "AppShell — With Banner"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio-16-9-Widescreen-Image",
+    "args": [
+      "build",
+      "AspectRatio — 16:9 Widescreen Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio-Circle-Image",
+    "args": [
+      "build",
+      "AspectRatio — Circle Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio-Image-Gallery",
+    "args": [
+      "build",
+      "AspectRatio — Image Gallery"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio-Loading-Skeleton",
+    "args": [
+      "build",
+      "AspectRatio — Loading Skeleton"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AspectRatio-Square-Image",
+    "args": [
+      "build",
+      "AspectRatio — Square Image"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Fallback-Chain",
+    "args": [
+      "build",
+      "Avatar — Fallback Chain"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Group",
+    "args": [
+      "build",
+      "Avatar — Group"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Initials",
+    "args": [
+      "build",
+      "Avatar — Initials"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Interactive",
+    "args": [
+      "build",
+      "Avatar — Interactive"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Photo",
+    "args": [
+      "build",
+      "Avatar — Photo"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Status-Dot",
+    "args": [
+      "build",
+      "Avatar — Status Dot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-Tooltip",
+    "args": [
+      "build",
+      "Avatar — Tooltip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-User-Card",
+    "args": [
+      "build",
+      "Avatar — User Card"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Avatar-first-annotations",
+    "args": [
+      "build",
+      "Avatar-first annotations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarGroup-Interactive",
+    "args": [
+      "build",
+      "AvatarGroup — Interactive"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarGroupOverflow-Custom-Text",
+    "args": [
+      "build",
+      "AvatarGroupOverflow — Custom Text"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarGroupOverflow-Default-Count",
+    "args": [
+      "build",
+      "AvatarGroupOverflow — Default Count"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_AvatarStatusDot-Variants",
+    "args": [
+      "build",
+      "AvatarStatusDot — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Badge-Colors",
+    "args": [
+      "build",
+      "Badge — Colors"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Badge-Counts",
+    "args": [
+      "build",
+      "Badge — Counts"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Badge-Status",
+    "args": [
+      "build",
+      "Badge — Status"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Badge-Variants",
+    "args": [
+      "build",
+      "Badge — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Action",
+    "args": [
+      "build",
+      "Banner — Action"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Collapsible",
+    "args": [
+      "build",
+      "Banner — Collapsible"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Dismiss",
+    "args": [
+      "build",
+      "Banner — Dismiss"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Floating",
+    "args": [
+      "build",
+      "Banner — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Full-Width",
+    "args": [
+      "build",
+      "Banner — Full Width"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Banner-Statuses",
+    "args": [
+      "build",
+      "Banner — Statuses"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BaseTypeahead",
+    "args": [
+      "build",
+      "BaseTypeahead"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BaseTypeahead-Custom-Search-Bar",
+    "args": [
+      "build",
+      "BaseTypeahead — Custom Search Bar"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Basic",
+    "args": [
+      "build",
+      "Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Basic-Login",
+    "args": [
+      "build",
+      "Basic Login"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Blank",
+    "args": [
+      "build",
+      "Blank"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Blockquote-Showcase",
+    "args": [
+      "build",
+      "Blockquote — Showcase"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Blockquote-Testimonials",
+    "args": [
+      "build",
+      "Blockquote — Testimonials"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Blockquote-With-Attribution",
+    "args": [
+      "build",
+      "Blockquote — With Attribution"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet",
+    "args": [
+      "build",
+      "Bottom Sheet"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-Height-variants",
+    "args": [
+      "build",
+      "Bottom Sheet — Height variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-Mobile-keyboard",
+    "args": [
+      "build",
+      "Bottom Sheet — Mobile keyboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-Multi-step-flow",
+    "args": [
+      "build",
+      "Bottom Sheet — Multi-step flow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-No-scrim",
+    "args": [
+      "build",
+      "Bottom Sheet — No scrim"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-Review-flow",
+    "args": [
+      "build",
+      "Bottom Sheet — Review flow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Bottom-Sheet-Snap-points",
+    "args": [
+      "build",
+      "Bottom Sheet — Snap points"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_BreadcrumbItem-Basic",
+    "args": [
+      "build",
+      "BreadcrumbItem — Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs-Deep-Path",
+    "args": [
+      "build",
+      "Breadcrumbs — Deep Path"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs-Icons",
+    "args": [
+      "build",
+      "Breadcrumbs — Icons"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs-Menu-item",
+    "args": [
+      "build",
+      "Breadcrumbs — Menu item"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs-Separators",
+    "args": [
+      "build",
+      "Breadcrumbs — Separators"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Breadcrumbs-Variants",
+    "args": [
+      "build",
+      "Breadcrumbs — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Budget-allocation",
+    "args": [
+      "build",
+      "Budget allocation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button-End-Slot",
+    "args": [
+      "build",
+      "Button — End Slot"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button-Floating",
+    "args": [
+      "build",
+      "Button — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button-Icon",
+    "args": [
+      "build",
+      "Button — Icon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button-Sizes",
+    "args": [
+      "build",
+      "Button — Sizes"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Button-Variants",
+    "args": [
+      "build",
+      "Button — Variants"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ButtonGroup-Basic",
+    "args": [
+      "build",
+      "ButtonGroup — Basic"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_ButtonGroup-Floating",
+    "args": [
+      "build",
+      "ButtonGroup — Floating"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_Calendar-Constraints",
+    "args": [
+      "build",
+      "Calendar — Constraints"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_author-a-theme",
+    "args": [
+      "build",
+      "author-a-theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_browser-support",
+    "args": [
+      "build",
+      "browser-support"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color",
+    "args": [
+      "build",
+      "color"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_elevation",
+    "args": [
+      "build",
+      "elevation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_getting-started",
+    "args": [
+      "build",
+      "getting-started"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icons",
+    "args": [
+      "build",
+      "icons"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_illustrations",
+    "args": [
+      "build",
+      "illustrations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_is-my-code-good",
+    "args": [
+      "build",
+      "is-my-code-good"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_motion",
+    "args": [
+      "build",
+      "motion"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_principles",
+    "args": [
+      "build",
+      "principles"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_shape",
+    "args": [
+      "build",
+      "shape"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_styling-overview",
+    "args": [
+      "build",
+      "styling-overview"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_use-a-theme",
+    "args": [
+      "build",
+      "use-a-theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_use-integrations",
+    "args": [
+      "build",
+      "use-integrations"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_working-with-ai",
+    "args": [
+      "build",
+      "working-with-ai"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_component",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_hook",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_doc",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_template",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_theme",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--type_bogus",
+    "args": [
+      "build",
+      "button",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_button_--limit_2",
+    "args": [
+      "build",
+      "button",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_hook",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_doc",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_template",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_theme",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--type_bogus",
+    "args": [
+      "build",
+      "table",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_table_--limit_2",
+    "args": [
+      "build",
+      "table",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_component",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_hook",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_doc",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_template",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_theme",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--type_bogus",
+    "args": [
+      "build",
+      "data table",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_data-table_--limit_2",
+    "args": [
+      "build",
+      "data table",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_component",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_hook",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_doc",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_template",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_theme",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--type_bogus",
+    "args": [
+      "build",
+      "dashboard",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_--limit_2",
+    "args": [
+      "build",
+      "dashboard",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_component",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_hook",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_doc",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_template",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_theme",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--type_bogus",
+    "args": [
+      "build",
+      "form validation",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_form-validation_--limit_2",
+    "args": [
+      "build",
+      "form validation",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_component",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_hook",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_doc",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_template",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_theme",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--type_bogus",
+    "args": [
+      "build",
+      "date picker",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_date-picker_--limit_2",
+    "args": [
+      "build",
+      "date picker",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_component",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_hook",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_doc",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_template",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_theme",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--type_bogus",
+    "args": [
+      "build",
+      "dark mode",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_dark-mode_--limit_2",
+    "args": [
+      "build",
+      "dark mode",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_component",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_hook",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_doc",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_template",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_theme",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--type_bogus",
+    "args": [
+      "build",
+      "color tokens",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_color-tokens_--limit_2",
+    "args": [
+      "build",
+      "color tokens",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_component",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_hook",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_doc",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_template",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_theme",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--type_bogus",
+    "args": [
+      "build",
+      "spacing",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_spacing_--limit_2",
+    "args": [
+      "build",
+      "spacing",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_component",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_hook",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_doc",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_template",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_theme",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--type_bogus",
+    "args": [
+      "build",
+      "modal dialog",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_modal-dialog_--limit_2",
+    "args": [
+      "build",
+      "modal dialog",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_component",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_hook",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_doc",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_template",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_theme",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--type_bogus",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_navigation-sidebar_--limit_2",
+    "args": [
+      "build",
+      "navigation sidebar",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_component",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_hook",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_doc",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_template",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_theme",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--type_bogus",
+    "args": [
+      "build",
+      "login page",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--limit_2",
+    "args": [
+      "build",
+      "login page",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_component",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_hook",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_doc",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_template",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_theme",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--type_bogus",
+    "args": [
+      "build",
+      "settings page",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_settings-page_--limit_2",
+    "args": [
+      "build",
+      "settings page",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_component",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_hook",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_doc",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_template",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_theme",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--type_bogus",
+    "args": [
+      "build",
+      "chart",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_chart_--limit_2",
+    "args": [
+      "build",
+      "chart",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_component",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_hook",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_doc",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_template",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_theme",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--type_bogus",
+    "args": [
+      "build",
+      "icon",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_icon_--limit_2",
+    "args": [
+      "build",
+      "icon",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_component",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_hook",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_doc",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_template",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_theme",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--type_bogus",
+    "args": [
+      "build",
+      "theme",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_theme_--limit_2",
+    "args": [
+      "build",
+      "theme",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_component",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_hook",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_doc",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_template",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_theme",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--type_bogus",
+    "args": [
+      "build",
+      "typography",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_typography_--limit_2",
+    "args": [
+      "build",
+      "typography",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_component",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_hook",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_doc",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_template",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_theme",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--type_bogus",
+    "args": [
+      "build",
+      "toast",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_toast_--limit_2",
+    "args": [
+      "build",
+      "toast",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_component",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_hook",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_doc",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_template",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_theme",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--type_bogus",
+    "args": [
+      "build",
+      "buton",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_buton_--limit_2",
+    "args": [
+      "build",
+      "buton",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_component",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "component"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_hook",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_doc",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "doc"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_template",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "template"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_theme",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "theme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--type_bogus",
+    "args": [
+      "build",
+      "tabel",
+      "--type",
+      "bogus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "build_tabel_--limit_2",
+    "args": [
+      "build",
+      "tabel",
+      "--limit",
+      "2"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "cols40_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "40"
+    }
+  },
+  {
+    "id": "cols80_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "80"
+    }
+  },
+  {
+    "id": "cols200_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "200"
+    }
+  },
+  {
+    "id": "cols-empty_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": ""
+    }
+  },
+  {
+    "id": "build_dashboard_tty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "cols60_build_dashboard_tty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true,
+    "env": {
+      "COLUMNS": "60"
+    }
+  },
+  {
+    "id": "build_dashboard_@pm-npm",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@pm-npm",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "pm-npm",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@pm-pnpm",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@pm-pnpm",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "pm-pnpm",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@pm-yarn",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@pm-yarn",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "pm-yarn",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@pm-yarnberry",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@pm-yarnberry",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "pm-yarnberry",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@pm-bun",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@pm-bun",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "pm-bun",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@monorepo",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@monorepo",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo.packages.web_build_dashboard_@monorepo",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web_build_login-page_--json_@monorepo",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_build_dashboard_@monorepo",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.web.src_build_login-page_--json_@monorepo",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/web/src"
+  },
+  {
+    "id": "in-monorepo.packages.api_build_dashboard_@monorepo",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "in-monorepo.packages.api_build_login-page_--json_@monorepo",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo",
+    "gen": true,
+    "cwd": "monorepo/packages/api"
+  },
+  {
+    "id": "build_dashboard_@monorepo-local",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@monorepo-local",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true
+  },
+  {
+    "id": "in-monorepo-local.apps.site_build_dashboard_@monorepo-local",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "in-monorepo-local.apps.site_build_login-page_--json_@monorepo-local",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "monorepo-local",
+    "gen": true,
+    "cwd": "monorepo-local/apps/site"
+  },
+  {
+    "id": "build_dashboard_@configured",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@configured",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "configured",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@configts",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@configts",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "configts",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@badconfig",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@badconfig",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "badconfig",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@syntaxconfig",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@syntaxconfig",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "syntaxconfig",
+    "gen": true
+  },
+  {
+    "id": "build_dashboard_@unknownint",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "build_login-page_--json_@unknownint",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "unknownint",
+    "gen": true
+  },
+  {
+    "id": "in-app.src_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.src_build_login-page_--json",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/src"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-app.node_modules.@astryxdesign.core_build_login-page_--json",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "cwd": "app/node_modules/@astryxdesign/core"
+  },
+  {
+    "id": "in-large.src_build_dashboard_@large",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-large.src_build_login-page_--json_@large",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true,
+    "cwd": "large/src"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_build_dashboard_@integration",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-integration.node_modules.@acme.kit_build_login-page_--json_@integration",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true,
+    "cwd": "integration/node_modules/@acme/kit"
+  },
+  {
+    "id": "in-._build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "in-._build_login-page_--json_@empty",
+    "args": [
+      "build",
+      "login page",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "cwd": "."
+  },
+  {
+    "id": "env-ua-pnpm_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-pnpm_build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "pnpm/9.12.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn1_build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/1.22.22 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-yarn4_build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "yarn/4.5.0 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-bun_build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "bun/1.1.30 npm/? node/v22.0.0 linux x64"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ua-npm-exec_build_dashboard_@empty",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "empty",
+    "gen": true,
+    "env": {
+      "npm_config_user_agent": "npm/10.9.0 node/v22.0.0 linux x64 workspaces/false",
+      "npm_command": "exec"
+    }
+  },
+  {
+    "id": "env-ci-1_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "1"
+    }
+  },
+  {
+    "id": "env-ci-true_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-ci-false_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "false"
+    }
+  },
+  {
+    "id": "env-ci-0_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "CI": "0"
+    }
+  },
+  {
+    "id": "env-ci-github_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "CI": "true"
+    }
+  },
+  {
+    "id": "env-xdg_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/home/xdg-config",
+      "XDG_CACHE_HOME": "/tmp/astryx-conformance/work/home/xdg-cache",
+      "XDG_DATA_HOME": "/tmp/astryx-conformance/work/home/xdg-data"
+    }
+  },
+  {
+    "id": "env-xdg-relative_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "XDG_CONFIG_HOME": "relative/config",
+      "XDG_CACHE_HOME": "relative/cache"
+    }
+  },
+  {
+    "id": "env-node-env-prod_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  {
+    "id": "env-agent_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "AGENT": "some-agent",
+      "AGENT_SESSION_ID": "abc123",
+      "TERM_PROGRAM": "vscode"
+    }
+  },
+  {
+    "id": "env-pnpm-home_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "PNPM_HOME": "/tmp/astryx-conformance/work/home/.pnpm"
+    }
+  },
+  {
+    "id": "env-lang-zh_build_dashboard",
+    "args": [
+      "build",
+      "dashboard"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "LANG": "zh_CN.UTF-8",
+      "LC_ALL": "zh_CN.UTF-8"
+    }
+  }
+]

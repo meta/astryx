@@ -1,0 +1,39 @@
+{
+ "id": "ex_integration_add_doc_releasing_--parent_acme_--json",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "releasing",
+  "--parent",
+  "acme",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"doc\",\n    \"name\": \"releasing\",\n    \"root\": {\n      \"path\": \"./docs\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"docs/releasing.doc.mjs\",\n      \"docs/acme.doc.mjs\",\n      \"package.json\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "app/docs/acme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: 'acme',\n  title: 'Acme',\n  summary: 'Guides for Acme.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n"
+  },
+  {
+   "path": "app/docs/releasing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'releasing',\n  title: 'Releasing',\n  description: 'Releasing documentation.',\n  placement: {parent: 'namespace:acme', slot: 'guides'},\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Releasing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  },
+  {
+   "path": "app/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"dependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"@stylexjs/stylex\": \"^0.19.0\"\n  },\n  \"peerDependencies\": {\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  }
+ ]
+}

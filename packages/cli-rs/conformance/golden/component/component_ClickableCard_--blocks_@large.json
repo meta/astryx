@@ -1,0 +1,20 @@
+{
+ "id": "component_ClickableCard_--blocks_@large",
+ "args": [
+  "component",
+  "ClickableCard",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: ClickableCard\ndescription: A clickable card that navigates on click. Nested interactive elements work independently.\n\nExamples\n\nname:        ClickableCardElevated\ndescription: A clickable card raised with `elevation=\"med\"` so the shadow signals the whole surface is interactive.\n\nname:        ClickableCardWithNestedButton\ndescription: A product card that navigates on click but has an independent \"Add to cart\" button inside.\n\nname:        ChatMessageBubbleCustomContent\ndescription: Custom in-message content aligned to the bubble text column. An artifact card is wrapped in a ghost bubble with width=\"100%\", so its left edge matches the bubble text and it spans the full message column instead of the default bubble width cap; the timestamp rides the bubble metadata slot.\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

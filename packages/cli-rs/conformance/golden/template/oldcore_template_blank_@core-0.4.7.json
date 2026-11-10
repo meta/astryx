@@ -1,0 +1,19 @@
+{
+ "id": "oldcore_template_blank_@core-0.4.7",
+ "args": [
+  "template",
+  "blank"
+ ],
+ "fixture": "core-0.4.7",
+ "fixtureHash": "8198fefbb18714e1+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Layout, LayoutContent} from '@astryxdesign/core';\nimport {Text} from '@astryxdesign/core';\n\nexport default function Page() {\n  return (\n    <Layout\n      content={\n        <LayoutContent>\n          <Text type=\"large\">New Page</Text>\n        </LayoutContent>\n      }\n    />\n  );\n}\n\n",
+ "stderr": "package: @astryxdesign/core\n\nNext step: run `npm install @astryxdesign/cli@0.4.7`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/core-0.4.7\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

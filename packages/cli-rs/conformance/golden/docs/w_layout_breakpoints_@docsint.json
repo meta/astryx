@@ -1,0 +1,20 @@
+{
+ "id": "w_layout_breakpoints_@docsint",
+ "args": [
+  "docs",
+  "layout",
+  "breakpoints"
+ ],
+ "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
+ "stdout": "package: @acme/docs\n\n## Breakpoints\n\nTwo of them.\n\nUp: npx @astryxdesign/cli@0.7.12 docs layout/responsive --index\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

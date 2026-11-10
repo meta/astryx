@@ -1,0 +1,61 @@
+[
+  {
+    "id": "w_th_eject_target_is_file_json",
+    "args": [
+      "theme",
+      "eject",
+      "--json",
+      "neutral",
+      "package.json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_target_under_file",
+    "args": [
+      "theme",
+      "eject",
+      "neutral",
+      "package.json/x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_template_under_file",
+    "args": [
+      "theme",
+      "template",
+      "package.json/t.ts"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_template_dir_target",
+    "args": [
+      "theme",
+      "template",
+      "src"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_template_name_too_long",
+    "args": [
+      "theme",
+      "template",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_th_eject_name_too_long_json",
+    "args": [
+      "--json",
+      "theme",
+      "eject",
+      "stone",
+      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    ],
+    "fixture": "app"
+  }
+]

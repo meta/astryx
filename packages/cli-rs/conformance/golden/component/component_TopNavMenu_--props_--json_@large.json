@@ -1,0 +1,15 @@
+{
+ "id": "component_TopNavMenu_--props_--json_@large",
+ "args": [
+  "component",
+  "TopNavMenu",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Visible label for the trigger button.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"items\",\n      \"type\": \"TopNavMenuItemData[]\",\n      \"description\": \"Menu items to display in the hover popover. Item href values follow the shared navigation rule described on Link; rejected destinations remain visible without navigation.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"delay\",\n      \"type\": \"number\",\n      \"description\": \"Delay in milliseconds before showing the menu on hover.\",\n      \"default\": \"150\"\n    },\n    {\n      \"name\": \"hideDelay\",\n      \"type\": \"number\",\n      \"description\": \"Delay in milliseconds before hiding the menu after the mouse leaves.\",\n      \"default\": \"200\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,35 @@
+{
+ "id": "after-swizzle-Blockquote_swizzle_Blockquote_--overwrite",
+ "args": [
+  "swizzle",
+  "Blockquote",
+  "--overwrite"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "[ok] Copied 2 files to components/astryx/Blockquote/\n\nWhat @astryxdesign/core exports is imported from @astryxdesign/core; the internal modules the component needs are copied beside it.\nYou can now customize the component source freely.\n\nIt imports these npm packages; install any your project lacks: @stylexjs/stylex@\"^0.19.0\" react@\">=19.0.0\"\n\nMarked components/astryx/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.\n\n! These components use StyleX and require a StyleX compiler in your build.\n  Without one, importing them throws \"Unexpected 'stylex.create' call at runtime\"\n  and the page does not render. See setup per framework:\n  npx @astryxdesign/cli@0.7.12 docs styling\n  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -\n  use an SWC-based StyleX transform instead (covered in the guide).\n\nCustomizing a component often signals a gap in the design system.\nLet the maintainers know what you needed:\n  https://github.com/meta/astryx/issues/new\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/Blockquote/Blockquote.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file Blockquote.tsx\n * @input Uses React, stylex, spacing and color tokens\n * @output Exports Blockquote component and BlockquoteProps\n * @position Blockquote component; renders styled quotations with optional attribution\n *\n * SYNC: When modified, update these files to stay in sync:\n * - /packages/core/src/Blockquote/Blockquote.doc.mjs\n * - /packages/core/src/Blockquote/Blockquote.test.tsx\n * - /apps/storybook/stories/Blockquote.stories.tsx\n * - /packages/cli/assets/templates/blocks/components/Blockquote/ (showcase blocks)\n */\n\nimport type {ReactNode} from 'react';\nimport type {BaseProps} from '@astryxdesign/core/BaseProps';\nimport * as stylex from '@stylexjs/stylex';\nimport {colorVars, spacingVars, typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';\nimport {isRenderable, mergeProps} from '@astryxdesign/core/utils';\nimport {themeProps} from '@astryxdesign/core/utils';\n\nexport interface BlockquoteProps extends BaseProps<HTMLQuoteElement> {\n  /** Ref forwarded to the root <blockquote> element */\n  ref?: React.Ref<HTMLQuoteElement>;\n  /** Content of the blockquote */\n  children: ReactNode;\n  /**\n   * Optional attribution for the quote. Rendered in a `<cite>` element after\n   * the quoted content.\n   */\n  cite?: ReactNode;\n}\n\nconst styles = stylex.create({\n  root: {\n    borderInlineStartWidth: spacingVars['--spacing-0-5'],\n    borderInlineStartStyle: 'solid',\n    borderInlineStartColor: colorVars['--color-border-emphasized'],\n    paddingInlineStart: spacingVars['--spacing-4'],\n    color: colorVars['--color-text-secondary'],\n    overflowWrap: 'break-word',\n    marginInlineStart: 0,\n    marginInlineEnd: 0,\n    marginBlockStart: 0,\n    marginBlockEnd: 0,\n  },\n  cite: {\n    display: 'block',\n    marginBlockStart: spacingVars['--spacing-2'],\n    fontSize: typeScaleVars['--text-supporting-size'],\n    lineHeight: typeScaleVars['--text-supporting-leading'],\n    fontStyle: 'normal',\n  },\n});\n\n/**\n * Blockquote component for displaying quoted content.\n *\n * Renders a semantic `<blockquote>` with an inline-start rule and secondary\n * text color, matching the Astryx visual language.\n *\n * @example\n * ```\n * <Blockquote>Design is not just what it looks like.</Blockquote>\n * ```\n */\nexport function Blockquote({\n  children,\n  cite,\n  xstyle,\n  className,\n  style,\n  ref,\n  ...props\n}: BlockquoteProps) {\n  return (\n    <blockquote\n      ref={ref}\n      {...mergeProps(\n        themeProps('blockquote'),\n        stylex.props(styles.root, xstyle),\n        className,\n        style,\n      )}\n      {...props}>\n      {children}\n      {/*\n        A bare <cite>, never wrapped in <footer>: <blockquote> is a sectioning\n        root, so a <footer> inside it maps to a contentinfo document landmark.\n      */}\n      {isRenderable(cite) && <cite {...stylex.props(styles.cite)}>{cite}</cite>}\n    </blockquote>\n  );\n}\n\nBlockquote.displayName = 'Blockquote';\n"
+  },
+  {
+   "path": "app/components/astryx/Blockquote/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n/**\n * @file index.ts\n * @input Imports from Blockquote.tsx\n * @output Exports Blockquote component and props type\n * @position Package entry point for Blockquote\n *\n * SYNC: When modified, update /packages/core/src/Blockquote/Blockquote.doc.mjs\n */\n\nexport {Blockquote} from './Blockquote';\nexport type {BlockquoteProps} from './Blockquote';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

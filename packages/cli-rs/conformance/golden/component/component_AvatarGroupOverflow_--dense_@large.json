@@ -1,0 +1,20 @@
+{
+ "id": "component_AvatarGroupOverflow_--dense_@large",
+ "args": [
+  "component",
+  "AvatarGroupOverflow",
+  "--dense"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# AvatarGroupOverflow\n\nUse at end of AvatarGroup to summarize hidden people after slicing visible avatars.\n\n**Import:** `import {AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Count label | Yes | The compact `+N` or custom count text displayed inside the circular indicator. |\n| Button behavior | No | When `onClick` is provided, the indicator becomes an interactive button with focus and hover states. |\n\n## Best Practices\n\n- **Do:** Pass real hidden count to `count` for a11y.\n- **Do:** Keep custom text short: `+12`, `99+`.\n- **Do:** Use `onClick` to open member list/popover/details.\n- **Don't:** Don't let custom text disagree with `count`; `count` still labels the indicator for accessibility.\n- **Don't:** Don't use long labels inside avatar-sized circle.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `count` | `number` | - | hidden avatar count; drives default +N + aria label **(required)** |\n| `children` | `ReactNode` | - | optional custom short count text, e.g. +12 or 99+ |\n| `onClick` | `() => void` | - | click handler; renders focusable button when set |\n| `ref` | `React.Ref<HTMLElement>` | - | forwarded ref |\n| `xstyle` | `StyleXStyles` | - | stylex.create() value — not an inline style object |\n\n## Examples\n\n### Default overflow count\n\n```tsx\n\n<AvatarGroup size=\"lg\">\n  {users.slice(0, 3).map(user => (\n    <Avatar key={user.id} src={user.src} name={user.name} />\n  ))}\n  <AvatarGroupOverflow count={users.length - 3} />\n</AvatarGroup>\n\n```\n\n### Custom count text\n\n```tsx\n\n<AvatarGroup size=\"lg\">\n  {users.slice(0, 3).map(user => (\n    <Avatar key={user.id} src={user.src} name={user.name} />\n  ))}\n  <AvatarGroupOverflow count={12}>12+</AvatarGroupOverflow>\n</AvatarGroup>\n\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

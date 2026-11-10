@@ -1,0 +1,19 @@
+{
+ "id": "build_InfoTip",
+ "args": [
+  "build",
+  "InfoTip"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Build kit for \"InfoTip\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nBLOCKS\nReady-made sections for parts the template lacks. Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        InfoTipMetricDefinitions\npackage:     @astryxdesign/core\ndescription: A row of metrics, each label followed by an InfoTip that defines how the value is counted.\n\nname:        InfoTipPermissionNotes\npackage:     @astryxdesign/core\ndescription: Read-only settings whose labels carry an InfoTip that says who can change each value.\n\nname:    InfoTipShowcase\npackage: @astryxdesign/core\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        InfoTip\npackage:     @astryxdesign/core\ndescription: An info icon that reveals help: a small \"i\" button.\n\nname:        Tooltip\npackage:     @astryxdesign/core\ndescription: A short text hint that appears on hover or focus, anchored to a trigger element.\n\nname:        useInputStatusIcon\npackage:     @astryxdesign/core\ndescription: Builds the on-field status affordance for a bordered input and its accessibility wiring, so every input in the family behaves the same for a given status.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

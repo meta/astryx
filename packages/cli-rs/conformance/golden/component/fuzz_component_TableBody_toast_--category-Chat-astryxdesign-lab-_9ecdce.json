@@ -1,0 +1,15 @@
+{
+ "id": "fuzz_component_TableBody_toast_--category-Chat-astryxdesign-lab-_9ecdce",
+ "args": [
+  "component",
+  "TableBody",
+  "toast",
+  "--category=Chat (@astryxdesign/lab)"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nTableBody\n\nselector: TableBody\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nTableBody  <- from '@astryxdesign/core/Table'\n  <tbody> wrapper for children mode. Holds the data rows. A row must sit inside...\n  Targets: astryx-table-body\n  children: ReactNode, xstyle\n\n\ntoast\n\nselector: toast\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"toast\"\n\nSuggestions\n\nname:   Toast\nreason: same name\n\nname:   Banner\nreason: keyword \"toast\"\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

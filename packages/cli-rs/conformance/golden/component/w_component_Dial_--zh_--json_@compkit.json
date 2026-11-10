@@ -1,0 +1,15 @@
+{
+ "id": "w_component_Dial_--zh_--json_@compkit",
+ "args": [
+  "component",
+  "Dial",
+  "--zh",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@comp/kit\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"Dial\",\n    \"usage\": {\n      \"description\": \"旋转选择数值的旋钮。\"\n    },\n    \"props\": [\n      {\n        \"name\": \"value\",\n        \"type\": \"number\",\n        \"description\": \"当前值。\"\n      }\n    ],\n    \"package\": \"@comp/kit\",\n    \"import\": \"@comp/kit\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

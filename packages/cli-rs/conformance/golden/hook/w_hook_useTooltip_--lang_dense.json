@@ -1,0 +1,21 @@
+{
+ "id": "w_hook_useTooltip_--lang_dense",
+ "args": [
+  "hook",
+  "useTooltip",
+  "--lang",
+  "dense"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# useTooltip\n\nHeadless hover/focus tooltip hook. Builds on useLayer w/ hover intent, keyboard focus handling, aria-describedby. Use for custom triggers without wrapper component.\n\n## Best Practices\n\n- **Do:** Use for brief text labels describing icon buttons, truncated text, abbreviations, compact controls.\n- **Do:** Prefer Tooltip for standard wrapping; use hook when trigger is not simple child.\n- **Do:** Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby + aria-controls={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.\n- **Don't:** Put interactive content in tooltips: use Popover / HoverCard instead.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `placement` | `'above' \\| 'below' \\| 'start' \\| 'end'` | `'above'` | position relative to trigger. logical: start/end follow the popover's inherited direction (RTL mirrors). |\n| `alignment` | `'start' \\| 'center' \\| 'end'` | `'center'` | alignment along placement axis. logical: start/end follow the popover's inherited direction (RTL mirrors). |\n| `delay` | `number` | `200` | show delay in ms. |\n| `hideDelay` | `number` | `0` | hide delay after mouse/focus leave in ms. |\n| `focusTrigger` | `'auto' \\| 'always' \\| 'never'` | `'auto'` | when focus opens tooltip; auto = focus on the trigger, or inside a trigger focusable when focus arrives. |\n| `touchTrigger` | `'auto' \\| 'tap' \\| 'none'` | `'auto'` | tap behavior with no hover; auto = tap unless trigger acts, tap = always, none = never. |\n| `isEnabled` | `boolean` | `true` | whether hover/focus triggers are enabled. |\n| `isOpen` | `boolean` | - | controlled open state: true force-show, false force-hide, undefined unmanaged. |\n| `isDefaultOpen` | `boolean` | `false` | show on mount. |\n| `onShow` | `() => void` | - | fires when tooltip becomes visible. |\n| `onHide` | `() => void` | - | fires when tooltip hides. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `ref` | `RefCallback<HTMLElement>` | combined position + interaction ref. |\n| `positionRef` | `RefCallback<HTMLElement>` | position anchor ref. |\n| `interactionRef` | `RefCallback<HTMLElement>` | hover/focus interaction ref. |\n| `anchorId` | `string` | CSS anchor name. |\n| `describedBy` | `string` | ID for aria-describedby. |\n| `renderTooltip` | `(children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode` | renders anchor-positioned tooltip content. |\n| `show` | `() => void` | opens + holds until hide()/Escape/outside press/focus leave; announces once; onShow. Controlled: onShow only. No-op when disabled. |\n| `hide` | `() => void` | closes; onHide. Controlled: onHide only. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Tooltip, HoverCard, Popover\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

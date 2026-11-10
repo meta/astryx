@@ -1,0 +1,98 @@
+[
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSChatComposerAttachments } from '@xds/core/Chat';",
+  "output": "import { XDSChatComposerDrawer } from '@xds/core/Chat';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSChatComposerAttachmentsProps } from '@xds/core/Chat';",
+  "output": "import type { XDSChatComposerDrawerProps } from '@xds/core/Chat';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSChatComposerAttachments } from '@xds/core/Chat';\nconst x = <XDSChatComposerAttachments count={3} />;",
+  "output": "import { XDSChatComposerDrawer } from '@xds/core/Chat';\nconst x = <XDSChatComposerDrawer count={3} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSChatComposerAttachments } from '@xds/core/Chat';\nconst x = <XDSChatComposerAttachments><span>child</span></XDSChatComposerAttachments>;",
+  "output": "import { XDSChatComposerDrawer } from '@xds/core/Chat';\nconst x = <XDSChatComposerDrawer><span>child</span></XDSChatComposerDrawer>;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSChatComposer onSubmit={fn} attachments={<Foo />} />",
+  "output": "<XDSChatComposer onSubmit={fn} drawer={<Foo />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<SomeOtherComponent attachments={items} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const cls = \"xds-chat-composer-attachments\";",
+  "output": "const cls = 'xds-chat-composer-drawer';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const cls = `xds-chat-composer-attachments`;",
+  "output": "const cls = `xds-chat-composer-drawer`;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSChatComposerAttachmentsProps } from '@xds/core/Chat';\nconst props: XDSChatComposerAttachmentsProps = {};",
+  "output": "import type { XDSChatComposerDrawerProps } from '@xds/core/Chat';\nconst props: XDSChatComposerDrawerProps = {};",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSChatComposer, XDSChatComposerAttachments } from '@xds/core/Chat';\nexport default function App() {\n  return (\n    <XDSChatComposer\n      onSubmit={fn}\n      attachments={\n        <XDSChatComposerAttachments count={2}>\n          <Token label=\"file.pdf\" />\n        </XDSChatComposerAttachments>\n      }\n    />\n  );\n}",
+  "output": "import { XDSChatComposer, XDSChatComposerDrawer } from '@xds/core/Chat';\nexport default function App() {\n  return (\n    <XDSChatComposer\n      onSubmit={fn}\n      drawer={\n        <XDSChatComposerDrawer count={2}>\n          <Token label=\"file.pdf\" />\n        </XDSChatComposerDrawer>\n      }\n    />\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSChatComposer drawer={<XDSChatComposerDrawer />} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/rename-attachments-to-drawer",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSChatComposerAttachments as Attachments } from '@xds/core/Chat';\nconst x = <Attachments count={3} />;",
+  "output": "import { XDSChatComposerDrawer as Attachments } from '@xds/core/Chat';\nconst x = <Attachments count={3} />;",
+  "error": null
+ }
+]

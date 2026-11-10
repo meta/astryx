@@ -1,0 +1,17 @@
+{
+ "id": "fuzz_component_ChatSystemMessage_Theme_--list_--package_LayoutHeader_10013f",
+ "args": [
+  "component",
+  "ChatSystemMessage",
+  "Theme",
+  "--list",
+  "--package",
+  "LayoutHeader"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nChatSystemMessage\n\nselector: ChatSystemMessage\nstatus:   not_found\ncode:     ERR_UNKNOWN_PACKAGE\nerror:    External package \"LayoutHeader\" not found\n\nTheme\n\nselector: Theme\nstatus:   not_found\ncode:     ERR_UNKNOWN_PACKAGE\nerror:    External package \"LayoutHeader\" not found\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

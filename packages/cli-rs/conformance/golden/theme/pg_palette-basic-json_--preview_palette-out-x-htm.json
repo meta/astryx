@@ -1,0 +1,17 @@
+{
+ "id": "pg_palette-basic-json_--preview_palette-out-x-htm",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/basic.json",
+  "--preview",
+  "palette/out/x.htm"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Palette preview output must end in .html.\n",
+ "exit": 1,
+ "files": []
+}

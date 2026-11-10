@@ -1,0 +1,13 @@
+{
+ "id": "w_acme-handbook-nope_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook/nope"
+ ],
+ "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"acme-handbook/nope\"\n\n  acme-handbook/deploying  (Ship it with `npm install -D @acme/docs`.)\n",
+ "exit": 1,
+ "files": []
+}

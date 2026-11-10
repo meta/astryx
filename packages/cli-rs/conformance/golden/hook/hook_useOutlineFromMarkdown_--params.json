@@ -1,0 +1,20 @@
+{
+ "id": "hook_useOutlineFromMarkdown_--params",
+ "args": [
+  "hook",
+  "useOutlineFromMarkdown",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `markdown` | `string` | - | The Markdown source. Pass the same string you render with Markdown. **(required)** |\n| `options` | `ParseOutlineFromMarkdownOptions` | - | Parse options. Omit them for a document that Markdown renders without plugins. |\n| `options.plugins` | `ReadonlyArray<MarkdownPluginEntry>` | - | The ordered Markdown plugin list. Pass the same list to Markdown, so transforms, labels and ids agree. The outline is recomputed when the list reference changes. |\n| `options.isFinal` | `boolean` | `true` | Whether the source is complete. Pass false while Markdown's isStreaming is true, so both apply the same transforms. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

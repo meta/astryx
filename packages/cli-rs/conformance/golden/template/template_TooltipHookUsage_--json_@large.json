@@ -1,0 +1,14 @@
+{
+ "id": "template_TooltipHookUsage_--json_@large",
+ "args": [
+  "template",
+  "TooltipHookUsage",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TooltipHookUsage\",\n    \"description\": \"Tooltip using the useTooltip hook for programmatic control.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Center\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useTooltip} from '@astryxdesign/core/Tooltip';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Center} from '@astryxdesign/core/Center';\\n\\nexport default function TooltipHookUsage() {\\n  const tooltip = useTooltip({\\n    placement: 'above',\\n    delay: 100,\\n  });\\n\\n  return (\\n    <Center>\\n      <Button\\n        label=\\\"Using hook directly\\\"\\n        ref={tooltip.ref}\\n        aria-describedby={tooltip.describedBy}\\n      />\\n      {tooltip.renderTooltip('Tooltip via hook')}\\n    </Center>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

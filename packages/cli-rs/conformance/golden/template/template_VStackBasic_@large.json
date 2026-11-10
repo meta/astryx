@@ -1,0 +1,19 @@
+{
+ "id": "template_VStackBasic_@large",
+ "args": [
+  "template",
+  "VStackBasic"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nexport default function VStackBasic() {\n  return (\n    <VStack gap={3}>\n      <Heading level={5}>Weekly Report</Heading>\n      <Text type=\"body\" color=\"secondary\">\n        VStack arranges its children in a vertical column.\n      </Text>\n      <Text type=\"body\" color=\"secondary\">\n        The gap prop controls the spacing between each item.\n      </Text>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

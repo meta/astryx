@@ -1,0 +1,21 @@
+{
+ "id": "hook_--list_--category_Other",
+ "args": [
+  "hook",
+  "--list",
+  "--category",
+  "Other"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\nOther:\n\n- useImperativeAlertDialog\n- useImperativeDialog\n- useTableColumnResize\n- useTableColumnSettings\n- useTableFilterState\n- useTableFiltering\n- useTableGroupedRows\n- useTablePagination\n- useTableRowExpansion\n- useTableRowIndex\n- useTableRowStatus\n- useTableRowsVirtualization\n- useTableSelection\n- useTableSelectionState\n- useTableSortable\n- useTableStickyColumns\n- useTableTreeData\n- useTableTreeState\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_components_@plain",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json, and this folder is outside a project.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

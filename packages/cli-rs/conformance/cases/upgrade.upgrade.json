@@ -1,0 +1,986 @@
+[
+  {
+    "id": "wide_legacy_from_0.0.1",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.0.1_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.0.14",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.14"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.0.14_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.14",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.1.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.1.0_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.2.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.2.0"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_0.2.0_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.2.0",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_apply_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_codemod_selector",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_codemod_optional",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "add-is-icon-only",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_codemod_css_optional",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "migrate-theme-selectors-to-data-attrs",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_codemod_unknown",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "no-such-codemod"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_codemod_unknown_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "no-such-codemod",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_skip",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--skip-codemod",
+      "migrate-gap-to-numeric",
+      "--skip-codemod",
+      "rename-isShown-to-isOpen",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_path_nested",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--path",
+      "src/nested",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_path_missing",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--path",
+      "nope"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_path_escape",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--path",
+      "../.."
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_subdir",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy",
+    "cwd": "upgrade-legacy/src/nested"
+  },
+  {
+    "id": "wide_legacy_subdir_text",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy",
+    "cwd": "upgrade-legacy/src"
+  },
+  {
+    "id": "wide_legacy_subdir_path",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--path",
+      "deep"
+    ],
+    "fixture": "upgrade-legacy",
+    "cwd": "upgrade-legacy/src/nested"
+  },
+  {
+    "id": "wide_legacy_force",
+    "args": [
+      "upgrade",
+      "--from",
+      "9.9.9",
+      "--force",
+      "--codemod",
+      "rename-selector-items-to-options"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_uptodate",
+    "args": [
+      "upgrade",
+      "--from",
+      "9.9.9"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_uptodate_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "9.9.9",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_current",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--apply"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_from_078",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_registry",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_list_with_from",
+    "args": [
+      "upgrade",
+      "--list",
+      "--from",
+      "0.1.0"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_list_registry",
+    "args": [
+      "upgrade",
+      "--list",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_legacy_registry_from",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--from",
+      "0.1.0",
+      "--force"
+    ],
+    "fixture": "upgrade-legacy"
+  },
+  {
+    "id": "wide_config_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0"
+    ],
+    "fixture": "upgrade-config"
+  },
+  {
+    "id": "wide_config_dry_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0",
+      "--json"
+    ],
+    "fixture": "upgrade-config"
+  },
+  {
+    "id": "wide_config_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0",
+      "--apply"
+    ],
+    "fixture": "upgrade-config"
+  },
+  {
+    "id": "wide_config_apply_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.2",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-config"
+  },
+  {
+    "id": "wide_config_codemod",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.1.0",
+      "--codemod",
+      "migrate-layout-components-to-experimental",
+      "--apply"
+    ],
+    "fixture": "upgrade-config"
+  },
+  {
+    "id": "wide_broken_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-isShown-to-isOpen"
+    ],
+    "fixture": "upgrade-broken"
+  },
+  {
+    "id": "wide_broken_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--json"
+    ],
+    "fixture": "upgrade-broken"
+  },
+  {
+    "id": "wide_broken_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply"
+    ],
+    "fixture": "upgrade-broken"
+  },
+  {
+    "id": "wide_themes_from_0.6.4",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.4"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_from_0.6.4_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.4",
+      "--json"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.4",
+      "--apply"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_apply_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.0",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_copied_only",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.4",
+      "--codemod",
+      "migrate-copied-themes-to-descriptors",
+      "--apply"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_surface_only",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.7",
+      "--codemod",
+      "migrate-deprecated-theme-surface",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-themes"
+  },
+  {
+    "id": "wide_themes_subdir",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.4",
+      "--json"
+    ],
+    "fixture": "upgrade-themes",
+    "cwd": "upgrade-themes/src/themes"
+  },
+  {
+    "id": "wide_hooks_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options"
+    ],
+    "fixture": "upgrade-hooks"
+  },
+  {
+    "id": "wide_hooks_apply_fail",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply"
+    ],
+    "fixture": "upgrade-hooks"
+  },
+  {
+    "id": "wide_hooks_apply_fail_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-hooks"
+  },
+  {
+    "id": "wide_hooks_ok_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply"
+    ],
+    "fixture": "upgrade-hooks-ok"
+  },
+  {
+    "id": "wide_hooks_ok_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-hooks-ok"
+  },
+  {
+    "id": "wide_hooks_nochange",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.0",
+      "--apply"
+    ],
+    "fixture": "upgrade-hooks-ok"
+  },
+  {
+    "id": "wide_initdone_from_0.6.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.0"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "wide_initdone_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.0",
+      "--apply"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "wide_initdone_uptodate_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "initdone"
+  },
+  {
+    "id": "wide_integration_extra",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--integration",
+      "@acme/kit"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "wide_integration_extra_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--integration",
+      "@acme/kit",
+      "--integration",
+      "@acme/kit",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "wide_integration_extra_missing",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--integration",
+      "@acme/nope"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "wide_integration_extra_missing_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--integration",
+      "@acme/nope",
+      "--json"
+    ],
+    "fixture": "integration"
+  },
+  {
+    "id": "wide_author_from_0.6.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.6.0",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "wide_large_from_0.7.0_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "large"
+  },
+  {
+    "id": "wide_protected_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options"
+    ],
+    "fixture": "upgrade-protected"
+  },
+  {
+    "id": "wide_protected_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply"
+    ],
+    "fixture": "upgrade-protected"
+  },
+  {
+    "id": "wide_protected_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-protected"
+  },
+  {
+    "id": "wide_protected_full",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.0",
+      "--json"
+    ],
+    "fixture": "upgrade-protected"
+  },
+  {
+    "id": "wide_protected_subdir",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options",
+      "--json"
+    ],
+    "fixture": "upgrade-protected",
+    "cwd": "upgrade-protected/src/gen"
+  },
+  {
+    "id": "wide_badattrs",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--codemod",
+      "rename-selector-items-to-options"
+    ],
+    "fixture": "upgrade-badattrs"
+  },
+  {
+    "id": "wide_badattrs_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-badattrs"
+  },
+  {
+    "id": "wide_configured_from_0.7.0",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0"
+    ],
+    "fixture": "upgrade-configured"
+  },
+  {
+    "id": "wide_configured_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.0",
+      "--json"
+    ],
+    "fixture": "upgrade-configured"
+  },
+  {
+    "id": "wide_configured_uptodate",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12"
+    ],
+    "fixture": "upgrade-configured"
+  },
+  {
+    "id": "wide_intcodemods_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--json"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--apply"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_apply_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_one",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--codemod",
+      "rename-widget",
+      "--apply"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_nested",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--codemod",
+      "nested/drop-legacy-flag",
+      "--json"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_optional",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--codemod",
+      "optional-polish",
+      "--apply"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_skip",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.8",
+      "--skip-codemod",
+      "explode",
+      "--apply"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_range",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.10"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_intcodemods_uptodate",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12"
+    ],
+    "fixture": "upgrade-intcodemods"
+  },
+  {
+    "id": "wide_format_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "upgrade-format"
+  },
+  {
+    "id": "wide_format_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-format"
+  },
+  {
+    "id": "wide_format_apply_014",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.14",
+      "--apply"
+    ],
+    "fixture": "upgrade-format"
+  },
+  {
+    "id": "wide_edge_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "upgrade-edge"
+  },
+  {
+    "id": "wide_edge_tokens",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.7",
+      "--codemod",
+      "migrate-token-renames",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-edge"
+  },
+  {
+    "id": "wide_protokeys_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_protokeys_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_protokeys_apply_05",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.0",
+      "--apply"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_registry_enums",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry-enums"
+  },
+  {
+    "id": "wide_registry_enums_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-enums"
+  },
+  {
+    "id": "wide_registry_enums_run",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-enums"
+  }
+]

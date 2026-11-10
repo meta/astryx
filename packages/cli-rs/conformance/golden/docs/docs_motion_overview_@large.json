@@ -1,0 +1,20 @@
+{
+ "id": "docs_motion_overview_@large",
+ "args": [
+  "docs",
+  "motion",
+  "overview"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/cli\n\n## Overview\n\nMotion serves two purposes: it makes interfaces easier to understand, and it makes them more pleasant to use. A panel animating open helps the eye track what changed and where new content sits in the layout. These moments reduce cognitive load and make the interface feel responsive.\n\nAt the same time, well-tuned motion gives an application a sense of craft and polish that users notice, even if they can't name it.\n\nThe design system provides duration and easing tokens that keep these moments consistent across your application.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nNext: npx @astryxdesign/cli@0.7.12 docs motion duration\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

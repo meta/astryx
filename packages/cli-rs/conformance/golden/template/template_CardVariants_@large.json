@@ -1,0 +1,19 @@
+{
+ "id": "template_CardVariants_@large",
+ "args": [
+  "template",
+  "CardVariants"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Card} from '@astryxdesign/core/Card';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst VARIANTS = [\n  {variant: 'default' as const, label: 'General', note: '4 tasks due today'},\n  {\n    variant: 'muted' as const,\n    label: 'Archived',\n    note: 'No activity in 30 days',\n  },\n  {variant: 'blue' as const, label: 'Engineering', note: '12 open issues'},\n  {variant: 'green' as const, label: 'Marketing', note: '3 campaigns active'},\n  {variant: 'orange' as const, label: 'Urgent', note: '2 items need review'},\n  {variant: 'purple' as const, label: 'Design', note: '5 drafts in progress'},\n];\n\nexport default function CardVariants() {\n  return (\n    <Stack direction=\"horizontal\" gap={3} style={{flexWrap: 'wrap'}}>\n      {VARIANTS.map(({variant, label, note}) => (\n        <Card key={variant} variant={variant} width={160}>\n          <Stack direction=\"vertical\" gap={1}>\n            <Text type=\"body\" weight=\"bold\">\n              {label}\n            </Text>\n            <Text type=\"supporting\" color=\"secondary\">\n              {note}\n            </Text>\n          </Stack>\n        </Card>\n      ))}\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

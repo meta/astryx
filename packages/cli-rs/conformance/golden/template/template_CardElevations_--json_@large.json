@@ -1,0 +1,14 @@
+{
+ "id": "template_CardElevations_--json_@large",
+ "args": [
+  "template",
+  "CardElevations",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CardElevations\",\n    \"description\": \"The four elevation levels side by side. Cards are flat by default; raise a card with `elevation` only when it needs to float above surrounding content.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Grid\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Grid} from '@astryxdesign/core/Grid';\\nimport {Text, Heading} from '@astryxdesign/core/Text';\\n\\nconst LEVELS = [\\n  {elevation: 'none' as const, caption: 'Flat — sits on the page (default)'},\\n  {elevation: 'low' as const, caption: 'Low — lifts off slightly'},\\n  {elevation: 'med' as const, caption: 'Med — clearly raised'},\\n  {elevation: 'high' as const, caption: 'High — floats well above'},\\n];\\n\\nexport default function CardElevations() {\\n  return (\\n    <Grid columns={2} gap={4} width={520}>\\n      {LEVELS.map(({elevation, caption}) => (\\n        <Card key={elevation} elevation={elevation}>\\n          <Stack direction=\\\"vertical\\\" gap={1}>\\n            <Heading level={4}>elevation=&quot;{elevation}&quot;</Heading>\\n            <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n              {caption}\\n            </Text>\\n          </Stack>\\n        </Card>\\n      ))}\\n    </Grid>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

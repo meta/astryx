@@ -1,0 +1,20 @@
+{
+ "id": "component_Breadcrumbs_--props_@large",
+ "args": [
+  "component",
+  "Breadcrumbs",
+  "--props"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | BreadcrumbItem elements to render inside the breadcrumb trail. **(required)** |\n| `separator` | `ReactNode` | `'/'` | Separator rendered between breadcrumb items. The built-in slash mirrors automatically in RTL. |\n| `variant` | `'default' \\| 'supporting'` | `'default'` | Visual variant: supporting is smaller with secondary text styling. |\n| `label` | `string` | `'Breadcrumb'` | Accessible label for the nav landmark (aria-label). |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

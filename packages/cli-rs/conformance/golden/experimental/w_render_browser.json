@@ -1,0 +1,16 @@
+{
+ "id": "w_render_browser",
+ "args": [
+  "experimental",
+  "render",
+  "browser.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page uses `window` while rendering, and a rendered page has no browser yet. Read it inside useEffect, or guard it with typeof window !== 'undefined'.\n",
+ "exit": 1,
+ "files": []
+}

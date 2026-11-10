@@ -1,0 +1,14 @@
+{
+ "id": "wide_registry_enums_json",
+ "args": [
+  "upgrade",
+  "--registry",
+  "--json"
+ ],
+ "fixture": "upgrade-registry-enums",
+ "fixtureHash": "df527cc6d7207cdc+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.registry\",\n  \"data\": {\n    \"applied\": false,\n    \"ok\": false,\n    \"found\": 2,\n    \"current\": 0,\n    \"wouldUpdate\": 0,\n    \"updated\": 0,\n    \"wouldMerge\": 0,\n    \"merged\": 0,\n    \"wouldRefreshReceipt\": 0,\n    \"receiptsRefreshed\": 0,\n    \"conflicts\": 0,\n    \"missing\": 0,\n    \"invalid\": 1,\n    \"failed\": 1,\n    \"items\": [\n      {\n        \"item\": \"example-broken\",\n        \"path\": \"examples/broken\",\n        \"action\": \"fetch-error\",\n        \"message\": \"Could not fetch https://astryx.atmeta.com/shadcn/examples/broken.json: fetch failed\",\n        \"files\": []\n      },\n      {\n        \"item\": \"example-enums\",\n        \"action\": \"invalid\",\n        \"message\": \"Invalid receipt components/astryx/examples/.astryx/example-enums.json: multiple install variants exist for registry/example-enums/Enums.tsx\",\n        \"files\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

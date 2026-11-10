@@ -1,0 +1,19 @@
+{
+ "id": "template_TextTruncation_@large",
+ "args": [
+  "template",
+  "TextTruncation"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Text} from '@astryxdesign/core/Text';\n\nconst LONG_TEXT =\n  'The design system provides a consistent set of typography tokens, spacing scales, and color palettes that ensure every surface in the product feels cohesive regardless of which team built it.';\n\nconst LINES = [\n  {maxLines: 1, label: '1 line'},\n  {maxLines: 2, label: '2 lines'},\n  {maxLines: 3, label: '3 lines'},\n];\n\nexport default function TextTruncation() {\n  return (\n    <div\n      style={{\n        display: 'flex',\n        flexDirection: 'column',\n        gap: 16,\n        maxWidth: 300,\n      }}>\n      {LINES.map(({maxLines, label}) => (\n        <div key={maxLines}>\n          <Text type=\"supporting\" color=\"secondary\" display=\"block\">\n            {label}\n          </Text>\n          <div style={{border: '1px solid #ccc', padding: 8}}>\n            <Text type=\"body\" maxLines={maxLines}>\n              {LONG_TEXT}\n            </Text>\n          </div>\n        </div>\n      ))}\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

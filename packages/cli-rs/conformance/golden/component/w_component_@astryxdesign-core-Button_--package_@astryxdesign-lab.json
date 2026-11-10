@@ -1,0 +1,15 @@
+{
+ "id": "w_component_@astryxdesign-core-Button_--package_@astryxdesign-lab",
+ "args": [
+  "component",
+  "@astryxdesign/core/Button",
+  "--package",
+  "@astryxdesign/lab"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Component selector \"@astryxdesign/core/Button\" conflicts with --package \"@astryxdesign/lab\"\n",
+ "exit": 1,
+ "files": []
+}

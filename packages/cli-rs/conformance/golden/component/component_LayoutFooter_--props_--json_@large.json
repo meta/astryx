@@ -1,0 +1,15 @@
+{
+ "id": "component_LayoutFooter_--props_--json_@large",
+ "args": [
+  "component",
+  "LayoutFooter",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Footer content.\"\n    },\n    {\n      \"name\": \"hasDivider\",\n      \"type\": \"boolean\",\n      \"description\": \"Border at top edge. When unset, the parent Layout's defaultHasDividers decides.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"height\",\n      \"type\": \"SizeValue\",\n      \"description\": \"Footer height. Numbers are treated as pixels, strings are used as-is.\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the landmark element.\"\n    },\n    {\n      \"name\": \"padding\",\n      \"type\": \"0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10\",\n      \"description\": \"Internal padding on every edge, using the spacing scale. Replaces the inset from the layout; 0 is full bleed.\"\n    },\n    {\n      \"name\": \"role\",\n      \"type\": \"AriaRole\",\n      \"description\": \"ARIA landmark role.\"\n    },\n    {\n      \"name\": \"ref\",\n      \"type\": \"React.Ref<HTMLDivElement>\",\n      \"description\": \"Ref forwarded to the footer element.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

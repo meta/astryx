@@ -1,0 +1,13 @@
+{
+ "id": "w_-_@integration",
+ "args": [
+  "discover",
+  "é"
+ ],
+ "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: \"é\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "sweep_manifest_manifests_theme",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"theme\",\n    \"name\": \"fresh\",\n    \"root\": {\n      \"path\": \"./themes\",\n      \"created\": false\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"themes/fresh/freshTheme.ts\",\n      \"themes/fresh/freshTheme.doc.mjs\",\n      \"package.json\"\n    ],\n    \"written\": false,\n    \"dryRun\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

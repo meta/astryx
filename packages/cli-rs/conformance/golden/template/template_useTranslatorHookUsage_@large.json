@@ -1,0 +1,19 @@
+{
+ "id": "template_useTranslatorHookUsage_@large",
+ "args": [
+  "template",
+  "useTranslatorHookUsage"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {\n  InternationalizationProvider,\n  useTranslator,\n  type MessagesByLocale,\n} from '@astryxdesign/core/i18n';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {List, ListItem} from '@astryxdesign/core/List';\nimport {\n  SegmentedControl,\n  SegmentedControlItem,\n} from '@astryxdesign/core/SegmentedControl';\nimport {Text} from '@astryxdesign/core/Text';\n\ntype Locale = 'en' | 'fr';\n\nconst MESSAGES: MessagesByLocale = {\n  en: {\n    '@myapp.invoices.loadMore': {defaultMessage: 'Load more'},\n    '@myapp.invoices.showing': {\n      defaultMessage: 'Showing {shown, number} of {total, number}',\n    },\n  },\n  fr: {\n    '@myapp.invoices.loadMore': {defaultMessage: 'Charger plus'},\n    '@myapp.invoices.showing': {\n      defaultMessage: '{shown, number} sur {total, number} affichées',\n    },\n  },\n};\n\nconst INVOICES = Array.from({length: 9}, (_, index) => `INV-${1001 + index}`);\nconst PAGE_SIZE = 3;\n\nfunction InvoiceList() {\n  const translate = useTranslator();\n  const [shownCount, setShownCount] = useState(PAGE_SIZE);\n  const total = INVOICES.length;\n\n  return (\n    <VStack gap={3}>\n      <List density=\"compact\" hasDividers>\n        {INVOICES.slice(0, shownCount).map(invoice => (\n          <ListItem key={invoice} label={invoice} />\n        ))}\n      </List>\n      <HStack gap={2} hAlign=\"between\" vAlign=\"center\">\n        <Text type=\"supporting\">\n          {translate('@myapp.invoices.showing', {shown: shownCount, total})}\n        </Text>\n        <Button\n          label={translate('@myapp.invoices.loadMore')}\n          size=\"sm\"\n          isDisabled={shownCount >= total}\n          onClick={() => setShownCount(count => count + PAGE_SIZE)}\n        />\n      </HStack>\n    </VStack>\n  );\n}\n\nexport default function UseTranslatorHookUsage() {\n  const [locale, setLocale] = useState<Locale>('en');\n\n  return (\n    <InternationalizationProvider locale={locale} messages={MESSAGES}>\n      <Card width={360} padding={4}>\n        <VStack gap={3}>\n          <SegmentedControl\n            label=\"Language\"\n            value={locale}\n            onChange={nextLocale => setLocale(nextLocale as Locale)}\n            size=\"sm\">\n            <SegmentedControlItem value=\"en\" label=\"English\" />\n            <SegmentedControlItem value=\"fr\" label=\"Français\" />\n          </SegmentedControl>\n          <InvoiceList />\n        </VStack>\n      </Card>\n    </InternationalizationProvider>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

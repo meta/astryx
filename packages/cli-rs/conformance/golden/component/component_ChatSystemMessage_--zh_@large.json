@@ -1,0 +1,20 @@
+{
+ "id": "component_ChatSystemMessage_--zh_@large",
+ "args": [
+  "component",
+  "ChatSystemMessage",
+  "--zh"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n# ChatSystemMessage\n\n居中的系统消息，用于日期分隔、成员变更和状态通知等非发送者内容。没有头像、对齐或气泡。使用 divider 变体做时间分隔，default 做内联状态更新。\n\n**Import:** `import {ChatSystemMessage} from '@astryxdesign/core/Chat';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| System message | Yes | The noninteractive status row that carries the chat-system-message theme target. |\n| Content | Yes | The concise caller-provided message or divider label. |\n| Icon content | No | Rendered before the message in the default variant; the divider variant currently does not render it. |\n| Divider | No | A labelled horizontal Divider rendered by the divider variant. |\n\n## Best Practices\n\n- **Do:** Keep the visible message concise and self-contained so it remains understandable without an icon.\n- **Do:** Use the divider variant for temporal or section boundaries and the default variant for factual status notices.\n- **Don't:** Use ChatSystemMessage for sender-authored content; use ChatMessage and ChatMessageBubble instead.\n- **Don't:** Use caller-provided icon artwork as the only source of meaning; the visible message must carry the same information.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 事实性系统消息内容，如日期、加入/离开通知或状态变更；较长的 default 内容会在可用宽度内换行。 **(required)** |\n| `variant` | `'default' \\| 'divider'` | `'default'` | 视觉变体。'default' 渲染居中文本。'divider' 通过 Divider 在两侧添加水平线，用于日期分隔和段落分隔。 |\n| `icon` | `ReactNode` | - | 可选的调用方图标内容。default 变体会在消息前渲染；divider 变体当前不会渲染。使用 Icon 包裹以获得一致的尺寸。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-chat-system-message` | `data-variant` | default, divider | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'chat-system-message': {\n    base: { /* CSS properties */ },\n    'variant:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

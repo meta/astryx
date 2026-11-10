@@ -1,0 +1,19 @@
+{
+ "id": "template_TimestampTooltipTimezones_@large",
+ "args": [
+  "template",
+  "TimestampTooltipTimezones"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Timestamp} from '@astryxdesign/core/Timestamp';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst DATE = '2026-02-19T17:00:00Z';\n\nexport default function TimestampTooltipTimezones() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Stack direction=\"vertical\" gap={1}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Local + UTC — hover to compare\n        </Text>\n        <Timestamp\n          value={DATE}\n          format=\"relative\"\n          color=\"primary\"\n          tooltipEntries={[\n            {format: 'date_time', label: 'Local'},\n            {timezoneID: 'UTC', format: 'date_time', label: 'UTC'},\n          ]}\n        />\n      </Stack>\n      <Stack direction=\"vertical\" gap={1}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Incident origin zone alongside the reader&rsquo;s\n        </Text>\n        <Timestamp\n          value={DATE}\n          format=\"date_time\"\n          color=\"primary\"\n          tooltipEntries={[\n            {format: 'date_time', label: 'Local'},\n            {\n              timezoneID: 'America/Los_Angeles',\n              format: 'date_time',\n              label: 'Origin',\n            },\n          ]}\n        />\n      </Stack>\n      <Stack direction=\"vertical\" gap={1}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Friendly line plus a machine-precise line\n        </Text>\n        <Timestamp\n          value={DATE}\n          format=\"date_time\"\n          color=\"primary\"\n          tooltipEntries={[\n            {format: 'full'},\n            {format: 'system_date_time', label: 'ISO'},\n          ]}\n        />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

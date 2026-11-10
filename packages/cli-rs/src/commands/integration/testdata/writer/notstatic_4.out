@@ -1,0 +1,1 @@
+ERROR Could not update astryx.integration.mjs safely: its default export is not a static object literal.

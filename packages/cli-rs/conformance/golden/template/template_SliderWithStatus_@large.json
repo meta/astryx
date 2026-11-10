@@ -1,0 +1,19 @@
+{
+ "id": "template_SliderWithStatus_@large",
+ "args": [
+  "template",
+  "SliderWithStatus"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Slider} from '@astryxdesign/core/Slider';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function SliderWithStatus() {\n  const [value1, setValue1] = useState(95);\n  const [value2, setValue2] = useState(50);\n  const [value3, setValue3] = useState(75);\n  return (\n    <div style={{width: 300}}>\n      <VStack gap={6}>\n        <Slider\n          label=\"CPU Usage\"\n          value={value1}\n          onChange={setValue1}\n          status={{type: 'error', message: 'CPU usage is critically high'}}\n        />\n        <Slider\n          label=\"Memory\"\n          value={value2}\n          onChange={setValue2}\n          status={{type: 'warning', message: 'Memory usage is moderate'}}\n        />\n        <Slider\n          label=\"Disk\"\n          value={value3}\n          onChange={setValue3}\n          status={{type: 'success', message: 'Disk usage is healthy'}}\n        />\n      </VStack>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

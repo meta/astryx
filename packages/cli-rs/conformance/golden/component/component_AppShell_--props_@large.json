@@ -1,0 +1,20 @@
+{
+ "id": "component_AppShell_--props_@large",
+ "args": [
+  "component",
+  "AppShell",
+  "--props"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Main content area, rendered inside a <main> element. |\n| `contentPadding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `0` | Padding for the main content area. Set based on the dominant content pattern: 4 (16px) for forms/settings/text, 0 for dashboards/maps/tables. Override individual sections with Section. |\n| `topNav` | `ReactNode` | - | Top navigation slot, typically TopNav. |\n| `sideNav` | `ReactNode` | - | Side navigation slot, typically SideNav. |\n| `mobileNav` | `ReactNode` | - | Mobile navigation configuration. Accepts false (disable), a config object (tune auto behavior), or ReactNode (full custom drawer). The config object is {hasToggle?: boolean, isOpen?: boolean, onOpenChange?: (isOpen: boolean) => void, content?: ReactNode, breakpoint?: 'sm' \\| 'md' \\| 'lg' \\| 'xl' \\| '2xl' \\| 'none', defaultIsMobile?: boolean}; breakpoint defaults to 'md', resolves through the nearest Theme's widthBreakpoints, and switches to the wider layout at equality. 'none' is always non-mobile and ignores defaultIsMobile. |\n| `banner` | `ReactNode` | - | Banner slot for system-wide announcements, placed above the topNav. |\n| `height` | `'fill' \\| 'auto'` | `'fill'` | Height behavior: 'fill' makes the shell fill the viewport (100dvh) with independent scroll containers; 'auto' lets the shell grow with content and uses sticky positioning for nav. |\n| `variant` | `'wash' \\| 'surface' \\| 'section' \\| 'elevated'` | `'elevated'` | Navigation background style controlling how nav areas contrast with content. 'wash' uses wash background, 'surface' uses surface background, 'section' adds dividers between nav and content, 'elevated' uses wash nav with elevated surface content and border radius. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

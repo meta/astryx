@@ -1,0 +1,17 @@
+{
+ "id": "pg_palette-basic-json_--out_---escape-ts",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/basic.json",
+  "--out",
+  "../escape.ts"
+ ],
+ "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid palette output path \"../escape.ts\": resolves outside the project root (/tmp/astryx-conformance/work/themes). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

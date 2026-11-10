@@ -1,0 +1,19 @@
+{
+ "id": "typo_search_grdspan",
+ "args": [
+  "search",
+  "grdspan"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Results for \"grdspan\" (7)\n\nname:        GridSpan\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Grid\ndescription: Grid item that spans multiple columns or rows.\ncommand:     npx @astryxdesign/cli@0.7.12 component GridSpan\n\nname:        GridSpanColumns\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: GridSpan - Columns\nkind:        block\ndescription: Grid items spanning two of three columns. Wrap a grid child in GridSpan to make it occupy multiple columns for asymmetric layouts.\ncommand:     npx @astryxdesign/cli@0.7.12 template GridSpanColumns --type block\n\nname:        GridSpanShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: GridSpan\nkind:        block\ndescription: GridSpan lets a grid item span multiple columns or rows within an Grid, enabling masonry-style and asymmetric layouts.\ncommand:     npx @astryxdesign/cli@0.7.12 template GridSpanShowcase --type block\n\nname:        BlockquoteTestimonials\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Blockquote - Testimonials\nkind:        block\ndescription: Multiple quotes arranged in a card grid for a testimonials section. Combine with Card and Grid to create social-proof layouts.\ncommand:     npx @astryxdesign/cli@0.7.12 template BlockquoteTestimonials --type block\n\nname:        GridDashboardLayout\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Grid - Dashboard Layout\nkind:        block\ndescription: Dashboard layout with mixed-size widgets and a full-width summary row\ncommand:     npx @astryxdesign/cli@0.7.12 template GridDashboardLayout --type block\n\nname:        GridWithGridSpan\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Grid - Column Spanning\nkind:        block\ndescription: Grid with featured items spanning multiple columns and rows\ncommand:     npx @astryxdesign/cli@0.7.12 template GridWithGridSpan --type block\n\nname:        layout/responsive\nsection:     columns-that-reflow\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Layout › Responsive › Columns that reflow\ndescription: For columns that reflow on small screens, use `Grid columns={{minWidth, max}}`. A numeric `columns` is exactly N columns at every width and never reflows: `columns={4}` on a 390px phone renders four tracks under 100px wide, and the row...\ncommand:     npx @astryxdesign/cli@0.7.12 docs layout/responsive columns-that-reflow\nparent:      npx @astryxdesign/cli@0.7.12 docs layout/responsive --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover grdspan\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

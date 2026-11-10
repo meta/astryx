@@ -1,0 +1,15 @@
+{
+ "id": "argv_experimental_icon_--json_--help",
+ "args": [
+  "experimental",
+  "icon",
+  "--json",
+  "--help"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx experimental icon\",\n    \"description\": \"[experimental] Find an icon by meaning, or build an icon set from a library (guide: astryx docs cli/experimental/icon-sets)\",\n    \"usage\": \"astryx experimental icon [options] [command] [query...]\",\n    \"options\": [\n      {\n        \"flags\": \"--list\",\n        \"description\": \"List the installed icon sets and do nothing else; a query is refused\"\n      },\n      {\n        \"flags\": \"--set <name>\",\n        \"description\": \"Search one set, by name or <package>/<set>\"\n      },\n      {\n        \"flags\": \"--limit <n>\",\n        \"description\": \"Max number of matches, a positive integer (default 10)\"\n      },\n      {\n        \"flags\": \"--definitions\",\n        \"description\": \"Every Astryx icon definition, one line each: name, built in or not, description, words\"\n      },\n      {\n        \"flags\": \"--all-icons\",\n        \"description\": \"With --set and no words: every icon of that set, one line each (id, words, definitions)\"\n      }\n    ],\n    \"subcommands\": [\n      {\n        \"name\": \"use\",\n        \"description\": \"[experimental] Choose the project's icon set\"\n      },\n      {\n        \"name\": \"map\",\n        \"description\": \"[experimental] Register which icon of your set draws an icon definition\"\n      },\n      {\n        \"name\": \"add\",\n        \"description\": \"[experimental] Register one icon you chose from a library in your icon set\"\n      },\n      {\n        \"name\": \"new-set\",\n        \"description\": \"[experimental] Start an icon set in your integration package\"\n      },\n      {\n        \"name\": \"new-definition\",\n        \"description\": \"[experimental] Add your icon set's own icon definition\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

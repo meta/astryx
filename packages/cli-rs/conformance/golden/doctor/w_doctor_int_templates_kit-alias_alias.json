@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_int_templates_kit-alias_alias",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "kit-alias"
+ ],
+ "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
+ "stdout": "Checking integration templates: @real/kit@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     missing_root\nmessage:  Declared themes root does not exist on disk: /tmp/astryx-conformance/work/doctor-integrations/alias/node_modules/kit-alias/gone\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

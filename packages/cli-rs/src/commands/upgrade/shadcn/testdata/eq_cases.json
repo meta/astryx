@@ -1,0 +1,132 @@
+[
+ {
+  "a": "// Keep this note\nexport default function Example(){return <Button label='Save'/>;}\n",
+  "b": "// Keep this note\nexport default function Example() {\n  return <Button label=\"Save\" />;\n}\n",
+  "eq": true
+ },
+ {
+  "a": "// Keep this note\nexport default function Example(){return <Button label='Save'/>;}\n",
+  "b": "// Keep this note\nexport default function Example() {\n  return <Button label=\"Delete\" />;\n}\n",
+  "eq": false
+ },
+ {
+  "a": "// Keep this note\nexport default function Example(){return <Button label='Save'/>;}\n",
+  "b": "// Changed note\nexport default function Example() {\n  return <Button label=\"Save\" />;\n}\n",
+  "eq": false
+ },
+ {
+  "a": "x++;\ny;\n",
+  "b": "x\n++y;\n",
+  "eq": false
+ },
+ {
+  "a": "function value() { return 42; }\n",
+  "b": "function value() { return\n42; }\n",
+  "eq": false
+ },
+ {
+  "a": "not valid {",
+  "b": "// Keep this note\nexport default function Example() {\n  return <Button label=\"Save\" />;\n}\n",
+  "eq": false
+ },
+ {
+  "a": "a = /*c*/ 1;\n",
+  "b": "a /*c*/ = 1;\n",
+  "eq": false
+ },
+ {
+  "a": "a; /*c*/ b;\n",
+  "b": "a; b; /*c*/\n",
+  "eq": false
+ },
+ {
+  "a": "const a = 1; // x\n",
+  "b": "const a = 1;\n// x\n",
+  "eq": true
+ },
+ {
+  "a": "f(a, /* c */ b);\n",
+  "b": "f(a /* c */, b);\n",
+  "eq": false
+ },
+ {
+  "a": "const x = (1);\n",
+  "b": "const x = 1;\n",
+  "eq": true
+ },
+ {
+  "a": "const x = 0x10;\n",
+  "b": "const x = 16;\n",
+  "eq": true
+ },
+ {
+  "a": "const s = 'a';\n",
+  "b": "const s = \"a\";\n",
+  "eq": true
+ },
+ {
+  "a": "let {a} = b;\n",
+  "b": "let { a } = b;\n",
+  "eq": true
+ },
+ {
+  "a": "class A { m() {} }\n",
+  "b": "class A {\n  m() {}\n}\n",
+  "eq": true
+ },
+ {
+  "a": "const a = 1\nconst b = 2\n",
+  "b": "const a = 1;\nconst b = 2;\n",
+  "eq": true
+ },
+ {
+  "a": "/** doc */\nfunction f() {}\n",
+  "b": "/** doc */ function f() {}\n",
+  "eq": true
+ },
+ {
+  "a": "function f() {\n  // inner\n}\n",
+  "b": "function f() {}\n// inner\n",
+  "eq": false
+ },
+ {
+  "a": "const t = `a${b}c`;\n",
+  "b": "const t = `a${ b }c`;\n",
+  "eq": true
+ },
+ {
+  "a": "const r = /ab+c/g;\n",
+  "b": "const r = /ab+c/gi;\n",
+  "eq": false
+ },
+ {
+  "a": "'use client';\nexport {};\n",
+  "b": "\"use client\"\nexport {}\n",
+  "eq": true
+ },
+ {
+  "a": "x = 1n;\n",
+  "b": "x = 1n;\n",
+  "eq": true
+ },
+ {
+  "a": "<div>\n  text\n</div>;\n",
+  "b": "<div>text</div>;\n",
+  "eq": false
+ },
+ {
+  "a": "a ? b : c;\n",
+  "b": "a\n  ? b\n  : c;\n",
+  "eq": true
+ },
+ {
+  "a": "",
+  "b": "\n",
+  "eq": true
+ },
+ {
+  "a": "//a\n",
+  "b": "//b\n",
+  "eq": false
+ }
+]

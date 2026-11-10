@@ -1,0 +1,15 @@
+{
+ "id": "search_buton_--limit_x",
+ "args": [
+  "search",
+  "buton",
+  "--limit",
+  "x"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"NaN\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

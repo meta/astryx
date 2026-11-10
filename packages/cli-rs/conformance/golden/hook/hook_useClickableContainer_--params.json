@@ -1,0 +1,20 @@
+{
+ "id": "hook_useClickableContainer_--params",
+ "args": [
+  "hook",
+  "useClickableContainer",
+  "--params"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseClickableContainerOptions` | - | Configuration object for the clickable container. **(required)** |\n| `options.containerRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the outer container element. **(required)** |\n| `options.interactiveRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the primary interactive element inside (link, button). If no onClick or href is provided, clicks are proxied to this element. |\n| `options.onClick` | `(event: MouseEvent<HTMLElement>) => void` | - | Click handler fired when the container surface (not a nested interactive element) is clicked. |\n| `options.href` | `string` | - | Navigation URL. When provided, clicking the container navigates to this URL. |\n| `options.target` | `string` | - | Link target (e.g., '_blank'). Used with href for navigation behavior. |\n| `options.disabled` | `boolean` | `false` | Whether the container is disabled. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

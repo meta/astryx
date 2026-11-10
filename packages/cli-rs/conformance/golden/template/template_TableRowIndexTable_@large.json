@@ -1,0 +1,19 @@
+{
+ "id": "template_TableRowIndexTable_@large",
+ "args": [
+  "template",
+  "TableRowIndexTable"
+ ],
+ "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Table,\n  useTableRowIndex,\n  proportional,\n  pixel,\n} from '@astryxdesign/core/Table';\nimport type {TableColumn} from '@astryxdesign/core/Table';\n\ninterface Track extends Record<string, unknown> {\n  id: string;\n  title: string;\n  artist: string;\n  plays: number;\n}\n\nconst tracks: Track[] = [\n  {id: 't1', title: 'Nightfall', artist: 'Ava Chen', plays: 1820},\n  {id: 't2', title: 'Ember', artist: 'Liam Park', plays: 942},\n  {id: 't3', title: 'Tidal', artist: 'Zoe Vega', plays: 3310},\n  {id: 't4', title: 'Cinder', artist: 'Max Ross', plays: 604},\n  {id: 't5', title: 'Halcyon', artist: 'Mia Cole', plays: 2075},\n];\n\nconst columns: TableColumn<Track>[] = [\n  {key: 'title', header: 'Title', width: proportional(2)},\n  {key: 'artist', header: 'Artist', width: proportional(2)},\n  {key: 'plays', header: 'Plays', width: pixel(90), align: 'end'},\n];\n\nexport default function TableRowIndexTable() {\n  // Table gives each row its position, so numbering follows the rendered rows.\n  const rowIndex = useTableRowIndex<Track>();\n\n  return (\n    <Table\n      data={tracks}\n      columns={columns}\n      idKey=\"id\"\n      hasHover\n      plugins={{rowIndex}}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

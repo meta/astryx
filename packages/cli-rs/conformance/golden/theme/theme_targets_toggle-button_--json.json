@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_toggle-button_--json",
+ "args": [
+  "theme",
+  "targets",
+  "toggle-button",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"toggle-button\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"toggle-button\",\n        \"className\": \"astryx-toggle-button\",\n        \"component\": \"ToggleButton\",\n        \"props\": [\n          \"elevation\"\n        ],\n        \"states\": [\n          \"isPressed\"\n        ]\n      },\n      {\n        \"key\": \"toggle-button-group\",\n        \"className\": \"astryx-toggle-button-group\",\n        \"component\": \"ToggleButton\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

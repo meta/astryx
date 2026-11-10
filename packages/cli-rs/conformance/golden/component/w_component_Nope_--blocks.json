@@ -1,0 +1,14 @@
+{
+ "id": "w_component_Nope_--blocks",
+ "args": [
+  "component",
+  "Nope",
+  "--blocks"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "Error: No component named \"Nope\"\n\n  Code  (similar name (distance 2))\n  CodeBlock  (keyword \"code\" (distance 2))\n  Skeleton  (keyword \"bone\" (distance 2))\n  OverflowList  (keyword \"more\" (distance 2))\n",
+ "exit": 1,
+ "files": []
+}
