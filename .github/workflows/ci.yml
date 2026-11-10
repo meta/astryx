@@ -6,9 +6,10 @@
 # Merge queue: test + build also run on merge_group events so the
 # merge queue can gate on them before landing a PR.
 name: CI
-# Main's nightly full interaction run names its commit, so the main heavy
-# lanes tell it from a release-check. Every other run keeps its default name.
-run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || '' }}"
+# Main's nightly full interaction run and the weekly full WebKit run name
+# their commit, so the main heavy lanes tell them from a release-check. Every
+# other run keeps its default name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || '' }}"
 
 on:
   pull_request:
@@ -1751,10 +1752,10 @@ jobs:
           echo "short_hash=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
           printf '{"forceFullComponentAudits":true}\n' > analysis.json
 
-      # The interaction proofs read it on a pull request and in main's nightly
-      # full interaction run.
+      # The interaction proofs read it on a pull request, in main's nightly
+      # full interaction run and in the weekly full WebKit run.
       - name: Upload Storybook artifact
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check' || inputs.operation == 'interaction-full')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check' || inputs.operation == 'interaction-full' || inputs.operation == 'webkit-weekly')
         uses: actions/upload-artifact@v7
         with:
           name: storybook-${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}

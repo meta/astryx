@@ -15,6 +15,7 @@ import {
   FAILED,
   GREEN,
   MAX_AGE_MS,
+  listVerdicts,
   releaseScope,
   releaseVersion,
 } from './webkit-release-scope.mjs';
@@ -180,6 +181,32 @@ describe('the weekly full WebKit run', () => {
       expect(ci.jobs[id].needs, id).toContain('webkit-weekly-request');
   });
 
+  it('builds and uploads the Storybook the WebKit legs download', () => {
+    const build = ci.jobs['build-storybook'];
+    const upload = step(build, 'Upload Storybook artifact');
+    const condition = String(upload.if)
+      .replace(/steps\.scope\.outputs\.[a-z_]+/g, "'false'")
+      .replace(/^\$\{\{\s*|\s*\}\}$/g, '');
+    expect(
+      Function(
+        'github',
+        'inputs',
+        `return (${condition});`,
+      )(weeklyDispatch.github, weeklyDispatch.inputs),
+    ).toBe(true);
+    expect(upload.with.name).toBe(`storybook-${build.outputs.short_hash}`);
+    expect(
+      step(ci.jobs['pr-interaction-webkit'], 'Download Storybook artifact').with
+        .name,
+    ).toBe('storybook-${{ needs.build-storybook.outputs.short_hash }}');
+  });
+
+  it("names its commit, so the main heavy lanes don't count it as a release-check", () => {
+    expect(ci['run-name']).toContain(
+      "github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha)",
+    );
+  });
+
   it('runs every WebKit spec at the dispatched main commit', () => {
     const webkit = ci.jobs['pr-interaction-webkit'];
     expect(webkit.env.WEBKIT_WEEKLY).toBe(
@@ -218,18 +245,15 @@ describe('the weekly full WebKit run', () => {
 
 describe('the release check WebKit scope', () => {
   const now = Date.parse('2026-11-16T15:00:00Z');
-  const onMain = {branch: 'main', sameRepository: true};
-  const green = (createdAt, sha = 'a'.repeat(40), run = onMain) => ({
+  const green = (createdAt, sha = 'a'.repeat(40)) => ({
     name: GREEN,
     createdAt,
     sha,
-    ...run,
   });
-  const failed = (createdAt, sha = 'b'.repeat(40), run = onMain) => ({
+  const failed = (createdAt, sha = 'b'.repeat(40)) => ({
     name: FAILED,
     createdAt,
     sha,
-    ...run,
   });
 
   it('reads the release version from the release tooling title', () => {
@@ -272,18 +296,45 @@ describe('the release check WebKit scope', () => {
     expect(scope.reason).toContain('failed');
   });
 
-  it('reads only verdicts a run on main in this repository recorded', () => {
-    const verdicts = [
-      failed('2026-11-08T11:00:00Z'),
-      green('2026-11-15T11:00:00Z', 'c'.repeat(40), {
-        branch: 'fix/thing',
-        sameRepository: true,
-      }),
-      green('2026-11-15T12:00:00Z', 'd'.repeat(40), {
-        branch: 'main',
-        sameRepository: false,
-      }),
-    ];
+  it('reads only verdicts a run on main in this repository recorded, through the shared lookup', async () => {
+    const artifact = (name, createdAt, run = {}, extra = {}) => ({
+      name,
+      created_at: createdAt,
+      expired: false,
+      ...extra,
+      workflow_run: {
+        head_branch: 'main',
+        head_sha: 'e'.repeat(40),
+        head_repository_id: 1,
+        repository_id: 1,
+        ...run,
+      },
+    });
+    const artifacts = {
+      [GREEN]: [
+        artifact(GREEN, '2026-11-15T11:00:00Z', {head_branch: 'fix/thing'}),
+        artifact(GREEN, '2026-11-15T12:00:00Z', {head_repository_id: 2}),
+        artifact(GREEN, '2026-11-15T13:00:00Z', {}, {expired: true}),
+      ],
+      [FAILED]: [artifact(FAILED, '2026-11-08T11:00:00Z')],
+    };
+    const github = {
+      rest: {
+        actions: {
+          listArtifactsForRepo: async ({name}) => ({
+            data: {artifacts: artifacts[name]},
+          }),
+        },
+      },
+    };
+    const verdicts = await listVerdicts({
+      github,
+      owner: 'meta',
+      repo: 'astryx',
+    });
+    expect(verdicts).toEqual([
+      {name: FAILED, createdAt: '2026-11-08T11:00:00Z', sha: 'e'.repeat(40)},
+    ]);
     const scope = releaseScope({version: '0.7.13', verdicts, now});
     expect(scope.full).toBe(true);
     expect(scope.reason).toContain('failed');

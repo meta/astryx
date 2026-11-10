@@ -14,7 +14,12 @@
  *   older, or is missing, and at every minor release (spec:AST-030 DEC-24).
  */
 
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+
+const {mainArtifacts} = createRequire(import.meta.url)(
+  './lib/main-artifact.cjs',
+);
 
 export const GREEN = 'webkit-weekly-green';
 export const FAILED = 'webkit-weekly-failed';
@@ -32,67 +37,109 @@ export function releaseVersion(title) {
 /**
  * @param {object} options
  * @param {string | null} options.version e.g. `0.7.12`
- * @param {Array<{name: string, createdAt: string, sha?: string, branch?: string, sameRepository?: boolean}>} options.verdicts
+ * @param {Array<{name: string, createdAt: string, sha?: string}>} options.verdicts
+ *   the verdicts Main's own runs on `main` recorded (listVerdicts)
  * @param {number} options.now milliseconds since the epoch
  * @returns {{full: boolean, reason: string}}
  */
 export function releaseScope({version, verdicts, now}) {
   if (version == null)
-    return {full: true, reason: 'the release version is unknown, so the full suite runs'};
+    return {
+      full: true,
+      reason: 'the release version is unknown, so the full suite runs',
+    };
   if (version.split('.')[2] === '0')
-    return {full: true, reason: `${version} is a minor release, so the full suite runs at its exact commit`};
-  // Only a run on main in this repository records the weekly verdict.
+    return {
+      full: true,
+      reason: `${version} is a minor release, so the full suite runs at its exact commit`,
+    };
   const recorded = verdicts
     .filter(verdict => verdict.name === GREEN || verdict.name === FAILED)
-    .filter(verdict => verdict.branch === 'main' && verdict.sameRepository === true)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   if (recorded.length === 0)
-    return {full: true, reason: 'no full weekly WebKit run is recorded, so the full suite runs'};
+    return {
+      full: true,
+      reason: 'no full weekly WebKit run is recorded, so the full suite runs',
+    };
   const last = recorded[0];
   const at = last.sha ? ` at ${last.sha.slice(0, 10)}` : '';
   if (last.name === FAILED)
-    return {full: true, reason: `the last full weekly run${at} failed, so the full suite runs`};
+    return {
+      full: true,
+      reason: `the last full weekly run${at} failed, so the full suite runs`,
+    };
   const age = now - Date.parse(last.createdAt);
   const days = (age / (24 * 60 * 60 * 1000)).toFixed(1);
   if (!(age <= MAX_AGE_MS))
-    return {full: true, reason: `the last green full weekly run${at} completed ${days} days ago, more than 7, so the full suite runs`};
-  return {full: false, reason: `the last full weekly run${at} is green and completed ${days} days ago, so the touch and gesture subset runs`};
+    return {
+      full: true,
+      reason: `the last green full weekly run${at} completed ${days} days ago, more than 7, so the full suite runs`,
+    };
+  return {
+    full: false,
+    reason: `the last full weekly run${at} is green and completed ${days} days ago, so the touch and gesture subset runs`,
+  };
 }
 
-/** Lists both verdict artifacts through the REST API. */
-async function listVerdicts({repository, token}) {
+/**
+ * Both verdicts as Main's own runs on `main` in this repository recorded
+ * them (lib/main-artifact.cjs): a pull request's run can upload an artifact
+ * under any name.
+ * @param {{github: object, owner: string, repo: string}} options an
+ *   Octokit-shaped client
+ */
+export async function listVerdicts({github, owner, repo}) {
   const verdicts = [];
-  for (const name of [GREEN, FAILED]) {
-    const response = await fetch(
-      `https://api.github.com/repos/${repository}/actions/artifacts?name=${name}&per_page=20`,
-      {headers: {authorization: `Bearer ${token}`, accept: 'application/vnd.github+json'}},
-    );
-    if (!response.ok) throw new Error(`listing ${name} artifacts: HTTP ${response.status}`);
-    const {artifacts} = await response.json();
-    for (const artifact of artifacts ?? [])
+  for (const name of [GREEN, FAILED])
+    for (const artifact of await mainArtifacts({github, owner, repo, name}))
       verdicts.push({
         name,
         createdAt: artifact.created_at,
         sha: artifact.workflow_run?.head_sha,
-        branch: artifact.workflow_run?.head_branch,
-        sameRepository:
-          artifact.workflow_run?.head_repository_id != null &&
-          artifact.workflow_run.head_repository_id === artifact.workflow_run.repository_id,
       });
-  }
   return verdicts;
+}
+
+/** The one REST call listVerdicts makes, without Octokit. */
+function restClient(token) {
+  return {
+    rest: {
+      actions: {
+        listArtifactsForRepo: async ({owner, repo, name, per_page}) => {
+          const response = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/actions/artifacts?name=${name}&per_page=${per_page}`,
+            {
+              headers: {
+                authorization: `Bearer ${token}`,
+                accept: 'application/vnd.github+json',
+              },
+            },
+          );
+          if (!response.ok)
+            throw new Error(
+              `listing ${name} artifacts: HTTP ${response.status}`,
+            );
+          return {data: await response.json()};
+        },
+      },
+    },
+  };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   // A failure to read the record counts as no record: the full suite runs.
   let verdicts = [];
   try {
+    const [owner, repo] = String(process.env.GITHUB_REPOSITORY).split('/');
     verdicts = await listVerdicts({
-      repository: process.env.GITHUB_REPOSITORY,
-      token: process.env.GITHUB_TOKEN,
+      github: restClient(process.env.GITHUB_TOKEN),
+      owner,
+      repo,
     });
   } catch (error) {
-    console.error(`::warning title=WebKit weekly record unreadable::${error.message}`);
+    console.error(
+      `::warning title=WebKit weekly record unreadable::${error.message}`,
+    );
   }
   const {full, reason} = releaseScope({
     version: releaseVersion(process.env.RELEASE_TITLE),
