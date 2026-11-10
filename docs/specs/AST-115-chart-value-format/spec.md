@@ -80,8 +80,9 @@ reads the same on both surfaces.
 
 - **FR1 — One format type.** `@astryxdesign/charts` exports
   `ChartValueFormat`, a function of `(value: unknown, locale: Locale,
-calendar: CalendarSystem) => string`. A format returns the display text for
-  one value, an empty value included (FR8). The built-in `compactNumber`,
+calendar: CalendarSystem) => string | null | undefined`. A format returns the
+  display text for one value, an empty value included, or `null` or
+  `undefined` for the chart's default text (FR8). The built-in `compactNumber`,
   `percent`, `shortDate`, and `monthYear` formatters, and the function that
   `currency(symbol)` returns (FR11), are `ChartValueFormat` values without a
   wrapper. A format that ignores `locale` and `calendar`, such as a closure
@@ -108,7 +109,8 @@ calendar: CalendarSystem) => string`. A format returns the display text for
 - **FR5 — The tooltip shows formatted values.** The default tooltip body shows
   the x text as its heading. It shows each row's value text, both as the
   single bare value and in labelled rows. Each `TooltipSeriesValue` row carries
-  `formattedValue: string` beside the raw `value`, and a custom
+  `formattedValue: string`, the text that the row shows, beside the raw
+  `value`, and a custom
   `tooltip.render` receives these rows. The raw `xValue` and raw row values
   stay unchanged.
 - **FR6 — The hidden data table shows formatted values.** Each row header
@@ -120,13 +122,16 @@ calendar: CalendarSystem) => string`. A format returns the display text for
   empty values alike. Two series that read the same data key with different
   formats are the one exception: the table column follows FR6, and each tooltip
   row follows its own series.
-- **FR8 — Empty values.** An empty value is `null` or `undefined`. When the
-  series declares `formatValue`, Chart calls it for an empty value too, so the
-  caller chooses the text. When the series declares no format, the tooltip and
-  the data table show the catalog message `@astryx.chart.noData` (English
-  default: "No data"), resolved through the translator for the provider
-  locale. The x value follows the same rule with `formatXValue`. Every other
-  value, `NaN` and infinities included, is a present value.
+- **FR8 — Empty values and the default text.** An empty value is `null` or
+  `undefined`; every other value, `NaN` and infinities included, is a present
+  value. When the series declares `formatValue`, Chart calls it for an empty
+  value too, so the caller chooses the text. The tooltip and the data table
+  show the default text, the catalog message `@astryx.chart.noData` (English
+  default: "No data") resolved through the translator for the provider
+  locale, in two cases: the value is empty and the series declares no format,
+  or any `formatValue` or `formatXValue` call returns `null` or `undefined`.
+  A returned string, the empty string included, is shown as given. The x
+  value follows the same rules with `formatXValue`.
 - **FR9 — No format means unchanged text for present values.** A series
   without `formatValue` and a chart without `formatXValue` render
   `String(value)` for present values.
@@ -141,10 +146,14 @@ calendar: CalendarSystem) => string`. A format returns the display text for
   call-time locale applies, so `currency('$')` as a series format follows the
   provider locale that Chart supplies (FR4). With neither, the output keeps
   the host default recorded under `architecture:internationalization` INV9.
-- **FR12 — Built-in formatters never show an empty value as a number.** The
-  built-in number formatters (`compactNumber`, `percent`, and the `currency()`
-  function) do not coerce `null` or `undefined` to zero. An empty value never
-  reads `0`, `0%`, or `$0`. OQ1 holds the text they return for it.
+- **FR12 — Built-in formatters defer empty values to the chart.**
+  `compactNumber`, `percent`, `shortDate`, `monthYear`, and the function that
+  `currency()` returns return `undefined` for a `null` or `undefined` input,
+  so the chart shows its default text (FR8). An empty value never reads `0`,
+  `0%`, `$0`, `null`, or `undefined`. For a present value, each built-in's
+  declared and returned result stays a string, so existing `ChartAxis`
+  `tickFormat` callsites that use a built-in keep type-checking and keep their
+  output.
 
 ### Platform support
 
@@ -172,22 +181,22 @@ calendar: CalendarSystem) => string`. A format returns the display text for
   value and an empty cell for an empty value.
 - FR11 gap: the function that `currency()` returns ignores a call-time locale.
 - FR12 gap: `compactNumber`, `percent`, and the `currency()` function read
-  `null` as `0`.
+  `null` as `0`, and `shortDate` and `monthYear` read it as `null`.
 - The `Chart` and `ChartTooltip` consumer docs and the formatter docs show the
   declaration once, with a mixed-unit example and an empty-value example.
 
 ## Verification
 
-| Contract | Verification                                                                       | Representative states                                                                                                                            | Mutation or failure expectation                                                                                                                                         |
-| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | Type tests and mark builder unit tests                                             | each listed builder with and without `formatValue`; each built-in formatter and `currency('$')` assigned without a wrapper; a custom `SeriesDef` | a builder drops the option, a built-in formatter fails to type-check as a format, or a utility mark accepts one                                                         |
-| FR3, FR5 | `ChartTooltip` tests with expected strings from platform `Intl`                    | single and multiple series; mixed units; candlestick; custom `render`; a directly composed `ChartTooltip`                                        | the heading or a row shows the raw value, `formattedValue` differs from the shown text, or a raw argument changes                                                       |
-| FR4      | Provider tests and a server/client render pair                                     | no provider; `fr` locale; `persian` provider calendar; a calendar the runtime cannot show; a locale change                                       | a format receives the host locale, a calendar other than the resolved one, stale text after a provider change, or server and client text that differ                    |
-| FR6, FR7 | `Chart` accessibility tests that compare table cells with tooltip rows             | every row of a small mixed-unit chart with empty values; two series that share a data key; the 100-cell limit                                    | a table cell differs from its tooltip row outside the shared-key exception, or a column uses a series other than the first that reads its key                           |
-| FR8, FR9 | Focused tests for both surfaces, with the expected phrase read from the catalog    | `null` and `undefined` with and without a format, for series and x values; `fr` locale; `NaN` and `Infinity`; present values without a format    | a format is skipped for an empty value, an unformatted empty value shows text other than the catalog phrase, or present unformatted output differs from `String(value)` |
-| FR10     | Layout and pointer tests with a format that returns long text, and one that throws | formatted and unformatted renders of the same data; a throwing format                                                                            | scales, hover selection, or render-callback arguments change; a thrown error is swallowed; markup in the output is parsed                                               |
-| FR11     | `currency()` unit tests with expected strings from platform `Intl`                 | factory locale only; call-time locale only; both, with different locales; neither; a one-argument `tickFormat` call                              | a call-time locale beats the factory locale, a call-time locale is ignored, or a one-argument call changes output                                                       |
-| FR12     | Built-in formatter unit tests                                                      | `null` and `undefined` into `compactNumber`, `percent`, and the `currency()` function                                                            | any of them returns a zero reading                                                                                                                                      |
+| Contract | Verification                                                                          | Representative states                                                                                                                                                                            | Mutation or failure expectation                                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2 | Type tests and mark builder unit tests                                                | each listed builder with and without `formatValue`; each built-in formatter and `currency('$')` assigned without a wrapper; a custom `SeriesDef`                                                 | a builder drops the option, a built-in formatter fails to type-check as a format, or a utility mark accepts one                                                                                               |
+| FR3, FR5 | `ChartTooltip` tests with expected strings from platform `Intl`                       | single and multiple series; mixed units; candlestick; custom `render`; a directly composed `ChartTooltip`                                                                                        | the heading or a row shows the raw value, `formattedValue` differs from the shown text, or a raw argument changes                                                                                             |
+| FR4      | Provider tests and a server/client render pair                                        | no provider; `fr` locale; `persian` provider calendar; a calendar the runtime cannot show; a locale change                                                                                       | a format receives the host locale, a calendar other than the resolved one, stale text after a provider change, or server and client text that differ                                                          |
+| FR6, FR7 | `Chart` accessibility tests that compare table cells with tooltip rows                | every row of a small mixed-unit chart with empty values; two series that share a data key; the 100-cell limit                                                                                    | a table cell differs from its tooltip row outside the shared-key exception, or a column uses a series other than the first that reads its key                                                                 |
+| FR8, FR9 | Focused tests for both surfaces, with the expected phrase read from the catalog       | `null` and `undefined` with and without a format, for series and x values; formats that return `null`, `undefined`, and `''`; `fr` locale; `NaN` and `Infinity`; present values without a format | a format is skipped for an empty value, a nullish result or an unformatted empty value shows text other than the catalog phrase, `''` is replaced, or present unformatted output differs from `String(value)` |
+| FR10     | Layout and pointer tests with a format that returns long text, and one that throws    | formatted and unformatted renders of the same data; a throwing format                                                                                                                            | scales, hover selection, or render-callback arguments change; a thrown error is swallowed; markup in the output is parsed                                                                                     |
+| FR11     | `currency()` unit tests with expected strings from platform `Intl`                    | factory locale only; call-time locale only; both, with different locales; neither; a one-argument `tickFormat` call                                                                              | a call-time locale beats the factory locale, a call-time locale is ignored, or a one-argument call changes output                                                                                             |
+| FR12     | Built-in formatter unit tests and a type test over `ChartAxis` `tickFormat` callsites | `null` and `undefined` into each built-in and the `currency()` function; present values; a built-in passed to `tickFormat`                                                                       | a built-in returns a string for an empty value, returns a non-string for a present value, or an existing `tickFormat` callsite stops type-checking                                                            |
 
 ## Decision log
 
@@ -247,13 +256,23 @@ reader user and a pointer user meet the same words for the same gap.
 Rejected: hiding empty rows by default, because the hidden table cannot drop a
 cell and the two surfaces must agree.
 
+### DEC-5 — A nullish format result means the chart's default text
+
+**Reference:** `spec:AST-115/DEC-5`
+**Decider:** pending
+
+A pure formatter has no translator, so it cannot return the localized "No
+data" phrase. A format returns `null` or `undefined` to ask for it, and the
+built-in formatters do so for every empty value (FR8, FR12). A missing value
+then reads the same with a built-in format, with no format, and on both
+surfaces. A caller who wants other text returns a string; the empty string
+stays a deliberate blank.
+
+Rejected: built-ins return the empty string, because a missing value would then
+read differently with and without a built-in format.
+Rejected: built-ins return `String(value)`, because the surfaces would show
+`null` or `undefined` to people.
+
 ## Open questions
 
-- **OQ1 — Built-in formatter text for an empty value.** (`human-api`) FR12
-  rules out a zero reading. The options are:
-  - the empty string. The surface shows a blank value, and the caller wraps
-    the built-in to show other text.
-  - `String(value)`, which reads `null` or `undefined`.
-
-  A pure built-in formatter has no translator, so it cannot return the
-  `@astryx.chart.noData` phrase itself.
+None.
