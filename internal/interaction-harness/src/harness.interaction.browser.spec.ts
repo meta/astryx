@@ -8398,6 +8398,31 @@ test.describe('page freeze', () => {
     expect(travel, trace).toBeGreaterThan(40);
   });
 
+  test('a block that thaws holds the thread for the whole time asked, on a time origin that steps back between two reads', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    // WebKit floors its time origin to the ms, so two reads of it can differ
+    // by one. This origin steps back a ms at every read.
+    await page.evaluate(() => {
+      const origin = Math.floor(performance.timeOrigin);
+      let reads = 0;
+      Object.defineProperty(performance, 'timeOrigin', {
+        configurable: true,
+        get: () => {
+          reads += 1;
+          return origin - reads;
+        },
+      });
+    });
+    const block = await blockMainThread(page, 50, {thaw: true});
+    expect(block.to - block.from).toBeGreaterThan(50 - 0.01);
+    expect(block.spanMs).toBeGreaterThanOrEqual(50);
+  });
+
   test('a block that thaws throws by name on a page the freeze does not hold', async ({
     page,
   }) => {

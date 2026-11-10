@@ -1716,8 +1716,11 @@ async function blockFromThaw(
               while (now - start < duration) {
                 now = read();
               }
-              const blockFrom = performance.timeOrigin + start;
-              const blockTo = performance.timeOrigin + now;
+              // One read of the time origin dates both ends, as a block that
+              // waits for its frame does.
+              const origin = performance.timeOrigin;
+              const blockFrom = origin + start;
+              const blockTo = origin + now;
               const controlStarts = w.__harnessCaught.controlStarts();
               resolve({
                 from: blockFrom,
