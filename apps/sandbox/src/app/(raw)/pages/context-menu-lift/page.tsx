@@ -74,6 +74,36 @@ const styles = stylex.create({
   },
   // The trigger fills its table cell.
   cellTrigger: {display: 'block'},
+  iconRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  outlined: {
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'currentColor',
+    borderRadius: 12,
+  },
+  translucent: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  pseudoFill: {
+    position: 'relative',
+    isolation: 'isolate',
+    padding: 12,
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      zIndex: -1,
+      borderRadius: 12,
+      backgroundColor: 'rgba(16, 185, 129, 1)',
+    },
+  },
 });
 
 export default function ContextMenuLiftPage() {
@@ -176,8 +206,49 @@ export default function ContextMenuLiftPage() {
         </VStack>
 
         <VStack gap={2}>
+          <Heading level={2}>Other shapes</Heading>
+          <Text>
+            A trigger with no surface of its own lifts on a plate. One with a
+            fill of its own lifts as it is.
+          </Text>
+          <Grid columns={2} gap={3}>
+            <ContextMenu items={MENU} label="Row with an icon">
+              <div {...stylex.props(styles.iconRow)}>
+                <svg width={20} height={20} viewBox="0 0 20 20" aria-hidden>
+                  <circle cx={10} cy={10} r={8} fill="currentColor" />
+                </svg>
+                <Text>A row with an icon</Text>
+              </div>
+            </ContextMenu>
+            <ContextMenu items={MENU} label="Outlined box">
+              <div {...stylex.props(styles.outlined)}>
+                <Text>An outlined box</Text>
+              </div>
+            </ContextMenu>
+            <ContextMenu items={MENU} label="Translucent box">
+              <div {...stylex.props(styles.translucent)}>
+                <Text>A translucent fill</Text>
+              </div>
+            </ContextMenu>
+            <ContextMenu items={MENU} label="Filled box">
+              <div {...stylex.props(styles.pseudoFill)}>
+                <Text>A fill from a pseudo-element</Text>
+              </div>
+            </ContextMenu>
+            <ContextMenu items={MENU} label="Inline image">
+              <img
+                src={swatch(HUES[3])}
+                alt="Purple swatch"
+                width={64}
+                height={64}
+              />
+            </ContextMenu>
+          </Grid>
+        </VStack>
+
+        <VStack gap={2}>
           <Heading level={2}>The side edges</Heading>
-          <HStack gap={2} justify="space-between">
+          <HStack gap={2} justify="between">
             <ContextMenu items={MENU} label="Left edge">
               <Card padding={2}>
                 <Text>Left edge</Text>
