@@ -1387,16 +1387,14 @@ describe('Tokenizer', () => {
       const user = userEvent.setup();
       const {source} = countingSource();
       render(
-        <>
-          <Tokenizer
-            label="Members"
-            searchSource={source}
-            value={[]}
-            onChange={() => {}}
-            hasEntriesOnFocus
-            debounceMs={0}
-          />
-        </>,
+        <Tokenizer
+          label="Members"
+          searchSource={source}
+          value={[]}
+          onChange={() => {}}
+          hasEntriesOnFocus
+          debounceMs={0}
+        />,
       );
       const input = await openFocusList(user);
 
