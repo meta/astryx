@@ -33,10 +33,11 @@ import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {
   claimContextMenuPress,
+  claimPress,
   currentGesture,
   currentGestureHasClicked,
-  keepPansFromLightDismissing,
 } from './gestureCounter';
+import {useOutsidePress} from './outsidePress';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
@@ -497,6 +498,12 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * The owner decides what a touch outside that pans does to the layer. An
+   * anchored menu closes as that pan begins, so the layer does not keep such
+   * a pan from light-dismissing it.
+   */
+  ownsOutsidePan?: boolean;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -1144,6 +1151,9 @@ function getGutterStyles(
   return [styles.gutterBlockStart, styles.gutterBlockEnd];
 }
 
+/** A layer the browser light-dismisses learns only of pans outside it. */
+function reportsNoOutsidePress(): void {}
+
 /**
  * Internal props for controls that sit beside an open layer. This stays out of
  * the public useLayer/usePopover return types until the input family adopts it.
@@ -1214,6 +1224,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
+  const ownsOutsidePan =
+    mode === 'context' ? (options.ownsOutsidePan ?? false) : false;
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
   onCloseStartRef.current =
     mode === 'context' ? options.onCloseStart : undefined;
@@ -1319,6 +1331,28 @@ function useLayerImplementation(
   // theirs to act on.
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
+
+  // A touch that starts outside an open auto layer and pans is a gesture,
+  // not an outside press. A browser can still read it as a tap, for example
+  // when its main thread is late. So the layer claims that touch as it
+  // begins to pan: the release lands on the layer, and the tap is cancelled.
+  const outsidePanWatch = useOutsidePress();
+  const watchOutsidePans = useCallback(
+    (popover: HTMLElement) => {
+      const root = popover.getRootNode();
+      outsidePanWatch.start(
+        popover,
+        path => path.includes(popover),
+        reportsNoOutsidePress,
+        {
+          pointerTypes: ['touch'],
+          root: isShadowRoot(root) ? root : null,
+          onPan: () => claimPress(popover, {cancelsTap: true}),
+        },
+      );
+    },
+    [outsidePanWatch],
+  );
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1546,7 +1580,9 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
-        keepPansFromLightDismissing(popover);
+        if (!ownsOutsidePan) {
+          watchOutsidePans(popover);
+        }
       }
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
@@ -1560,6 +1596,8 @@ function useLayerImplementation(
     onShow,
     keepsAnchorClear,
     lightDismiss,
+    ownsOutsidePan,
+    watchOutsidePans,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1728,6 +1766,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
+      outsidePanWatch.stop();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -1748,7 +1787,13 @@ function useLayerImplementation(
     }
     releaseAnchor(popoverRef.current);
     clearContextMount();
-  }, [onHide, clearContextMount, releaseAnchor, cancelPendingAnchorWait]);
+  }, [
+    onHide,
+    clearContextMount,
+    releaseAnchor,
+    cancelPendingAnchorWait,
+    outsidePanWatch,
+  ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
@@ -1963,6 +2008,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
+        outsidePanWatch.stop();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -1972,7 +2018,13 @@ function useLayerImplementation(
         clearContextMount();
       }
     },
-    [onHide, clearContextMount, rememberDismissal, releaseAnchor],
+    [
+      onHide,
+      clearContextMount,
+      rememberDismissal,
+      releaseAnchor,
+      outsidePanWatch,
+    ],
   );
 
   // Ref callback for popover element — sets up the `toggle` listener.

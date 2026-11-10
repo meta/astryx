@@ -2,16 +2,17 @@
 
 /**
  * @file LayerPanLightDismiss.interaction.browser.spec.ts
- * @input The built Default DropdownMenu and Default Popover stories under the
- *   harness's phone profile, with real touch input in Chromium (CDP)
+ * @input The built Default Popover, Selector, DropdownMenu and ContextMenu
+ *   stories under the harness's phone profile, with real touch input in
+ *   Chromium (CDP)
  * @output Proof that a touch that pans over the page does not light-dismiss
- *   an open auto layer, with and without pointercancel. That includes a pan
- *   that the browser itself reads as a tap: it lifts with no pointercancel
- *   and the browser makes a click. A tap outside still closes the layer, also
- *   after a pan
+ *   an open Popover or Selector list, with and without pointercancel. That
+ *   includes a pan that the browser itself reads as a tap. A tap outside
+ *   still closes the layer, also after a pan. The menus keep their own
+ *   outside behavior
  * @position Evidence for `architecture:layer-runtime` INV7 (native light
- *   dismiss identifies gestures); the guard itself is unit-tested in
- *   gestureCounter.test.ts
+ *   dismiss identifies gestures); the watch and the claim are unit-tested in
+ *   outsidePress.test.ts and gestureCounter.test.ts
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -36,17 +37,31 @@ const TAP_AFTER_PAN_MS = 500;
 interface Surface {
   readonly name: string;
   readonly story: string;
+  readonly role: 'button' | 'combobox';
   readonly trigger: string;
 }
 
 const SURFACES: ReadonlyArray<Surface> = [
   {
-    name: 'DropdownMenu',
-    story: 'core-dropdownmenu--default',
-    trigger: 'Actions',
+    name: 'Popover',
+    story: 'core-popover--default',
+    role: 'button',
+    trigger: 'Settings',
   },
-  {name: 'Popover', story: 'core-popover--default', trigger: 'Settings'},
+  {
+    name: 'Selector',
+    story: 'core-selector--default',
+    role: 'combobox',
+    trigger: 'Fruit',
+  },
 ];
+
+const DROPDOWN_MENU: Surface = {
+  name: 'DropdownMenu',
+  story: 'core-dropdownmenu--default',
+  role: 'button',
+  trigger: 'Actions',
+};
 
 interface PressLog {
   readonly types: string[];
@@ -112,7 +127,7 @@ async function openSurface(
   await openStory(page, storybook(), surface.story);
   await preparePage(page);
   const driver = await touchDriver(page);
-  const trigger = page.getByRole('button', {name: surface.trigger});
+  const trigger = page.getByRole(surface.role, {name: surface.trigger});
   const box = await trigger.boundingBox();
   if (box == null) {
     throw new Error('the trigger has no rendered box');
@@ -229,6 +244,53 @@ for (const surface of SURFACES) {
     });
   });
 }
+
+// An anchored menu owns what a pan outside it does: it closes as the pan
+// begins. DropdownMenu does not do that yet, and the guard leaves it out.
+test.describe('DropdownMenu', () => {
+  test.beforeEach(({browserName}) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the browser reads a short pan as a tap only in Chromium, through CDP touch',
+    );
+  });
+
+  test('a pan that the browser reads as a tap still closes it', async ({
+    page,
+  }) => {
+    const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
+    await pan(driver, outside, {x: outside.x, y: outside.y - (PAN_PX + 2)}, 48);
+    await expect
+      .poll(async () => isLayerOpen(page), {
+        message: 'the pan outside closes the menu',
+        timeout: 2000,
+      })
+      .toBe(false);
+  });
+
+  test('a tap outside closes it', async ({page}) => {
+    const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
+    await tapClosesLayer(page, driver, outside);
+  });
+
+  test.fixme('a pan that scrolls the page (pointercancel): closes as a pan outside begins (FR21 gap)', async ({
+    page,
+  }) => {
+    const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
+    await pan(driver, outside, {x: outside.x, y: outside.y - 40}, 300);
+    expect(await isLayerOpen(page)).toBe(false);
+  });
+
+  test.fixme('a 40 px pan with no pointercancel: closes as a pan outside begins (FR21 gap)', async ({
+    page,
+  }) => {
+    const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
+    const viewport = page.viewportSize();
+    const start = {x: outside.x, y: Math.round((viewport?.height ?? 0) - 40)};
+    await pan(driver, start, {x: start.x, y: start.y - 40}, 64);
+    expect(await isLayerOpen(page)).toBe(false);
+  });
+});
 
 // ContextMenu is a manual popover with its own outside-press close, so the
 // guard does not apply to it. These cases show that its outside behavior

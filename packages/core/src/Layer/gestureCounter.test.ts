@@ -10,10 +10,8 @@
  *   ends at its release and runs once per press and layer. A release target
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
- *   fired `contextmenu`. The pan guard cancels the lift of a touch that
- *   started outside an open auto layer and travelled the pan distance, and no
- *   other lift; it stops listening when its last layer closes or leaves the
- *   document
+ *   fired `contextmenu`. A claim that cancels the tap cancels its touch's
+ *   lift (`touchend`) after the release, and no other
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
@@ -23,9 +21,8 @@ import {
   claimPress,
   currentGesture,
   isPressInFlight,
-  keepPansFromLightDismissing,
 } from './gestureCounter';
-import {UIKIT_PAN} from '../motion/uikit/gestures';
+import {__resetClickGuardForTest} from '../utils/clickGuard';
 
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
 function pointerEvent(
@@ -325,6 +322,42 @@ describe('claimPress', () => {
     expect([...listening].filter(([, n]) => n !== 0)).toEqual([]);
   });
 
+  /** A cancelable touch lift, which jsdom's events lack. */
+  const touchEnd = () =>
+    new Event('touchend', {bubbles: true, cancelable: true, composed: true});
+
+  it('cancels the lift after the release of a claim that cancels the tap', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {cancelsTap: true});
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    const lift = touchEnd();
+    trigger.dispatchEvent(lift);
+    expect(lift.defaultPrevented).toBe(true);
+    __resetClickGuardForTest();
+  });
+
+  it('cancels no lift for a claim that keeps the tap, or one whose layer closed first', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer);
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    const kept = touchEnd();
+    trigger.dispatchEvent(kept);
+    expect(kept.defaultPrevented).toBe(false);
+
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {cancelsTap: true});
+    layer.dispatchEvent(
+      Object.assign(new Event('toggle'), {newState: 'closed'}),
+    );
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    const afterClose = touchEnd();
+    trigger.dispatchEvent(afterClose);
+    expect(afterClose.defaultPrevented).toBe(false);
+    __resetClickGuardForTest();
+  });
+
   it('claims a press for the context menu only once that press fired contextmenu', () => {
     const {trigger, layer} = mountLayer();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
@@ -335,180 +368,5 @@ describe('claimPress', () => {
     );
     claimContextMenuPress(layer);
     expect(captured).toEqual([7]);
-  });
-});
-
-/** A touch event of `type` for one finger, which jsdom's events lack. */
-function touchEvent(
-  type: string,
-  {id = 1, x = 0, y = 0, fingers = 1, cancelable = true} = {},
-): Event {
-  const point = {identifier: id, clientX: x, clientY: y};
-  const down =
-    type === 'touchend' || type === 'touchcancel' ? fingers - 1 : fingers;
-  return Object.assign(
-    new Event(type, {bubbles: true, cancelable, composed: true}),
-    {
-      changedTouches: [point],
-      touches: Array.from({length: down}, (_, index) => ({
-        ...point,
-        identifier: index === 0 ? id : id + index,
-      })),
-    },
-  );
-}
-
-describe('keepPansFromLightDismissing', () => {
-  const PAN_PX = UIKIT_PAN.hysteresis.value;
-
-  afterEach(() => {
-    for (const layer of document.querySelectorAll('[popover]')) {
-      layer.dispatchEvent(
-        Object.assign(new Event('toggle'), {newState: 'closed'}),
-      );
-    }
-    document.body.replaceChildren();
-    vi.restoreAllMocks();
-  });
-
-  /** An open auto layer beside a page area, and the layer's guard. */
-  function openGuardedLayer() {
-    const page = document.createElement('div');
-    const layer = document.createElement('div');
-    layer.setAttribute('popover', 'auto');
-    document.body.append(page, layer);
-    const matches = layer.matches.bind(layer);
-    vi.spyOn(layer, 'matches').mockImplementation(selector =>
-      selector === ':popover-open' ? true : matches(selector),
-    );
-    keepPansFromLightDismissing(layer);
-    return {page, layer};
-  }
-
-  /** Plays a one-finger touch on `target`; returns its lift. */
-  function touch(
-    target: Element,
-    points: ReadonlyArray<{x: number; y: number}>,
-    {cancelable = true} = {},
-  ): Event {
-    const [start, ...rest] = points;
-    target.dispatchEvent(touchEvent('touchstart', start));
-    for (const point of rest.slice(0, -1)) {
-      target.dispatchEvent(touchEvent('touchmove', point));
-    }
-    const lift = touchEvent('touchend', {
-      ...(rest.at(-1) ?? start),
-      cancelable,
-    });
-    target.dispatchEvent(lift);
-    return lift;
-  }
-
-  it('cancels the lift of a touch that panned outside the layer', () => {
-    const {page} = openGuardedLayer();
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100, y: 300 - PAN_PX},
-      {x: 100, y: 300 - PAN_PX},
-    ]);
-    expect(lift.defaultPrevented).toBe(true);
-  });
-
-  it('cancels the lift of a touch whose only travel shows at its lift', () => {
-    const {page} = openGuardedLayer();
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100 + PAN_PX, y: 300},
-    ]);
-    expect(lift.defaultPrevented).toBe(true);
-  });
-
-  it('leaves a tap outside alone, so it still light-dismisses', () => {
-    const {page} = openGuardedLayer();
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100 + PAN_PX - 1, y: 300 - (PAN_PX - 1)},
-      {x: 100 + PAN_PX - 1, y: 300 - (PAN_PX - 1)},
-    ]);
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('leaves a pan that starts in the layer alone', () => {
-    const {layer} = openGuardedLayer();
-    const lift = touch(layer, [
-      {x: 100, y: 300},
-      {x: 100, y: 200},
-    ]);
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('leaves a lift that is not cancelable alone', () => {
-    const {page} = openGuardedLayer();
-    const lift = touch(
-      page,
-      [
-        {x: 100, y: 300},
-        {x: 100, y: 200},
-      ],
-      {cancelable: false},
-    );
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('leaves a second finger alone', () => {
-    const {page} = openGuardedLayer();
-    page.dispatchEvent(touchEvent('touchstart', {id: 1, x: 100, y: 300}));
-    page.dispatchEvent(
-      touchEvent('touchstart', {id: 2, x: 200, y: 300, fingers: 2}),
-    );
-    page.dispatchEvent(touchEvent('touchmove', {id: 2, x: 200, y: 200}));
-    const lift = touchEvent('touchend', {id: 2, x: 200, y: 200, fingers: 2});
-    page.dispatchEvent(lift);
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('stops listening to touches when the layer closes', () => {
-    const remove = vi.spyOn(window, 'removeEventListener');
-    const {page, layer} = openGuardedLayer();
-    layer.dispatchEvent(
-      Object.assign(new Event('toggle'), {newState: 'closed'}),
-    );
-    expect(remove.mock.calls.map(([type]) => type)).toEqual(
-      expect.arrayContaining(['touchstart', 'touchmove', 'touchend']),
-    );
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100, y: 200},
-    ]);
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('stops at the next touch when the layer left the document while open', () => {
-    const {page, layer} = openGuardedLayer();
-    layer.remove();
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100, y: 200},
-    ]);
-    expect(lift.defaultPrevented).toBe(false);
-  });
-
-  it('guards an open layer once, and guards it again after it reopens', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const {page, layer} = openGuardedLayer();
-    keepPansFromLightDismissing(layer);
-    const touchEnds = () =>
-      add.mock.calls.filter(([type]) => type === 'touchend').length;
-    expect(touchEnds()).toBe(1);
-    layer.dispatchEvent(
-      Object.assign(new Event('toggle'), {newState: 'closed'}),
-    );
-    keepPansFromLightDismissing(layer);
-    expect(touchEnds()).toBe(2);
-    const lift = touch(page, [
-      {x: 100, y: 300},
-      {x: 100, y: 200},
-    ]);
-    expect(lift.defaultPrevented).toBe(true);
   });
 });

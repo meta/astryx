@@ -5,7 +5,8 @@
  * @input isFocusInsideOwnedLayer, isPressInsideOwnedLayer and
  *   watchOutsidePress
  * @output The shared focus-leave test, and the outside-press watch that
- *   closes as a finger outside begins to pan, at a cancel or at a lift
+ *   closes as a finger outside begins to pan, at a cancel or at a lift. With
+ *   onPan, the watch reports only that pan, once, and no press or count
  */
 
 import {fireEvent} from '@testing-library/react';
@@ -334,5 +335,78 @@ describe('watchOutsidePress, closing on a pan', () => {
     fireEvent.pointerUp(host, touch(2));
     expect(onOutside).toHaveBeenCalledOnce();
     stop();
+  });
+});
+
+describe('watchOutsidePress, reporting pans (onPan)', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const touch = (pointerId: number, x = 0, y = 0) => ({
+    pointerType: 'touch',
+    pointerId,
+    clientX: x,
+    clientY: y,
+    composed: true,
+  });
+
+  function setup() {
+    const layer = document.createElement('div');
+    const item = document.createElement('button');
+    layer.append(item);
+    const outside = document.createElement('button');
+    document.body.append(layer, outside);
+    const onOutside = vi.fn();
+    const onPan = vi.fn();
+    const stop = watchOutsidePress(
+      layer,
+      path => path.includes(layer),
+      onOutside,
+      {pointerTypes: ['touch'], onPan},
+    );
+    return {item, outside, onOutside, onPan, stop};
+  }
+
+  it('reports a press outside once, as it begins to pan, and judges it no more', () => {
+    const {outside, onOutside, onPan, stop} = setup();
+    const before = outsideDismissalCount(document);
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerMove(outside, touch(1, 0, 9));
+    expect(onPan).not.toHaveBeenCalled();
+    fireEvent.pointerMove(outside, touch(1, 0, 10));
+    fireEvent.pointerMove(outside, touch(1, 0, 40));
+    fireEvent.pointerUp(outside, touch(1, 0, 40));
+    expect(onPan).toHaveBeenCalledOnce();
+    expect(onOutside).not.toHaveBeenCalled();
+    expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+  });
+
+  it('reports no tap, no cancel and no pan that starts inside', () => {
+    const {item, outside, onOutside, onPan, stop} = setup();
+    const before = outsideDismissalCount(document);
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerUp(outside, touch(1));
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerCancel(outside, touch(2));
+    fireEvent.pointerMove(outside, touch(2, 0, 40));
+    fireEvent.pointerDown(item, touch(3));
+    fireEvent.pointerMove(item, touch(3, 0, 40));
+    expect(onPan).not.toHaveBeenCalled();
+    expect(onOutside).not.toHaveBeenCalled();
+    expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+  });
+
+  it('leaves a mouse alone, and stops listening when stopped', () => {
+    const {outside, onPan, stop} = setup();
+    fireEvent.pointerDown(outside, {...touch(1), pointerType: 'mouse'});
+    fireEvent.pointerMove(outside, {...touch(1, 0, 40), pointerType: 'mouse'});
+    expect(onPan).not.toHaveBeenCalled();
+    stop();
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerMove(outside, touch(2, 0, 40));
+    expect(onPan).not.toHaveBeenCalled();
   });
 });

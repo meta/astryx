@@ -389,6 +389,11 @@ interface InternalPopoverOptions extends UsePopoverOptions {
    * asked for it, when focus may already have moved.
    */
   getOpener?: () => HTMLElement | null;
+  /**
+   * The owner decides what a touch outside that pans does to the popover
+   * (useLayer's `ownsOutsidePan`).
+   */
+  ownsOutsidePan?: boolean;
 }
 
 /**
@@ -455,6 +460,7 @@ function usePopoverImplementation(
     getRestoreFallback,
     restoreFocusTo,
     getOpener,
+    ownsOutsidePan = false,
   } = options;
 
   const t = useComponentTranslator();
@@ -484,6 +490,7 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
+    ownsOutsidePan,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
