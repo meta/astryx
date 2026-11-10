@@ -40,6 +40,7 @@ import {
   importerGraph,
   isComponentPath,
   listedFiles,
+  proofImporters,
   renderingFolders,
   specOwners,
 } from './a11y-pr-contracts.mjs';
@@ -336,9 +337,12 @@ const STORY = /^apps\/storybook\/stories\/([A-Z][^/.]*)\.stories\.tsx$/;
  * What a Chromium interaction run covers for a pull request (spec:AST-030
  * FR31): `{full: true, reason}` for the whole suite, or `{full: false, specs,
  * touched, dependents}`. It runs every interaction spec the change adds or
- * edits, and every spec in the component folders the change touches and in
- * the folders that render them through value imports. It fails closed: an
- * unknown change, a missing import graph, a full-suite classification, a
+ * edits, every spec that loads a changed file through its own imports, and
+ * every spec in the component folders the change touches and in the folders
+ * that render them through value imports. A unit test, doc, record or
+ * accessibility spec in a component folder touches no component; it selects
+ * only the specs that import it. It fails closed: an unknown change, a
+ * missing import graph or proof import map, a full-suite classification, a
  * shared path, a listed shared primitive, or a changed path that maps to no
  * one component runs the whole suite.
  * @param {object} options
@@ -349,6 +353,8 @@ const STORY = /^apps\/storybook\/stories\/([A-Z][^/.]*)\.stories\.tsx$/;
  *   infrastructure or could not decide
  * @param {boolean} [options.everySpec] the release interaction check
  * @param {Map<string, Set<string>> | null} options.importers the import graph
+ * @param {Map<string, Set<string>> | null} options.proofs each file a proof
+ *   loads, to the proofs that load it (`proofImporters`)
  * @param {{shared: string[], edges: {from: string, specs: string[]}[]}} options.selection
  * @param {string[]} options.primitives shared primitives, as `<pkg>/<Folder>`
  */
@@ -359,6 +365,7 @@ export function chromiumSelection({
   fullSuite,
   everySpec = false,
   importers,
+  proofs,
   selection,
   primitives,
 }) {
@@ -368,11 +375,13 @@ export function chromiumSelection({
     return full('the change touches shared infrastructure or is undecided');
   if (changed == null) return full('the changed files are unknown');
   if (importers == null) return full('the import graph could not be computed');
+  if (proofs == null) return full("the proofs' imports could not be followed");
   const present = new Set(listed);
   const specs = new Set();
   const touched = new Set();
   const relevant = changed.filter(file => scope.test(file));
   for (const file of relevant) {
+    for (const proof of proofs.get(file) ?? []) specs.add(proof);
     if (isInteractionSpec(file)) {
       if (present.has(file)) specs.add(file);
       continue;
@@ -687,21 +696,32 @@ function selectChromium(args) {
     fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
   const changedFile = option(args, '--changed');
   const root = option(args, '--root');
+  const listed = lines(listedFile);
   let importers = null;
+  let proofs = null;
   try {
     if (root) importers = importerGraph(root);
   } catch (error) {
     console.error(`The import graph could not be computed: ${error.message}`);
   }
   if (importers != null && importers.size === 0) importers = null;
+  try {
+    if (root)
+      proofs = proofImporters({root, listed, isProof: isInteractionSpec});
+  } catch (error) {
+    console.error(
+      `The proofs' imports could not be followed: ${error.message}`,
+    );
+  }
   const result = chromiumSelection({
-    listed: lines(listedFile),
+    listed,
     changed:
       changedFile && fs.existsSync(changedFile) ? lines(changedFile) : null,
     scope: new RegExp(scope),
     fullSuite: option(args, '--full-suite') !== 'false',
     everySpec: option(args, '--every-spec') === 'true',
     importers,
+    proofs,
     selection: JSON.parse(fs.readFileSync(selectionFile, 'utf8')),
     primitives: JSON.parse(fs.readFileSync(primitivesFile, 'utf8')).primitives,
   });

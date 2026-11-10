@@ -2650,8 +2650,8 @@ jobs:
       # The Chromium selection (spec:AST-030 FR31) runs in shadow: this step
       # computes it, reports it and keeps it as an artifact, and the lane
       # still runs every spec until a replay of recent pull requests shows the
-      # selection catches what the full runs caught. Its import graph reads
-      # the merge commit's package sources.
+      # selection catches what the full runs caught. Its import graphs read
+      # the merge commit's package and harness sources.
       - name: Select the Chromium proofs, in shadow
         id: select-chromium
         if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
@@ -2664,7 +2664,7 @@ jobs:
           listed="$RUNNER_TEMP/interaction-legs/listed.txt"
           git -C .test-scope ls-tree -r --name-only HEAD > "$listed"
           mapfile -t SOURCES < <(grep -oE '^packages/[^/]+/src/' "$listed" | sort -u)
-          git -C .test-scope sparse-checkout add "${SOURCES[@]}"
+          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select-chromium \
             --listed "$listed" --changed "${CHANGED_FILES:-}" \
             --scope "$SCOPE_PATHS" --full-suite "${FULL_SUITE:-true}" \

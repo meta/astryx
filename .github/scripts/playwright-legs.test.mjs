@@ -25,7 +25,7 @@ import {
   testsReader,
 } from './playwright-legs.mjs';
 import {matrixFor} from './ci-matrix.mjs';
-import {importerGraph} from './a11y-pr-contracts.mjs';
+import {importerGraph, proofImporters} from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1326,7 +1326,10 @@ describe('what a Chromium run covers for a pull request', () => {
     'packages/core/src/Menu/__tests__/Menu.interaction.browser.spec.ts': '',
     'packages/core/src/Card/Card.tsx':
       "import type {Tooltip} from '../Tooltip/Tooltip';\nexport function Card() {}\n",
-    'packages/core/src/Card/__tests__/Card.interaction.browser.spec.ts': '',
+    'packages/core/src/Card/__tests__/Card.interaction.browser.spec.ts':
+      "import {press} from '../../Menu/__tests__/fixtures/press';\nimport {ease} from './ease.test';\n",
+    'packages/core/src/Card/__tests__/ease.test.ts': '',
+    'packages/core/src/Menu/__tests__/fixtures/press.ts': '',
     'packages/core/src/Button/Button.tsx': 'export function Button() {}\n',
     'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': '',
     'packages/core/src/Layer/Layer.tsx': 'export function Layer() {}\n',
@@ -1362,6 +1365,7 @@ describe('what a Chromium run covers for a pull request', () => {
       scope,
       fullSuite: false,
       importers: importerGraph(tree),
+      proofs: proofImporters({root: tree, listed, isProof: isInteractionSpec}),
       selection,
       primitives,
       ...overrides,
@@ -1412,6 +1416,20 @@ describe('what a Chromium run covers for a pull request', () => {
     ).toEqual({full: false, specs: [], touched: [], dependents: []});
   });
 
+  it('runs the specs that import a changed file, a unit-test helper included', () => {
+    // Card's spec imports a `.test` helper beside it.
+    expect(select(['packages/core/src/Card/__tests__/ease.test.ts'])).toEqual({
+      full: false,
+      specs: [spec('Card')],
+      touched: [],
+      dependents: [],
+    });
+    // A fixture in Menu's folder that Card's spec imports.
+    expect(
+      select(['packages/core/src/Menu/__tests__/fixtures/press.ts']).specs,
+    ).toContain(spec('Card'));
+  });
+
   it('runs the full suite for a path in no component folder', () => {
     for (const file of [
       'packages/core/src/utils/clamp.ts',
@@ -1435,12 +1453,13 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it('fails closed: a full-suite classification, unknown files, no graph, the release check', () => {
+  it('fails closed: a full-suite classification, unknown files, no graph or proof imports, the release check', () => {
     const change = ['packages/core/src/Tooltip/Tooltip.tsx'];
     expect(select(change, {fullSuite: true}).full).toBe(true);
     expect(select(null).full).toBe(true);
     expect(select(change, {importers: null}).full).toBe(true);
     expect(select(change, {everySpec: true}).full).toBe(true);
+    expect(select(change, {proofs: null}).full).toBe(true);
   });
 
   it("adds an escape's edge from the selection file", () => {
