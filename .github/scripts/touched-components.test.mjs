@@ -706,8 +706,13 @@ describe('pr-component-a11y-contracts routing', () => {
       'build-storybook',
     ]);
     // The same gate as the WebKit interaction proofs, which the test join
-    // also reads.
-    expect(contracts.if).toBe(ci.jobs['pr-interaction-webkit'].if);
+    // also reads, without the weekly full WebKit run.
+    expect(contracts.if).toBe(
+      ci.jobs['pr-interaction-webkit'].if.replace(
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+        "github.event_name != 'workflow_dispatch' && always()",
+      ),
+    );
     expect(contracts['runs-on']).toBe('ubuntu-latest');
     expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
     expect(contracts.permissions).toEqual({

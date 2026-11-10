@@ -26,7 +26,11 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
+import {
+  webInputDriver,
+  WHEEL_SCROLL_END_MS,
+  WHEEL_SKIP,
+} from '@astryxdesign/interaction-harness';
 
 /**
  * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
@@ -2144,17 +2148,32 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const card = await center(page, 'card');
-    // Six 16 px steps at a still cursor: the card leaves it after two.
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...card, dx: 16});
-    }
+    // One trackpad scroll at a still cursor, a step a frame. Its first 48 px
+    // step takes the card off the cursor at once. The three 16 px steps after
+    // it land off the card, merged or not, so only the latch carries them.
+    // Awaited steps land a round trip apart, which a loaded runner stretches
+    // past the scroll's end. The burst keeps a frame between steps and fails
+    // a split by name.
+    const {receivedSteps} = await driver.wheelBurst({
+      ...card,
+      steps: [{dx: 48}, {dx: 16}, {dx: 16}, {dx: 16}],
+      maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
     );
     const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
     // Every step after the first moved the card, and none scrolled the page.
-    expect(moved).toHaveLength(5);
+    // WebKit merges the steps it holds while the page is busy, as it does a
+    // trackpad's. So the count is of the steps the page received. The card
+    // took all 96 px past the 10 px hysteresis.
+    expect(moved).toHaveLength(receivedSteps - 1);
+    const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+    expect(shown.at(-1)?.split(':')[2]).toBe('-86');
+    // The card had left the cursor, half its 60 px width, before the last
+    // wheel reached the page. So the latch carried that wheel.
+    expect(Number(shown.at(-2)?.split(':')[2])).toBeLessThan(-30);
     expect(pan.slice(-2).map(entry => entry.split(':')[1])).toEqual([
       'ended',
       'possible',
@@ -2334,9 +2353,15 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const strip = await center(page, 'strip');
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...strip, dx: 8});
-    }
+    // Six 8 px steps a frame apart. WebKit reads them as one trackpad scroll,
+    // whose first step stays under the pan's 10 px hysteresis, so a split
+    // fails the burst by name. Chromium's notches are no trackpad scroll.
+    await driver.wheelBurst({
+      ...strip,
+      steps: Array.from({length: 6}, () => ({dx: 8})),
+      maxGapMs:
+        browserName === 'webkit' ? WHEEL_SCROLL_END_MS.horizontal : undefined,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
@@ -2352,9 +2377,10 @@ test.describe('where the primary pointer is fine', () => {
       // WebKit's sends a trackpad's precise deltas, which the pan follows.
       expect(pan[0]).toMatch(/^pan:began:/);
       expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
-      // The content moves the way the fingers do: a scroll right drags it left.
-      const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
-      expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+      // The content moves the way the fingers do: a scroll right drags it
+      // left. WebKit may merge the steps into the pan's first move.
+      const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+      expect(Number(shown.at(-1)?.split(':')[2])).toBeLessThan(0);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
     }
     // Across the pan's axis the wheel is the page's.

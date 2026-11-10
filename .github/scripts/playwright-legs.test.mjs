@@ -353,13 +353,18 @@ describe('the interaction leg count job in ci.yml', () => {
   ];
 
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
-    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
-    expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
-    // The WebKit proofs do not run for main's nightly full run.
+    expect(counter.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'webkit-weekly-request',
+    ]);
+    // The lanes' gate, which admits main's nightly Chromium run and the
+    // weekly full WebKit run.
     expect(counter.if).toBe(
       ci.jobs['pr-interaction-webkit'].if.replace(
-        "github.event_name != 'workflow_dispatch' && always()",
-        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
       ),
     );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
@@ -730,13 +735,13 @@ describe('the interaction proof legs in ci.yml', () => {
       }
     }
 
-    it("plans every WebKit spec only for the release tooling's interaction-check/ pull request", () => {
-      expect(job.env.WEBKIT_ALL_SPECS).toBe(
+    it("decides the WebKit scope only for the release tooling's interaction-check/ pull request", () => {
+      expect(job.env.WEBKIT_RELEASE_CHECK).toBe(
         "${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}",
       );
       // The expression's three conditions, read against a pull request.
       const fullScope = pr =>
-        job.env.WEBKIT_ALL_SPECS.slice(3, -2)
+        job.env.WEBKIT_RELEASE_CHECK.slice(3, -2)
           .trim()
           .split(' && ')
           .every(condition => {
@@ -1558,7 +1563,11 @@ describe('the Chromium selection in ci.yml, in shadow', () => {
     expect(select.run).toContain(
       '--primitives .test-scope/.github/a11y-shared-primitives.json',
     );
-    expect(select.run).toContain('--every-spec "${WEBKIT_ALL_SPECS:-false}"');
+    // The release interaction check runs every Chromium spec; WebKit's own
+    // scope (WEBKIT_ALL_SPECS) does not decide it.
+    expect(select.run).toContain(
+      '--every-spec "${WEBKIT_RELEASE_CHECK:-false}"',
+    );
   });
 
   it('keeps the selection as an artifact, and still runs every Chromium spec', () => {
