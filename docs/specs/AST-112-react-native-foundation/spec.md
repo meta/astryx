@@ -108,7 +108,8 @@ shared icon names under FR17.
     platform's hosts or drawn by the library (DEC-9).
   - The package takes no third-party navigation dependency, a router,
     react-native-screens, and react-native-safe-area-context included: its
-    only peer dependencies outside Astryx are React and React Native. The one exception is the optional peers of the deprecated `./navigation-legacy` entry (FR5). Apart from that entry, a React
+    only peer dependencies outside Astryx are React and React Native. The one exception is the optional peers of the
+    `./navigation-legacy` entry (FR5). Apart from that entry, a React
     Navigation adapter may exist only as a separate optional package, never
     as a dependency of the set; it drives the platform's `navigation` hosts and
     depends on no package that ships native navigation code,
@@ -168,14 +169,13 @@ shared icon names under FR17.
   - `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and
     `./navigation` are the optional capabilities' entries; `./navigation` also
     holds the Astryx router and its navigators (FR2).
-  - `./navigation-legacy` is the one React Navigation binding inside the
-    package: it binds React Navigation's navigators, and it is deprecated in
-    favor of `./navigation`. Its peer dependencies on React Navigation,
+  - `./navigation-legacy` is the React Navigation binding, the one inside the
+    package: a transitional entry that binds React Navigation's navigators,
+    beside `./navigation`. Its peer dependencies on React Navigation,
     react-native-screens, react-native-safe-area-context, and
     `@callstack/liquid-glass` are optional, so an app that does not import it
     installs none of them, and no other entry imports it. It is removed
-    when `./navigation` holds the Astryx router and the native hosts, and in
-    any case before the package joins the stable channel (FR14).
+    before the package joins the stable channel (FR14).
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
@@ -477,7 +477,7 @@ platform's `navigation` capability holds the native stack and tab containers
 with their transitions and gestures, the core holds safe-area insets, and
 every bar, header, button, and search field is the system's, through the
 platform's hosts, or drawn by the library. The packages take no third-party navigation dependency outside one
-deprecated entry, and an app that navigates with Astryx's router runs no
+transitional entry, and an app that navigates with Astryx's router runs no
 third-party native code for navigation.
 
 Rejected: building on React Navigation, react-native-screens, and
