@@ -238,6 +238,7 @@ export class GestureArena {
           x: input.x,
           y: input.y,
           time,
+          inputTime: input.time,
           startX: input.x,
           startY: input.y,
           startTime: time,
@@ -328,6 +329,7 @@ export class GestureArena {
         x: input.x,
         y: input.y,
         time,
+        inputTime: input.time,
         startX: input.x,
         startY: input.y,
         startTime: time,
@@ -993,6 +995,7 @@ export class GestureArena {
       touch.x = input.x;
       touch.y = input.y;
       touch.time = time;
+      touch.inputTime = input.time;
       touch.phase = phase;
       changed.push(touch);
     }
