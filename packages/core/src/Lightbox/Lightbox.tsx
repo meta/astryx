@@ -950,9 +950,7 @@ export function Lightbox({
     captionTruncation.ref,
   );
   const [captionShownLines, setCaptionShownLines] = useState(0);
-  // Counts again when an open caption gets new text. The count of an opening
-  // is the text's own lines, and new text needs the same count.
-  const [captionRecount, setCaptionRecount] = useState(0);
+  // Whether the current caption is open, for the content observer's callback.
   const isCaptionOpenRef = useRef(false);
   // The current caption's lines, without its toggle's place.
   const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
@@ -1105,10 +1103,13 @@ export function Lightbox({
       const stopContent = observeContent(element, () => {
         stopResize?.();
         if (isCaptionOpenRef.current) {
-          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new count must lay out before the new registration's delivery reads the caption
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the caption lays out without the toggle's place before its lines are counted
           flushSync(() => {
             setCaptionShownLines(0);
-            setCaptionRecount(count => count + 1);
+          });
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new count must lay out before the new registration's delivery reads the caption
+          flushSync(() => {
+            countOpenCaption();
           });
         }
         stopResize = register();
@@ -1137,33 +1138,37 @@ export function Lightbox({
     captionToggleHitAreaRef,
   );
   usePressTracker(captionToggleRef);
-  // An opened caption first lays out without the toggle's place, so its
-  // first count is the text's own lines. The place also takes the toggle's
-  // width for its new label. Then a toggle that does not fit beside the last
-  // line takes a line of its own, before the resize delivery reads the
-  // caption.
-  useIsomorphicLayoutEffect(() => {
-    isCaptionOpenRef.current = isCaptionOpen;
+  // Counts an open caption's lines while the toggle's place is not shown, so
+  // the count is the text's own lines. The place also takes the toggle's width
+  // for its current label. A toggle that does not fit beside the last line
+  // then takes a line of its own, before the resize delivery reads the
+  // caption. The click that opens a caption and new text in an open caption
+  // both count here.
+  const countOpenCaption = useCallback(() => {
     const caption = bandCaptionRef.current;
     const flow = bandCaptionFlowRef.current;
-    const toggle = captionToggleRef.current;
-    if (!isCaptionOpen || caption == null || flow == null) {
+    if (caption == null || flow == null) {
       return;
     }
     const view = caption.ownerDocument.defaultView ?? window;
     const line = parseFloat(view.getComputedStyle(caption).lineHeight);
-    if (Number.isFinite(line) && line > 0) {
-      // The layout width, as the observer's own fallback reads it: a scaled
-      // ancestor does not change it.
-      const toggleWidth = toggle?.offsetWidth ?? 0;
-      if (toggleWidth > 0) {
-        setCaptionToggleWidth(toggleWidth);
-      }
-      setCaptionShownLines(
-        Math.round(flow.getBoundingClientRect().height / line),
-      );
+    if (!Number.isFinite(line) || line <= 0) {
+      return;
     }
-  }, [isCaptionOpen, captionRecount]);
+    // The layout width, as the observer's own fallback reads it: a scaled
+    // ancestor does not change it.
+    const toggleWidth = captionToggleRef.current?.offsetWidth ?? 0;
+    if (toggleWidth > 0) {
+      setCaptionToggleWidth(toggleWidth);
+    }
+    setCaptionShownLines(
+      Math.round(flow.getBoundingClientRect().height / line),
+    );
+  }, []);
+  // Syncs the content observer's callback with this render's open caption.
+  useIsomorphicLayoutEffect(() => {
+    isCaptionOpenRef.current = isCaptionOpen;
+  }, [isCaptionOpen]);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
   // follows, so nothing reads the toggle there. A hidden toggle's size is
@@ -2033,12 +2038,16 @@ export function Lightbox({
                                         aria-expanded={isCaptionOpen}
                                         aria-controls={fullCaptionId}
                                         onClick={() => {
-                                          if (!isCaptionOpen) {
-                                            setCaptionShownLines(0);
+                                          if (isCaptionOpen) {
+                                            setOpenCaptionIndex(null);
+                                            return;
                                           }
-                                          setOpenCaptionIndex(
-                                            isCaptionOpen ? null : index,
-                                          );
+                                          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the opened caption lays out without the toggle's place before its lines are counted
+                                          flushSync(() => {
+                                            setCaptionShownLines(0);
+                                            setOpenCaptionIndex(index);
+                                          });
+                                          countOpenCaption();
                                         }}
                                         xstyle={
                                           [
