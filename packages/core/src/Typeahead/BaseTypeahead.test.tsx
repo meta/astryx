@@ -1436,6 +1436,49 @@ describe('BaseTypeahead pending work after a dismissal', () => {
     );
   });
 
+  it('reopens a partial list kept through Escape as busy while its search is pending', async () => {
+    let finish: ((items: SearchableItem[]) => void) | null = null;
+    const source: SearchSource<SearchableItem> = {
+      search: async (_query, context) =>
+        new Promise<SearchableItem[]>(resolve => {
+          context?.update([{id: 'Alpine', label: 'Alpine'}]);
+          finish = resolve;
+        }),
+      bootstrap: () => [],
+    };
+    render(
+      <BaseTypeahead
+        searchSource={source}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'al'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Alpine')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () =>
+      finish?.([
+        {id: 'Alpine', label: 'Alpine'},
+        {id: 'Alps', label: 'Alps'},
+      ]),
+    );
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(screen.getByText('Alps')).toBeInTheDocument();
+  });
+
   it('announces the count of an answer kept through Escape when the menu reopens', async () => {
     __resetLiveRegionsForTest();
     try {

@@ -1674,7 +1674,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // The rows on hand answer the text the field holds: from the current
   // source, of the current search generation, and, for an empty answer, a
   // settled search of this query. Results a replaced source or an older query
-  // left behind count as none (spec:AST-092 FR4).
+  // left behind count as none.
   const hasCurrentAnswer = useCallback(
     () =>
       resultsGenRef.current >= sourceGenRef.current &&
@@ -1832,16 +1832,33 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         if (isDialogMenu) {
           return;
         }
+        // Escape before the first list shows still dismisses: the answer of a
+        // search that runs or waits on its debounce must not open the popup.
+        if (
+          e.key === 'Escape' &&
+          (loadingRef.current || searchTimeoutRef.current != null)
+        ) {
+          dismiss();
+          return;
+        }
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
           // Results held from a replaced search source are not current
           // (spec:AST-092 FR4), and results an older query left behind are not
           // shown either: both count as none.
-          if (hasCurrentAnswer()) {
+          if (resumePendingSearch()) {
+            // The search is still pending, so the field is busy again. A
+            // partial list kept from it shows now; its answer shows the rest.
+            if (
+              results.length > 0 &&
+              resultsGenRef.current === searchGenRef.current
+            ) {
+              popover.show();
+              setHighlightedIndex(0);
+            }
+          } else if (hasCurrentAnswer()) {
             popover.show();
             setHighlightedIndex(results.length > 0 ? 0 : -1);
-          } else if (resumePendingSearch()) {
-            // The typed text's answer opens the popup when it arrives.
           } else if (
             query.length > 0 &&
             !isBelowMinQueryLength(query, minQueryLength)
@@ -1938,6 +1955,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       performSearch,
       resumePendingSearch,
       hasCurrentAnswer,
+      dismiss,
       externalOnKeyDown,
     ],
   );
