@@ -2490,6 +2490,9 @@ jobs:
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           A11Y_CONTRACT_WORKERS: 4
+          # The Table release proof's timing budgets hold on 4-core-ubuntu only;
+          # on the scheduled ubuntu-latest checks its receipt reports timing.
+          ASTRYX_TABLE_TIMING_GATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '1' || '0' }}
         # Tests are split by recorded duration (a11y-contract-shard.mjs), not
         # Playwright's count-based --shard; every listed test runs in one leg.
         run: |
