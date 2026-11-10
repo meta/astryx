@@ -74,7 +74,8 @@ four checks hold:
 - `tsc -b` exits 0. The arm's own command decides this, not a parsed log.
 - `vite build` exits 0 and writes `dist/index.html`.
 - The task probe passes in headless Chromium against the built app, served from
-  127.0.0.1. Requests to other hosts are blocked.
+  127.0.0.1. Requests to other hosts are blocked, except font files from Google
+  Fonts, so each arm renders with its own theme font.
 - The page throws no uncaught error, at desktop or phone size.
 
 The grader also records screenshots (desktop 1280×800 before and after the
@@ -144,7 +145,8 @@ node internal/vibe-tests/eval/run.mjs --self-test
 It needs Node 22 or later, npm registry access and a Chromium build. Install
 the grader's dependencies with `pnpm install` at the repository root, then a
 browser with `pnpm -F @astryxdesign/vibe-tests exec playwright-core install
-chromium`. Set `VIBE_EVAL_CHROMIUM` to use another Chromium build. The run
+chromium`. Set `VIBE_EVAL_CHROMIUM` to use another Chromium build. When
+`HTTPS_PROXY` is set, Chromium uses it to reach the font hosts. The run
 directory defaults to a new folder in the system temp folder. It must be
 outside the repository.
 
@@ -158,7 +160,6 @@ what the eval measures, so compare results only within one arm version.
 ## Known gaps
 
 - Chromium only. WebKit and real touch devices are not covered.
-- Remote fonts are blocked, so screenshots can use fallback fonts.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).

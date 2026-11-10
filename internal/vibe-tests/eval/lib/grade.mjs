@@ -35,10 +35,30 @@ const CONTENT_TYPES = {
   '.png': 'image/png',
 };
 
+/**
+ * Hosts a built app may still reach. A theme can load its font from a font
+ * service while another library bundles its font, so both arms get their own
+ * font and the screenshots compare like with like.
+ */
+export const ALLOWED_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com']);
+
 export async function launchBrowser() {
   const {chromium} = await import('playwright-core');
   const executablePath = process.env.VIBE_EVAL_CHROMIUM || undefined;
-  return chromium.launch({executablePath, args: ['--no-sandbox']});
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const args = ['--no-sandbox'];
+  if (proxy) args.push(`--proxy-server=${proxy}`, '--proxy-bypass-list=127.0.0.1;localhost');
+  return chromium.launch({executablePath, args});
+}
+
+export function isAllowedRequest(url, origin) {
+  if (url.startsWith(origin)) return true;
+  try {
+    const {protocol, hostname} = new URL(url);
+    return protocol === 'https:' && ALLOWED_HOSTS.has(hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** Serves a built app from 127.0.0.1 only; unknown paths get index.html. */
@@ -87,14 +107,14 @@ async function axeCounts(page) {
   });
 }
 
-/** Blocks every request that leaves the local server. */
+/** Blocks every request except the local server and the allowed font hosts. */
 async function localOnly(context, origin) {
   await context.route('**/*', route =>
-    route.request().url().startsWith(origin) ? route.continue() : route.abort(),
+    isAllowedRequest(route.request().url(), origin) ? route.continue() : route.abort(),
   );
 }
 
-/** A context that only reaches the local server and fails fast like the probe steps. */
+/** A context that reaches only allowed hosts and fails fast like the probe steps. */
 async function openContext(browser, options, origin) {
   const context = await browser.newContext(options);
   context.setDefaultTimeout(ACTION_TIMEOUT_MS);
@@ -108,7 +128,7 @@ function watchErrors(page, origin, pageErrors, consoleErrors) {
   page.on('console', message => {
     if (message.type() !== 'error') return;
     const source = message.location().url ?? '';
-    if (message.text().startsWith('Failed to load resource') && source && !source.startsWith(origin)) return;
+    if (message.text().startsWith('Failed to load resource') && source && !isAllowedRequest(source, origin)) return;
     consoleErrors.push(message.text().slice(0, 500));
   });
 }
@@ -126,6 +146,7 @@ async function probeInBrowser({browser, url, task, outDir}) {
     const page = await desktop.newPage();
     watchErrors(page, url, pageErrors, consoleErrors);
     await page.goto(url, {waitUntil: 'load'});
+    await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(300);
     screenshots.desktopInitial = path.join(outDir, 'desktop-initial.png');
     await page.screenshot({path: screenshots.desktopInitial, fullPage: true});
@@ -142,6 +163,7 @@ async function probeInBrowser({browser, url, task, outDir}) {
     const phone = await mobile.newPage();
     watchErrors(phone, url, pageErrors, consoleErrors);
     await phone.goto(url, {waitUntil: 'load'});
+    await phone.evaluate(() => document.fonts.ready);
     await phone.waitForTimeout(300);
     screenshots.mobileInitial = path.join(outDir, 'mobile-initial.png');
     await phone.screenshot({path: screenshots.mobileInitial, fullPage: true});
