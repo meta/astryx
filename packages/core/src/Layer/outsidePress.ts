@@ -19,6 +19,7 @@ import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */
@@ -39,7 +40,10 @@ export interface OutsidePressOptions {
 
 // A modal host's backdrop press reads this. A press that closed a layer above
 // the host is that layer's, so the host stays open.
-const outsideDismissals = new WeakMap<Document, number>();
+const outsideDismissals = sharedWeakMap<Document, number>(
+  'layer/outside-press/outside-dismissals',
+  1,
+);
 
 /** Records that a layer in `doc` is closing because a press or focus went outside it. */
 export function noteOutsideDismissal(doc: Document): void {

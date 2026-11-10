@@ -23,11 +23,12 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {generateMarkdownFixture, nextStreamOffset} from './benchmark';
 import {
   formatBenchmarkChange,
-  generateMarkdownFixture,
-  nextStreamOffset,
-} from './benchmark';
+  formatCount,
+  formatDuration,
+} from '../perfReadings';
 import {
   getMarkdownBenchmarkPlugins,
   getMarkdownBenchmarkProfile,
@@ -59,14 +60,6 @@ const SECTION_OPTIONS = ['10', '50', '200', '500'];
 const BURST_OPTIONS = ['64', '256', '1024'];
 const SETTLE_DELAY_MS = 180;
 const BURST_INTERVAL_MS = 80;
-
-function formatDuration(value: number | null): string {
-  return value == null ? '—' : `${value.toFixed(1)} ms`;
-}
-
-function formatCount(value: number | null): string {
-  return value == null ? '—' : value.toLocaleString();
-}
 
 function formatFrameCounts(
   frames: number | null,

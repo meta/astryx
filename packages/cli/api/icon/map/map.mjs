@@ -77,7 +77,8 @@ export async function iconMap(definition, icon, options = {}) {
         ERROR_CODES.ERR_MISSING_ARGUMENT,
       );
     }
-    const {packageDir, set} = await findLocalIconSet(cwd, selector);
+    const {packageDir, set, moduleRenamed, moduleUpdate} =
+      await findLocalIconSet(cwd, selector);
     // The docs' kebab id (`eye-slash`) names the same definition, and a
     // library's other name for an icon (`trash-2`) names the same icon.
     definition = definitionNameOf(definition, mappableDefinitions(set));
@@ -112,7 +113,8 @@ export async function iconMap(definition, icon, options = {}) {
       }
       map[definition] = /** @type {string} */ (icon);
     }
-    const changed = remove ? previous != null : previous !== icon;
+    const changed =
+      (remove ? previous != null : previous !== icon) || moduleRenamed;
     /** @type {string[]} */
     const files = [];
     if (changed) {
@@ -139,6 +141,7 @@ export async function iconMap(definition, icon, options = {}) {
         icon: remove ? null : /** @type {string} */ (icon),
         previous,
         changed,
+        ...(moduleUpdate ? {moduleUpdate} : {}),
         ...(files.length > 0 ? {files} : {}),
       },
     };
@@ -161,7 +164,10 @@ async function mapMany({cwd, selector, pairs}) {
       ERROR_CODES.ERR_MISSING_ARGUMENT,
     );
   }
-  const {packageDir, set} = await findLocalIconSet(cwd, selector);
+  const {packageDir, set, moduleRenamed, moduleUpdate} = await findLocalIconSet(
+    cwd,
+    selector,
+  );
   const known = mappableDefinitions(set);
   const ids = set.data.icons.map(each => each.id);
   const map = {...(set.data.map ?? {})};
@@ -204,7 +210,7 @@ async function mapMany({cwd, selector, pairs}) {
       changed: previous !== id,
     });
   }
-  const changed = entries.some(each => each.changed);
+  const changed = entries.some(each => each.changed) || moduleRenamed;
   /** @type {string[]} */
   const files = [];
   if (changed) {
@@ -228,6 +234,7 @@ async function mapMany({cwd, selector, pairs}) {
       file: path.relative(packageDir, set.dataPath).split(path.sep).join('/'),
       entries,
       changed,
+      ...(moduleUpdate ? {moduleUpdate} : {}),
       ...(files.length > 0 ? {files} : {}),
     },
   };

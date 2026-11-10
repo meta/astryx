@@ -170,7 +170,7 @@ describe('parseInline', () => {
     }
   });
 
-  it('decides link destinations with the shared navigation rule', () => {
+  it('keeps link destinations the navigation rule accepts, except data: URLs', () => {
     const destinations: [string, boolean][] = [
       ['https://example.com', true],
       ['/page', true],
@@ -178,7 +178,7 @@ describe('parseInline', () => {
       ['mailto:a@example.com', true],
       ['tel:+1234567890', true],
       ['custom:document', true],
-      ['data:image/png;base64,iVBORw0KGgo=', true],
+      ['data:image/png;base64,iVBORw0KGgo=', false],
       ['javascript:alert(1)', false],
       ['vbscript:MsgBox(1)', false],
       ['data:text/html,<b>x</b>', false],
