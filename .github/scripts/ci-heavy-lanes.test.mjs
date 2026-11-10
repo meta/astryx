@@ -583,7 +583,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ).toEqual([]);
   });
 
-  it("leaves every run name as it was, but main's nightly interaction run's and the weekly WebKit run's", () => {
+  it("names main's nightly interaction run, the weekly WebKit run and a cut-evidence release-check, and leaves every other run's name", () => {
     const name = (operation, evidence = false) =>
       Function(
         'github',

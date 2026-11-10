@@ -52,7 +52,7 @@ describe('Table release timing gate', () => {
       `return Boolean(${condition});`,
     )({event_name: event, triggering_actor: actor}, {operation, evidence});
 
-  it('gates a cut-evidence run the bot dispatches, but not its monitoring runs', () => {
+  it("gates a person's release-check; the bot's runs, cut evidence included, report timing (DEC-17)", () => {
     const condition = conditionFor(step.env.ASTRYX_TABLE_TIMING_GATE, '1');
     const dispatch = {event: 'workflow_dispatch', operation: 'release-check'};
     const bot = 'github-actions[bot]';
@@ -60,9 +60,10 @@ describe('Table release timing gate', () => {
     expect(
       holds(condition, {...dispatch, actor: 'someone', evidence: false}),
     ).toBe(true);
-    // The pre-cut release-check and the release re-check.
+    // The pre-cut release-check and the release re-check stay on standard
+    // runners while DEC-17 holds.
     expect(holds(condition, {...dispatch, actor: bot, evidence: true})).toBe(
-      true,
+      false,
     );
     // The three-hourly monitoring check reports timing only.
     expect(holds(condition, {...dispatch, actor: bot, evidence: false})).toBe(
