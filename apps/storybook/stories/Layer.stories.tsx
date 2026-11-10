@@ -629,13 +629,59 @@ function sameRect(a: DOMRect, b: DOMRect) {
   );
 }
 
+/** The most frames a click may take to open its layer. */
+const OPEN_WITHIN_FRAMES = 2;
+
+const readAnchorNames = (element: HTMLElement) =>
+  element.style
+    .getPropertyValue('anchor-name')
+    .split(',')
+    .map(name => name.trim())
+    .filter(Boolean);
+
+/** The open layer that anchors to this trigger, or null. */
+function openLayerOf(trigger: HTMLElement): HTMLElement | null {
+  const names = readAnchorNames(trigger);
+  for (const layer of document.querySelectorAll<HTMLElement>(
+    '[popover]:popover-open[id]',
+  )) {
+    if (names.includes(layer.style.getPropertyValue('position-anchor'))) {
+      return layer;
+    }
+  }
+  return null;
+}
+
 /**
- * Click the trigger, read the first frame's geometry synchronously (the
- * discrete event flushes React and the rect read forces layout), then settle
- * and read again. A difference is a paint-then-shift (FR8).
+ * Wait until the trigger's own layer is open. The click's update can commit
+ * in the microtask after `click()` returns. That is still before the next
+ * paint, so a read after this wait is the first frame's geometry. A layer
+ * that does not open within OPEN_WITHIN_FRAMES frames fails by name.
+ */
+async function layerOpened(trigger: HTMLElement): Promise<void> {
+  await committed();
+  for (let frame = 0; openLayerOf(trigger) == null; frame++) {
+    if (frame === OPEN_WITHIN_FRAMES) {
+      fail(`the layer did not open within ${OPEN_WITHIN_FRAMES} frames`);
+    }
+    await nextFrame();
+  }
+}
+
+/**
+ * Click the trigger, wait until its layer is open, read the first frame's
+ * geometry (the rect read forces layout), then settle and read again. A
+ * difference is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
-  canvasElement.querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+  const trigger = canvasElement.querySelector<HTMLElement>(
+    '[data-testid="trigger"]',
+  );
+  if (!trigger) {
+    throw new Error('No trigger');
+  }
+  trigger.click();
+  await layerOpened(trigger);
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);
