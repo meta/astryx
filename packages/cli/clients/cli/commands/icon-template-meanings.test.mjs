@@ -261,6 +261,23 @@ describe('experimental icon --definitions marks template use and the set', () =>
     expect(missing.body.code).toBe('ERR_NOT_FOUND');
   });
 
+  it('in a project whose astryx.config does not load: lists every definition, with no set', async () => {
+    const project = writeIconSetProject(tmp);
+    for (const config of [
+      'export default {experimental: {iconSet: ',
+      'export default {notAKey: true};\n',
+    ]) {
+      fs.writeFileSync(path.join(project, 'astryx.config.mjs'), config);
+      const {code, body} = await json(
+        ['experimental', 'icon', '--definitions'],
+        project,
+      );
+      expect(code, JSON.stringify(body)).toBe(0);
+      expect(body.data.set).toBeNull();
+      expect(body.data.definitions.length).toBeGreaterThan(0);
+    }
+  });
+
   it('with no set anywhere, nothing is marked mapped', async () => {
     fs.mkdirSync(pkg, {recursive: true});
     fs.writeFileSync(

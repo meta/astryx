@@ -62,6 +62,7 @@ import {
   resolveDefaultLook,
 } from './_default-look.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {isPackagePath} from '../../authoring/doctypes/icon-set/parse.mjs';
 import {
   hasLicenseNotice,
   licenseNoticeFix,
@@ -103,7 +104,7 @@ function adapterOption(value) {
     typeof value === 'string'
       ? /^(\.\/[^#\s]+)#([$A-Z_a-z][$\w]*)$/u.exec(value.trim())
       : null;
-  if (!match) {
+  if (!match || !isPackagePath(match[1])) {
     throw new AstryxError(
       `Invalid --adapter "${String(value)}": name a file in your package and its named export, as ./<path>#<export>, such as ./src/adapt.js#adaptIcon.`,
       undefined,

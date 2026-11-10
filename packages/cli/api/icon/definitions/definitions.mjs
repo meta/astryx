@@ -8,15 +8,13 @@
  * @position api/icon/definitions — dispatched by ../icon.mjs
  */
 
-import {AstryxError} from '../../error.mjs';
-import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
   astryxIconDefinitions,
   findLocalIconSet,
   loadIconSets,
   templateIconMeanings,
 } from '../_adapter.mjs';
-import {setsNamed, unusableSet} from '../_records.mjs';
+import {oneNamedSet} from '../_records.mjs';
 
 /**
  * List every Astryx icon definition.
@@ -58,7 +56,8 @@ export async function iconDefinitions({cwd, set: selector}) {
  * The set the definitions are checked against: the one `selector` names, in
  * the icon-set package the command runs in and then among the installed
  * sets; else the project's main set; else the only set of the icon-set
- * package. Null when there is none.
+ * package. Null when there is none, or when the project config does not
+ * load and the command runs outside an icon-set package.
  * @param {string} cwd
  * @param {string | undefined} selector
  * @returns {Promise<{key: string, map: Record<string, string>} | null>}
@@ -71,22 +70,14 @@ async function checkedSet(cwd, selector) {
   });
   const local = await findLocalIconSet(cwd, selector).catch(() => null);
   if (selector != null && local) return entry(local.set);
-  const {sets, withdrawn, choice} = await loadIconSets(cwd);
   if (selector != null) {
-    const named = setsNamed(sets, selector);
-    if (named.length === 0) throw unusableSet(sets, withdrawn, selector);
-    if (named.length > 1) {
-      throw new AstryxError(
-        `"${selector}" names ${named.length} sets; name one as <package>/<set>`,
-        named.map(each => ({
-          name: `${each.package}/${each.name}`,
-          reason: 'name the package',
-        })),
-        ERROR_CODES.ERR_INVALID_ARGUMENT,
-      );
-    }
-    return entry(named[0]);
+    const {sets, withdrawn} = await loadIconSets(cwd);
+    return entry(oneNamedSet(sets, withdrawn, selector));
   }
-  if (choice.status === 'selected' && choice.set) return entry(choice.set);
+  // A project config this CLI cannot load names no set: the list still
+  // answers, unchecked or checked against the local set.
+  const loaded = await loadIconSets(cwd).catch(() => null);
+  const choice = loaded?.choice;
+  if (choice?.status === 'selected' && choice.set) return entry(choice.set);
   return local ? entry(local.set) : null;
 }

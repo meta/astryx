@@ -190,7 +190,7 @@ export function registerExperimentalIcon(group, program) {
           ...(set && unmappedUsed > 0
             ? [
                 text(
-                  `${set} does not map ${unmappedUsed} definitions that templates use; a copied template shows a placeholder for each.`,
+                  `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'definition' : 'definitions'} that templates use; a copied template shows a placeholder for each.`,
                 ),
               ]
             : []),

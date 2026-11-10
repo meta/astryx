@@ -299,6 +299,12 @@ describe('new-set --adapter', () => {
   });
 
   it('refuses a malformed value or a file that does not exist, and writes nothing', async () => {
+    writeDataLibrary();
+    fs.mkdirSync(path.join(pkg, 'src'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'src', 'adapt.js'),
+      'export function adaptIcon(data) { return () => null; }\n',
+    );
     const bad = await json([
       'experimental',
       'icon',
@@ -309,6 +315,24 @@ describe('new-set --adapter', () => {
     ]);
     expect(bad.code).not.toBe(0);
     expect(bad.body.code).toBe('ERR_INVALID_ARGUMENT');
+    for (const module of [
+      './src/./adapt.js',
+      './src/../src/adapt.js',
+      './src//adapt.js',
+      './src/adapt+x.js',
+    ]) {
+      const refused = await json([
+        'experimental',
+        'icon',
+        'new-set',
+        'solid',
+        '--from',
+        '@acme/glyph-data',
+        '--adapter',
+        `${module}#adaptIcon`,
+      ]);
+      expect(refused.body.code, module).toBe('ERR_INVALID_ARGUMENT');
+    }
     const missing = await json([
       'experimental',
       'icon',
