@@ -416,7 +416,7 @@ describe('Tokenizer', () => {
       expect(input).not.toHaveFocus();
     });
 
-    it('leaves the input unfocused after a pen removes a token with the keyboard down', () => {
+    it('moves focus to the input after a pen removes a token, as a mouse removal does', () => {
       const {input, remove, onChange} = renderPair();
       fireEvent.pointerDown(remove, {pointerType: 'pen'});
       act(() => remove.focus());
@@ -425,7 +425,7 @@ describe('Tokenizer', () => {
         item: users[0],
         type: 'remove',
       });
-      expect(input).not.toHaveFocus();
+      expect(input).toHaveFocus();
     });
 
     it('keeps the input focused after a finger removes a token while typing', () => {

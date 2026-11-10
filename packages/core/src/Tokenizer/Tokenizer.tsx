@@ -861,13 +861,19 @@ export function Tokenizer<T extends SearchableItem>({
   const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   const lastPressRef = useRef<{
     inputHadFocus: boolean;
+    isFinger: boolean;
     pressedTokenRemove: Element | null;
   } | null>(null);
-  // The touch keyboard is down while the input is unfocused.
+  // The touch keyboard is down while the input is unfocused. Only a finger's
+  // press counts: a pen's press keeps the default focus rules, as a mouse's
+  // does.
   const wasKeyboardDown = useCallback(() => {
     const press = lastPressRef.current;
     return (
-      press != null && !press.inputHadFocus && readModality() === 'pointer'
+      press != null &&
+      press.isFinger &&
+      !press.inputHadFocus &&
+      readModality() === 'pointer'
     );
   }, [readModality]);
   // A finger's tap on a token's remove button with the keyboard down keeps
@@ -894,6 +900,7 @@ export function Tokenizer<T extends SearchableItem>({
         inputHadFocus:
           inputRef.current != null &&
           inputRef.current.ownerDocument.activeElement === inputRef.current,
+        isFinger: e.pointerType === 'touch',
         pressedTokenRemove: removeControlOf(e.target),
       };
     },
