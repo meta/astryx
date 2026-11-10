@@ -1,0 +1,30 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# WebKit's full interaction suite, weekly on main (spec:AST-030 DEC-24). A
+# release runs WebKit's touch and gesture subset while the last full weekly
+# run is green and at most seven days old; this workflow keeps that run
+# fresh. Sunday 10:00 UTC leaves a day to fix a red result forward before
+# Monday's release. ci.yml's `webkit-weekly` operation runs only the
+# Storybook build and the WebKit legs, at main's exact tip, and records a
+# green or failed verdict the release check reads.
+name: WebKit weekly
+
+on:
+  schedule:
+    - cron: '0 10 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the full WebKit run for main's tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run ci.yml --ref main -f operation=webkit-weekly
