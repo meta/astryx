@@ -1632,6 +1632,33 @@ describe('Lightbox', () => {
       expect(screen.queryByText('1 / 1')).toBeNull();
     });
 
+    it("gives a single captioned video a gallery page's box and band, and its caption describes the viewer", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            src: '/clip.mp4',
+            alt: 'A clip',
+            type: 'video',
+            caption: 'A caption',
+          }}
+        />,
+      );
+      const page = document.querySelector('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      const media = page.querySelector('[data-lightbox-page-media]')!;
+      expect(media.querySelector('video')).toHaveAttribute('src', '/clip.mp4');
+      const caption = page.querySelector<HTMLElement>(
+        '[data-lightbox-caption]',
+      )!;
+      expect(caption).toHaveTextContent('A caption');
+      expect(media.nextElementSibling).toContainElement(caption);
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+        'A caption',
+      );
+    });
+
     it('with no caption has no band, as a gallery with none', () => {
       render(
         <Lightbox
