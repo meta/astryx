@@ -417,9 +417,12 @@ const styles = stylex.create({
     // The clamp draws an ellipsis on its last line. The place shows nothing.
     visibility: 'hidden',
     // The lines are generated, so the caption's text and its ranges hold
-    // none of them.
+    // none of them. Each line is a no-break space, and the place shows as
+    // many as the caption does. An open caption scrolls once it passes 60 %
+    // of the viewport, and then the place is not shown. 240 lines cover that
+    // at a 10px line in a window 4,000px tall.
     '::before': {
-      content: 'attr(data-lines)',
+      content: `"${'\\A0\\A'.repeat(239)}\\A0"`,
     },
   },
   // The place shows one line box for each line the caption shows. Layout
@@ -605,16 +608,6 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
 
-/**
- * The toggle's place generates these lines of a no-break space, and shows
- * as many as the caption does. They never change, so a measurement changes
- * no node. An open caption scrolls once it passes 60 % of the viewport, and
- * then the place is not shown. 240 lines cover that at a 10px line in a
- * window 4,000px tall.
- */
-const CAPTION_PLACE_LINES = Array.from({length: 240}, () => '\u00a0').join(
-  '\n',
-);
 /**
  * A fullscreen overlay for viewing images and videos at full resolution.
  *
@@ -950,6 +943,8 @@ export function Lightbox({
     captionTruncation.ref,
   );
   const [captionShownLines, setCaptionShownLines] = useState(0);
+  // Whether the current caption is open, for the content observer's callback.
+  const isCaptionOpenRef = useRef(false);
   // The current caption's lines, without its toggle's place.
   const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
   // The caption's width at its last measure, and the cancel of a smaller
@@ -1074,12 +1069,10 @@ export function Lightbox({
   // caption's own open resize it. New text can keep its size, and paging
   // attaches the next page's caption. The dialog's opening attaches it again.
   // Each registration gets one delivery after the browser lays the caption
-  // out, and the commit reads nothing. A delivery's update changes attributes
-  // and styles only, and adds no element. Another observer that reacts to new
-  // elements then observes nothing mid-delivery. The observer watches the
-  // caption's box, two levels above its text. A delivery can show the toggle,
-  // and the toggle's observers sit deeper, so they get their deliveries in the
-  // same frame.
+  // out, and the commit reads nothing. A delivery changes attributes and
+  // styles only and adds no element, so no observer that reacts to new
+  // elements runs mid-delivery. The toggle's observers sit deeper, so they
+  // deliver in the same frame.
   useAttachment(
     bandCaptionRef,
     element => {
@@ -1096,9 +1089,20 @@ export function Lightbox({
       };
       let stopResize = register();
       // New text in a box that keeps its size fires no resize. A new
-      // registration gets its own delivery after the next layout.
+      // registration gets its own delivery after the next layout. An open
+      // caption first counts its new text's lines, as an opening does.
       const stopContent = observeContent(element, () => {
         stopResize?.();
+        if (isCaptionOpenRef.current) {
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the caption lays out without the toggle's place before its lines are counted
+          flushSync(() => {
+            setCaptionShownLines(0);
+          });
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new count must lay out before the new registration's delivery reads the caption
+          flushSync(() => {
+            countOpenCaption();
+          });
+        }
         stopResize = register();
       });
       return () => {
@@ -1125,31 +1129,35 @@ export function Lightbox({
     captionToggleHitAreaRef,
   );
   usePressTracker(captionToggleRef);
-  // An opened caption first lays out without the toggle's place, so its
-  // first count is the text's own lines. The place also takes the toggle's
-  // width for its new label. Then a toggle that does not fit beside the last
-  // line takes a line of its own, before the resize delivery reads the
+  // Counts an open caption's lines while the toggle's place is not shown, so
+  // the count is the text's own lines. The place also takes the toggle's width
+  // for its current label. A toggle that does not fit beside the last line
+  // then takes a line of its own, before the resize delivery reads the
   // caption.
-  useIsomorphicLayoutEffect(() => {
+  const countOpenCaption = useCallback(() => {
     const caption = bandCaptionRef.current;
     const flow = bandCaptionFlowRef.current;
-    const toggle = captionToggleRef.current;
-    if (!isCaptionOpen || caption == null || flow == null) {
+    if (caption == null || flow == null) {
       return;
     }
     const view = caption.ownerDocument.defaultView ?? window;
     const line = parseFloat(view.getComputedStyle(caption).lineHeight);
-    if (Number.isFinite(line) && line > 0) {
-      // The layout width, as the observer's own fallback reads it: a scaled
-      // ancestor does not change it.
-      const toggleWidth = toggle?.offsetWidth ?? 0;
-      if (toggleWidth > 0) {
-        setCaptionToggleWidth(toggleWidth);
-      }
-      setCaptionShownLines(
-        Math.round(flow.getBoundingClientRect().height / line),
-      );
+    if (!Number.isFinite(line) || line <= 0) {
+      return;
     }
+    // The layout width, as the observer's own fallback reads it: a scaled
+    // ancestor does not change it.
+    const toggleWidth = captionToggleRef.current?.offsetWidth ?? 0;
+    if (toggleWidth > 0) {
+      setCaptionToggleWidth(toggleWidth);
+    }
+    setCaptionShownLines(
+      Math.round(flow.getBoundingClientRect().height / line),
+    );
+  }, []);
+  // Syncs the content observer's callback with this render's open caption.
+  useIsomorphicLayoutEffect(() => {
+    isCaptionOpenRef.current = isCaptionOpen;
   }, [isCaptionOpen]);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
@@ -1270,6 +1278,9 @@ export function Lightbox({
 
   const isZoomTarget = hasZoom && !isVideo;
 
+  // The current page's caption band. The drag to close fades it with the
+  // viewer's controls.
+  const currentCaptionBandRef = useRef<HTMLDivElement | null>(null);
   const dismissFades = useCallback((): {
     backdrop: Animator | null;
     chrome: Animator[];
@@ -1280,14 +1291,16 @@ export function Lightbox({
       return {backdrop: null, chrome: []};
     }
     // A caption in a band fades as the band, which carries its backing.
-    const chrome: HTMLElement[] = [];
+    const band = currentCaptionBandRef.current;
+    const chrome: HTMLElement[] = band == null ? [] : [band];
     for (const element of container.querySelectorAll<HTMLElement>(
-      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption-band], [data-lightbox-caption]',
+      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption]',
     )) {
       if (
         element.parentElement?.closest(
-          '[data-lightbox-page]:not([data-current]), [data-lightbox-caption-band]',
-        ) == null
+          '[data-lightbox-page]:not([data-current])',
+        ) == null &&
+        band?.contains(element) !== true
       ) {
         chrome.push(element);
       }
@@ -1859,7 +1872,6 @@ export function Lightbox({
                   {...stylex.props(styles.mediaGroup)}>
                   <div
                     ref={imageWrapperRef}
-                    data-lightbox-viewport=""
                     {...stylex.props(
                       styles.imageWrapper,
                       isZoomTarget && !isZoomed && styles.imageWrapperZoomable,
@@ -1929,7 +1941,9 @@ export function Lightbox({
                           </div>
                           {hasCaptionBand && (
                             <div
-                              data-lightbox-caption-band=""
+                              ref={
+                                i === index ? currentCaptionBandRef : undefined
+                              }
                               {...stylex.props(
                                 styles.captionBand,
                                 !isRenderable(mediaArray[i].caption) &&
@@ -1996,7 +2010,6 @@ export function Lightbox({
                                                 captionShownLines,
                                               ),
                                           )}
-                                          data-lines={CAPTION_PLACE_LINES}
                                         />
                                         {mediaArray[i].caption}
                                       </div>
@@ -2020,12 +2033,16 @@ export function Lightbox({
                                         aria-expanded={isCaptionOpen}
                                         aria-controls={fullCaptionId}
                                         onClick={() => {
-                                          if (!isCaptionOpen) {
-                                            setCaptionShownLines(0);
+                                          if (isCaptionOpen) {
+                                            setOpenCaptionIndex(null);
+                                            return;
                                           }
-                                          setOpenCaptionIndex(
-                                            isCaptionOpen ? null : index,
-                                          );
+                                          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the opened caption lays out without the toggle's place before its lines are counted
+                                          flushSync(() => {
+                                            setCaptionShownLines(0);
+                                            setOpenCaptionIndex(index);
+                                          });
+                                          countOpenCaption();
                                         }}
                                         xstyle={
                                           [

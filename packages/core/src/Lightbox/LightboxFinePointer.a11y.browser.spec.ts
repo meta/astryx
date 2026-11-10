@@ -131,8 +131,9 @@ test("the zoom target's focus ring sits inside the stage, which a clipping group
     return {
       width: parseFloat(style.outlineWidth),
       offset: parseFloat(style.outlineOffset),
-      clips: getComputedStyle(el.closest('[data-lightbox-viewport]') as Element)
-        .overflow,
+      clips: getComputedStyle(
+        el.closest('[data-lightbox-media] > :first-child') as Element,
+      ).overflow,
     };
   });
   expect(ring.clips).toBe('hidden');

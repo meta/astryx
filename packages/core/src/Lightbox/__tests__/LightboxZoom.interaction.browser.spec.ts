@@ -330,7 +330,7 @@ for (const theme of SHIPPED_THEMES) {
     const img = dialog.getByRole('img', {name: 'Mountain lake'});
     // The viewport, and whatever moved inside it to show the second photo,
     // rests.
-    await waitForRest(dialog.locator('[data-lightbox-viewport]'));
+    await waitForRest(dialog.locator('[data-lightbox-media] > :first-child'));
     const rect = await img.boundingBox();
     if (rect == null) {
       throw new Error('no photo');

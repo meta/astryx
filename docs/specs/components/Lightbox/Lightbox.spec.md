@@ -226,7 +226,9 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   in, `-` zooms out, and `0` returns to the fitted size; while zoomed, the arrow
   keys pan the photo. Focus stays inside the viewer (FR4), and on close returns
   to the element that opened the viewer when that element is still connected and
-  can receive focus (`family:overlay-dismissal` AV1).
+  can receive focus (`family:overlay-dismissal` AV1). Paging away from a
+  focused "more" or "less" moves focus to the new page's photo, or to Close
+  when the photo has no zoom.
 - **AR4 — Screen-reader semantics and announcements (WCAG 2.2 1.1.1, 4.1.2,
   4.1.3).** The viewer is a modal dialog named by the active item's `alt`, or a
   localized "Media viewer" when it has none. Every item requires `alt`, which

@@ -174,7 +174,9 @@ test('with a fine pointer (a desktop) the stage fills the viewer, as under a coa
     // caption it fills the stage. A click or a drag beside the photo is the
     // stage's, as a finger's is.
     const layout = await stage.evaluate(el => {
-      const viewport = el.closest('[data-lightbox-viewport]') as HTMLElement;
+      const viewport = el.closest(
+        '[data-lightbox-media] > :first-child',
+      ) as HTMLElement;
       const own = getComputedStyle(viewport);
       const group = getComputedStyle(viewport.parentElement as HTMLElement);
       const v = viewport.getBoundingClientRect();

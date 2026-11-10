@@ -54,7 +54,7 @@ async function openViewer(page: Page, story: string, trigger: string) {
  */
 async function captionShape(page: Page) {
   return page.getByRole('dialog').evaluate(el => {
-    const viewer = el.querySelector('[data-lightbox-viewport]');
+    const viewer = el.querySelector('[data-lightbox-media] > :first-child');
     const current = viewer?.querySelector('[data-current]');
     const media = current?.querySelector('[data-lightbox-page-media]');
     const photo = media?.querySelector('img');
@@ -188,7 +188,7 @@ for (const size of ['phone', 'desktop'] as const) {
         'Open with zoom',
       );
       const fill = await dialog.evaluate(el => {
-        const viewer = el.querySelector('[data-lightbox-viewport]');
+        const viewer = el.querySelector('[data-lightbox-media] > :first-child');
         const media = viewer?.querySelector(
           '[data-current] [data-lightbox-page-media]',
         );
