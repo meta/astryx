@@ -98,14 +98,17 @@ shared icon names under FR17.
   - No package of the set depends on react-native-screens,
     react-native-safe-area-context, or a navigation package that ships native
     code or requires either of them (DEC-9).
-  - Astryx owns everything in navigation except routing state: the native
-    stack and tab containers, transitions, gestures, insets, and every bar,
-    header, button, and search field, rendered by the system through the
-    platform's hosts or drawn by the library. A router holds only routing
-    state and drives the `navigation` hosts. React Navigation's JavaScript
-    core (`@react-navigation/core`) is an optional integration under
-    `spec:AST-082/FR13`: an app that routes with it depends on it itself,
-    and neither the library nor the platform depends on it.
+  - React Navigation's JavaScript core (`@react-navigation/core`, which ships
+    no native code) holds the routing state. The library's `navigation`
+    entry provides navigators over the platform's `navigation` hosts. Astryx
+    owns everything else in navigation: the native stack and tab
+    containers, transitions, gestures, insets, and every bar, header,
+    button, and search field, rendered by the system through the
+    platform's hosts or drawn by the library. No third-party package draws
+    any part of navigation.
+  - `@react-navigation/core` is an optional peer dependency of the library,
+    needed only by its `navigation` entry: an optional integration under
+    `spec:AST-082/FR13`. The platform never depends on it.
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -127,7 +130,9 @@ shared icon names under FR17.
     writes every permission the app needs (FR4).
 - **FR4 — Native code lives only in the platform.**
   - The library contains no native code and has no runtime dependency beyond
-    `react`, `react-native`, and the platform.
+    `react`, `react-native`, and the platform, apart from the optional
+    `@react-navigation/core` peer that only its `navigation` entry uses
+    (FR2).
   - An app holds no hand-written native code. Its iOS and Android projects are
     generated from the app's configuration. The platform ships one
     configuration plugin. It always writes the core's host declarations (on
@@ -156,6 +161,8 @@ shared icon names under FR17.
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
+  - On the library, `.` holds no navigator, and `./navigation` holds the
+    navigators (FR2).
   - On the platform, `.` is the core and exports no capability's objects or
     views; `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and `./navigation` are the capabilities' entries.
   - `./host` holds the plumbing the library and the capabilities need, such
@@ -453,7 +460,8 @@ everything in navigation except routing state: the `navigation` capability
 holds the native stack and tab containers with their transitions and
 gestures, the core holds safe-area insets, and every bar, header, button,
 and search field is the system's, through the platform's hosts, or drawn by
-the library. React Navigation's JavaScript core holds only routing state.
+the library. React Navigation's JavaScript core holds only the routing state, and the
+library's `navigation` entry provides navigators over the platform's hosts.
 Apps, and the projects the Astryx app previews, then run no third-party
 native code for navigation.
 
