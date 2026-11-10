@@ -98,6 +98,10 @@ async function serve(
   page: Page,
   {rtl = false, startIndex = 1, tall = false} = {},
 ): Promise<void> {
+  // WebKit starts an animation inside a frame, and stamps that frame at or
+  // after the start. Chromium starts it on the compositor after a commit.
+  const stampsStartFrame =
+    page.context().browser()?.browserType().name() === 'webkit';
   const pages = Array.from(
     {length: COUNT},
     (_, i) =>
@@ -123,13 +127,16 @@ async function serve(
   window.moves = [];
   // For a failure's load report. It records the frames the page draws from
   // each touch, wheel or goTo, until 2 s after the last one. It also records
-  // when each settle ends, and the time of each touch and wheel event.
+  // when each frame's callbacks ran, when each settle ends, and the time of
+  // each touch and wheel event.
   window.frameTimes = [];
+  window.frameCallbacks = [];
   window.settleTimes = [];
   let framesUntil = 0;
   let framing = false;
   const frame = time => {
     window.frameTimes.push(time);
+    window.frameCallbacks.push(performance.now());
     if (performance.now() < framesUntil) {
       requestAnimationFrame(frame);
     } else {
@@ -168,13 +175,42 @@ async function serve(
     window.liftPositions.push(track ? parseFloat(getComputedStyle(track).translate) || 0 : 0);
     return velocity;
   };
+  // When each motion on the track was made, for the report check below.
+  window.trackMotions = [];
+  const trackElement = document.getElementById('track');
+  const animateTrack = trackElement.animate;
+  trackElement.animate = function (...args) {
+    window.trackMotions.push(performance.now());
+    return animateTrack.apply(this, args);
+  };
   window.pager = Pager.createPager({
     count: ${COUNT},
     defaultIndex: ${startIndex},
-    // Notes whether the settle was already running on its curve when the
-    // page was reported.
-    onIndexChange: (i, reason) => window.pagerLog.push('index:' + i + ':' + reason +
-      (document.getAnimations().some(a => a.playState === 'running' && a.startTime != null && a.currentTime > 20) ? ':moving' : '')),
+    // Notes whether the settle had run for two of the page's frames when the
+    // page was reported. The browser must also have told its start. The
+    // frames are counted after the one that the pager counts from. In
+    // Chromium, that is the frame that commits the settle: the first one whose
+    // callbacks run after the settle is made. On a loaded runner, Chromium can
+    // date its own start a frame later. WebKit starts the settle inside a
+    // frame and stamps that frame at or after the start. So in WebKit the
+    // count starts at that frame. The frames are the ones the load report
+    // records.
+    onIndexChange: (i, reason) => {
+      const now = document.timeline.currentTime;
+      const frames = [...new Set([...window.frameTimes, now])];
+      const made = window.trackMotions.at(-1);
+      const committed = made == null ? null : window.frameTimes[window.frameCallbacks.findIndex(t => t > made)];
+      const moving = document.getAnimations().some(a => {
+        if (a.playState !== 'running' || a.startTime == null) {
+          return false;
+        }
+        const past = ${stampsStartFrame}
+          ? frames.filter(t => t <= now && t >= a.startTime).length - 1
+          : committed == null ? 0 : frames.filter(t => t <= now && t > committed).length;
+        return past >= 2;
+      });
+      window.pagerLog.push('index:' + i + ':' + reason + (moving ? ':moving' : ''));
+    },
     onSettle: (i, previous) => {
       window.settleTimes.push(performance.now());
       window.pagerLog.push('settle:' + i + ':' + previous);

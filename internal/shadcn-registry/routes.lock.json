@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circle-check-indicator",
       "path": "components/lab/circle-check-indicator",
       "aliases": []
@@ -685,6 +690,11 @@
     {
       "name": "component-lab-tab-bar-item",
       "path": "components/lab/tab-bar-item",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
       "aliases": []
     },
     {
@@ -1385,6 +1395,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -2364,6 +2379,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3767,6 +3787,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -3889,6 +3914,11 @@
     {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
       "aliases": []
     },
     {
@@ -4122,6 +4152,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
+      "aliases": []
+    },
+    {
       "name": "hook-use-drag-to-snap-points",
       "path": "hooks/use-drag-to-snap-points",
       "aliases": []
@@ -4274,6 +4309,11 @@
     {
       "name": "hook-use-popover",
       "path": "hooks/use-popover",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
       "aliases": []
     },
     {

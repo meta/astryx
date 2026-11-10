@@ -260,5 +260,6 @@ var --text-supporting-weight (./theme.css)
 
 ```text
 attr data-astryx-media (public data attribute)
+attr data-astryx-pressable (public data attribute)
 attr data-astryx-theme (public data attribute)
 ```

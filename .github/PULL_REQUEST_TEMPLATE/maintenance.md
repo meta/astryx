@@ -21,6 +21,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] No intended public API, product behavior, visual direction, or policy change.
 - [ ] Product changes discovered during the work were removed or split.
 - [ ] Public text and artifacts contain no internal Meta context.

@@ -47,6 +47,13 @@ function shards(count, {storybookSha = 'abc', withPlan = plan} = {}) {
             cards,
             d8BrowserContract: contract,
             pageRecoveries: [{storyId: `recovered-${shard.index}`}],
+            storyRetries: [
+              {
+                storyId: `retried-${shard.index}`,
+                firstError: 'e',
+                outcome: 'recovered',
+              },
+            ],
           }),
         ),
       ),
@@ -84,6 +91,11 @@ describe('RTL audit shards', () => {
       'recovered-1',
       'recovered-2',
       'recovered-3',
+    ]);
+    expect(merged.storyRetries.map(entry => entry.storyId)).toEqual([
+      'retried-1',
+      'retried-2',
+      'retried-3',
     ]);
   });
 
@@ -130,5 +142,19 @@ describe('RTL audit shards', () => {
     expect(() => mergeRtlShards(set, {plan, storybookSha: 'abc'})).toThrow(
       /D8/,
     );
+  });
+});
+
+describe('retries across shards', () => {
+  it("merges each shard's retried stories and prints one countable line", async () => {
+    const {retriesLine} =
+      await import('../../apps/storybook/rtl-audit/rtl-audit-shards.mjs');
+    expect(retriesLine([])).toBe('rtl-audit-retries: 0 []');
+    expect(
+      retriesLine([
+        {storyId: 'core-b--x', firstError: 'e', outcome: 'recovered'},
+        {storyId: 'core-a--y', firstError: 'e', outcome: 'error'},
+      ]),
+    ).toBe('rtl-audit-retries: 2 [core-a--y core-b--x]');
   });
 });
