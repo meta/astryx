@@ -217,14 +217,6 @@
       "status": "allowed",
       "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
     },
-    "packages/core/src/Spinner/spinnerRotor.ts:flushScheduled": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/Spinner/spinnerRotor.ts:pendingRotors": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
       "status": "open",
       "group": "triage"
@@ -313,10 +305,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/gestures/gestureSync.ts:syncingDepth": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
     "packages/core/src/gestures/haptics.ts:nextLabelId": {
       "status": "open",
       "group": "F13 Shared id sequences"
@@ -396,78 +384,6 @@
     "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
       "status": "open",
       "group": "F6 Keyboard"
-    },
-    "packages/core/src/motion/animatedLayout.ts:batches": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:changeStarts": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:edgeMotions": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:endedReports": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:exits": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:glideReports": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:glides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:heldSlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:ours": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:presentedGlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:releaseGlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:replaced": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:resizeReveals": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:settleRetimes": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:settling": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:slideTargets": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:stoppedShown": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:transitionSettles": {
-      "status": "open",
-      "group": "F7 Motion frame"
     },
     "packages/core/src/motion/animator.ts:frameDepth": {
       "status": "open",

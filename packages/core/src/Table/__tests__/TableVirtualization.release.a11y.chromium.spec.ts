@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @a11y-isolated
 /**
  * @file TableVirtualization.release.a11y.chromium.spec.ts
  * @input Production row fixture, isolated Chromium and synthetic 1k/10k/100k corpora
@@ -45,6 +46,28 @@ function readPackageVersion(name: string): string {
   return 'unresolved';
 }
 const SAMPLES = 100;
+/**
+ * Timing budgets for the release runner (4-core-ubuntu), with this proof alone
+ * in its leg. They are the module record's PR5 targets: five isolated runs
+ * there stay inside them, and worst-run-plus-25% is never looser.
+ */
+const TIMING_BUDGETS = {
+  rangeCommitP95Ms: 4,
+  noopP95Ms: 2,
+  frameWorkP95Ms: 16.7,
+  missedFraction: 0.01,
+  supportedIncrementP95Ms: 2,
+  coldMountMaxMs: 250,
+};
+// Timing gates only on the release runner. Elsewhere the receipt reports it.
+const GATES_TIMING = process.env.ASTRYX_TABLE_TIMING_GATE === '1';
+function expectTiming(value: number, budget: number, label: string) {
+  if (GATES_TIMING) {
+    expect.soft(value, label).toBeLessThanOrEqual(budget);
+  }
+}
+// Measure 30 seconds at 60 Hz; a 1% rate is unstable over only 100 intervals.
+const CADENCE_SAMPLES = 60 * 30;
 const SIZES = [1000, 10000, 100000];
 let fixture: Awaited<ReturnType<typeof startRowFixture>>;
 test.beforeAll(async () => {
@@ -165,7 +188,10 @@ test('records release timing, bounded work and controlled-GC lifetime without re
                 throw new Error('The Table viewport is missing');
               }
               const viewport: HTMLElement = found;
+              const startTop = viewport.scrollTop;
+              const endTop = startTop + 200 * 56;
               const intervals: number[] = [];
+              let direction = 1;
               let last = 0,
                 blankFrames = 0;
               function next(now: number) {
@@ -194,12 +220,18 @@ test('records release timing, bounded work and controlled-GC lifetime without re
                   resolve({intervals, blankFrames});
                   return;
                 }
-                viewport.scrollTop += 56;
+                // Reverse before the 1k corpus ends, so every interval includes a scroll.
+                if (viewport.scrollTop >= endTop) {
+                  direction = -1;
+                } else if (viewport.scrollTop <= startTop) {
+                  direction = 1;
+                }
+                viewport.scrollTop += direction * 56;
                 requestAnimationFrame(next);
               }
               requestAnimationFrame(next);
             }),
-          SAMPLES,
+          CADENCE_SAMPLES,
         );
         const missedFrames = cadence.intervals.reduce(
           (sum, interval) =>
@@ -254,8 +286,9 @@ test('records release timing, bounded work and controlled-GC lifetime without re
           noopCommitMs: distribution(noop),
           frameIntervalsMs: distribution(cadence.intervals),
           missedFrames,
-          observedFrames: SAMPLES,
-          missedFraction: missedFrames / (SAMPLES + missedFrames),
+          observedFrames: cadence.intervals.length,
+          missedFraction:
+            missedFrames / (cadence.intervals.length + missedFrames),
           blankFrames: cadence.blankFrames,
           callerHeap,
           mountedHeap,
@@ -314,7 +347,14 @@ test('records release timing, bounded work and controlled-GC lifetime without re
           'Selection, row index, sticky columns plus no-op counting transforms',
       },
     },
+    timingGate: {
+      gates: GATES_TIMING,
+      runner: GATES_TIMING ? '4-core-ubuntu' : 'reported only',
+      budgets: TIMING_BUDGETS,
+    },
     limitations: [
+      'The timing proof owns its contract shard; other shards retain parallel workers.',
+      'Cadence records 1800 intervals over 200 row pitches in both directions; every scheduling gap enters the unchanged 1% missed-frame bound.',
       'Range-plus-commit spans run from the viewport scroll event to the end of the React commit that it causes, including layout effects; they exclude style, layout and paint after the commit.',
       'TaskDuration is an inclusive main-thread work bound for each scroll step and its frames, not a compositor/GPU measurement.',
       'Before the final heap sample, one click on the empty root releases the last event target that React DOM keeps; without it one scrolled viewport stays reachable through React DOM until the next event.',
@@ -339,21 +379,26 @@ test('records release timing, bounded work and controlled-GC lifetime without re
     expect
       .soft(result.rangeCommitSamples, `${label} range-plus-commit samples`)
       .toBeGreaterThanOrEqual(SAMPLES * 0.9);
-    expect
-      .soft(result.rangeCommitMs.p95, `${label} range-plus-commit`)
-      .toBeLessThanOrEqual(4);
-    expect
-      .soft(result.noopCommitMs.p95, `${label} no-op`)
-      .toBeLessThanOrEqual(2);
-    expect
-      .soft(
-        result.mainThreadTaskMsUpperBound.p95,
-        `${label} main-thread frame work`,
-      )
-      .toBeLessThanOrEqual(16.7);
-    expect
-      .soft(result.missedFraction, `${label} missed frame fraction`)
-      .toBeLessThanOrEqual(0.01);
+    expectTiming(
+      result.rangeCommitMs.p95,
+      TIMING_BUDGETS.rangeCommitP95Ms,
+      `${label} range-plus-commit`,
+    );
+    expectTiming(
+      result.noopCommitMs.p95,
+      TIMING_BUDGETS.noopP95Ms,
+      `${label} no-op`,
+    );
+    expectTiming(
+      result.mainThreadTaskMsUpperBound.p95,
+      TIMING_BUDGETS.frameWorkP95Ms,
+      `${label} main-thread frame work`,
+    );
+    expectTiming(
+      result.missedFraction,
+      TIMING_BUDGETS.missedFraction,
+      `${label} missed frame fraction`,
+    );
     expect.soft(result.blankFrames, `${label} blank frames`).toBe(0);
     expect
       .soft(result.initialCounts.cells, `${label} initial pre-cell work bound`)
@@ -375,9 +420,11 @@ test('records release timing, bounded work and controlled-GC lifetime without re
       .soft(result.maxScrollCells, `${label} per-scroll cell work bound`)
       .toBeLessThanOrEqual(16 * result.columns);
     if (result.count === 100000 && result.combination === 'core') {
-      expect
-        .soft(result.coldMs.max, `${label} cold mount`)
-        .toBeLessThanOrEqual(250);
+      expectTiming(
+        result.coldMs.max,
+        TIMING_BUDGETS.coldMountMaxMs,
+        `${label} cold mount`,
+      );
       expect
         .soft(
           result.mountedIncrementBytesUpperBound,
@@ -419,12 +466,11 @@ test('records release timing, bounded work and controlled-GC lifetime without re
       if (core == null) {
         throw new Error(`No core result at ${result.count} rows`);
       }
-      expect
-        .soft(
-          result.rangeCommitMs.p95 - core.rangeCommitMs.p95,
-          `${label} incremental supported-plugin p95`,
-        )
-        .toBeLessThanOrEqual(2);
+      expectTiming(
+        result.rangeCommitMs.p95 - core.rangeCommitMs.p95,
+        TIMING_BUDGETS.supportedIncrementP95Ms,
+        `${label} incremental supported-plugin p95`,
+      );
     }
   }
 });

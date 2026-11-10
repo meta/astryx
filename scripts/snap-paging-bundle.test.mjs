@@ -6,13 +6,16 @@
  * @output Proves snap paging's module boundary. Carousel alone bundles no
  *   pager code, and Carousel with `useSnapPaging` does. Importing the
  *   snap-paging module does no DOM work
- * @position Node test over source, so it needs no build
+ * @position Node test over source, so it needs no build. The import runs in
+ *   a child Node process, so it makes no request to Vitest's main process
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterAll, describe, expect, it} from 'vitest';
 
 const REPO = path.resolve(import.meta.dirname, '..');
@@ -116,9 +119,54 @@ export {useSnapPaging} from ${from('SnapPaging/index.ts')};`,
     expect(added.filter(input => !PAGER_CODE.test(input))).toEqual([]);
   });
 
-  it('imports with no DOM: a server import does no DOM work', async () => {
-    expect(typeof globalThis.document).toBe('undefined');
-    const module = await import('../packages/core/src/SnapPaging/index.ts');
-    expect(Object.keys(module)).toEqual(['useSnapPaging']);
+  it('imports with no DOM: a server import does no DOM work', () => {
+    // Vitest transforms each source module of an import in its main process,
+    // one request at a time behind every worker's. On a loaded machine, the
+    // module's 58 files then take more than the test's 30 s. One esbuild
+    // bundle, loaded by a plain Node process, runs the same module code.
+    const result = esbuild.buildSync({
+      absWorkingDir: REPO,
+      entryPoints: [path.join(CORE_SRC, 'SnapPaging/index.ts')],
+      bundle: true,
+      write: false,
+      format: 'esm',
+      platform: 'node',
+      // A package stays a real Node import, as in a server import.
+      packages: 'external',
+      // Every module runs as it does when loaded one by one, so a call at
+      // load in an unused module still runs.
+      treeShaking: false,
+      loader: {'.css': 'empty'},
+      logLevel: 'silent',
+    });
+    // Beside core, so its packages resolve from core's node_modules.
+    const dir = path.join(
+      REPO,
+      'packages/core/node_modules/.cache/snap-paging-bundle',
+    );
+    fs.mkdirSync(dir, {recursive: true});
+    const file = path.join(dir, `server-${process.pid}.mjs`);
+    fs.writeFileSync(file, result.outputFiles[0].text);
+    try {
+      const out = execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `const module = await import(${JSON.stringify(pathToFileURL(file).href)});
+           console.log(JSON.stringify({
+             document: typeof globalThis.document,
+             exports: Object.keys(module),
+           }));`,
+        ],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+      expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual({
+        document: 'undefined',
+        exports: ['useSnapPaging'],
+      });
+    } finally {
+      fs.rmSync(file, {force: true});
+    }
   });
 });
