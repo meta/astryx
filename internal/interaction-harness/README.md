@@ -278,7 +278,11 @@ a just-started compositor animation late (a sheet's release held on screen for
 late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, at the position the page last
 set before the block is excused. Pass that position as `setBeforeBlock`, such
-as the drag's last position at the release. An animation frozen at the block's
+as the drag's last position at the release. Without it, a block with `during`
+takes the position on the cast's last frame before the caught animation's
+start. Chromium on a loaded runner presents a just-started compositor
+animation late too: a slider's coast first showed 25–111 ms after its start.
+An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
 An element off screen before the block, such as a card that enters from an
@@ -552,10 +556,8 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 `Date.now()` sees one event per photograph, about 100 ms apart, so a
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
-`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
-the page's surface right after it changes ("Unable to capture screenshot"); a
-storyboard takes that photograph again two frames later, up to three attempts
-in all, and lists each retake under `recaptures` in the trace.
+`startScreencast` and `castStoryboard`. A photograph the engine fails
+throws the engine's error; a storyboard never takes it again.
 
 ## Page freeze
 
@@ -711,8 +713,11 @@ as it does a trackpad's.
 WebKit dispatches a step only once the page's main thread is free, and the
 steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). Three things can split a run past
-`maxGapMs`. When a step reached the page within one frame of its own wheel
+listener received it (`wheelArrivals`). A gap of `maxGapMs` or more splits the
+run, as Core's gesture host ends a wheel gesture at a pause of its end window or
+more. A proof whose component reads the run as one trackpad scroll passes its
+axis's `WHEEL_SCROLL_END_MS`. Three things can split a run. When a step reached
+the page within one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
@@ -733,7 +738,7 @@ arrived, and never later than the next step's arrival. So its handling, with
 any work queued before that task, counts as the page's. Other main-thread work
 between steps that leaves frames running still counts as the dispatch's stall.
 Chromium stamps a step with its dispatch time, so a page that holds its main
-thread does not widen the gaps there, and every gap past `maxGapMs` is a
+thread does not widen the gaps there, and every gap of `maxGapMs` or more is a
 `WheelPacingError`.
 
 The WebKit input command is reached through Playwright's in-process server
