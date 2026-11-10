@@ -10,7 +10,8 @@
  *   loads its tooltip on demand (truncated Text and Heading) holds the latest
  *   hover, tap or focus here with native events only, and starts the load. The
  *   tooltip that loads answers the held interaction through
- *   TooltipPresentInterestContext. This module imports no touch or layer code.
+ *   TooltipPresentInterestContext. It imports neither the touch trigger nor
+ *   the layer runtime.
  */
 
 import {
@@ -24,6 +25,7 @@ import {
   type RefObject,
 } from 'react';
 import type {ModuleLoader} from '../utils/moduleLoader';
+import {waitForPressClick} from '../utils/waitForPressClick';
 import type {TooltipPresentInterestState} from '../Tooltip/tooltipPresentInterest';
 
 export interface DeferredTooltipInterest<T> {
@@ -47,8 +49,8 @@ export interface DeferredTooltipInterest<T> {
  * `isEnabled`, until the loaded tooltip reads it. A mouse or pen hover and
  * focus are held as they come and mount the tooltip. A touch or pen press
  * starts the load and mounts nothing: the browser's `click` for it is a tap,
- * which is held and mounts the tooltip, and its `pointercancel` (a scroll)
- * drops it. A leave or a blur drops a held hover or focus.
+ * which is held and mounts the tooltip, and its `pointercancel` (a scroll) or
+ * a key press drops it. A leave or a blur drops a held hover or focus.
  */
 export function useDeferredTooltipInterest<T>(
   isEnabled: boolean,
@@ -80,10 +82,8 @@ export function useDeferredTooltipInterest<T>(
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
-    pressEvent: null,
     isRead: false,
   });
-  // Removes the listeners that wait for a held press's click or cancel.
   const stopHoldingPressRef = useRef<(() => void) | null>(null);
   // Releases a held press's listeners on unmount.
   useEffect(() => () => stopHoldingPressRef.current?.(), []);
@@ -117,8 +117,7 @@ export function useDeferredTooltipInterest<T>(
       state.interest = null;
     }
   }, []);
-  // The pointer type of the latest pointer on the element. A tap also fires
-  // compatibility mouse events, which are no hover.
+  // A tap also fires compatibility mouse events, which are not a hover.
   const lastPointerTypeRef = useRef<string | null>(null);
   const onPointerEnter = useCallback(
     (event: PointerEvent<HTMLElement>) => {
@@ -141,6 +140,7 @@ export function useDeferredTooltipInterest<T>(
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       stopHoldingPressRef.current?.();
+      stopHoldingPressRef.current = null;
       lastPointerTypeRef.current = event.pointerType;
       const state = interestRef.current;
       if (!isEnabled || state.isRead) {
@@ -152,39 +152,20 @@ export function useDeferredTooltipInterest<T>(
         return;
       }
       // A held hover or focus stays: a pen hovers before it lands, and a
-      // finger's press focuses a focusable element before its click.
-      const press = event.nativeEvent;
-      const target = event.currentTarget;
-      state.pressEvent = press;
-      const stop = () => {
-        target.removeEventListener('click', handleClick);
-        target.removeEventListener('pointercancel', handleCancel);
-        target.removeEventListener('keydown', handleCancel);
-        if (stopHoldingPressRef.current === stop) {
-          stopHoldingPressRef.current = null;
-        }
-      };
-      const handleClick = (click: MouseEvent) => {
-        stop();
-        if (!state.isRead && state.pressEvent === press) {
-          state.interest = 'tap';
-          state.tapEvent = click;
-          state.pressEvent = null;
-          want();
-        }
-      };
-      const handleCancel = () => {
-        stop();
-        if (state.pressEvent === press) {
-          state.pressEvent = null;
-        }
-      };
-      target.addEventListener('click', handleClick);
-      target.addEventListener('pointercancel', handleCancel);
-      // A key press ends the hold, so a keyboard activation's click is not
-      // taken for this press's tap.
-      target.addEventListener('keydown', handleCancel);
-      stopHoldingPressRef.current = stop;
+      // finger's press focuses a focusable element before its click. A key
+      // press ends the hold, so a keyboard activation's click is not taken
+      // for this press's tap.
+      stopHoldingPressRef.current = waitForPressClick(
+        event.currentTarget,
+        click => {
+          if (!state.isRead) {
+            state.interest = 'tap';
+            state.tapEvent = click;
+            want();
+          }
+        },
+        {cancelOn: ['keydown']},
+      );
       // A press mounts nothing: a scroll would leave a tooltip behind. Its
       // click mounts the tooltip, which answers it as a tap.
       load();
