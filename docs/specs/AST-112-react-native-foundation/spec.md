@@ -23,9 +23,9 @@ affects_consumer_docs: [cli]
 ## Intent
 
 A developer builds an iOS and Android app with React Native and Astryx by
-installing three kinds of package: a component library written in JavaScript,
-a platform layer that holds every line of native code, and command-line tools
-that create, check, and preview the app. The app gets Astryx's components,
+installing one package, `@astryxdesign/react-native`: a component library
+written in JavaScript over a platform layer that holds every line of native
+code. Command-line tools create, check, and preview the app. The app gets Astryx's components,
 themes, and icons, and native capabilities (storage, files, camera, media, web
 content, documents, native controls) through one consistent API. The app
 itself holds no hand-written native code, builds in a generated native
@@ -59,54 +59,58 @@ shared icon names under FR17.
 
 ## Requirements
 
-- **FR1 — Three package families.** The public set is:
-  - `@astryxdesign/react-native`: the component library. Components, the app
-    root (`AstryxAppRoot`), theming, and the hooks an app uses. JavaScript and
-    TypeScript only.
-  - `@astryxdesign/react-native-platform`: the platform, one package. Its core
-    is always present: the result vocabulary (FR6), the capability shape
-    (FR7), the types of every capability, the registry seams the capabilities
-    plug into, the generic capabilities (storage, secure storage, files,
-    network, cookies, permissions, haptics, clipboard, client identity), the
-    gesture owner, gesture root, touch shield, presentation, menu, and
-    action-sheet hosts, system symbols, system materials, and safe-area
-    insets. Its optional
-    capabilities are opt-in modules (FR3), each with its own entry (FR5):
-    `camera` (camera view, live code scanning, and code decoding from still
-    images), `media` (audio and video playback), `web` (web view and sign-in
-    session), `pdf` (document view), `controls` (native button, text field, date pickers, and the swipe-row, drag-snap, and zoom-pager views), and `navigation` (the native stack and tab hosts, DEC-9).
+- **FR1 — Two package families.** The public set is:
+  - `@astryxdesign/react-native`: the one package an app installs. It holds
+    two layers and a configuration plugin:
+    - The library layer: components, the app root (`AstryxAppRoot`), theming,
+      the hooks an app uses, and the Astryx router (DEC-9). JavaScript and
+      TypeScript only.
+    - The platform layer, which holds every line of native code. Its core is
+      always present: the result vocabulary (FR6), the capability shape
+      (FR7), the types of every capability, the registry seams the
+      capabilities plug into, the generic capabilities (storage, secure
+      storage, files, network, cookies, permissions, haptics, clipboard,
+      client identity), the gesture owner, gesture root, touch shield,
+      presentation, menu, and action-sheet hosts, system symbols, system
+      materials, and safe-area insets. Its optional capabilities are opt-in
+      modules (FR3): `camera` (camera view, live code scanning, and code
+      decoding from still images), `media` (audio and video playback), `web`
+      (web view and sign-in session), `pdf` (document view), `controls`
+      (native button, text field, date pickers, and the swipe-row,
+      drag-snap, and zoom-pager views), and `navigation` (the native stack
+      and tab hosts, DEC-9).
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
-  - The library takes the platform as a peer dependency and calls it
-    directly. The platform imports nothing from the library, in source or in
-    tests.
+  - The library layer calls the platform layer directly. The platform layer
+    imports nothing from the library layer, in source or in tests.
   - A capability uses the platform's core only. Apart from its loader
     (`AstryxPlatform.capability(name)`), the core imports no capability; the
-    loader is the one place that names the capability entries. A need that crosses
-    capabilities goes through a registration hook in the core, never through
-    an import between capabilities.
-  - The library reaches an optional capability only through that loader,
-    which answers the capability's entry when the app opted it in (FR3) and
-    `null` otherwise. On a binary that records no list of linked capabilities, it answers the entry; the entry's probes answer false and its calls resolve `no-module` where its module is missing.
-  - None of these packages depends on another Astryx package at run time,
-    other than these dependencies, the reads of `@astryxdesign/core` that
-    `spec:AST-082/FR16` allows, and `@astryxdesign/native` (FR10, OQ2, OQ3),
-    which the platform uses at the version the repository's release gives
-    every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
-    never depend on them (`spec:AST-082/FR14`).
-  - The Astryx router (the library's `navigation` entry) holds the routing
-    state and drives the platform's `navigation` hosts. Astryx also owns the
-    native stack and tab containers, transitions, gestures, insets, and every
-    bar, header, button, and search field, rendered by the system through the
+    loader is the one place that names the capability modules. A need that
+    crosses capabilities goes through a registration hook in the core, never
+    through an import between capabilities.
+  - The library layer reaches an optional capability only through that
+    loader, which answers the capability's module when the app opted it in
+    (FR3) and `null` otherwise. On a binary that records no list of linked
+    capabilities, it answers the module; the module's probes answer false
+    and its calls resolve `no-module` where its native module is missing.
+  - The package depends on no other Astryx package at run time, other than
+    the reads of `@astryxdesign/core` that `spec:AST-082/FR16` allows and
+    `@astryxdesign/native` (FR10, OQ2, OQ3), which it uses at the version the
+    repository's release gives every package (FR14). `@astryxdesign/core`
+    and `@astryxdesign/cli` never depend on it (`spec:AST-082/FR14`).
+  - The Astryx router (the `navigation` entry) holds the routing state and
+    drives the platform's `navigation` hosts. Astryx also owns the native
+    stack and tab containers, transitions, gestures, insets, and every bar,
+    header, button, and search field, rendered by the system through the
     platform's hosts or drawn by the library (DEC-9).
-  - The packages of the set take no third-party navigation dependency, a
-    router, react-native-screens, and react-native-safe-area-context
-    included: their only peer dependencies outside Astryx are React and React Native. A React Navigation adapter may exist as a separate optional
-    package, never as a dependency of the set; it drives the platform's
-    `navigation` hosts and depends on no package that ships native
-    navigation code, react-native-screens and react-native-safe-area-context
-    included.
+  - The package takes no third-party navigation dependency, a router,
+    react-native-screens, and react-native-safe-area-context included: its
+    only peer dependencies outside Astryx are React and React Native. A React
+    Navigation adapter may exist as a separate optional package, never as a
+    dependency of the set; it drives the platform's `navigation` hosts and
+    depends on no package that ships native navigation code,
+    react-native-screens and react-native-safe-area-context included.
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -126,11 +130,11 @@ shared icon names under FR17.
     is on the list, or on a binary that records no list (FR8).
   - The package's manifests declare no permission. The configuration plugin
     writes every permission the app needs (FR4).
-- **FR4 — Native code lives only in the platform.**
-  - The library contains no native code and has no runtime dependency beyond
-    `react`, `react-native`, and the platform.
+- **FR4 — Native code lives only in the platform layer.**
+  - The library layer contains no native code, and the package has no
+    runtime dependency beyond `react` and `react-native`.
   - An app holds no hand-written native code. Its iOS and Android projects are
-    generated from the app's configuration. The platform ships one
+    generated from the app's configuration. The package ships one
     configuration plugin. It always writes the core's host declarations (on
     Android, the network-state permission), and from the app's list of
     capabilities it writes the opt-in (FR3) and the host declarations each
@@ -141,33 +145,36 @@ shared icon names under FR17.
     a capability the app does not list.
   - An app-level native setting is configuration that a plugin writes into the
     generated project. JavaScript cannot read or change it at run time.
-  - The platform ships its native code as source that the app's native build
-    compiles; the core and each opted-in capability register through
+  - The platform layer ships its native code as source that the app's native
+    build compiles; the core and each opted-in capability register through
     autolinking and React Native's code generation.
   - `@astryxdesign/native` is the single cross-platform contracts package of
-    `spec:AST-082` (DEC-7). The React Native platform ships as one
-    package whose capabilities an app opts in (FR3) because each capability
-    carries its own native code, permissions, and size, so an app links only
-    what it uses.
-    The React Native packages may consume `@astryxdesign/native`'s generated
-    contracts (OQ2).
+    `spec:AST-082` (DEC-7). The React Native platform ships inside
+    `@astryxdesign/react-native` with capabilities an app opts in (FR3),
+    because each capability carries its own native code, permissions, and
+    size, so an app links only what it uses. The package may consume
+    `@astryxdesign/native`'s generated contracts (OQ2).
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported.
-  - `.` is the app API.
+  - `.` is the app API: the library layer's components, themes, and hooks,
+    and the platform core's always-present objects, views, and result
+    vocabulary. It holds no router and no optional capability's objects or
+    views.
+  - `./storage` (storage, secure storage, files) and `./network` (network,
+    cookies, client identity) hold the rest of the core.
+  - `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and
+    `./navigation` are the optional capabilities' entries; `./navigation`
+    also holds the Astryx router and its navigators (FR2).
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
-  - On the library, `.` holds no router, and `./navigation` holds the Astryx
-    router and its navigators (FR2).
-  - On the platform, `.` is the core and exports no capability's objects or
-    views; `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and `./navigation` are the capabilities' entries.
-  - `./host` holds the plumbing the library and the capabilities need, such
-    as the library's hosts. It has the status `spec:AST-017` FR21 gives
-    Core's `./internal/*`: reserved for Astryx's own packages, undocumented
-    for apps, versioned in lockstep with the set (FR14), limited by a
-    package-boundary check, and outside the compatibility promise. An app
-    imports from `.` and the capability entries.
-  - `./app.plugin.js`, on the platform, is the configuration plugin (FR4).
+  - Internal entries hold the plumbing Astryx's own tools need (the host
+    plumbing, the preview host of the Astryx app, and Astryx Stage's
+    simulation). They have the status `spec:AST-017` FR21 gives Core's
+    `./internal/*`: undocumented for apps, versioned with the package (FR14),
+    limited by a package-boundary check, and outside the compatibility
+    promise.
+  - `./app.plugin.js` is the configuration plugin (FR4).
   - `.` exports nothing named `*ForTesting`, `reset*`, `SIMULATED_*`, or
     `*_NAME`.
   - A renamed or removed public name stays exported, marked `@deprecated`, for
@@ -277,20 +284,17 @@ shared icon names under FR17.
     contract whichever released shape OQ5 settles.
   - `@astryxdesign/cli` contains no React Native commands, so a web project
     installs nothing for them.
-- **FR14 — One React Native release train.** All the packages in FR1 except
-  the experiment CLI carry the same version and release together.
-  - While they are canary-only, they publish on the canary channel only, under
-    `spec:AST-082/FR15`, and carry the version the repository's canary release
-    gives every package: core's declared version with `-canary.<sha>`
-    (`spec:AST-017` FR46). They join the stable channel in a planned minor
-    once a platform is supported.
-  - A package that depends on another package of the set requires it at
-    exactly the set's version.
-  - The platform is one package with one version. Its capabilities are opted
-    in, never versioned apart.
+- **FR14 — One React Native release train.** `@astryxdesign/react-native`
+  releases on one version; its capabilities are opted in, never versioned
+  apart. The experiment CLI versions on its own.
+  - While it is canary-only, the package publishes on the canary channel
+    only, under `spec:AST-082/FR15`, and carries the version the repository's
+    canary release gives every package: core's declared version with
+    `-canary.<sha>` (`spec:AST-017` FR46). It joins the stable channel in a
+    planned minor once a platform is supported.
   - Before 1.0, a minor version may change the API. Each release has a
-    changelog per package with migration steps for every rename and removal,
-    and a release records the packed tarballs with their hashes.
+    changelog with migration steps for every rename and removal, and a
+    release records the packed tarball with its hash.
 - **FR15 — Evidence matches the claim.**
   - Evidence for native behavior comes from the iOS Simulator, the Android
     emulator, devices, and Astryx Stage. The Simulator and the emulator are the
@@ -318,29 +322,29 @@ shared icon names under FR17.
 
 ## Current-state impact
 
-- New packages under `packages/`: the library, the platform, and the
+- New packages under `packages/`: `@astryxdesign/react-native` and the
   experiment CLI, each canary-only (FR14).
 - `@astryxdesign/cli` is unchanged. The released command-line shape for React
   Native (OQ5) may change `architecture:cli-surface` when it is decided.
 - The React Native packages join the repository's canary release and carry
   its version (FR14).
 - `spec:AST-017` FR21 extends the status of Core's `./internal/*` to the
-  platform's `./host` entry (FR5).
+  package's internal entries (FR5).
 - `spec:AST-082` DEC-7 gains one sentence: the React Native candidate's native
-  code lives in the platform package of `spec:AST-112` (FR4), and
+  code lives in the platform layer of `@astryxdesign/react-native` (`spec:AST-112` FR4), and
   `@astryxdesign/native` stays the single cross-platform contracts package.
-- The package-boundary check gains the FR2 rules: no import from the library in
-  the platform, no import of a capability from the platform's core outside its loader or from another capability, no dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included), no peer dependency outside Astryx other than React and React Native, and no dependency on these packages from core or the CLI.
+- The package-boundary check gains the FR2 rules: no import from the library layer in
+  the platform layer, no import of a capability from the platform's core outside its loader or from another capability, no dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included), no peer dependency outside Astryx other than React and React Native, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                                                            | Representative states                                                                                                                                            | Mutation or failure expectation                                                                                                                                                                                                                                                                                            |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Package manifest check of names and entries; the canary release's package list                                                                                                          | each package in the public set; each capability entry                                                                                                            | A package missing from the set, a set package missing from the canary release, or a capability without its entry                                                                                                                                                                                                           |
-| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the core and each capability; each package's dependencies                                                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included), or a peer dependency outside Astryx other than React and React Native |
+| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included), or a peer dependency outside Astryx other than React and React Native |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason    | a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list | An app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module`              |
-| FR4      | `npm pack` file lists; a generated sample app's project from configuration with a capability list                                                                                       | the library's files; the sample's iOS and Android projects; a default and an overridden usage description                                                        | The library ships native code, the package manifests declare a permission, the sample needs a manual native edit, the generated project lacks the core's declarations, or it writes a usage description other than the default or the app's override                                                                       |
-| FR5      | `exports` map and public-entry name check; package-boundary check of `./host` imports                                                                                                   | `.`, `./testing`, `./host`, `./app.plugin.js`                                                                                                                    | A private name on `.`, a deep import resolving, an app importing `./host`, or a router exported from the library's `.`                                                                                                                                                                                                     |
+| FR4      | `npm pack` file list; a generated sample app's project from configuration with a capability list                                                                                        | the package's files; the sample's iOS and Android projects; a default and an overridden usage description                                                        | Native code outside the platform layer, the package manifests declare a permission, the sample needs a manual native edit, the generated project lacks the core's declarations, or it writes a usage description other than the default or the app's override                                                              |
+| FR5      | `exports` map and public-entry name check; package-boundary check of the internal entries' imports                                                                                      | `.`, `./storage`, `./network`, each capability entry, `./testing`, the internal entries, `./app.plugin.js`                                                       | A private name on `.`, a deep import resolving, an app importing an internal entry, or a router or optional capability exported from `.`                                                                                                                                                                                   |
 | FR6      | Unit tests of every asynchronous call through `./testing` mocks                                                                                                                         | absent, older, and current module; a missing option; a native throw; cancel                                                                                      | A call rejects, or answers a reason outside its set                                                                                                                                                                                                                                                                        |
 | FR7      | Unit tests of each capability's probes, permissions, and hook cleanup                                                                                                                   | an older binary; a view mounted without permission; unmount                                                                                                      | A silent no-op, a prompt on mount, or work that outlives its component                                                                                                                                                                                                                                                     |
 | FR8      | Spec rules check in the platform                                                                                                                                                        | a new method; a component spec; a platform-only member                                                                                                           | A changed shipped method, a missing header, or a new method without `status`                                                                                                                                                                                                                                               |
@@ -349,7 +353,7 @@ shared icon names under FR17.
 | FR11     | Prebuild and EAS Build of the sample app                                                                                                                                                | the sample with every capability opted in                                                                                                                        | The build needs a manual native edit, or a package requires an Expo runtime library                                                                                                                                                                                                                                        |
 | FR12     | Scripted checks of each capability in Astryx Stage, the simulator, and the emulator                                                                                                     | each public API                                                                                                                                                  | An Astryx Stage result differs from iOS and Android and the documentation does not name it                                                                                                                                                                                                                                 |
 | FR13     | CLI contract tests of each `astryx-rn` command: JSON envelopes, exit codes, Astryx Stage's checksum and signature refusal, `--remote` parity; a dependency check of `@astryxdesign/cli` | each command; a tampered binary; a web project                                                                                                                   | An exit code that depends on `--json`, a tampered binary runs, or `@astryxdesign/cli` contains or depends on React Native commands                                                                                                                                                                                         |
-| FR14     | Canary release dry run; dependency check of in-set ranges                                                                                                                               | a release of every package                                                                                                                                       | Packages with different versions, an in-set range that is not exact, or a release without a changelog or hashes                                                                                                                                                                                                            |
+| FR14     | Canary release dry run                                                                                                                                                                  | a release of the package                                                                                                                                         | A release without a changelog or the tarball's hash, or a capability versioned apart                                                                                                                                                                                                                                       |
 | FR15     | Review of each native change's evidence; documentation drift check                                                                                                                      | a native behavior change; a renamed API                                                                                                                          | A native claim backed only by a build or by anything other than the Simulator, the emulator, a device, or Astryx Stage, or documentation that no longer matches                                                                                                                                                            |
 
 ## Decision log
@@ -359,29 +363,30 @@ shared icon names under FR17.
 **Reference:** `spec:AST-112/DEC-1`
 **Decider:** imdreamrunner, 2026-11-09
 
-The platform owns the native contract and first-class capability objects; the
-library calls them directly and keeps the Astryx mapping. Apps call the same
-objects for capabilities the library does not cover. Dependencies point from
-the library to the platform only, so the native API stays clean and the
-library can change without touching native code.
+The platform layer owns the native contract and first-class capability
+objects; the library layer calls them directly and keeps the Astryx mapping.
+Apps call the same objects for capabilities the library does not cover.
+Dependencies point from the library layer to the platform layer only, so the
+native API stays clean and the library can change without touching native
+code.
 
 Rejected: a design-system-neutral platform built for standalone use, because
 it would duplicate the mapping the library owns.
 
-### DEC-2 — One platform package with opt-in capabilities
+### DEC-2 — One package with opt-in capabilities
 
 **Reference:** `spec:AST-112/DEC-2`
 **Decider:** imdreamrunner, 2026-11-09
 
-An app that stores data does not ship a camera permission, a media service, or
-their frameworks: it links only the capabilities it opts in. One package keeps
-one version, one install, and one place for the capability list, and the
-configuration plugin writes the opt-in and the declarations, so an app never
-edits a native project by hand.
+An app installs one package and imports everything from it: the components,
+the native platform layer, and the configuration plugin. An app that stores
+data does not ship a camera permission, a media service, or their frameworks:
+it links only the capabilities it opts in, and the plugin writes the opt-in
+and the declarations, so an app never edits a native project by hand.
 
-Rejected: one package per capability, because the packages could be installed
-at different versions and each app would track several packages that only
-work together.
+Rejected: a separate platform package, or one package per capability, because
+the packages could be installed at different versions and each app would
+track several packages that only work together.
 
 ### DEC-3 — Apps hold no native code
 
@@ -442,9 +447,9 @@ keeps Astryx Stage matched to them. A missing or divergent path is a defect.
 **Reference:** `spec:AST-112/DEC-8`
 **Decider:** imdreamrunner, 2026-11-09
 
-The library and the platform change together, so they share
-one version and release together. They stay on the canary channel until a
-platform is supported under `spec:AST-082/FR15`.
+The library and platform layers change together, so they ship in one package
+on one version. It stays on the canary channel until a platform is supported
+under `spec:AST-082/FR15`.
 
 ### DEC-9 — Astryx owns navigation, routing included
 
@@ -452,7 +457,7 @@ platform is supported under `spec:AST-082/FR15`.
 **Decider:** imdreamrunner, 2026-11-09
 
 Gestures, bars, safe areas, and routing meet in the native stack, so Astryx
-owns all of it: the library's `navigation` entry holds the router, the
+owns all of it: the package's `navigation` entry holds the router, the
 platform's `navigation` capability holds the native stack and tab containers
 with their transitions and gestures, the core holds safe-area insets, and
 every bar, header, button, and search field is the system's, through the
