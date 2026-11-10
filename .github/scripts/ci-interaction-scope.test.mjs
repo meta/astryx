@@ -7,11 +7,16 @@
  *   leg-count job and in each lane's own scope step.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+
+import {isInteractionSpec} from './playwright-legs.mjs';
+import {proofImporters} from './proof-imports.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -82,5 +87,66 @@ describe('the interaction scope', () => {
       SCOPES['Chromium proofs'].source,
     );
     expect(SCOPES['WebKit legs'].source).toBe(SCOPES['WebKit proofs'].source);
+  });
+});
+
+describe('a left-out file that a proof imports', () => {
+  it("is found through the proofs' value imports", () => {
+    // A spec that imports a `.test` helper beside it.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'proof-imports-'));
+    const files = {
+      'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts':
+        "import {drag} from './drag.test';\nimport type {Kind} from './kinds.test';\n",
+      'packages/core/src/Sheet/__tests__/drag.test.ts':
+        "export {ease} from '../Sheet.doc.mjs';\n",
+      'packages/core/src/Sheet/__tests__/kinds.test.ts': '',
+      'packages/core/src/Sheet/Sheet.doc.mjs': '',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const importers = proofImporters({
+      root: tree,
+      listed: Object.keys(files),
+      isProof: isInteractionSpec,
+    });
+    const spec =
+      'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts';
+    expect([...importers.keys()].sort()).toEqual([
+      'packages/core/src/Sheet/Sheet.doc.mjs',
+      'packages/core/src/Sheet/__tests__/drag.test.ts',
+    ]);
+    expect([...importers.get('packages/core/src/Sheet/Sheet.doc.mjs')]).toEqual(
+      [spec],
+    );
+    // So the scopes would leave out files this proof loads.
+    for (const file of importers.keys())
+      expect(SCOPES['Chromium proofs'].test(file), file).toBe(false);
+  });
+
+  it('does not exist: no proof in the repository imports a file the scopes leave out', () => {
+    const listed = execFileSync('git', ['ls-files'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(Boolean);
+    const importers = proofImporters({
+      root,
+      listed,
+      isProof: isInteractionSpec,
+    });
+    expect(importers.size).toBeGreaterThan(0);
+    const leftOut = [...importers.keys()].filter(
+      file =>
+        /^packages\/[^/]+\/src\//.test(file) &&
+        (!SCOPES['Chromium proofs'].test(file) ||
+          (/^packages\/[^/]+\/src\/[^/]+\//.test(file) &&
+            !SCOPES['WebKit proofs'].test(file))),
+    );
+    // A proof that needs such a file: rename the file so its name says it is
+    // runtime code, or narrow the scopes' lookahead.
+    expect(leftOut).toEqual([]);
   });
 });
