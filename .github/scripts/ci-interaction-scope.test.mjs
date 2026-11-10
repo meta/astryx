@@ -16,7 +16,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {isInteractionSpec} from './playwright-legs.mjs';
-import {proofImporters} from './proof-imports.mjs';
+import {proofImporters} from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
