@@ -927,7 +927,7 @@ export function Tokenizer<T extends SearchableItem>({
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
   const isHandingOffFocusRef = useRef(false);
-  // Focus a pointer puts on a control (a token's own button) stays there: the
+  // Focus a pointer puts on a token's own control stays there: the
   // person chose that control. The shared tracker says which input moved it.
   const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   // True while the menu returns focus after it closes. That focus stays on
@@ -1240,18 +1240,28 @@ export function Tokenizer<T extends SearchableItem>({
           onFocus?.(e);
         }
         // Redirect to the input so the user doesn't have to tab through
-        // every token remove button. A press, and the menu returning focus
-        // to the token that opened it, keep focus where they put it.
+        // every token remove button. A press on a token's own control, and
+        // the menu returning focus to the token that opened it, keep focus
+        // where they put it.
         if (
           e.target !== inputRef.current &&
-          readModality() !== 'pointer' &&
+          !(
+            readModality() === 'pointer' && findTokenControl(e.target) != null
+          ) &&
           !isMenuFocusReturnRef.current
         ) {
           inputRef.current?.focus();
         }
       }
     },
-    [isLayerMode, layer, isFocusInTokenizer, onFocus, readModality],
+    [
+      isLayerMode,
+      layer,
+      isFocusInTokenizer,
+      onFocus,
+      readModality,
+      findTokenControl,
+    ],
   );
 
   const handleBlurCapture = useCallback(

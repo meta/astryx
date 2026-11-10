@@ -10,7 +10,7 @@
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, useRef, useState} from 'react';
+import {createRef, useRef, useState, type MouseEvent} from 'react';
 import {
   BaseTypeahead,
   type BaseTypeaheadHandle,
@@ -1003,6 +1003,84 @@ describe('BaseTypeahead menu', () => {
       const details = screen.getByRole('button', {name: 'Details Apple'});
       await user.click(details);
       expect(details).toHaveFocus();
+    });
+
+    describe("a press on a custom token's own control keeps focus on it", () => {
+      const renderTokenField = (onClick?: (event: MouseEvent) => void) =>
+        render(
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+            renderToken={item => (
+              <button type="button" onClick={onClick}>
+                {`Details ${item.label}`}
+              </button>
+            )}
+          />,
+        );
+
+      it('when the press is released outside the field', async () => {
+        const user = userEvent.setup();
+        renderTokenField();
+        const details = screen.getByRole('button', {name: 'Details Apple'});
+        await user.pointer({keys: '[MouseLeft>]', target: details});
+        fireEvent.pointerUp(document.body);
+        expect(details).toHaveFocus();
+      });
+
+      it('when the click stops propagation', async () => {
+        const user = userEvent.setup();
+        renderTokenField(event => event.stopPropagation());
+        const details = screen.getByRole('button', {name: 'Details Apple'});
+        await user.click(details);
+        expect(details).toHaveFocus();
+      });
+    });
+
+    describe('a press on an endContent control moves focus to the input', () => {
+      const renderApplyField = (onClick?: (event: MouseEvent) => void) =>
+        render(
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+            endContent={
+              <button type="button" onClick={onClick}>
+                Apply
+              </button>
+            }
+          />,
+        );
+
+      it('when the click completes', async () => {
+        const user = userEvent.setup();
+        renderApplyField();
+        await user.click(screen.getByRole('button', {name: 'Apply'}));
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
+
+      it('when the press is released outside the field', async () => {
+        const user = userEvent.setup();
+        renderApplyField();
+        await user.pointer({
+          keys: '[MouseLeft>]',
+          target: screen.getByRole('button', {name: 'Apply'}),
+        });
+        fireEvent.pointerUp(document.body);
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
+
+      it('when the click stops propagation', async () => {
+        const user = userEvent.setup();
+        renderApplyField(event => event.stopPropagation());
+        await user.click(screen.getByRole('button', {name: 'Apply'}));
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
     });
 
     it('a press on a token released outside the field still lets Tab land on the input', async () => {
