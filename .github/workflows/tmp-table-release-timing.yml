@@ -5,7 +5,7 @@ name: tmp-table-release-timing
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [synchronize]
     paths:
       - '.github/workflows/tmp-table-release-timing.yml'
 
