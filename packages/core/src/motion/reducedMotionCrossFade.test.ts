@@ -3,10 +3,12 @@
 /**
  * @file reducedMotionCrossFade.test.ts
  * @input reducedMotionCrossFade.ts, with fakeAnimate for Web Animations
- * @output Proof of the cross-fade through a copy: the copy fades out where
- *   the element showed while the element lands and fades in, on one easing.
- *   The copy sits next to the clipping box and is clipped to it. It goes once
- *   both fades end or on cancel. An element that cannot be copied gets null.
+ * @output Proof of the cross-fade through a copy. In a scroll container, the
+ *   copy is the container's visible part, in an inert holder next to it. It
+ *   includes what the element draws outside its own box. Without one, the
+ *   copy is the element, with no transform. The copy fades out as the element
+ *   lands and fades in, on one easing. It goes once both fades end or on
+ *   cancel. An element with no box gets null.
  * @position Testing for /packages/core/src/motion/reducedMotionCrossFade.ts
  */
 
@@ -19,17 +21,7 @@ const fade = {duration: 200, easing: 'cubic-bezier(0.42, 0, 0.58, 1)'};
 
 /** A DOMRect-like box: jsdom lays nothing out. */
 function box(left: number, top: number, width: number, height: number) {
-  return {
-    x: left,
-    y: top,
-    left,
-    top,
-    width,
-    height,
-    right: left + width,
-    bottom: top + height,
-    toJSON: () => ({}),
-  } as DOMRect;
+  return DOMRect.fromRect({x: left, y: top, width, height});
 }
 
 let animations: FakeAnimation[] = [];
@@ -47,13 +39,21 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A scroller in a wrapper, holding a list moved 167 px down. */
+/**
+ * A scroller in a wrapper, holding a list moved 167 px down and, above the
+ * list's own box, an indicator.
+ */
 function list() {
   const wrapper = document.createElement('div');
   const scroller = document.createElement('div');
+  scroller.setAttribute('role', 'region');
+  scroller.tabIndex = 0;
   const content = document.createElement('div');
   content.textContent = 'Message 1';
   content.style.setProperty('translate', '0px 167px');
+  const indicator = document.createElement('div');
+  indicator.textContent = 'Refreshing';
+  content.append(indicator);
   scroller.append(content);
   wrapper.append(scroller);
   document.body.append(wrapper);
@@ -65,18 +65,18 @@ function list() {
     ['clientWidth', 400],
     ['clientHeight', 600],
   ] as const) {
-    Object.defineProperty(scroller, name, {value});
+    Object.defineProperty(scroller, name, {value, configurable: true});
   }
   return {wrapper, scroller, content};
 }
 
 /** The copy the cross-fade laid, if any. */
-const copyIn = (wrapper: Element) =>
-  [...wrapper.children].find(child => child.hasAttribute('inert')) as
+const copyIn = (parent: Element) =>
+  [...parent.children].find(child => child.hasAttribute('inert')) as
     HTMLElement | undefined;
 
 describe('playReducedMotionCrossFade', () => {
-  it('lays a copy where the list shows, then lands the list and fades both on one easing', () => {
+  it('in a scroll container, lays a holder of its visible part next to it, then lands the element', () => {
     const {wrapper, scroller, content} = list();
     const land = vi.fn(() => {
       // The copy already shows the old state when the change lands.
@@ -86,13 +86,28 @@ describe('playReducedMotionCrossFade', () => {
     const played = playReducedMotionCrossFade(content, fade, land, scroller);
     expect(played).not.toBeNull();
     expect(land).toHaveBeenCalledOnce();
-    const copy = copyIn(wrapper);
-    expect(copy?.textContent).toBe('Message 1');
+    const holder = copyIn(wrapper);
     // Next to the scroller, never inside it: a scroll moves nothing of it.
-    expect(scroller.nextElementSibling).toBe(copy);
-    // Its rect places it, so no transform moves it a second time.
-    expect(copy?.style.getPropertyValue('translate')).toBe('none');
-    expect(copy?.style.getPropertyValue('pointer-events')).toBe('none');
+    expect(scroller.nextElementSibling).toBe(holder);
+    expect(holder?.getAttribute('aria-hidden')).toBe('true');
+    expect(holder?.style.overflow).toBe('hidden');
+    expect(holder?.style.pointerEvents).toBe('none');
+    // The holder clips; no clip is computed for the copy.
+    expect(holder?.style.getPropertyValue('clip-path')).toBe('');
+    // The list keeps its place inside the copy, with what it draws above
+    // its own box.
+    const copiedList = holder?.firstElementChild?.firstElementChild as
+      HTMLElement | undefined;
+    expect(copiedList?.style.getPropertyValue('translate')).toBe('0px 167px');
+    expect(holder?.textContent).toContain('Refreshing');
+    // The copied scroller is no landmark or tab stop.
+    expect(holder?.firstElementChild?.hasAttribute('role')).toBe(false);
+    expect(holder?.firstElementChild?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('fades the element in and the copy out together, on one easing', () => {
+    const {scroller, content} = list();
+    playReducedMotionCrossFade(content, fade, () => {}, scroller);
     expect(animations).toHaveLength(2);
     const [fadeIn, fadeOut] = animations;
     expect(fadeIn.keyframes.map(frame => frame.opacity)).toEqual([
@@ -106,24 +121,15 @@ describe('playReducedMotionCrossFade', () => {
     expect(fadeOut.keyframes[0].easing).toBe(fade.easing);
   });
 
-  it('clips the copy to the scroller it is laid outside of', () => {
-    const {wrapper, scroller, content} = list();
-    // The copy's own box once laid: where the list showed, 900 px tall.
-    const nativeBox = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      return this.hasAttribute('inert')
-        ? box(0, 167, 400, 900)
-        : nativeBox.call(this);
-    };
-    try {
-      playReducedMotionCrossFade(content, fade, () => {}, scroller);
-    } finally {
-      Element.prototype.getBoundingClientRect = nativeBox;
-    }
-    // The scroller shows 600 px: the copy's last 467 px are cut.
-    expect(copyIn(wrapper)?.style.getPropertyValue('clip-path')).toBe(
-      'inset(0px 0px 467px 0px)',
-    );
+  it('without a scroll container, copies the element where it shows, with no transform', () => {
+    const {scroller, content} = list();
+    playReducedMotionCrossFade(content, fade, () => {});
+    const copy = copyIn(scroller);
+    expect(content.nextElementSibling).toBe(copy);
+    expect(copy?.textContent).toContain('Message 1');
+    // Its rect places it, so no transform moves it a second time.
+    expect(copy?.style.getPropertyValue('translate')).toBe('none');
+    expect(copy?.style.pointerEvents).toBe('none');
   });
 
   it('removes the copy once both fades end, and reports it finished', async () => {
@@ -181,9 +187,9 @@ describe('playReducedMotionCrossFade', () => {
     await expect(played?.finished).resolves.toBe(true);
   });
 
-  it('gives null and lands nothing for an element with no box', () => {
+  it('gives null and lands nothing for a scroll container with no box', () => {
     const {scroller, content} = list();
-    content.getBoundingClientRect = () => box(0, 0, 0, 0);
+    Object.defineProperty(scroller, 'clientWidth', {value: 0});
     const land = vi.fn();
     expect(
       playReducedMotionCrossFade(content, fade, land, scroller),

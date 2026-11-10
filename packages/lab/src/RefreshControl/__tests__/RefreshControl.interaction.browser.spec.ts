@@ -916,41 +916,108 @@ function reducedMotionFailures(log: readonly RecordedAnimation[]) {
   );
 }
 
+/** One frame of what the list and its spinner show. */
+interface ShownFrame {
+  /** ms on the page's wall clock, as the driver stamps its events. */
+  readonly t: number;
+  readonly row: number;
+  readonly spinner: number;
+}
+
 /**
- * Records how much of a row the list shows on each frame. Every element that
- * draws the row's label counts: the content's own and any copy of it. The
- * share shown is 1 − Π(1 − opacity), each opacity taken up the tree.
+ * Records, on each frame, how much of a row and of the spinner show. Every
+ * element that draws one counts: the content's own and any copy of it. Each
+ * shows at its opacity up the tree, times the share of its box left visible.
+ * An overflow or a clip-path inset clips that box. Together they show
+ * 1 − Π(1 − shown).
  */
-async function recordRowShown(page: Page, label: string) {
-  await page.evaluate(text => {
-    const record = window as unknown as {
-      __rowShown: {t: number; shown: number}[];
-      __rowShownStop: boolean;
-    };
-    record.__rowShown = [];
-    record.__rowShownStop = false;
-    const frame = () => {
-      let hidden = 1;
-      const texts = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-      );
-      for (let node = texts.nextNode(); node != null; node = texts.nextNode()) {
-        if (node.nodeValue?.trim() !== text) {
-          continue;
-        }
-        let opacity = 1;
-        for (
-          let element = node.parentElement;
-          element != null;
-          element = element.parentElement
-        ) {
-          opacity *= Number(getComputedStyle(element).opacity);
-        }
-        hidden *= 1 - opacity;
+async function recordShown(content: Locator, label: string) {
+  await content.evaluate((element, text) => {
+    // The spinner is the indicator's reveal: the band's indicator's child.
+    // A copy keeps the mark.
+    element
+      .querySelector(':scope > :last-child > div > *')
+      ?.setAttribute('data-test-refresh-spinner', '');
+    const visibleShare = (target: Element) => {
+      const box = target.getBoundingClientRect();
+      const area = box.width * box.height;
+      if (area === 0) {
+        return 0;
       }
-      record.__rowShown.push({t: performance.now(), shown: 1 - hidden});
-      if (!record.__rowShownStop) {
+      let [left, top, right, bottom] = [
+        box.left,
+        box.top,
+        box.right,
+        box.bottom,
+      ];
+      for (let clip: Element | null = target; clip != null;) {
+        const style = getComputedStyle(clip);
+        const outer = clip.getBoundingClientRect();
+        // A clip-path inset() cuts the box itself, children included.
+        const inset = /^inset\(([^)]*)\)/.exec(style.clipPath);
+        if (inset != null) {
+          const [t, r = t, b = t, l = r] = inset[1]
+            .trim()
+            .split(/\s+/)
+            .map(parseFloat);
+          left = Math.max(left, outer.left + l);
+          top = Math.max(top, outer.top + t);
+          right = Math.min(right, outer.right - r);
+          bottom = Math.min(bottom, outer.bottom - b);
+        }
+        const parent: Element | null = clip.parentElement;
+        if (
+          clip !== target &&
+          (style.overflowX !== 'visible' || style.overflowY !== 'visible')
+        ) {
+          left = Math.max(left, outer.left + clip.clientLeft);
+          top = Math.max(top, outer.top + clip.clientTop);
+          right = Math.min(
+            right,
+            outer.left + clip.clientLeft + clip.clientWidth,
+          );
+          bottom = Math.min(
+            bottom,
+            outer.top + clip.clientTop + clip.clientHeight,
+          );
+        }
+        clip = parent;
+      }
+
+      return (Math.max(0, right - left) * Math.max(0, bottom - top)) / area;
+    };
+    const shownOf = (target: Element) => {
+      let opacity = 1;
+      for (
+        let node: Element | null = target;
+        node != null;
+        node = node.parentElement
+      ) {
+        opacity *= Number(getComputedStyle(node).opacity);
+      }
+      return opacity * visibleShare(target);
+    };
+    const together = (targets: Element[]) =>
+      1 - targets.reduce((hidden, target) => hidden * (1 - shownOf(target)), 1);
+    const record = window as unknown as {
+      __shown: ShownFrame[];
+      __shownStop: boolean;
+    };
+    record.__shown = [];
+    record.__shownStop = false;
+    const frame = () => {
+      const rows = [...document.querySelectorAll('span, div')].filter(
+        node =>
+          node.childElementCount === 0 && node.textContent?.trim() === text,
+      );
+      record.__shown.push({
+        t: performance.timeOrigin + performance.now(),
+        row: together(rows),
+        spinner: together([
+          ...document.querySelectorAll('[data-test-refresh-spinner]'),
+        ]),
+      });
+      if (!record.__shownStop) {
         requestAnimationFrame(frame);
       }
     };
@@ -958,31 +1025,36 @@ async function recordRowShown(page: Page, label: string) {
   }, label);
 }
 
-const stopRowShown = (page: Page) =>
+const stopShown = async (page: Page) =>
   page.evaluate(() => {
     const record = window as unknown as {
-      __rowShown: {t: number; shown: number}[];
-      __rowShownStop: boolean;
+      __shown: ShownFrame[];
+      __shownStop: boolean;
     };
-    record.__rowShownStop = true;
-    return record.__rowShown;
+    record.__shownStop = true;
+    return record.__shown;
   });
 
-test('under Reduce Motion the list shows on every frame: the release and the end cross-fade rather than dip', async ({
+const pageNow = async (page: Page) =>
+  page.evaluate(() => performance.timeOrigin + performance.now());
+
+test('under Reduce Motion the list and its spinner show on every frame: the release and the end cross-fade rather than dip', async ({
   page,
 }) => {
   // A cross-fade connects the two states: the list where it was fades out as
   // the list in its new place fades in. A dip fades out, lands and fades back
-  // in, so the list area goes blank between the two.
+  // in, so the list area goes blank between the two. The spinner above the
+  // list stays through the release, and fades out as the refresh ends.
   await page.emulateMedia({reducedMotion: 'reduce'});
   await primaryPointer(page, 'coarse');
   const {driver, content, start} = await openRefresh(page, undefined, {
     refreshMs: '-1',
   });
-  await recordRowShown(page, 'Message 2');
-  await driver.play(slowPull(start, 300, 200));
+  await recordShown(content, 'Message 2');
+  const played = await driver.play(slowPull(start, 300, 200));
   await waitForContentRest(content);
   expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  const endAt = await pageNow(page);
   await endRefresh(page);
   await expect.poll(() => isBusy(content), {timeout: 8000}).toBe(false);
   // The end starts two frames after the busy state clears.
@@ -990,17 +1062,40 @@ test('under Reduce Motion the list shows on every frame: the release and the end
     .poll(() => shownPull(content), {timeout: 8000})
     .toBeCloseTo(0, 1);
   await waitForContentRest(content);
-  const frames = await stopRowShown(page);
-  const least = Math.min(...frames.map(frame => frame.shown));
+  const frames = await stopShown(page);
+  const least = Math.min(...frames.map(frame => frame.row));
   const emptiest = frames
-    .filter(frame => frame.shown < 0.5)
-    .map(frame => frame.shown.toFixed(3))
+    .filter(frame => frame.row < 0.5)
+    .map(frame => frame.row.toFixed(3))
     .join(' ');
   // Two equal fades crossing show the row at 0.75 or more. Half is the floor.
   expect(
     least,
     `the row showed at ${least.toFixed(3)} on its emptiest frame; the list blanked (frames under half: ${emptiest})`,
   ).toBeGreaterThanOrEqual(0.5);
+  const lift = played.find(event => event.type === 'touchEnd');
+  if (lift == null) {
+    throw new Error('the play has no lift');
+  }
+  const spinners = (from: number, to: number) =>
+    frames.filter(frame => frame.t > from && frame.t <= to).map(f => f.spinner);
+  const pulled = spinners(-Infinity, lift.dispatchedAt);
+  expect(pulled.at(-1), 'the pull did not reveal the spinner').toBeGreaterThan(
+    0.9,
+  );
+  const held = spinners(lift.dispatchedAt, endAt);
+  const heldLeast = Math.min(...held);
+  expect(
+    heldLeast,
+    `the spinner showed at ${heldLeast.toFixed(3)} on its emptiest frame from the lift (${held.map(v => v.toFixed(2)).join(' ')})`,
+  ).toBeGreaterThanOrEqual(0.5);
+  const ended = spinners(endAt, Infinity);
+  // A fade shows frames between: the spinner leaves where it is, not at once.
+  expect(
+    ended.some(value => value > 0.1 && value < 0.9),
+    `the spinner did not fade as the refresh ended (${ended.map(v => v.toFixed(2)).join(' ')})`,
+  ).toBe(true);
+  expect(ended.at(-1)).toBeLessThan(0.05);
 });
 
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
