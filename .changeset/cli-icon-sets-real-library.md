@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] Icon sets: wrapping a large icon library that names its looks in its exports works in seconds and gives one icon per glyph. Only the experimental icon commands, the icon-set guide, and `integration check` on an icon set change.
+[experimental] Icon sets: wrapping a large icon library that names its looks in its exports works in seconds and gives one icon per glyph. Only the experimental icon commands, the icon-set guide, and `integration check` on an icon set change. (#8013)
 
 - **Large libraries.** `experimental icon new-set --from` reads a library of 20,000 exports in about ten seconds instead of minutes, and in text mode says on stderr that it is reading and what it found. `iconNewSet` and `iconAdd` report reading progress for large modules through the shared `logger` (stderr, text mode only); called directly, they stay silent until `logger.setSilent(false)`.
 - **Libraries of looks.** A library whose export names end in style, size and weight words (`XOutline24WGHT500Icon`), never direction words like `Up` and `Down`, gives one icon per glyph, named `x` (`XIcon`), in the look the set's default variant names, else the library's usual default; suggestions and `add` name icons by glyph, `add --variant filled --all` picks each glyph's filled look, a refresh keeps every icon an earlier release wrapped, and a refresh with a new `--default-variant` moves each glyph to that look. Every command that records the default variant takes it from the look each icon's export draws, refuses a look word the library does not have, and never adds a second export of an icon.

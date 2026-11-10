@@ -2,7 +2,7 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `HoverCard` and `Tooltip`: a controlled `isOpen={true}` (or `isDefaultOpen`) no longer strands the layer in the viewport corner when its trigger mounts with no layout box yet, for example inside a `Dialog` that has not called `showModal()` yet.
+[fix] `HoverCard` and `Tooltip`: a controlled `isOpen={true}` (or `isDefaultOpen`) no longer strands the layer in the viewport corner when its trigger mounts with no layout box yet, for example inside a `Dialog` that has not called `showModal()` yet. (#5398)
 
 `Dialog` mounts its children before it opens (`isOpen` gates `showModal()`, not rendering), so a `HoverCard` or `Tooltip` inside one with a controlled `isOpen={true}` runs its show effect while the trigger sits in a still non-modal `<dialog>` and has no box. A trigger with no box is not a valid CSS anchor: the popover resolves to its fallback position in the viewport corner, and unlike a live layout change that resolution is not revisited once the trigger later gets a box.
 

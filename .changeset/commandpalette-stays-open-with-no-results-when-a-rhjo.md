@@ -2,5 +2,5 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] CommandPalette stays open with no results when a search or bootstrap request rejects
+[fix] CommandPalette stays open with no results when a search or bootstrap request rejects (#10675)
 @Varshavia

@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: a ChatComposerInput source comment that restated the code is removed. No change to behavior or output.
+[chore] Internal: a ChatComposerInput source comment that restated the code is removed. No change to behavior or output. (#10811)
 
 @cixzhang
