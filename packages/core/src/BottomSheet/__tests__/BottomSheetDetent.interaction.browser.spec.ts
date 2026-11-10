@@ -4,12 +4,13 @@
  * @file BottomSheetDetent.interaction.browser.spec.ts
  * @input The built "Snap points" BottomSheet story, real touch input
  *   (Chromium CDP / WebKit's input command) and the interaction harness
- * @output Interaction and animation proofs for dragging the sheet to a
- *   detent: the drag follows the finger and a slow release settles on the
- *   nearest detent; a flick dismisses; the settle lands on the detent, its
- *   sampled curve recorded; the settle keeps advancing every frame through a blocked
- *   main thread; the settle does no Layout or Paint per frame; a storyboard of
- *   the drag and the settle.
+ * @output Interaction and animation proofs for dragging the sheet to a detent.
+ *   The drag follows the finger, and a slow release settles on the nearest
+ *   detent. A flick dismisses. A softer flick lands on the half detent, also
+ *   when one early move arrives late. The settle lands on the detent, its
+ *   sampled curve recorded. It keeps advancing every frame through a blocked
+ *   main thread, and does no Layout or Paint per frame. A storyboard shows the
+ *   drag and the settle.
  * @position The exemplar for `*.interaction.browser.spec.ts`: component lanes
  *   copy this shape. Each test names the instrument it uses from
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
@@ -39,33 +40,152 @@ import {
   drag,
   flick,
   frames,
-  freezeTimers,
+  freezePageOn,
   holdAnimations,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
   readLongTasks,
+  readRelease,
   releaseAnimations,
   releaseVelocity,
   sampleCurve,
+  startBusyControl,
   startScreencast,
-  thawTimers,
+  thawPage,
   timeline,
   timingFunction,
   touchDriver,
   toTouchEvents,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   withStorybook,
   waitForAnimation,
   waitForRest,
   writeEvidence,
+  type PlayedEvent,
   type TouchDriver,
+  type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {resolveSnapPoint} from '../../motion/resolveSnapPoint';
+import {sheet as uikitSheet} from '../../motion/uikit/sheet';
 
 const storybook = withStorybook(test);
+
+// How far the dismissing flick's release, as WebKit stamps its touches on
+// arrival, may stray from the script's before the play fails by name. 2,000
+// px/s from tall, 160 px of travel: the 0.1 s projection passes half above
+// 1,409 px/s, so the sheet dismisses.
+const DISMISS_FLICK_TOLERANCE = 0.29;
+
+// Core counts a release as a flick only after the drag moved more than this,
+// px.
+// SYNC: Keep equal to `DRAG_PROMOTION_SLOP` in ../useSheetGestures.ts.
+const DRAG_PROMOTION_SLOP_PX = 8;
+
+/** A downward release from tall, its positions in px below tall. */
+interface DownwardRelease {
+  /** Where the finger lets go. */
+  readonly travel: number;
+  /** The half detent. */
+  readonly half: number;
+  /** The dismissed position: the sheet's height on screen at tall. */
+  readonly closed: number;
+}
+
+const POSITIONS = ['tall', 'half', 'the dismissed position'] as const;
+
+/**
+ * Where Core's release rule lands a downward touch release from tall at
+ * `speed`, px/s. It calls `resolveSnapPoint` with the arguments
+ * `useSheetGestures` passes for a touch release.
+ */
+function landingOf(
+  speed: number,
+  {travel, half, closed}: DownwardRelease,
+): (typeof POSITIONS)[number] {
+  const {fastSpeed, minProjectionSpeed, projectionSeconds, detentTolerance} =
+    uikitSheet.release;
+  const {index} = resolveSnapPoint({
+    points: [0, half, closed],
+    position: travel,
+    velocity: speed,
+    flickThreshold:
+      travel > DRAG_PROMOTION_SLOP_PX ? fastSpeed : Number.POSITIVE_INFINITY,
+    tolerance: detentTolerance,
+    flickPastProjection: true,
+    projection: {seconds: projectionSeconds, minSpeed: minProjectionSpeed},
+    start: 0,
+  });
+  return POSITIONS[index];
+}
+
+/** How far down the script's finger travels before it lifts, in whole px. */
+function travelOf(script: TouchScript): number {
+  const ys = toTouchEvents(script)
+    .filter(step => step.type === 'touchStart' || step.type === 'touchMove')
+    .map(step => Math.round(step.changed[0].y));
+  return ys[ys.length - 1] - ys[0];
+}
+
+/**
+ * The release the page read, px/s, as Core's velocity tracker reads it. In
+ * WebKit the touch driver reads it from the page's own event stamps. A page
+ * whose listeners take a few ms reads a slower flick than the script's. In
+ * Chromium the page reads the script's stamps, so the release is the
+ * script's.
+ */
+function pageRelease(
+  script: TouchScript,
+  played: ReadonlyArray<PlayedEvent>,
+): number {
+  const read = played[played.length - 1]?.release;
+  if (read != null) {
+    return read.pagePxPerS;
+  }
+  const steps = toTouchEvents(script);
+  const reading = readRelease(
+    steps,
+    steps.map(step => ({stamp: step.t, handledAt: Number.NaN})),
+  );
+  return reading?.scriptPxPerS ?? Number.NaN;
+}
+
+/**
+ * Fails by name unless Core's release rule lands the release the page read
+ * on half.
+ */
+function expectLandsOnHalf(speed: number, release: DownwardRelease) {
+  const landing = landingOf(speed, release);
+  if (landing !== 'half') {
+    throw new Error(
+      `the page read a release of ${speed.toFixed(0)} px/s, which Core's release rule lands on ${landing}, not half`,
+    );
+  }
+}
+
+/**
+ * The slowest release, in whole px/s, from which Core's release rule lands on
+ * half for every speed up to `fastest`. The play takes it as a boundary. A
+ * page that read the release below it did not receive the soft flick. The
+ * play then fails by name, before the proof judges the landing.
+ */
+function halfFrom(fastest: number, release: DownwardRelease): number {
+  if (landingOf(fastest, release) !== 'half') {
+    throw new Error(
+      `the script's ${fastest.toFixed(0)} px/s lands on ${landingOf(fastest, release)}, so it proves no soft flick`,
+    );
+  }
+  let slowest = Math.floor(fastest);
+  while (slowest > 0 && landingOf(slowest - 1, release) === 'half') {
+    slowest -= 1;
+  }
+  return slowest;
+}
 
 // The settle's timing, from the theme the story renders in: `--ease-standard`
 // is the default cubic-bezier(0.24, 1, 0.4, 1), and `--duration-medium` is the
@@ -79,6 +199,8 @@ interface OpenSheet {
   /** Top of the sheet at its tall detent and at the half-viewport detent, CSS px. */
   tallTop: number;
   halfTop: number;
+  /** The viewport's height: a dismissed sheet's top, CSS px. */
+  screenHeight: number;
   handle: {x: number; y: number};
 }
 
@@ -112,6 +234,7 @@ async function openSheet(page: Page): Promise<OpenSheet> {
     tallTop: rect.y,
     // snapPoints={[0.5]}: the extra stop shows half the viewport.
     halfTop: viewport.height * 0.5,
+    screenHeight: viewport.height,
     handle: {x: rect.x + rect.width / 2, y: rect.y + 12},
   };
 }
@@ -183,18 +306,121 @@ test('a downward flick dismisses the sheet', async ({page}) => {
     hz: 120,
   });
   expect(releaseVelocity(script).y).toBeCloseTo(2000, -1);
-  await driver.play(script);
+  await driver.play(script, {
+    pacing: 'spacing',
+    releaseTolerance: DISMISS_FLICK_TOLERANCE,
+  });
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
+});
+
+test('a softer downward flick from the tall detent lands on the half detent', async ({
+  page,
+}) => {
+  const {driver, sheet, handle, tallTop, halfTop, screenHeight} =
+    await openSheet(page);
+  // 1,200 px/s: a flick, whose projection stops short of the half detent, so
+  // it goes one stop.
+  const script = flick(handle, {
+    velocity: {x: 0, y: 1200},
+    durationMs: 80,
+    hz: 120,
+  });
+  expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
+  const release = {
+    travel: travelOf(script),
+    half: halfTop - tallTop,
+    closed: screenHeight - tallTop,
+  };
+  // Below the speed where the landing leaves half, the page did not receive
+  // the soft flick. The play then fails by name.
+  const played = await driver.play(script, {
+    pacing: 'spacing',
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
+  });
+  // The release the page read decides the landing, so the proof asks Core's
+  // release rule where that release lands.
+  expectLandsOnHalf(pageRelease(script, played), release);
+  await waitForRest(sheet);
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
+test('a softer flick with one early move 70 ms late still lands on the half detent', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'webkit',
+    'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+  );
+  const {driver, sheet, handle, tallTop, halfTop, screenHeight} =
+    await openSheet(page);
+  const script = flick(handle, {
+    velocity: {x: 0, y: 1200},
+    durationMs: 80,
+    hz: 120,
+  });
+  const release = {
+    travel: travelOf(script),
+    half: halfTop - tallTop,
+    closed: screenHeight - tallTop,
+  };
+  // The move after this step reaches the page 70 ms late, as a stalled
+  // dispatch delivers it. The last two moves keep their spacing.
+  const late = toTouchEvents(script).length - 5;
+  const played = await driver.play(script, {
+    pacing: 'spacing',
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
+    onEvent: async (_, index) => {
+      if (index === late) {
+        await new Promise(resolve => setTimeout(resolve, 70));
+      }
+    },
+  });
+  expectLandsOnHalf(pageRelease(script, played), release);
+  await waitForRest(sheet);
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
+test("the release check asks Core's rule with the sheet's arguments", () => {
+  const long = {travel: 96, half: 300, closed: 650};
+  // Below the flick speed the projection decides: 126 px stays nearer tall,
+  // 186 px nearer half.
+  expect(landingOf(300, long)).toBe('tall');
+  expect(landingOf(900, long)).toBe('half');
+  // A flick goes at least to half, and on once its projection passes half.
+  expect(landingOf(1500, long)).toBe('half');
+  expect(landingOf(3000, long)).toBe('the dismissed position');
+  // 32 px: a flick lands on half where its projection, 142 px, would not.
+  const short = {travel: 32, half: 300, closed: 650};
+  expect(landingOf(900, short)).toBe('tall');
+  expect(landingOf(1100, short)).toBe('half');
+  // 8 px is within Core's drag slop, so 1,100 px/s is no flick there.
+  expect(landingOf(1100, {travel: 8, half: 300, closed: 650})).toBe('tall');
+  // The boundary a soft flick's play takes: from 540 px/s the projection
+  // reaches nearer half. On 32 px only a flick, from 1,008 px/s, lands there.
+  expect(halfFrom(1200, long)).toBe(540);
+  expect(halfFrom(1100, short)).toBe(1008);
 });
 
 test('the settle lands on the detent, its curve recorded frame by frame', async ({
   page,
 }, testInfo) => {
+  // The page clock that lets the scene stop at the lift, installed before
+  // the story loads; a freeze also needs the timer gate.
+  await installPageFreeze(page);
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
+  await installTimerGate(page);
   const dy = Math.round((halfTop - tallTop) * 0.66);
+  // The scene stops in the lift's own task, before the sheet hears the lift.
+  // The settle then starts held, however late this process reacts. A hold
+  // that the test sends after the lift can come after the settle ends.
+  await freezePageOn(page, 'touchend');
   await driver.play(slowDragTo(handle, dy));
-  const [settle] = await waitForAnimation(sheet);
-  const held = await holdAnimations(page, sheet);
+  const held = await holdAnimations(page, sheet, {
+    judges: {target: sheet, property: 'transform'},
+  });
   const transition = held.find(a => a.name === 'transform');
   if (transition == null) {
     throw new Error(`no transform transition held: ${JSON.stringify(held)}`);
@@ -214,6 +440,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     from + (to - from) * ease(Math.min(1, t / SETTLE_MS));
   const result = compareCurve(samples, expectedSettle, 0.5);
   await releaseAnimations(page);
+  await thawPage(page);
   testInfo.annotations.push({
     type: 'settle-curve',
     description: `settle: ${transition.easing}, ${transition.durationMs} ms; frame-by-frame max error ${result.maxError.toFixed(2)} px against ${SETTLE_EASING} over ${SETTLE_MS} ms`,
@@ -232,7 +459,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     'curves/bottomsheet-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {settle, transition, comparison: result},
+        {transition, comparison: result},
         null,
         2,
       ),
@@ -253,6 +480,10 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
   );
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
   await markElement(sheet);
+  // The harness's busy-window control: a box the compositor moves along the
+  // top edge, in the same screencast. The settle is judged against what the
+  // compositor presented, not against a frame rate.
+  const control = await startBusyControl(page);
   const cast = await startScreencast(page);
   // The settle must be running (and composited) before the block: an
   // animation cannot start while the main thread is held. Armed before the
@@ -279,11 +510,21 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
     return chip.getBoundingClientRect().y;
   });
   const castFrames = await cast.stop();
+  await control.remove();
   const tracked = await trackMarker(page, castFrames);
+  const controlFrames = await trackControl(
+    page,
+    castFrames.filter(f => f.t >= block.from - 300 && f.t <= block.to + 100),
+  );
   // Judge the part of the block during which the settle was still moving:
   // until it is within 2 px of rest (the screencast rounds to whole pixels,
-  // so the easing tail shows plateaus there).
-  const proof = busyWindowProof(tracked, block, {settledWithin: 2, settledAt});
+  // so the easing tail shows plateaus there). The settle moves on every frame
+  // the control moves on, and it stalls no longer than the control.
+  const proof = busyWindowProof(tracked, block, {
+    settledWithin: 2,
+    settledAt,
+    control: controlFrames,
+  });
   await writeEvidence(
     'busy-main-thread/bottomsheet-settle',
     {
@@ -354,6 +595,9 @@ test(
   'storyboard: drag to the half detent and settle',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    // The page clock that lets the scene stop at the lift, installed before
+    // the story loads.
+    await installPageFreeze(page);
     const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
     // Gate the page's timers from here on, so the settle's completion timer can
     // be held with its animation while the filmstrip is photographed.
@@ -362,6 +606,10 @@ test(
     const clip = {x: 0, y: 0, width: viewport.width, height: viewport.height};
     const dy = Math.round((halfTop - tallTop) * 0.66);
     const measure = async () => ({top: await sheetTop(sheet)});
+    // The scene stops in the lift's own task, before the sheet hears the
+    // lift. The settle then starts held, however late this process reacts. A
+    // hold that the test sends after the lift can come after the settle ends.
+    await freezePageOn(page, 'touchend');
     const dragBoard = await touchStoryboard(
       page,
       driver,
@@ -378,18 +626,17 @@ test(
         cellScale: 0.4,
       },
     );
-    await waitForAnimation(sheet);
-    await freezeTimers(page);
     const {storyboard: settleBoard} = await animationStoryboard(page, {
       name: 'bottomsheet-settle',
       clip,
       scope: sheet,
+      judges: {target: sheet, property: 'transform'},
       measure,
       columns: 7,
       cellScale: 0.4,
     });
     await releaseAnimations(page, {finish: true});
-    await thawTimers(page);
+    await thawPage(page);
     await dragBoard.write(testInfo);
     await settleBoard.write(testInfo);
     // The trace is the assertion; the sheets are the evidence.

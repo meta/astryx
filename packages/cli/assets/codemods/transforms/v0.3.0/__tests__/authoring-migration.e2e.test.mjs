@@ -25,6 +25,7 @@ import {parseIntegration} from '../../../../../authoring/integration/parse.mjs';
 import {parseDoc} from '../../../../../authoring/doctypes/parse.mjs';
 import {parseTemplate} from '../../../../../authoring/doctypes/template/parse.mjs';
 import {parseCodemod} from '../../../../../authoring/codemod/parse.mjs';
+import {REPO_ROOT} from '../../../../../test-utils/repo-root.mjs';
 
 /** Run the full v0.3.0 authoring migration (both codemods, in release order). */
 async function migrate(source, filePath = 'input.ts') {
@@ -40,7 +41,7 @@ async function migrate(source, filePath = 'input.ts') {
 let tmpDir;
 beforeAll(() => {
   // Repo-local temp dir: Vite's dynamic import blocks /tmp.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-codemod-e2e-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-codemod-e2e-'));
 });
 afterAll(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});

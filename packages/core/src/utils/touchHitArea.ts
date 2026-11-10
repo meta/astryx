@@ -4,15 +4,16 @@
 
 /**
  * @file touchHitArea.ts
- * @input Whether an element takes taps, the shared touch hit area
- *   (utils/hitArea.ts) and the Web Animations around the element
+ * @input Whether an element takes taps, how it grows, the shared touch hit
+ *   area (utils/hitArea.ts) and the Web Animations around the element
  * @output `useTouchHitArea`, a callback ref that keeps an element's hit insets
  *   live for its invisible layer (`touchHitAreaStyles.layer`)
  * @position Core-internal hook for the coarse-only 44 px target. List rows,
- *   InfoTip, CheckboxInput and RadioListItem use it, and so can any control
- *   whose target grows under a finger without growing its box.
+ *   InfoTip, CheckboxInput, RadioListItem, SegmentedControl segments and the
+ *   press-tracking groups use it, and so can any control whose target outgrows
+ *   its box under a finger.
  *
- * SYNC: When modified, update utils/touchHitArea.stylex.ts and
+ * SYNC: When modified, update internal/touchHitArea.stylex.ts and
  * touchHitArea.test.tsx.
  */
 
@@ -22,7 +23,42 @@ import {
   NO_HIT_INSETS,
   watchHitArea,
   writeHitInsets,
+  type HitInsets,
+  type HitRect,
 } from './hitArea';
+
+/** How an owner's element grows, for an owner with its own rule. */
+export interface TouchHitAreaOptions {
+  /**
+   * How far the element grows on each side before any neighbour stops it,
+   * read as `watchHitArea`'s `growth`. It also gets the element. A group
+   * passes `groupGrowth` of its members.
+   * @default toward 44 px on each axis, centered
+   */
+  readonly growth?: (
+    target: HitRect,
+    toLayout: (rect: HitRect) => HitRect,
+    element: HTMLElement,
+  ) => HitInsets;
+  /**
+   * Whether a finger's press on the element re-measures it against every
+   * interactive element on the page. An owner that reads its own targets
+   * when a press begins turns it off.
+   * @default true
+   */
+  readonly checkAtPress?: boolean;
+  /**
+   * Whether a finger's press that lands on a descendant is the element's,
+   * however near a neighbour is, read as `watchHitArea`'s
+   * `ownsDescendantTouches`. An owner that draws the band on a descendant,
+   * and whose content never paints past its box, turns it off, so a band
+   * press nearer a neighbour is not the element's.
+   * @default true
+   */
+  readonly ownsDescendantTouches?: boolean;
+}
+
+const NO_OPTIONS: TouchHitAreaOptions = {};
 
 /**
  * The finite animations running or held in the element's parent, the element
@@ -58,7 +94,11 @@ function settlingAnimations(element: HTMLElement): Animation[] {
  * element is watched again. The insets are then taken at rest, and no frame
  * of a compositor-only motion lays out or paints for them.
  */
-function watchAtRest(element: HTMLElement, minSize: number): () => void {
+function watchAtRest(
+  element: HTMLElement,
+  minSize: number,
+  {growth, checkAtPress, ownsDescendantTouches = true}: TouchHitAreaOptions,
+): () => void {
   let stopWatch = (): void => {};
   let isStopped = false;
   let isWaiting = false;
@@ -97,9 +137,18 @@ function watchAtRest(element: HTMLElement, minSize: number): () => void {
           }
         });
       },
-      // The layer is the host's own `::after`, so a touch on the host's
-      // content is the host's, even where that content paints past its box.
-      {minSize, ownsDescendantTouches: true},
+      // By default the layer is the host's own `::after`, so a touch on the
+      // host's content is the host's, even where that content paints past
+      // its box.
+      {
+        minSize,
+        ownsDescendantTouches,
+        growth:
+          growth == null
+            ? undefined
+            : (target, toLayout) => growth(target, toLayout, element),
+        checkAtPress,
+      },
     );
   };
   watch();
@@ -123,10 +172,16 @@ const heldWatches = new WeakMap<HTMLElement, HeldWatch>();
  * detaches and attaches again in one commit. So the last release waits a
  * microtask, and an attach in between keeps the watch and its insets.
  */
-function holdWatch(element: HTMLElement): () => void {
+function holdWatch(
+  element: HTMLElement,
+  options: TouchHitAreaOptions,
+): () => void {
   let held = heldWatches.get(element);
   if (held == null) {
-    held = {stop: watchAtRest(element, MIN_TOUCH_TARGET), holders: 0};
+    held = {
+      stop: watchAtRest(element, MIN_TOUCH_TARGET, options),
+      holders: 0,
+    };
     heldWatches.set(element, held);
   }
   held.holders += 1;
@@ -151,9 +206,11 @@ function holdWatch(element: HTMLElement): () => void {
  * A callback ref that keeps its element's hit insets live while `enabled`:
  * the element takes taps, so it is interactive and not disabled or read-only.
  * Merge it into the element's ref, and pair it with `touchHitAreaStyles.layer`
- * on the same element. The watch lasts while the element is attached, so a
- * replaced element starts its own. A re-render that hands the same element a
- * new merged ref keeps its watch.
+ * on the same element, or on a descendant with `ownsDescendantTouches` off.
+ * The watch lasts while the element is attached, so a replaced element starts
+ * its own. A re-render that hands the same element a
+ * new merged ref keeps its watch. `options` set how the element grows. Keep
+ * them stable, as a module constant. An element's first holder sets them.
  *
  * @example
  * ```
@@ -161,7 +218,10 @@ function holdWatch(element: HTMLElement): () => void {
  * <li ref={hitAreaRef} {...stylex.props(isInteractive && touchHitAreaStyles.layer)} />
  * ```
  */
-export function useTouchHitArea(enabled: boolean): RefCallback<HTMLElement> {
+export function useTouchHitArea(
+  enabled: boolean,
+  options: TouchHitAreaOptions = NO_OPTIONS,
+): RefCallback<HTMLElement> {
   // Syncs with an external system: the shared touch hit area
   // (utils/hitArea.ts) measures the element against its neighbors and writes
   // its insets on it. The ref's cleanup stops the watch.
@@ -170,8 +230,8 @@ export function useTouchHitArea(enabled: boolean): RefCallback<HTMLElement> {
       if (!enabled || element == null) {
         return undefined;
       }
-      return holdWatch(element);
+      return holdWatch(element, options);
     },
-    [enabled],
+    [enabled, options],
   );
 }

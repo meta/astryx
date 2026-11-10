@@ -20,6 +20,7 @@ import {
   getCliInvocation,
 } from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {logger} from '../../../../api/logger.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {
   emit,
@@ -57,6 +58,20 @@ const defaultVariantText = value =>
 
 /** @param {unknown} value */
 const variantsText = value => (Array.isArray(value) ? value.join('/') : '');
+
+/**
+ * The receipt line for a data file whose `module` the command rewrote after
+ * a package rename.
+ * @param {{moduleUpdate?: {previous: string, module: string}, dryRun?: boolean}} data
+ */
+const moduleUpdateLines = data =>
+  data.moduleUpdate
+    ? [
+        text(
+          `${data.dryRun ? '[plan] Would update' : '[ok] Updated'} module to "${data.moduleUpdate.module}" (was "${data.moduleUpdate.previous}"), from the package name in package.json.`,
+        ),
+      ]
+    : [];
 
 /**
  * Register `icon` and its subcommands under the `experimental` group.
@@ -140,7 +155,7 @@ export function registerExperimentalIcon(group, program) {
             ),
           ),
           text(
-            `Built-in definitions are the ones every set maps. Map one: ${run} experimental icon map <definition> <icon id>`,
+            `Built-in definitions are the ones every set maps. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
           ),
         );
         return answered;
@@ -157,7 +172,9 @@ export function registerExperimentalIcon(group, program) {
                 `${each.id}: ${each.words.join(', ')}${each.definitions.length > 0 ? ` = ${each.definitions.join(', ')}` : ''}`,
             ),
           ),
-          text(`Map one: ${run} experimental icon map <definition> <id>`),
+          text(
+            `Map one: ${run} experimental icon map <definition> <id> --set ${set}`,
+          ),
         );
         return answered;
       }
@@ -308,6 +325,9 @@ export function registerExperimentalIcon(group, program) {
    * @param {(result: any) => void} print
    */
   const run = async (call, print) => {
+    // Reading a large library reports its progress through the shared
+    // logger: on stderr in text mode, never under --json.
+    logger.setSilent(Boolean(program.opts().json));
     let result;
     try {
       result = await call();
@@ -370,20 +390,24 @@ export function registerExperimentalIcon(group, program) {
                     (
                       /** @type {{definition: string, icon: string, previous: string | null}} */ each,
                     ) =>
-                      `${each.definition} = "${each.icon}"${each.previous && each.previous !== each.icon ? ` (was "${each.previous}")` : ''}`,
+                      `${each.definition} = "${each.icon}"${each.previous === each.icon ? ' (unchanged)' : each.previous ? ` (was "${each.previous}")` : ' (was not mapped)'}`,
                   ),
                 ),
+                ...moduleUpdateLines(data),
               )
             : emit(
+                // The entry line reads `previous` and `icon`: a write can
+                // come from a package rename alone.
                 text(
                   data.icon == null
-                    ? data.changed
+                    ? data.previous != null
                       ? `[ok] Removed map.${data.definition} (was "${data.previous}") from ${data.file}.`
                       : `[ok] ${data.file} has no map.${data.definition}.`
-                    : data.changed
+                    : data.previous !== data.icon
                       ? `[ok] map.${data.definition} = "${data.icon}" in ${data.file}${data.previous ? ` (was "${data.previous}")` : ''}.`
                       : `[ok] map.${data.definition} is already "${data.icon}".`,
                 ),
+                ...moduleUpdateLines(data),
               ),
       ),
   });
@@ -424,6 +448,7 @@ export function registerExperimentalIcon(group, program) {
               text(
                 `[ok] ${data.variant}: ${data.added} icons gained it${data.already > 0 ? `, ${data.already} already had it` : ''}, read from ${data.from}.`,
               ),
+              ...moduleUpdateLines(data),
               ...(data.files.length > 0 ? [list(data.files)] : []),
               ...(data.missing.length > 0
                 ? [
@@ -436,7 +461,7 @@ export function registerExperimentalIcon(group, program) {
             return;
           }
           if (result.type === 'icon.definitionMatches') {
-            const {matches, newDefinition} = result.data;
+            const {matches, newDefinition, variant} = result.data;
             emit(
               section(
                 `Icon definitions for ${result.data.export} (${matches.length})`,
@@ -466,6 +491,13 @@ export function registerExperimentalIcon(group, program) {
                     ),
                   ]
                 : []),
+              ...(variant
+                ? [
+                    text(
+                      `The set already has this glyph in another look. Add this one as its variant: ${formatCliCommand(variant)}`,
+                    ),
+                  ]
+                : []),
               text(
                 `All icon definitions: ${cli} docs cli/experimental/icon-definitions`,
               ),
@@ -475,10 +507,11 @@ export function registerExperimentalIcon(group, program) {
           const {data} = result;
           emit(
             text(
-              data.changed
+              data.added
                 ? `[ok] Added ${data.icon.export} as "${data.icon.id}"${data.variant ? ` (variant ${data.variant})` : ''}${data.definition ? `, map.${data.definition} = "${data.icon.id}"` : ''}.`
                 : `[ok] ${data.icon.export} is already "${data.icon.id}"${data.definition ? ` and map.${data.definition} names it` : ''}.`,
             ),
+            ...moduleUpdateLines(data),
             ...(data.files.length > 0 ? [list(data.files)] : []),
             ...(data.note ? [text(`[next] ${data.note}`)] : []),
           );
@@ -500,17 +533,25 @@ export function registerExperimentalIcon(group, program) {
       const {root, manifest, files, written, dryRun} = data;
       const state = dryRun ? 'plan' : written ? 'ok' : 'unchanged';
       const refreshed = data.refreshed === true;
+      const updated = data.updated === true;
+      const What = `${what[0].toUpperCase()}${what.slice(1)}`;
       emit(
         section(
           refreshed
             ? dryRun
               ? `Refresh ${what} plan`
-              : `${what[0].toUpperCase()}${what.slice(1)} refreshed`
-            : dryRun
-              ? `New ${what} plan`
-              : written
-                ? `New ${what} added`
-                : `New ${what} unchanged`,
+              : `${What} refreshed`
+            : updated
+              ? dryRun
+                ? `${What} update plan`
+                : written && files.length > 0
+                  ? `${What} updated`
+                  : `${What} unchanged`
+              : dryRun
+                ? `New ${what} plan`
+                : written
+                  ? `New ${what} added`
+                  : `New ${what} unchanged`,
         ),
         text(`[${state}] ${data.name}`),
         // What the command did (or, in a dry run, would do): never a step
@@ -522,6 +563,7 @@ export function registerExperimentalIcon(group, program) {
               : `The experimental.iconSets root ${root.path} in ${manifest} is unchanged.`
             : `${dryRun ? 'Would update' : 'Updated'} ${manifest}.`,
         ),
+        ...moduleUpdateLines(data),
         ...(files.length > 0 ? [list(files)] : []),
         // What to do next comes before the long lists, so it never scrolls
         // away.
@@ -542,7 +584,7 @@ export function registerExperimentalIcon(group, program) {
               list(
                 data.suggestions.map(
                   each =>
-                    `${each.definition} -> ${each.icon} (${each.word}): ${formatCliCommand(`astryx experimental icon map ${each.definition} ${each.icon}`)}`,
+                    `${each.definition} -> ${each.icon} (${each.word}): ${formatCliCommand(`astryx experimental icon map ${each.definition} ${each.icon} --set ${data.name}`)}`,
                 ),
               ),
             ]

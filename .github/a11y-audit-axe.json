@@ -35,5 +35,38 @@
     "stories": ["core-hovercard--open-states"],
     "readySelector": "[role=\"dialog\"]"
   },
-  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]}
+  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]},
+  "LayoutFooter": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--footer-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  },
+  "LayoutHeader": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--header-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  },
+  "LayoutPanel": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--panel-states",
+      "core-layout--with-sidebar",
+      "core-layout--dual-panels",
+      "core-layout--content-width-with-start-panel"
+    ]
+  },
+  "Lightbox": {
+    "stories": ["core-lightbox--open-viewer"],
+    "readySelector": "dialog[open]"
+  }
 }
