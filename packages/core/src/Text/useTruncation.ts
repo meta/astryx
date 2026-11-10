@@ -6,7 +6,7 @@
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
  * @output Exports useTruncation hook for detecting text overflow
- * @position Hook; consumed by Text.tsx, Heading.tsx
+ * @position Hook; consumed by TruncatableText.tsx, the client part of Text and Heading
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Text/Text.doc.mjs

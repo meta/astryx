@@ -8,8 +8,8 @@
  * @output Exports TruncatableText, the client part of Text and Heading. It
  *   measures overflow, mounts the full-text tooltip and scopes Text's clamp.
  * @position Rendered by the directive-free Text.tsx and Heading.tsx: always
- *   in a client render, and for an explicit `maxLines` in a Server Component.
- *   Its first render is the markup they render on the server.
+ *   in a client render, and in a Server Component for an explicit `maxLines`
+ *   with the tooltip on. Its first render is the server markup.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Text/Text.doc.mjs
@@ -17,7 +17,6 @@
  */
 
 import {
-  use,
   useRef,
   type ElementType,
   type HTMLAttributes,
@@ -31,7 +30,7 @@ import {
   TruncationTooltip,
   useTruncationTooltipInterest,
 } from './TruncationTooltip';
-import {TextClampContext} from './textClampContext';
+import {TextClampScope} from './TextClampScope';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import type {LayerPlacement} from '../Layer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -80,7 +79,6 @@ export function TruncatableText({
   // The tooltip mounts on the first hover, tap or focus, not with the text.
   const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
-  // The tooltip's anchor.
   const anchorRef = useRef<HTMLElement>(null);
 
   // Keep the merged ref stable across rerenders.
@@ -134,22 +132,3 @@ export function TruncatableText({
 }
 
 TruncatableText.displayName = 'TruncatableText';
-
-/**
- * Tells Text's children whether they are in clamped text. It stays mounted
- * for every value, so a change of `maxLines` keeps every child mounted.
- */
-function TextClampScope({
-  isClamped,
-  children,
-}: {
-  isClamped: boolean;
-  children?: ReactNode;
-}) {
-  const isInClampedText = use(TextClampContext);
-  return (
-    <TextClampContext value={isClamped || isInClampedText}>
-      {children}
-    </TextClampContext>
-  );
-}

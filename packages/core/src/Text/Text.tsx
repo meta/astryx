@@ -5,8 +5,9 @@
  * @input Uses React, HTMLAttributes, ReactNode
  * @output Exports Text component, TextProps, TextType, TextSize types
  * @position Core implementation; consumed by index.ts, tested by Text.test.tsx.
- *   A server module: in a Server Component, Text without `maxLines` ships no
- *   client code. Truncation renders the TruncatableText client part.
+ *   A server module: in a Server Component it renders no client component,
+ *   unless the truncation tooltip needs TruncatableText or a clamp needs
+ *   TextClampScope.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Text/Text.doc.mjs (props table, features, implementation notes)
@@ -46,6 +47,7 @@ import {
   tabularNumbersStyle,
 } from './text.stylex';
 import {TruncatableText} from './TruncatableText';
+import {TextClampScope} from './TextClampScope';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
 import {isReactServer} from '../utils/isReactServer';
@@ -298,15 +300,23 @@ export function Text({
     ...props,
   };
 
-  // In a Server Component, text without `maxLines` needs no client code. A
-  // client render always takes the client part, so a change of `maxLines` or
-  // `hasTruncateTooltip` keeps the element and its children mounted.
-  if (isReactServer && maxLinesProp === undefined) {
+  // In a Server Component, only the truncation tooltip needs TruncatableText,
+  // and a clamp alone needs TextClampScope. A client render always takes
+  // TruncatableText, so a change of `maxLines` or `hasTruncateTooltip` keeps
+  // the element and its children mounted.
+  if (
+    isReactServer &&
+    (maxLinesProp === undefined || hasTruncateTooltip === false)
+  ) {
     // The tag union's intersected ref types reject a plain element ref.
     const Element = Component as ElementType;
     return (
       <Element ref={ref} {...elementProps}>
-        {children}
+        {isClamped ? (
+          <TextClampScope isClamped>{children}</TextClampScope>
+        ) : (
+          children
+        )}
       </Element>
     );
   }

@@ -80,9 +80,12 @@ const EXTENSIONS = ['.tsx', '.ts', '.mjs', '.js', '.jsx'];
 const CLIENT_ISLANDS = new Set([
   'hooks/AnnounceRenderedText.tsx',
   'hooks/StackItemScrollRegion.tsx',
-  // Text's and Heading's truncation: it measures overflow and mounts the
-  // full-text tooltip, and only an explicit `maxLines` renders it.
+  // Text's and Heading's truncation tooltip: it measures overflow and mounts
+  // the tooltip. Only an explicit `maxLines` with the tooltip on renders it.
   'Text/TruncatableText.tsx',
+  // Tells a nested Link that it is in clamped text. A clamped Text with the
+  // tooltip off renders it, and it adds no DOM.
+  'Text/TextClampScope.tsx',
 ]);
 
 const isSourceFile = (name: string) =>

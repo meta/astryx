@@ -5,8 +5,8 @@
  * @input Uses React, HTMLAttributes, ReactNode
  * @output Exports Heading component, HeadingProps, HeadingLevel types
  * @position Core implementation; lives in own Heading/ dir, re-exported by Text/.
- *   A server module: in a Server Component, Heading without `maxLines` ships
- *   no client code. Truncation renders the TruncatableText client part.
+ *   A server module: in a Server Component it renders no client component,
+ *   unless the truncation tooltip needs TruncatableText.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Text/Heading.doc.mjs (props table, theming target)
@@ -293,10 +293,13 @@ export function Heading({
     ...props,
   };
 
-  // In a Server Component, a heading without `maxLines` needs no client code.
-  // A client render always takes the client part, so a change of `maxLines`
-  // or `hasTruncateTooltip` keeps the element and its children mounted.
-  if (isReactServer && maxLinesProp === undefined) {
+  // In a Server Component, only the truncation tooltip needs the client part.
+  // A client render always takes it, so a change of `maxLines` or
+  // `hasTruncateTooltip` keeps the element and its children mounted.
+  if (
+    isReactServer &&
+    (maxLinesProp === undefined || hasTruncateTooltip === false)
+  ) {
     return (
       <Component ref={ref} {...elementProps}>
         {children}
