@@ -10,6 +10,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  checkoutReader,
   chromiumSelection,
   isProofPage,
   costsFor,
@@ -1400,14 +1401,11 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it("runs a story's component, and the full suite for a story of no one component", () => {
+  it('runs the full suite for a changed story, which maps to no component', () => {
     expect(select(['apps/storybook/stories/Menu.stories.tsx'])).toMatchObject({
-      full: false,
-      touched: ['core/Menu'],
+      full: true,
+      reason: 'apps/storybook/stories/Menu.stories.tsx maps to no component',
     });
-    expect(
-      select(['apps/storybook/stories/Nothing.stories.tsx']),
-    ).toMatchObject({full: true});
   });
 
   it('ignores a unit test, doc or record beside the code', () => {
@@ -1420,11 +1418,12 @@ describe('what a Chromium run covers for a pull request', () => {
   });
 
   it('runs the specs that import a changed file, a unit-test helper included', () => {
-    // Card's spec imports a `.test` helper beside it.
+    // Card's spec imports a `.test` helper beside it, which makes the helper
+    // a change to Card.
     expect(select(['packages/core/src/Card/__tests__/ease.test.ts'])).toEqual({
       full: false,
       specs: [spec('Card')],
-      touched: [],
+      touched: ['core/Card'],
       dependents: [],
     });
     // A fixture in Menu's folder that Card's spec imports.
@@ -1550,5 +1549,50 @@ describe('the Chromium selection in ci.yml, in shadow', () => {
       step(ci.jobs['pr-interaction'], "Plan this leg's interaction proofs").run,
     ])
       expect(run).not.toContain('chromium-selection');
+  });
+});
+
+describe('checkoutReader', () => {
+  it('reads a file a sparse checkout leaves out from its commit', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'sparse-read-'));
+    const git = (...args) =>
+      execFileSync('git', ['-C', repo, ...args], {encoding: 'utf8'});
+    git('init', '-q');
+    fs.mkdirSync(path.join(repo, 'apps/storybook/rtl-audit'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(repo, 'apps/storybook/rtl-audit/story-parameters.ts'),
+      'export const p = 1;\n',
+    );
+    git('add', '-A');
+    git('-c', 'user.name=t', '-c', 'user.email=t@e', 'commit', '-qm', 'x');
+    fs.rmSync(path.join(repo, 'apps'), {recursive: true});
+    expect(
+      checkoutReader(repo)('apps/storybook/rtl-audit/story-parameters.ts'),
+    ).toBe('export const p = 1;\n');
+  });
+
+  it('lets the proof map follow a bundled fixture a spec names by path', () => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'bundled-'));
+    const files = {
+      'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts':
+        "const entry = new URL('./sheetBundle.ts', import.meta.url);\n",
+      'packages/core/src/Sheet/__tests__/sheetBundle.ts':
+        "import {ease} from '../ease.test';\n",
+      'packages/core/src/Sheet/ease.test.ts': '',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const proofs = proofImporters({
+      root: tree,
+      listed: Object.keys(files),
+      isProof: isProofPage,
+    });
+    expect([...proofs.get('packages/core/src/Sheet/ease.test.ts')]).toEqual([
+      'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts',
+    ]);
   });
 });

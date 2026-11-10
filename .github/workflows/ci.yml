@@ -2661,10 +2661,11 @@ jobs:
           FULL_SUITE: ${{ steps.scope-chromium.outputs.full_suite }}
           SCOPE_PATHS: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
         run: |
+          set -o pipefail
           listed="$RUNNER_TEMP/interaction-legs/listed.txt"
           git -C .test-scope ls-tree -r --name-only HEAD > "$listed"
           mapfile -t SOURCES < <(grep -oE '^packages/[^/]+/src/' "$listed" | sort -u)
-          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal apps/storybook/stories apps/storybook/.storybook
+          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal/interaction-harness apps/storybook/stories apps/storybook/.storybook
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select-chromium \
             --listed "$listed" --changed "${CHANGED_FILES:-}" \
             --scope "$SCOPE_PATHS" --full-suite "${FULL_SUITE:-true}" \
