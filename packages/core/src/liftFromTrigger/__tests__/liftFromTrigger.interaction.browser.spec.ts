@@ -7,7 +7,7 @@
  * @output Proof in real engines of the lift and the zoom's copy. A row lifts
  *   into the top layer while a placeholder holds its spot. Every motion is
  *   `translate`, `scale`, `transform` or `opacity`. The menu grows out of the
- *   press and shrinks back into it on close. The page has at most five more
+ *   press and shrinks back into it on close. The page has at most four more
  *   elements while lifted, and none after the drop. A tap while it grows
  *   reaches nothing. The zoom's copy grows on the rect morph, turns around
  *   and lands in the thumbnail
@@ -97,7 +97,7 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
         row3: box(document.getElementById('row3')),
         row4: box(document.getElementById('row4')),
         placeholder: box(document.querySelector('[data-lift-placeholder]')),
-        shadow: box(document.querySelector('[data-lift-shadow]')),
+        hasShadow: document.querySelector('[data-lift-shadow]') != null,
         isOpen: row.matches(':popover-open'),
         look: [
           style.color,
@@ -126,8 +126,8 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
   };
   expect(lifted.width).toBeCloseTo(361, 3);
   expectBox(after.row2, [lifted.x, lifted.y, lifted.width, lifted.height]);
-  // Its shadow lies exactly under it.
-  expectBox(after.shadow, [lifted.x, lifted.y, lifted.width, lifted.height]);
+  // It casts no shadow.
+  expect(after.hasShadow).toBe(false);
   expectBox(after.placeholder, before.row2);
   expectBox(after.row1, before.row1);
   expectBox(after.row3, before.row3);
@@ -186,13 +186,12 @@ test('a lifted item of an ordered list leaves the numbers of the items after it 
   page,
 }) => {
   await open(page);
-  // An ordered list with its markers outside, and no tint and no shadow. A
-  // later item's marker paints the same while an item is lifted, unless its
-  // number changes.
+  // An ordered list with its markers outside, and no tint. A later item's
+  // marker paints the same while an item is lifted, unless its number
+  // changes.
   const clip = await page.evaluate(() => {
     const root = document.documentElement.style;
     root.setProperty('--color-overlay', 'transparent');
-    root.setProperty('--shadow-high', 'none');
     const panel = document.querySelector<HTMLElement>('.panel');
     if (panel != null) {
       panel.style.display = 'none';
@@ -236,46 +235,6 @@ test('a lifted item of an ordered list leaves the numbers of the items after it 
   // The fifth item still reads "5.".
   expect(Buffer.compare(lifted, before), JSON.stringify(placeholder)).toBe(0);
   expect(placeholder?.tag).toBe('li');
-  await page.evaluate(() => window.__lift.dispose());
-});
-
-test('the shadow follows the row on every frame of its lift and of its drop', async ({
-  page,
-}) => {
-  await open(page);
-  // Every animation of the lift, held at the same moment `t` ms in.
-  const at = async (t: number) =>
-    page.evaluate(time => {
-      for (const animation of document.getAnimations()) {
-        animation.pause();
-        animation.currentTime = time;
-      }
-      const box = (element: Element | null): Box => {
-        const r = element?.getBoundingClientRect();
-        return r == null ? [0, 0, 0, 0] : [r.x, r.y, r.width, r.height];
-      };
-      return {
-        row: box(document.getElementById('row2')),
-        shadow: box(document.querySelector('[data-lift-shadow]')),
-      };
-    }, t);
-  await page.evaluate(() => window.__lift.lift('row2', 0.2));
-  await page.waitForTimeout(50);
-  for (const t of [30, 90, 180]) {
-    const {row, shadow} = await at(t);
-    expectBox(shadow, row);
-  }
-  await page.evaluate(() => {
-    for (const animation of document.getAnimations()) {
-      animation.finish();
-    }
-    window.__lift.drop();
-  });
-  await page.waitForTimeout(50);
-  for (const t of [30, 90]) {
-    const {row, shadow} = await at(t);
-    expectBox(shadow, row);
-  }
   await page.evaluate(() => window.__lift.dispose());
 });
 
@@ -568,7 +527,7 @@ test('without a press the menu fades in where it rests: opacity only, no travel 
   await page.evaluate(() => window.__lift.dispose());
 });
 
-test('while lifted the page has the layer, the shadow, the anchor and the placeholder more, whatever the row holds, and never more than 5 (AST-017 FR60); a drop leaves the page as it was', async ({
+test('while lifted the page has the layer, the anchor and the placeholder more, whatever the row holds, and never more than 4 (AST-017 FR60); a drop leaves the page as it was', async ({
   page,
 }) => {
   await open(page);
@@ -622,13 +581,13 @@ test('while lifted the page has the layer, the shadow, the anchor and the placeh
       lifted: window.__lift.isLifted(),
     };
   });
-  // A row of 13 elements and a row of 1 add the same 4 once grown: the layer,
-  // the shadow, the anchor and the placeholder. The hold's shield joins while
-  // the lift grows.
-  expect(counts.deep).toBe(5);
-  expect(counts.shallow).toBe(5);
-  expect(counts.open).toBe(4);
-  expect(counts.most).toBeLessThanOrEqual(5);
+  // A row of 13 elements and a row of 1 add the same 3 once grown: the layer,
+  // the anchor and the placeholder. The hold's shield joins while the lift
+  // grows.
+  expect(counts.deep).toBe(4);
+  expect(counts.shallow).toBe(4);
+  expect(counts.open).toBe(3);
+  expect(counts.most).toBeLessThanOrEqual(4);
   expect(counts.after).toBe(0);
   expect(counts.styleAfter).toBe(counts.style);
   expect(counts.popoverAfter).toBeNull();

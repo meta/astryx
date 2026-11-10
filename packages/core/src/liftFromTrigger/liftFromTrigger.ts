@@ -55,10 +55,6 @@ export interface LiftFromTriggerMotion {
   readonly drop: SpringDescription;
   /** The tint clears on it. */
   readonly clear: SpringDescription;
-  /** The shadow rises on it. */
-  readonly shadowIn: SpringDescription;
-  /** The shadow fades on it. */
-  readonly shadowOut: SpringDescription;
   /** A surface grows out of the press on it. */
   readonly surfaceIn: SpringDescription;
   /** A surface shrinks back into the press on it. */
@@ -87,8 +83,6 @@ export interface LiftFromTriggerOptions {
   readonly release?: () => void;
   /** The tint, a CSS color resolved where the source is. */
   readonly tint?: string;
-  /** The shadow under the lifted source, a CSS box shadow. */
-  readonly shadow?: string;
   /** The inset an app declares for a bar over an edge (LayerProvider). */
   readonly inset?: LayerInset;
   /** A finger lifted on the backdrop where it went down. */
@@ -210,18 +204,6 @@ interface LiftState {
   readonly growing: MotionHandle;
   /** The tint's color, held on the layer's `::backdrop`. */
   readonly layerFill: Animation | null;
-  /**
-   * The shadow under the source, a box in the layer laid out where the source
-   * is. It follows the source frame for frame and fades on its own spring.
-   */
-  readonly shadow: HTMLElement;
-  /** The shadow's rect morph, on the source's path and clock. */
-  readonly shadowMorph: RectMorph;
-  /**
-   * Holds the clock of both morphs at one instant (null lets it run), so the
-   * shadow starts each motion where the source does.
-   */
-  readonly holdClock: (at: number | null) => void;
   /** The layer's own waits and listeners, released with it. */
   readonly waits: AbortController;
   untilPointersLift: () => Promise<void>;
@@ -340,8 +322,6 @@ function resolvedMotion(
     lift: resolve(motion.lift),
     drop: resolve(motion.drop),
     clear: resolve(motion.clear),
-    shadowIn: resolve(motion.shadowIn),
-    shadowOut: resolve(motion.shadowOut),
     surfaceIn: resolve(motion.surfaceIn),
     surfaceOut: resolve(motion.surfaceOut),
   };
@@ -502,7 +482,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     current.isSourceLifted = false;
     const {source} = current;
-    current.shadowMorph.dispose();
     current.morph.dispose();
     if (source.matches(':popover-open')) {
       source.hidePopover();
@@ -670,10 +649,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       ? placeholderStyle(computed, sourceRect)
       : null;
     const direction = computed.direction === 'rtl' ? 'rtl' : 'ltr';
-    const radius = shapeRadius(source);
     const motion = resolvedMotion(source, options.motion);
-    // The tint, the shadow and the layer runtime's gutter, with the inset an
-    // app declares, resolved where the source is.
+    // The tint and the layer runtime's gutter, with the inset an app
+    // declares, resolved where the source is.
     const probed = probe(source, {
       ...Object.fromEntries(
         Object.entries(layerInsetProperties(options.inset)).map(
@@ -681,7 +659,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
         ),
       ),
       'background-color': options.tint ?? 'var(--color-overlay)',
-      'box-shadow': options.shadow ?? 'var(--shadow-high)',
       'padding-top': [
         `calc(${layerViewportInset.gutterBlockStartFallback})`,
         `calc(${layerViewportInset.gutterBlockStart})`,
@@ -696,7 +673,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       ],
     });
     const tint = probed['background-color'];
-    const shadow = probed['box-shadow'];
     const viewport: LiftFromTriggerViewport = {
       width: doc.documentElement.clientWidth || view?.innerWidth || 0,
       height: view?.innerHeight ?? doc.documentElement.clientHeight,
@@ -712,22 +688,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     options.release?.();
     const layer = createLayer(doc, attribute);
     doc.body.append(layer);
-    const shadowEl = doc.createElement('span');
-    shadowEl.setAttribute(`${attribute}-shadow`, '');
-    Object.assign(shadowEl.style, {
-      position: 'absolute',
-      left: `${sourceRect.x}px`,
-      top: `${sourceRect.y}px`,
-      width: `${sourceRect.width}px`,
-      height: `${sourceRect.height}px`,
-      borderRadius: radius,
-      boxShadow: shadow,
-      opacity: '0',
-      pointerEvents: 'none',
-      // Its keyframes scale about the top-left corner, as the source's do.
-      transformOrigin: '0 0',
-    });
-    layer.append(shadowEl);
     const anchor = doc.createElement('span');
     anchor.setAttribute(`${attribute}-anchor`, '');
     Object.assign(anchor.style, {
@@ -787,13 +747,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     // The source grows from where the press left it into its lifted rect. It
     // stays laid out at its own size, so its content scales as UIKit's
     // snapshot does. Under Reduce Motion it lands at once and fades in.
-    let heldAt: number | null = null;
-    const holdClock = (at: number | null) => {
-      heldAt = at;
-    };
-    const now = () => heldAt ?? performance.now();
-    const morph = createRectMorph(source, {now});
-    const shadowMorph = createRectMorph(shadowEl, {now});
+    const morph = createRectMorph(source);
     // The layer first: the source shows above its tint. The popover makes
     // its `::backdrop` new, so the tint starts clear in the same task.
     const tints = createMotionEngine(layer, {
@@ -803,26 +757,11 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     layer.showPopover();
     tints.set({opacity: 0});
     source.showPopover();
-    holdClock(performance.now());
     const growing = morph.present(
       lerpPath(from, lifted, {box: sourceRect, scale: 'uniform'}),
       {spring: motion.lift},
       {crossfadeAs: 'entrance'},
     );
-    // The shadow rises with the source, frame for frame: the same path,
-    // spring and clock. It fades in on its own spring. It is a box in the
-    // layer, because an animated `::backdrop` of the source would restyle and
-    // lay out the page on every frame.
-    shadowMorph.present(
-      lerpPath(from, lifted, {
-        box: sourceRect,
-        scale: 'uniform',
-        opacity: [0, 1],
-      }),
-      {spring: motion.lift},
-      {fade: {spring: motion.shadowIn}, crossfadeAs: 'entrance'},
-    );
-    holdClock(null);
     // The tint: the layer's `::backdrop`, its color held there.
     const layerFill = holdBackdropColor(layer, tint);
     const current: LiftState = {
@@ -840,9 +779,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       morph,
       growing,
       layerFill,
-      shadow: shadowEl,
-      shadowMorph,
-      holdClock,
       waits,
       untilPointersLift: async () => {},
       tints,
@@ -1056,29 +992,12 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     // The tint clears from what it shows now, with its velocity.
     current.tint = current.tints.animate({opacity: 0}, {spring: motion.clear});
     // The source returns to its place from wherever it is now, with its
-    // velocity. Its shadow follows it back frame for frame: the same instant,
-    // path and spring. It fades on its own spring. Under Reduce Motion both
-    // fade where they are.
-    current.holdClock(performance.now());
-    current.shadowMorph.dismiss(
-      lerpPath(sourceRect, lifted, {
-        box: sourceRect,
-        scale: 'uniform',
-        opacity: [0, 1],
-      }),
-      {spring: motion.drop},
-      {
-        target: current.shadow,
-        fade: {spring: motion.shadowOut},
-        crossfadeAs: 'exit',
-      },
-    );
+    // velocity. Under Reduce Motion it fades where it is.
     const returning = current.morph.dismiss(
       lerpPath(sourceRect, lifted, {box: sourceRect, scale: 'uniform'}),
       {spring: motion.drop},
       {target: source, crossfadeAs: 'exit'},
     );
-    current.holdClock(null);
     const exit = current.surface?.dismissing;
     const settled = Promise.all([returning.finished, exit?.finished]);
     void settled.then(() => {

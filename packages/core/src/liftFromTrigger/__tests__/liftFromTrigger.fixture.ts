@@ -52,7 +52,7 @@ declare global {
 }
 
 document.documentElement.style.cssText =
-  '--color-overlay: rgba(1, 18, 40, 0.4); --shadow-high: 0 8px 24px rgba(0, 0, 0, 0.3); --spacing-4: 16px;';
+  '--color-overlay: rgba(1, 18, 40, 0.4); --spacing-4: 16px;';
 document.body.style.margin = '0';
 document.body.style.font = '16px sans-serif';
 const deep = Array.from(
@@ -112,8 +112,6 @@ function options(response: number): LiftFromTriggerOptions {
       lift: spring,
       drop: spring,
       clear: spring,
-      shadowIn: spring,
-      shadowOut: spring,
       surfaceIn: spring,
       surfaceOut: spring,
     },

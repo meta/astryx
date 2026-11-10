@@ -37,8 +37,6 @@ function options(
       lift: SPRING,
       drop: SPRING,
       clear: SPRING,
-      shadowIn: SPRING,
-      shadowOut: SPRING,
       surfaceIn: SPRING,
       surfaceOut: SPRING,
     },
@@ -194,14 +192,15 @@ function expectNoDocumentListeners() {
 }
 
 describe('lift', () => {
-  it('adds the layer, its shadow and anchor, and one placeholder while lifted, whatever the source holds; the source keeps its place among its siblings', () => {
+  it('adds the layer, its anchor and one placeholder while lifted, and no shadow, whatever the source holds; the source keeps its place among its siblings', () => {
     const {source, before} = renderList();
     const rest = count();
     const lift = createLiftFromTrigger();
     const result = lift.lift(source, options());
     expect(result).not.toBeNull();
-    // 13 elements lifted (the row and its 12), 4 added.
-    expect(count()).toBe(rest + 4);
+    // 13 elements lifted (the row and its 12), 3 added.
+    expect(count()).toBe(rest + 3);
+    expect(document.querySelector('[data-test-lift-shadow]')).toBeNull();
     expect(source.previousElementSibling).toBe(before);
     const placeholder = source.nextElementSibling as HTMLElement;
     expect(placeholder.hasAttribute('data-test-lift-placeholder')).toBe(true);
@@ -350,7 +349,8 @@ describe('lift', () => {
     const rest = count();
     const lift = createLiftFromTrigger();
     lift.lift(source, options());
-    expect(count()).toBe(rest + 3);
+    // The layer and its anchor only.
+    expect(count()).toBe(rest + 2);
     lift.dispose();
   });
 

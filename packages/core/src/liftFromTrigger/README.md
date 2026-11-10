@@ -24,14 +24,13 @@ or stacking ancestor cuts or covers it, and an empty placeholder after it
 holds its spot, so the page does not move. In a list the placeholder is an
 `li` that is not a list item, so the list stays valid and keeps its numbers.
 The trigger takes no hits while lifted: a tap on it is a tap on the backdrop.
-While lifted the page has four
+While lifted the page has three
 elements more, whatever the trigger holds: the lift layer (its `::backdrop`
-is the tint); the shadow, a box in the layer that follows the trigger on a
-rect morph of its own (an animated `::backdrop` of the trigger would restyle
-and lay out the page on every frame); an empty box at the lifted rect for
-the surface to be placed against (anchor positioning follows transforms, so
-a box inside the trigger would move with it); and the placeholder. The input hold's shield joins while the lift grows and
-while it closes: never more than five (`spec:AST-017` FR60, DEC-29). The
+is the tint); an empty box at the lifted rect for the surface to be placed
+against (anchor positioning follows transforms, so a box inside the trigger
+would move with it); and the placeholder. The lifted trigger casts no
+shadow. The input hold's shield joins while the lift grows and while it
+closes: never more than four (`spec:AST-017` FR60, DEC-29). The
 exit copy the surface shrinks on is the layer runtime's transient copy. At
 rest there is nothing.
 
@@ -54,7 +53,7 @@ up the page has one element more.
 ## Motion
 
 Every motion is `translate`, `scale` or `opacity` on the compositor
-(`spec:AST-094` FR5): the trigger, its shadow and the surface on the rect morph,
+(`spec:AST-094` FR5): the trigger and the surface on the rect morph,
 which continues an interrupted motion with the velocity on screen (FR6); the
 tint on the animator, as the opacity of the layer's `::backdrop`, so a drop
 while it rises turns it with its velocity too. A
