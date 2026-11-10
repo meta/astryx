@@ -2,5 +2,5 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Markdown's parser rejects the same unsafe link and image URL schemes as the renderer.
+[fix] Markdown's public parser drops every data: link and image URL, and `<Markdown>` renders data: links and images as source text.
 @cixzhang

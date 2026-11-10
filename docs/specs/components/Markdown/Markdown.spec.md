@@ -80,16 +80,23 @@ streaming behavior is the released one.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), and per-block text direction (below)
-- Compatibility class: additive, opt-in public API, with four visible
+- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), per-block text direction (below), and `data:` link and image URLs (below)
+- Compatibility class: additive, opt-in public API, with five visible
   default-path rendering changes (the FR29 diff layer, the fenced-code wrap,
-  the headerless layout, and per-block text direction, below); existing parser nodes, DOM (apart from the direction markup below), styling, targets,
+  the headerless layout, per-block text direction, and `data:` URLs, below); existing parser nodes (apart from `data:` URLs, below), DOM (apart from the direction markup below), styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, supplies
   `codeLanguages`, or passes the matching explicit parser option.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 - Additive opt-in prop (FR30): `codeLanguages` lets fences in less common languages paint with `component:CodeBlock` language modules; without it nothing changes.
+- Default-path change for `data:` URLs (`spec:AST-005/DEC-3`), a security fix
+  and not a breaking one: the parser drops every `data:` link and image URL, so
+  `<Markdown>` renders each as its source text and the public parser functions
+  no longer return a `data:` URL in `link.href` or `image.src`. A destination
+  that is blank once control characters and outer whitespace are removed is an
+  empty destination and still renders as text, or the image's alternative-text
+  fallback.
 - Default-path rendering change for diff fences (FR29), a visible default change
   and not a breaking one: a `diff` fence that rendered as plain text renders as CodeBlock's diff
   layer over plaintext with a `diff` label, and a `diff-<language>` fence —

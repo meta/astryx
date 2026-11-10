@@ -59,6 +59,8 @@ itself establish implementation or exact-head verification.
 - Defining content policy for image, media, downloaded files, CSS, fetch, or
   other embedded resource URLs. Those sinks have different capabilities and
   content-type risks; downloads from accepted link destinations stay supported.
+  Markdown image URLs are the exception: Markdown's parser decides them with
+  its link rule (DEC-3).
 - Sanitizing caller-owned JSX, custom Markdown plugin output, or arbitrary
   consumer callbacks after control has left Astryx.
 - Replacing Content Security Policy, router authorization, server validation, or
@@ -111,15 +113,17 @@ itself establish implementation or exact-head verification.
   scheme-bearing `href`, `pathname`, or `protocol` field and the destination
   those fields form. A separate protocol or an unchecked field MUST NOT provide
   a path around the rule. Accepted fields and object identity remain unchanged.
-- **FR8 — Parser and rendering checks agree for navigation.** Markdown parsing,
-  Markdown link rendering, and shared Core navigation plumbing MUST reject the
-  same blocked navigation schemes after the same normalization. Markdown MAY use
-  a stricter policy for embedded resource URLs without narrowing this navigation
-  contract.
+- **FR8 — Markdown's parser applies the shared rule and owns its URL
+  decision.** Markdown's parser MUST apply the shared navigation rule, with its
+  normalization, to every link and image destination, and MUST also reject
+  every `data:` URL (DEC-3). `<Markdown>` renders only the nodes it parsed and
+  keeps a check only at a real bypass path, if one exists. Shared Core
+  navigation plumbing outside Markdown rejects the shared blocked schemes only.
 - **IR1 — Shared exits use a shared owner.** Core components that delegate links
   or navigate imperatively MUST use one shared policy owner rather than maintain
-  component-local blocked-scheme lists. Parser-local implementations MAY remain
-  separate only while conformance tests pin the same navigation matrix.
+  component-local blocked-scheme lists. Markdown's parser calls the shared
+  policy owner and adds only its `data:` check (DEC-3); it keeps no copy of the
+  shared blocked-scheme list.
 - **IR2 — Every distinct sink has mutation-sensitive coverage.** Verification
   MUST fail when the guard is removed from native anchors, custom `href`, custom
   `to`, supported structured destinations (including `protocol`), new-tab,
@@ -159,7 +163,8 @@ Implementation and verification must cover:
    separate `protocol`, with inert rendering whenever either value is rejected;
 3. every imperative and delegated activation while preserving accepted
    destinations and consumer callbacks;
-4. conformant Markdown navigation with separate embedded-resource policy; and
+4. conformant Markdown navigation, with Markdown link and image URLs decided by
+   its parser (DEC-3); and
 5. exact-head evidence before recording completed family adoption.
 
 No component-local public prop is added. Exceptional behavior belongs in
@@ -189,7 +194,8 @@ This spec moves from `accepted` to `shipped` only when:
 - a source/member audit finds no caller-controlled Core navigation exit outside
   the family; and
 - consumer docs describe the shared outcome without implying that embedded
-  resources or caller-owned renderers receive the same policy.
+  resources other than Markdown images, or caller-owned renderers, receive the
+  same policy.
 
 ## Decision log
 
@@ -223,6 +229,8 @@ Rejected: one undifferentiated “safe URL” boolean for every URL-shaped value
 That hides material differences between navigating a document and embedding or
 fetching a resource, and would accidentally broaden or narrow unrelated public
 behavior.
+
+For Markdown links and images, superseded in part by DEC-3.
 
 ### DEC-3 — Markdown's parser owns its URL safety and blocks every data: URL
 

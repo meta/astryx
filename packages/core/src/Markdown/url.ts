@@ -10,39 +10,42 @@
 
 import {sanitizeUrl} from '../utils/safeUrl';
 
-/** Schemes the parser never keeps as a link or an image. */
-const BLOCKED_SCHEME_PATTERN = /^(?:javascript:|data:|vbscript:)/i;
+/**
+ * Markdown blocks every `data:` URL, of any media type, on top of the shared
+ * navigation rule. The test runs on the shared rule's normalized form.
+ */
+const DATA_SCHEME_PATTERN = /^data:/i;
 
-function normalizeMarkdownUrl(url: string): string {
-  // Browsers ignore embedded controls in schemes, so normalize before checking.
-  // eslint-disable-next-line no-control-regex -- control chars are the bypass
-  return url.replace(/[\x00-\x1f\x7f]/g, '').trim();
-}
-
-function hasBlockedScheme(normalized: string): boolean {
-  return BLOCKED_SCHEME_PATTERN.test(normalized);
+/**
+ * Whether the parser keeps a link or image destination: the shared navigation
+ * rule (`sanitizeUrl`) accepts it, and it is not a `data:` URL. The parser
+ * decodes the destination before this check.
+ */
+export function isSafeMarkdownParserUrl(url: string): boolean {
+  const normalized = sanitizeUrl(url);
+  return normalized !== null && !DATA_SCHEME_PATTERN.test(normalized);
 }
 
 /**
- * Whether the parser keeps a link or image destination. It rejects every
- * `javascript:`, `vbscript:`, and `data:` URL, after the parser decodes the
- * destination and after this step removes control characters and outer
- * whitespace and ignores case.
+ * The destination the parser stores: an empty string when nothing remains
+ * after the shared rule removes control characters and outer whitespace, so a
+ * blank destination renders like an empty one; otherwise the destination as
+ * written.
  */
-export function isSafeMarkdownParserUrl(url: string): boolean {
-  return !hasBlockedScheme(normalizeMarkdownUrl(url));
+export function parsedMarkdownDestination(url: string): string {
+  return sanitizeUrl(url) === '' ? '' : url;
 }
 
 /**
  * A navigation URL that does not come from parsed source, such as a plugin's
- * base URL, checked with the shared navigation rule and the parser's rule.
- * Returns the normalized URL, or null.
+ * base URL, checked with the parser's rule. Returns the normalized URL, or
+ * null.
  */
 export function sanitizeMarkdownLinkUrl(url: string): string | null {
   const normalized = sanitizeUrl(url);
   return normalized === null ||
     normalized === '' ||
-    hasBlockedScheme(normalized)
+    DATA_SCHEME_PATTERN.test(normalized)
     ? null
     : normalized;
 }
