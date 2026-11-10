@@ -773,9 +773,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // the last logical row, before that row mounts, so a number never clips.
   // Fixed layout sizes columns from the header, so rows keep their columns;
   // pinned offsets read the extra width from a table variable.
-  const sizedColumns = withLogicalPositionWidths(
-    resolvedColumns,
-    windowPlan.logicalPositionWidths,
+  // Column pitches and the inline anchor compare this array by identity.
+  const sizedColumns = useMemo(
+    () =>
+      withLogicalPositionWidths(
+        resolvedColumns,
+        windowPlan.logicalPositionWidths,
+      ),
+    [resolvedColumns, windowPlan.logicalPositionWidths],
   );
   const resolvedWidths = resolveColumnWidths(sizedColumns);
   const logicalExtraStyle: Record<string, string> = {};
@@ -822,11 +827,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
               columnsConfig.initialViewportWidth > 0
             )
           ? 'the inline viewport seed must be a positive finite CSS pixel width'
-          : rowsCapability != null
-            ? 'windowing rows and columns together comes in a later release'
-            : !hasFloorMinWidth
-              ? 'a table min-width wider than the column floors changes the column pitch'
-              : undefined);
+          : !hasFloorMinWidth
+            ? 'a table min-width wider than the column floors changes the column pitch'
+            : undefined);
   }
   useDevWarningPerMessage(
     'Table',
@@ -852,6 +855,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const columnSegments = columnWindow.isWindowed
     ? columnWindow.segments
     : undefined;
+  // A row gap spans every cell of a mounted row: pinned cells, spacers and
+  // mounted columns.
+  const mountedCellCount =
+    columnSegments?.reduce(
+      (count, segment) =>
+        count + (segment.type === 'gap' ? 1 : segment.end - segment.start),
+      0,
+    ) ?? resolvedColumns.length;
   // Admitted column windowing keeps content single-line at every width, so
   // rows keep their height as the viewport crosses the table minimum width.
   const textOverflow =
@@ -1088,7 +1099,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                         key={`gap:${segment.start}:${segment.end}`}
                         aria-hidden="true">
                         <td
-                          colSpan={resolvedColumns.length}
+                          colSpan={mountedCellCount}
                           {...stylex.props(styles.spacer(segment.height))}
                         />
                       </tr>,
@@ -1144,7 +1155,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
               : data != null &&
                 emptyState !== false && (
                   <tr>
-                    <td colSpan={resolvedColumns.length}>
+                    <td colSpan={mountedCellCount}>
                       {emptyState ?? (
                         <EmptyState
                           title={t('@astryx.table.noData')}

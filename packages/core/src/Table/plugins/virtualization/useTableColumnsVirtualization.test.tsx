@@ -428,20 +428,6 @@ describe('column windowing admission', () => {
     expect(warnings(warn).join('\n')).toContain('min-width');
   });
 
-  it('keeps row windowing, renders every column and names the later release when both capabilities are present', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {container} = render(<Fixture hasRows />);
-    expectEveryColumn(container);
-    // Rows still window: ceil(240 / 48) plus four of overscan.
-    const rows = Array.from(container.querySelectorAll('tbody > tr')).filter(
-      row => row.getAttribute('aria-hidden') !== 'true',
-    );
-    expect(rows).toHaveLength(9);
-    expect(warnings(warn).join('\n')).toContain(
-      'windowing rows and columns together',
-    );
-  });
-
   it('accepts a list with one rows capability alone', () => {
     function RowsList() {
       const rows = useTableRowsVirtualization({
@@ -532,6 +518,20 @@ function controlledViewport(width = 500) {
   ) {
     return isArea(this) ? left : 0;
   });
+  let top = 0;
+  vi.spyOn(Element.prototype, 'scrollTop', 'get').mockImplementation(function (
+    this: Element,
+  ) {
+    return isArea(this) ? top : 0;
+  });
+  vi.spyOn(Element.prototype, 'scrollTop', 'set').mockImplementation(function (
+    this: Element,
+    value: number,
+  ) {
+    if (isArea(this)) {
+      top = value;
+    }
+  });
   vi.spyOn(Element.prototype, 'scrollLeft', 'set').mockImplementation(function (
     this: Element,
     value: number,
@@ -550,6 +550,10 @@ function controlledViewport(width = 500) {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
   }
+  async function scrollBoth(nextLeft: number, nextTop: number) {
+    top = nextTop;
+    await scrollTo(nextLeft);
+  }
   async function landWrites() {
     await act(async () => {
       document
@@ -558,7 +562,7 @@ function controlledViewport(width = 500) {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
   }
-  return {scrollTo, landWrites, writes, getLeft: () => left};
+  return {scrollTo, scrollBoth, landWrites, writes, getLeft: () => left};
 }
 
 /** Body cells take focus, as a cell control would. */
@@ -739,5 +743,95 @@ describe('first-visible-column anchor', () => {
     // 1900px into the run, half hidden.
     expect(viewport.getLeft()).toBe(1950);
     expect(mountedKeys(container)).toEqual(keys(0, ...range(18, 27)));
+  });
+});
+
+describe('rows and columns windowing together', () => {
+  const manyRows: Item[] = Array.from({length: 100}, (_, row) => {
+    const item: Item = {id: `many-${row}`};
+    for (let i = 0; i < COLUMN_COUNT; i++) {
+      item[`c${i}`] = `${row}:${i}`;
+    }
+    return item;
+  });
+  function mountedRows(container: HTMLElement): HTMLTableRowElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLTableRowElement>('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+  }
+  function gapCells(container: HTMLElement): HTMLTableCellElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLTableCellElement>(
+        'tbody > tr[aria-hidden="true"] > td',
+      ),
+    );
+  }
+
+  it('windows both axes with full-table row and column positions, and no fallback warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = render(<Fixture hasRows items={manyRows} />);
+    const table = container.querySelector('table');
+    expect(table).toHaveAttribute('aria-rowcount', '101');
+    expect(table).toHaveAttribute('aria-colcount', String(COLUMN_COUNT));
+    const rows = mountedRows(container);
+    // ceil(240 / 48) rows plus four of overscan; five columns plus two.
+    expect(rows).toHaveLength(9);
+    expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
+    expect(rows[8]).toHaveAttribute('aria-rowindex', '10');
+    expect(
+      Array.from(rows[3].cells)
+        .filter(cell => !isSpacer(cell))
+        .map(cell => cell.getAttribute('aria-colindex')),
+    ).toEqual(range(1, 8).map(String));
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 7)));
+    expect(
+      warn.mock.calls.map(call => call.join(' ')).join('\n'),
+    ).not.toContain('Column windowing');
+  });
+
+  it('spans each row gap across exactly the mounted column structure', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(
+      <Fixture hasRows items={manyRows} startKeys={['c0']} endKeys={['c39']} />,
+    );
+    const seedCells = headerCells(container).length;
+    expect(gapCells(container).map(cell => cell.colSpan)).toEqual([seedCells]);
+    await settle();
+    await viewport.scrollBoth(2000, 2400);
+    const header = headerCells(container);
+    // Pinned c0, a spacer, the range, a spacer and pinned c39.
+    expect(header.filter(isSpacer)).toHaveLength(2);
+    const gaps = gapCells(container);
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const gap of gaps) {
+      expect(gap.colSpan).toBe(header.length);
+      expect(gap.textContent).toBe('');
+    }
+    for (const row of mountedRows(container)) {
+      expect(Array.from(row.cells).map(isSpacer)).toEqual(header.map(isSpacer));
+    }
+  });
+
+  it('keeps a focused cell row and column when both scroll away, and the same element when they return', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(
+      <Fixture hasRows items={manyRows} extraPlugins={{focusableCells}} />,
+    );
+    await settle();
+    const cell = bodyCell(container, 0, 1);
+    expect(cell).not.toBeNull();
+    act(() => cell?.focus());
+    await viewport.scrollBoth(2000, 2400);
+    const rows = mountedRows(container);
+    // Row 1 stays as the island before the window from row 47.
+    expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
+    expect(rows[1]).toHaveAttribute('aria-rowindex', '48');
+    expect(rows[0].contains(cell)).toBe(true);
+    expect(mountedKeys(container)).toEqual(keys(1, ...range(18, 27)));
+    expect(document.activeElement).toBe(cell);
+    expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
+    await viewport.scrollBoth(0, 0);
+    expect(document.activeElement).toBe(cell);
+    expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });
 });
