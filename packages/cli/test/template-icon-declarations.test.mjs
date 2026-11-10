@@ -86,6 +86,9 @@ describe('bundled template icon declarations', () => {
       source: fs.readFileSync(template.filePath, 'utf-8'),
       declared: template.icons ?? {},
     }));
-    expect(undeclaredTemplateIcons(templates)).toEqual([]);
+    expect(undeclaredTemplateIcons(templates)).toEqual({
+      undeclared: [],
+      unchecked: [],
+    });
   }, 60_000);
 });

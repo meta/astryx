@@ -3,7 +3,8 @@
 /**
  * @file `integration check` notes each icon a template imports but does not
  * declare in its `icons` (`template_icon_undeclared`), in a package whose
- * templates declare `icons`. The note is marked `next`: it fails
+ * templates declare `icons`. A generic renderer, and an import matched by its
+ * name only, are listed as not checked instead. The note is marked `next`: it fails
  * `--strict --next` and leaves `--strict` as it was. A package that never
  * declares `icons` sees no change.
  */
@@ -106,31 +107,73 @@ describe('template_icon_undeclared', () => {
     );
   }, 60_000);
 
-  it('keeps --strict passing for a package that imports Icon from lucide-react', async () => {
+  it('lists Icon and DynamicIcon from lucide-react, matched by name only, as not checked, and --strict --next passes', async () => {
     writePackage(
       ", icons: {TrashIcon: 'delete'}",
       [
-        "import {Icon} from 'lucide-react';",
+        "import {Icon, DynamicIcon} from 'lucide-react';",
         "import {TrashIcon} from '@acme/glyphs';",
-        'export default function AcmeBar() { return <><Icon iconNode={[]} /><TrashIcon /></>; }',
+        'export default function AcmeBar() { return <><Icon iconNode={[]} /><DynamicIcon name="trash" /><TrashIcon /></>; }',
         '',
       ].join('\n'),
     );
     const data = await validated();
-    expect(undeclaredNotes(data)).toEqual([
-      expect.objectContaining({
-        next: true,
-        message: expect.stringContaining('"Icon" from lucide-react'),
-      }),
-    ]);
-    const strict = await integrationCheck({cwd: dir, strict: true});
+    expect(undeclaredNotes(data)).toEqual([]);
+    expect(data.templateIcons).toEqual({
+      status: 'checked',
+      findings: [],
+      unchecked: [
+        expect.objectContaining({
+          file: 'templates/acme-bar.tsx',
+          icon: 'Icon',
+          module: 'lucide-react',
+          reason: expect.stringContaining('generic renderer'),
+        }),
+        expect.objectContaining({icon: 'DynamicIcon', module: 'lucide-react'}),
+      ],
+    });
+    const strictNext = await integrationCheck({
+      cwd: dir,
+      strict: true,
+      next: true,
+    });
     // The temporary package has no TypeScript, so the doc-type check skips.
     expect(
-      strict.data.failures.filter(
+      strictNext.data.failures.filter(
         (/** @type {{code: string}} */ each) =>
           each.code !== 'doc_types_skipped',
       ),
     ).toEqual([]);
+    expect(strictNext.data.unchecked).toBeGreaterThanOrEqual(2);
+  }, 60_000);
+
+  it('notes a one-icon import from the module the package declares icons from, and lists its generic renderers as not checked', async () => {
+    writePackage(
+      ", icons: {Trash2: 'delete'}",
+      [
+        "import {Trash2, Scissors, Icon, DynamicIcon} from 'lucide-react';",
+        'export default function AcmeBar() { return <><Trash2 /><Scissors /><Icon iconNode={[]} /><DynamicIcon name="x" /></>; }',
+        '',
+      ].join('\n'),
+    );
+    const data = await validated();
+    expect(
+      undeclaredNotes(data).map((/** @type {any} */ note) => note.message),
+    ).toEqual([
+      expect.stringContaining('imports icon "Scissors" from lucide-react'),
+    ]);
+    expect(data.templateIcons.unchecked).toEqual([
+      expect.objectContaining({
+        icon: 'Icon',
+        module: 'lucide-react',
+        reason: expect.stringContaining('generic renderer'),
+      }),
+      expect.objectContaining({
+        icon: 'DynamicIcon',
+        module: 'lucide-react',
+        reason: expect.stringContaining('generic renderer'),
+      }),
+    ]);
   }, 60_000);
 
   it('says nothing in a package whose templates declare no icons', async () => {
@@ -147,7 +190,7 @@ describe('template_icon_undeclared', () => {
 });
 
 describe('undeclaredTemplateIcons', () => {
-  it('counts a name ending in Icon, and any import from a module another template declares an icon from', () => {
+  it('counts any import from a module another template declares an icon from, and lists a name ending in Icon from another module as not checked', () => {
     expect(
       undeclaredTemplateIcons([
         {
@@ -163,11 +206,35 @@ describe('undeclaredTemplateIcons', () => {
           declared: {},
         },
       ]),
-    ).toEqual([
-      {id: 'a', key: 'Cut', module: 'glyphs'},
-      {id: 'a', key: 'HomeIcon', module: 'other'},
-      {id: 'b', key: 'Scan', module: 'glyphs'},
-    ]);
+    ).toEqual({
+      undeclared: [
+        {id: 'a', key: 'Cut', module: 'glyphs'},
+        {id: 'b', key: 'Scan', module: 'glyphs'},
+      ],
+      unchecked: [{id: 'a', key: 'HomeIcon', module: 'other', why: 'name'}],
+    });
+  });
+
+  it('lists a bare Icon, and a name every JSX use of which passes an icon prop, as not checked whatever its module', () => {
+    expect(
+      undeclaredTemplateIcons([
+        {
+          id: 'a',
+          source:
+            'import {Trash, Cut, Icon, Dynamic, Pick} from \'glyphs\';\nconst x = <><Dynamic name="a" /><Dynamic src="b" /><Pick icon={Trash} /><Pick /><Cut /></>;\n',
+          declared: {Trash: 'delete'},
+        },
+      ]),
+    ).toEqual({
+      undeclared: [
+        {id: 'a', key: 'Cut', module: 'glyphs'},
+        {id: 'a', key: 'Pick', module: 'glyphs'},
+      ],
+      unchecked: [
+        {id: 'a', key: 'Icon', module: 'glyphs', why: 'renderer'},
+        {id: 'a', key: 'Dynamic', module: 'glyphs', why: 'renderer'},
+      ],
+    });
   });
 
   it('never counts an import from an Astryx package', () => {
@@ -180,6 +247,6 @@ describe('undeclaredTemplateIcons', () => {
           declared: {},
         },
       ]),
-    ).toEqual([]);
+    ).toEqual({undeclared: [], unchecked: []});
   });
 });

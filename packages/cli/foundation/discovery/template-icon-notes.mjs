@@ -8,12 +8,15 @@
  * the template's source binds can never map to a project's icon set, so each
  * one gets a note with its fix. An icon the template imports but does not
  * declare never maps either: in a package whose templates declare `icons`,
- * each one gets a note too, which `validate` marks `next`.
+ * each one gets a note too, which `validate` marks `next`. A generic
+ * renderer, and an import that matches an icon by its name only, are listed
+ * as not checked instead.
  *
  * @input A loaded integration (absolute roots) and its package directory.
- * @output One `template_icon_not_imported` note per such key, and one
- *   `template_icon_undeclared` note per undeclared icon. A note is never an
- *   error or a warning, even under `--strict`.
+ * @output One `template_icon_not_imported` note per such key, one
+ *   `template_icon_undeclared` note per undeclared icon, and each generic
+ *   renderer or import matched by its name only, as not checked. A note is never an error or a
+ *   warning, even under `--strict`.
  * @position foundation/discovery; read by `doctor integration validate` (and
  *   so `integration check`) for the package being authored.
  */
@@ -92,22 +95,45 @@ export async function templateIconNotes(loaded, packageDir) {
 }
 
 /**
- * One note per icon a template imports but does not declare in `icons`.
- * Only a package whose templates declare `icons` gets them: a package that
- * never labels its icons sees no change.
+ * One item the undeclared-icon check could not judge.
+ * @typedef {object} TemplateIconUnchecked
+ * @property {string} file the template, relative to the package
+ * @property {string} icon the imported name
+ * @property {string} module the module it is imported from
+ * @property {string} reason why, and what would let the check judge it
+ */
+
+/**
+ * One note per icon a template imports but does not declare in `icons`, and
+ * each import the check cannot judge. Only a package whose templates declare
+ * `icons` gets either: a package that never labels its icons sees no change.
  * @param {any} loaded a loaded integration (absolute roots)
  * @param {string} packageDir
- * @returns {Promise<Array<{code: string, message: string}>>}
+ * @returns {Promise<{notes: Array<{code: string, message: string}>, unchecked: TemplateIconUnchecked[]}>}
  */
 export async function templateIconUndeclaredNotes(loaded, packageDir) {
   const read = (await readTemplates(loaded, packageDir)).map(each => ({
     ...each,
     declared: each.declared ?? {},
   }));
-  if (!read.some(each => Object.keys(each.declared).length > 0)) return [];
+  if (!read.some(each => Object.keys(each.declared).length > 0)) {
+    return {notes: [], unchecked: []};
+  }
   const docOf = new Map(read.map(each => [each.id, each.docPath]));
-  return undeclaredTemplateIcons(read).map(({id, key, module}) => ({
-    code: TEMPLATE_ICON_UNDECLARED,
-    message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<definition>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the definitions).`,
-  }));
+  const {undeclared, unchecked} = undeclaredTemplateIcons(read);
+  return {
+    notes: undeclared.map(({id, key, module}) => ({
+      code: TEMPLATE_ICON_UNDECLARED,
+      message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<definition>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the definitions).`,
+    })),
+    unchecked: unchecked.map(({id, key, module, why}) => ({
+      file: id,
+      icon: key,
+      module,
+      reason:
+        why === 'renderer'
+          ? `"${key}" is a generic renderer: it is a bare \`Icon\`, or every use gives it an icon prop, so it draws no one icon definition and needs no \`icons\` key.`
+          : `"${key}" matches an icon by its name only: no template in the package declares an icon from ${module}, so the check cannot tell whether it draws one icon definition. Declare an icon from ${module} in a template's \`icons\` to have its imports checked.`,
+    })),
+  };
 }

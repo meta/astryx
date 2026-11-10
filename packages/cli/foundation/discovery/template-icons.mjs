@@ -500,12 +500,13 @@ function declaredKey(specifier) {
 
 /**
  * Every binding in a parsed module that a declared key can name: each import
- * specifier (with whether it is type-only) and each named re-export.
+ * specifier (with its local name and whether it is type-only) and each
+ * named re-export.
  * @param {any} ast
- * @returns {Array<{key: string, module: string, export: string, form: 'named' | 'default' | 'namespace' | 'type' | 're-export'}>}
+ * @returns {Array<{key: string, local?: string, module: string, export: string, form: 'named' | 'default' | 'namespace' | 'type' | 're-export'}>}
  */
 function iconBindings(ast) {
-  /** @type {Array<{key: string, module: string, export: string, form: 'named' | 'default' | 'namespace' | 'type' | 're-export'}>} */
+  /** @type {Array<{key: string, local?: string, module: string, export: string, form: 'named' | 'default' | 'namespace' | 'type' | 're-export'}>} */
   const found = [];
   for (const node of ast.program.body) {
     if (node.type === 'ImportDeclaration') {
@@ -515,6 +516,7 @@ function iconBindings(ast) {
           node.importKind === 'type' || specifier.importKind === 'type';
         found.push({
           key: declaredKey(specifier),
+          local: specifier.local.name,
           module,
           export: importedName(specifier),
           form: typeOnly
@@ -570,13 +572,42 @@ function isPackageModule(module) {
   return !/^(?:\.|\/|node:)/u.test(module);
 }
 
+/** The props that choose which icon a generic renderer draws. */
+const ICON_CHOOSING_PROPS = new Set(['icon', 'iconNode', 'name', 'src']);
+
+/**
+ * The local names every JSX use of which passes an icon-choosing prop, as
+ * `<DynamicIcon name="trash" />` does. A name with no JSX use is left out.
+ * @param {any} ast
+ * @returns {Set<string>}
+ */
+function iconPropRenderers(ast) {
+  /** @type {Map<string, boolean>} local name → every use passes one */
+  const uses = new Map();
+  walk(ast.program, node => {
+    if (node.type !== 'JSXOpeningElement' || node.name.type !== 'JSXIdentifier')
+      return;
+    const chooses = node.attributes.some(
+      (/** @type {any} */ attribute) =>
+        attribute.type === 'JSXAttribute' &&
+        attribute.name.type === 'JSXIdentifier' &&
+        ICON_CHOOSING_PROPS.has(attribute.name.name),
+    );
+    const name = node.name.name;
+    uses.set(name, (uses.get(name) ?? true) && chooses);
+  });
+  return new Set([...uses].filter(([, every]) => every).map(([name]) => name));
+}
+
 /**
  * The value imports a template takes from other packages, as the keys its
  * `icons` uses: a named import by the name it imports, a default import by
  * its local name. Astryx's own packages, relative files, namespace imports,
- * and type-only imports are left out. Null when the source does not parse.
+ * and type-only imports are left out. `renderer` marks a generic renderer:
+ * the key is `Icon`, or every JSX use passes an icon-choosing prop. Null
+ * when the source does not parse.
  * @param {string} source
- * @returns {Array<{key: string, module: string}> | null}
+ * @returns {Array<{key: string, module: string, renderer: boolean}> | null}
  */
 export function packageImports(source) {
   let ast;
@@ -585,6 +616,7 @@ export function packageImports(source) {
   } catch {
     return null;
   }
+  const renderers = iconPropRenderers(ast);
   return iconBindings(ast)
     .filter(
       binding =>
@@ -592,16 +624,23 @@ export function packageImports(source) {
         isPackageModule(binding.module) &&
         !isAstryxModule(binding.module),
     )
-    .map(({key, module}) => ({key, module}));
+    .map(({key, local, module}) => ({
+      key,
+      module,
+      renderer: key === 'Icon' || renderers.has(local ?? key),
+    }));
 }
 
 /**
- * The icons each template imports but does not declare in its `icons`. A
- * package import is an icon when its key ends in `Icon`, or when it comes
- * from a module that some template declares an icon from (an icon library).
- * Only templates that parse are read.
+ * The icons each template imports but does not declare in its `icons`. An
+ * import is undeclared when it comes from a module that some template
+ * declares an icon from (an icon library). The check cannot tell that an
+ * import draws one icon definition when it is a generic renderer, or when it
+ * comes from any other package and only its key ends in `Icon`, so it lists
+ * those as not checked (`architecture:cli-surface` DEC-7). Only templates
+ * that parse are read.
  * @param {Array<{id: string, source: string, declared: Record<string, string>}>} templates
- * @returns {Array<{id: string, key: string, module: string}>}
+ * @returns {{undeclared: Array<{id: string, key: string, module: string}>, unchecked: Array<{id: string, key: string, module: string, why: 'renderer' | 'name'}>}}
  */
 export function undeclaredTemplateIcons(templates) {
   const read = templates.flatMap(template => {
@@ -617,15 +656,21 @@ export function undeclaredTemplateIcons(templates) {
     ),
   );
   /** @type {Array<{id: string, key: string, module: string}>} */
-  const found = [];
+  const undeclared = [];
+  /** @type {Array<{id: string, key: string, module: string, why: 'renderer' | 'name'}>} */
+  const unchecked = [];
   for (const template of read) {
     for (const each of template.imports) {
       if (Object.hasOwn(template.declared, each.key)) continue;
-      if (!/Icon$/u.test(each.key) && !iconModules.has(each.module)) continue;
-      found.push({id: template.id, key: each.key, module: each.module});
+      const iconLike = iconModules.has(each.module) || /Icon$/u.test(each.key);
+      if (!iconLike) continue;
+      const found = {id: template.id, key: each.key, module: each.module};
+      if (each.renderer) unchecked.push({...found, why: 'renderer'});
+      else if (iconModules.has(each.module)) undeclared.push(found);
+      else unchecked.push({...found, why: 'name'});
     }
   }
-  return found;
+  return {undeclared, unchecked};
 }
 
 /**

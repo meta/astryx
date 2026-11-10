@@ -126,6 +126,8 @@ export {validateLoadedIntegration, isListedIssue};
  * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
  *   what the public-import check could not judge
+ * @property {import('../../foundation/discovery/template-icon-notes.mjs').TemplateIconUnchecked[]} [templateIconsUnchecked]
+ *   the template icon imports the undeclared-icon check could not judge
  */
 
 /**
@@ -561,10 +563,12 @@ async function validateAtPackageDir(
     // templates declare `icons`: a note until the next minor makes it a
     // warning.
     const undeclared = await templateIconUndeclaredNotes(loaded, packageDir);
-    if (undeclared.length > 0)
+    if (undeclared.notes.length > 0)
       (result.notes ??= []).push(
-        ...undeclared.map(note => ({...note, next: true})),
+        ...undeclared.notes.map(note => ({...note, next: true})),
       );
+    if (undeclared.unchecked.length > 0)
+      result.templateIconsUnchecked = undeclared.unchecked;
   }
 
   return result;
@@ -953,6 +957,16 @@ export async function validateIntegration(pkg, options = {}) {
               status: 'checked',
               findings: [],
               unchecked: examples.unchecked,
+            },
+          }
+        : {}),
+      // Template icon imports matched by name only: listed, never failed on.
+      ...(result.found && result.templateIconsUnchecked
+        ? {
+            templateIcons: {
+              status: 'checked',
+              findings: [],
+              unchecked: result.templateIconsUnchecked,
             },
           }
         : {}),

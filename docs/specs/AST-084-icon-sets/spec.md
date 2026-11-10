@@ -261,9 +261,11 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   source never imports (`template_icon_not_imported`), never counted or
   failing, under `--strict` or `--next`. In a package whose templates declare
   `icons`, it notes each icon a template imports but does not declare
-  (`template_icon_undeclared`): an import from another package whose name
-  ends in `Icon`, or from a module some template in the package declares an
-  icon from. The note is marked `next` (`architecture:cli-surface` DEC-11):
+  (`template_icon_undeclared`): an import from a module some template in
+  the package declares an icon from; an import from another package whose
+  name ends in `Icon` matches by name only and is listed as not checked, and
+  a generic renderer (a bare `Icon`, or one every use gives an icon prop) is
+  listed as not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
   it fails `--strict --next`, and `--strict` does not fail on it. A package
   whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
   declared.
