@@ -7,7 +7,7 @@
  * @position Colocated Table column virtualization runtime coverage
  */
 import {afterEach, describe, it, expect, vi} from 'vitest';
-import {act, cleanup, render, renderHook} from '@testing-library/react';
+import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as TableApi from '@astryxdesign/core/Table';
 import {Table} from '../../Table';
@@ -501,5 +501,243 @@ describe('column windowing admission', () => {
       text.includes('virtualization list'),
     );
     expect(listWarnings).toHaveLength(3);
+  });
+});
+
+/**
+ * A measured scroll area whose inline position the test moves. A write to
+ * scrollLeft records the anchor's request and lands, as a browser scroll does.
+ */
+function controlledViewport(width = 500) {
+  let left = 0;
+  const writes: number[] = [];
+  const isArea = (el: Element) => el.matches('[role="group"]');
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return isArea(this) ? 300 : 0;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return isArea(this) ? width : 0;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return isArea(this) ? 4000 : 0;
+    },
+  );
+  vi.spyOn(Element.prototype, 'scrollLeft', 'get').mockImplementation(function (
+    this: Element,
+  ) {
+    return isArea(this) ? left : 0;
+  });
+  vi.spyOn(Element.prototype, 'scrollLeft', 'set').mockImplementation(function (
+    this: Element,
+    value: number,
+  ) {
+    if (isArea(this)) {
+      writes.push(value);
+      left = value;
+    }
+  });
+  async function scrollTo(next: number) {
+    left = next;
+    await act(async () => {
+      document
+        .querySelector('[role="group"]')
+        ?.dispatchEvent(new Event('scroll'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+  }
+  async function landWrites() {
+    await act(async () => {
+      document
+        .querySelector('[role="group"]')
+        ?.dispatchEvent(new Event('scroll'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+  }
+  return {scrollTo, landWrites, writes, getLeft: () => left};
+}
+
+/** Body cells take focus, as a cell control would. */
+const focusableCells: TablePlugin<Item> = {
+  rowModel: 'flat',
+  transformBodyCell: props => ({
+    ...props,
+    htmlProps: {...props.htmlProps, tabIndex: 0},
+  }),
+};
+function bodyCell(container: HTMLElement, row: number, column: number) {
+  return container.querySelector<HTMLElement>(
+    `tbody > tr:nth-child(${row + 1}) > td[aria-colindex="${column + 1}"]`,
+  );
+}
+
+describe('retained focused column', () => {
+  it('keeps the focused cell, with its original element, mounted while its column scrolls out and back', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(<Fixture extraPlugins={{focusableCells}} />);
+    await settle();
+    const cell = bodyCell(container, 0, 1);
+    expect(cell).not.toBeNull();
+    act(() => cell?.focus());
+    expect(document.activeElement).toBe(cell);
+    await viewport.scrollTo(2000);
+    // The range is c18..c26; c1 stays as the one discontiguous column.
+    expect(mountedKeys(container)).toEqual(keys(1, ...range(18, 27)));
+    expect(document.activeElement).toBe(cell);
+    // Three spacers: before c1, between c1 and the range, after the range.
+    const header = headerCells(container);
+    expect(header.filter(isSpacer)).toHaveLength(3);
+    expect(header.map(isSpacer)).toEqual([
+      true,
+      false,
+      true,
+      ...range(18, 27).map(() => false),
+      true,
+    ]);
+    expect(header[0].getAttribute('style') ?? '').toContain('100px');
+    expect(header[2].getAttribute('style') ?? '').toContain('1600px');
+    for (const row of Array.from(container.querySelectorAll('tbody > tr'))) {
+      expect(Array.from(row.children).map(isSpacer)).toEqual(
+        header.map(isSpacer),
+      );
+    }
+    expect(bodyCell(container, 0, 1)).toBe(cell);
+    await viewport.scrollTo(0);
+    expect(document.activeElement).toBe(cell);
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 7)));
+  });
+
+  it('releases the column when focus leaves the table', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(
+      <>
+        <Fixture extraPlugins={{focusableCells}} />
+        <button type="button">Outside</button>
+      </>,
+    );
+    await settle();
+    act(() => bodyCell(container, 0, 1)?.focus());
+    await viewport.scrollTo(2000);
+    expect(mountedKeys(container)).toContain('c1');
+    act(() => screen.getByRole('button', {name: 'Outside'}).focus());
+    expect(mountedKeys(container)).toEqual(keys(...range(18, 27)));
+  });
+
+  it('transfers retention to the newly focused column', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(<Fixture extraPlugins={{focusableCells}} />);
+    await settle();
+    act(() => bodyCell(container, 0, 1)?.focus());
+    await viewport.scrollTo(2000);
+    const next = bodyCell(container, 2, 20);
+    act(() => next?.focus());
+    expect(mountedKeys(container)).toEqual(keys(...range(18, 27)));
+    await viewport.scrollTo(0);
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 7), 20));
+    expect(document.activeElement).toBe(next);
+  });
+
+  it('returns focus to the scroll area when the focused column is removed', async () => {
+    const viewport = controlledViewport();
+    const {container, rerender} = render(
+      <Fixture extraPlugins={{focusableCells}} />,
+    );
+    await settle();
+    act(() => bodyCell(container, 0, 1)?.focus());
+    await viewport.scrollTo(2000);
+    rerender(
+      <Fixture
+        extraPlugins={{focusableCells}}
+        tableColumns={columns.filter(column => column.key !== 'c1')}
+      />,
+    );
+    await settle();
+    expect(document.activeElement).toBe(
+      container.querySelector('[role="group"]'),
+    );
+  });
+});
+
+describe('first-visible-column anchor', () => {
+  // 2050px into a run of 100px columns: c20 is first visible, half shown.
+  async function mountAt(
+    viewport: ReturnType<typeof controlledViewport>,
+    props: FixtureProps = {},
+  ) {
+    const result = render(<Fixture {...props} />);
+    await settle();
+    await viewport.scrollTo(2050);
+    return result;
+  }
+
+  it('keeps the first visible column and its offset when an earlier column moves to the end', async () => {
+    const viewport = controlledViewport();
+    const {rerender, container} = await mountAt(viewport);
+    rerender(<Fixture tableColumns={[...columns.slice(1), columns[0]]} />);
+    await viewport.landWrites();
+    // c20 now starts at 1900px; half of it stays hidden.
+    expect(viewport.getLeft()).toBe(1950);
+    expect(mountedKeys(container)[2]).toBe('c20');
+  });
+
+  it('keeps the first visible column and its offset when earlier columns widen', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = await mountAt(viewport);
+    rerender(
+      <Fixture
+        tableColumns={columns.map((column, index) =>
+          index < 10 ? {...column, width: pixel(150)} : column,
+        )}
+      />,
+    );
+    await viewport.landWrites();
+    expect(viewport.getLeft()).toBe(2550);
+  });
+
+  it('keeps the fractional offset when the anchor column itself widens', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = await mountAt(viewport);
+    rerender(
+      <Fixture
+        tableColumns={columns.map(column =>
+          column.key === 'c20' ? {...column, width: pixel(200)} : column,
+        )}
+      />,
+    );
+    await viewport.landWrites();
+    // Half of a 200px column.
+    expect(viewport.getLeft()).toBe(2100);
+  });
+
+  it('keeps the anchor when an earlier column is hidden, and moves to the next column when the anchor is hidden', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = await mountAt(viewport);
+    const withoutC5 = columns.filter(column => column.key !== 'c5');
+    rerender(<Fixture tableColumns={withoutC5} />);
+    await viewport.landWrites();
+    expect(viewport.getLeft()).toBe(1950);
+    rerender(
+      <Fixture
+        tableColumns={withoutC5.filter(column => column.key !== 'c20')}
+      />,
+    );
+    await viewport.landWrites();
+    // c21 takes c20's place at 1900px, with the same fraction.
+    expect(viewport.getLeft()).toBe(1950);
+  });
+
+  it('keeps the first visible column when an earlier column is pinned', async () => {
+    const viewport = controlledViewport();
+    const {rerender, container} = await mountAt(viewport);
+    rerender(<Fixture startKeys={['c0']} />);
+    await viewport.landWrites();
+    // The run now starts at c1, behind the pinned 100px c0: c20 starts
+    // 1900px into the run, half hidden.
+    expect(viewport.getLeft()).toBe(1950);
+    expect(mountedKeys(container)).toEqual(keys(0, ...range(18, 27)));
   });
 });

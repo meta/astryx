@@ -834,13 +834,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
     columnFallbackReason != null,
   );
   const pinnedRuns = resolvePinnedColumnRuns(plugins, resolvedColumns);
+  const columnKeys = useMemo(
+    () => resolvedColumns.map(column => column.key),
+    [resolvedColumns],
+  );
   const columnWindow = useTableColumnWindow({
     config: columnsConfig,
     isAdmitted: columnsConfig != null && columnFallbackReason == null,
     widths: columnPitches,
     startCount: pinnedRuns.startCount,
     endCount: pinnedRuns.endCount,
+    columnKeys,
     table: runtime.table,
+    viewport: runtime.viewport,
     geometry: runtime.geometry,
   });
   const columnSegments = columnWindow.isWindowed
@@ -1039,7 +1045,21 @@ function BaseTableInner<T extends Record<string, unknown>>({
           .join(' ') || undefined,
         tableStyle,
       )}
-      {...rest}>
+      {...rest}
+      {...(columnWindow.isActive
+        ? {
+            onFocus: (event: React.FocusEvent<HTMLTableElement>) => {
+              tableRenderProps.htmlProps.onFocus?.(event);
+              rest.onFocus?.(event);
+              columnWindow.onFocus(event);
+            },
+            onBlur: (event: React.FocusEvent<HTMLTableElement>) => {
+              tableRenderProps.htmlProps.onBlur?.(event);
+              rest.onBlur?.(event);
+              columnWindow.onBlur(event);
+            },
+          }
+        : null)}>
       {children ? (
         children
       ) : (
