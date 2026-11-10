@@ -47,7 +47,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {announceInModal} from '../hooks/useAnnounce';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
@@ -147,9 +147,10 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
    * Enable zoom (images only). A pinch or a ctrl-wheel zooms about the
    * fingers or the pointer. A double tap fills the viewer and a double-click
    * zooms 2×, about that point, and the next goes back. Enter, Space, `+` and
-   * `-` zoom 2× about the centre and back. When zoomed, drag or scroll a
-   * trackpad to pan, or use the arrow keys. On a phone or a tablet, the pan
-   * has momentum. The gestures work for every pointer.
+   * `-` zoom 2× about the centre and back, and `0` returns to the fitted
+   * size. When zoomed, drag or scroll a trackpad to pan, or use the arrow
+   * keys. On a phone or a tablet, the pan has momentum. The gestures work
+   * for every pointer.
    * @default false
    */
   hasZoom?: boolean;
@@ -470,7 +471,7 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 const VIDEO_CONTROLS_BAND = 48;
 
 /**
- * A fullscreen overlay for viewing images at full resolution.
+ * A fullscreen overlay for viewing images and videos at full resolution.
  *
  * Supports single image and gallery modes. In gallery mode, it provides
  * prev/next navigation via buttons and arrow keys. The arrow keys follow the
@@ -480,10 +481,11 @@ const VIDEO_CONTROLS_BAND = 48;
  * Optionally supports zoom like a photo viewer. A pinch or a ctrl-wheel zooms
  * about the fingers or the pointer, gives past the limits and springs back. A
  * double tap or a double-click zooms in at that point and back. Enter or
- * Space on the image, and `+` or `-` from the keyboard, zoom too. When zoomed,
- * a drag or a trackpad's scroll pans. On a phone or a tablet, the pan has
- * momentum and a rubber band at the edges. The arrow keys pan a zoomed photo
- * and navigate the gallery otherwise.
+ * Space on the image, and `+` or `-` from the keyboard, zoom too, and `0`
+ * returns to the fitted size. When zoomed, a drag or a trackpad's scroll
+ * pans. On a phone or a tablet, the pan has momentum and a rubber band at the
+ * edges. The arrow keys pan a zoomed photo and navigate the gallery
+ * otherwise.
  *
  * Uses the native `<dialog>` element with `showModal()` for focus
  * trapping and top-layer placement. Dismiss via Escape, close button,
@@ -600,7 +602,14 @@ export function Lightbox({
   // already-open session — not on mount, not when opening (even at a new
   // index, since the dialog's aria-label already names the current image), and
   // not on close.
-  const announce = useAnnounce();
+  // While the modal viewer is open, a screen reader reads only messages
+  // inside it.
+  const announce = useCallback((message: string) => {
+    const dialog = dialogRef.current;
+    if (dialog != null) {
+      announceInModal(dialog, message);
+    }
+  }, []);
   const prevIndexRef = useRef(index);
   const wasOpenRef = useRef(isOpen);
   useEffect(() => {
@@ -1228,6 +1237,12 @@ export function Lightbox({
           return;
         }
         if (e.key === '-') {
+          e.preventDefault();
+          stage.zoomOut();
+          return;
+        }
+        // Ctrl or Cmd with 0 resets the browser's page zoom; leave it.
+        if (e.key === '0' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           stage.zoomOut();
           return;

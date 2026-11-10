@@ -106,6 +106,18 @@ export const categories: SandboxCategory[] = [
           'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Menu Press Cases',
+        href: '/pages/menu-press-cases/',
+        description:
+          'A DropdownMenu in a fixed top bar that opens as a finger presses it, and one in the content, on a page that scrolls with the document',
+      },
+      {
+        name: 'BottomSheet Pull',
+        href: '/pages/bottom-sheet-pull/',
+        description:
+          'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:
@@ -274,6 +286,12 @@ export const categories: SandboxCategory[] = [
         href: '/pages/markdown-perf/',
         description:
           'Compare complete Markdown rendering with bursty streaming performance and animation',
+      },
+      {
+        name: 'Animated Layout Perf',
+        href: '/pages/animated-layout-perf/',
+        description:
+          'Expand and collapse an item in the middle of a long list through useAnimatedLayout and measure the walk',
       },
       {
         name: 'DiffViewer Perf',

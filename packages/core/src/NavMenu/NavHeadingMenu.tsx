@@ -18,7 +18,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -128,7 +128,7 @@ export function NavHeadingMenu({
   // A press that slides across the rows acts on the row it lifts on, the
   // highlight following the pointer, as every menu does
   // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: ENABLED_ITEM_SELECTOR,
     onDismiss: closeMenu ?? dismissMenu,

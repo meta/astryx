@@ -7,7 +7,9 @@
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
  *   Client main-app chunks start with the preview's cookie compatibility guard;
- *   large Webpack builds run with isolated, memory-optimized compilation.
+ *   large Webpack builds run with isolated, memory-optimized compilation. The
+ *   experimental DOCSITE_ICON_SET setting draws template previews with an
+ *   installed icon set.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -32,6 +34,13 @@ const docRedirectsPath = resolve(
 const docRedirects = existsSync(docRedirectsPath)
   ? JSON.parse(readFileSync(docRedirectsPath, 'utf8'))
   : {};
+
+// Experimental: the icon set template previews draw with, main set first and
+// backups after it, separated by commas. Unset, previews keep the icons their
+// templates import, and the loader is not added.
+const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
+const templateSources =
+  /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
 
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
@@ -177,6 +186,22 @@ const nextConfig = {
         t,
         'dist/theme.css',
       );
+    }
+
+    if (previewIconSet) {
+      config.module.rules.push({
+        test: templateSources,
+        enforce: 'pre',
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
     }
 
     // Vercel can add Toolbar instrumentation to Next's shared main-app entry.

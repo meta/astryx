@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
           "name": "CircleCheckIndicator"
         },
         {
@@ -195,6 +199,10 @@
         {
           "kind": "component",
           "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
         },
         {
           "kind": "component",

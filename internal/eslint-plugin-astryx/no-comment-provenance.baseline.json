@@ -579,17 +579,11 @@
     "spec quote"
   ],
   "packages/core/src/Link/Link.tsx": [
-    "FR1",
-    "FR1",
-    "FR2",
     "FR4",
-    "FR5",
     "FR6",
     "INV5",
     "component:Link",
-    "component:Text",
-    "spec:AST-085",
-    "spec:AST-085"
+    "component:Text"
   ],
   "packages/core/src/List/ListContext.tsx": ["DEC-6", "spec:AST-061"],
   "packages/core/src/Markdown/Markdown.fr23.bench.ts": [
