@@ -98,5 +98,8 @@ what the eval measures, so compare results only within one arm version.
 ## Known gaps
 
 - Chromium only. WebKit and real touch devices are not covered.
-- The `pilot` task set is small. It shows that the pipeline works and gives
-  wide intervals. A comparison needs a larger fixed set.
+- The `pilot` set (5 tasks) only shows that the pipeline works; fresh agents
+  pass all of it in both arms. The `v1` set (15 tasks) is the fixed comparison
+  set: multi-step forms, paged tables with selection, menus, comboboxes,
+  dialogs, responsive navigation, notifications, theming, tooltips, loading
+  states, filters and sliders. Run it with `--task-set v1`.
