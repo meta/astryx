@@ -20,7 +20,11 @@
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {requireFrames} from '@astryxdesign/interaction-harness';
+import {
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
+  requireFrames,
+} from '@astryxdesign/interaction-harness';
 import {build} from 'esbuild';
 import {cubicBezier} from '../bezier';
 import {LATE_START_MS} from '../frameBlock';
@@ -1015,6 +1019,18 @@ test.describe('spec:AST-105 Coverage', () => {
         <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
       '#area { --duration-medium: 1000ms; }',
     );
+    // The page's frames from before the change until the glide is read.
+    await page.evaluate(() => {
+      const log = window as unknown as {glideFrames: {t: number}[]};
+      log.glideFrames = [];
+      const record = () => {
+        if (log.glideFrames != null) {
+          log.glideFrames.push({t: performance.now()});
+          requestAnimationFrame(record);
+        }
+      };
+      requestAnimationFrame(record);
+    });
     await change(page);
     await page.waitForTimeout(100);
     const run = await page.evaluate(async mutate => {
@@ -1029,6 +1045,9 @@ test.describe('spec:AST-105 Coverage', () => {
       // the rest of this task.
       const [first] = row.getAnimations();
       const heldElapsed = Number(first.currentTime);
+      const log = window as unknown as {glideFrames?: {t: number}[]};
+      const frames = [...(log.glideFrames ?? []), {t: performance.now()}];
+      delete log.glideFrames;
       const yHeld = window.glideBoxOf(row).top;
       const keyframes =
         (first.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
@@ -1061,12 +1080,35 @@ test.describe('spec:AST-105 Coverage', () => {
       await window.change({changed: '#second', mutate});
       await frame();
       await frame();
-      return {yHeld, reached, shown: window.glideBoxOf(row).top};
+      return {
+        yHeld,
+        reached,
+        shown: window.glideBoxOf(row).top,
+        heldElapsed,
+        duration,
+        frames,
+      };
     }, `document.querySelector('#second').classList.add('open')`);
     test.info().annotations.push({
       type: 'a retarget after a block',
       description: JSON.stringify(run),
     });
+    // The block must carry the row more than 20 px, or the two places cannot
+    // be told apart. A page starved of frames as the glide began reads it too
+    // late in its curve for that. It fails by name.
+    const longestGapMs = Math.max(
+      ...run.frames.slice(1).map((f, i) => f.t - run.frames[i].t),
+    );
+    if (run.reached <= run.yHeld + 20 && longestGapMs > FRAME_STARVATION_MS) {
+      throw new FrameStarvationError({
+        by: 'the retarget proof',
+        during: `the glide began, over a ${Math.round(longestGapMs)} ms stretch`,
+        frames: 0,
+        min: 1,
+        longestGapMs,
+        cause: `the read came ${Math.round(run.heldElapsed)} ms into the ${run.duration} ms glide, so the block carried the row ${(run.reached - run.yHeld).toFixed(1)} px, not the 20 px the proof needs`,
+      });
+    }
     // The row glides down. Two frames after the block it is past where the
     // compositor had it as the block ended, not back near its place before.
     expect(run.reached).toBeGreaterThan(run.yHeld + 20);
