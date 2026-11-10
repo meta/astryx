@@ -20,9 +20,10 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
-import {createRef, Profiler, startTransition, useState} from 'react';
+import {createRef, Profiler, startTransition, useRef, useState} from 'react';
 import userEvent from '@testing-library/user-event';
-import {Tokenizer} from './Tokenizer';
+import {Tokenizer, type TokenizerHandle} from './Tokenizer';
+import {Typeahead} from '../Typeahead/Typeahead';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
@@ -1642,6 +1643,63 @@ describe('Tokenizer', () => {
         });
       }
       expect(cancel.mock.calls.length).toBe(before);
+    });
+
+    it('leaves a single-select field inside its dialog menu closing after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function WithDialogMenu() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [inner, setInner] = useState<SearchableItem | null>(null);
+        return (
+          <>
+            <button type="button" onClick={() => handleRef.current?.open()}>
+              Open menu
+            </button>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              handleRef={handleRef}
+              menu={{
+                role: 'dialog',
+                label: 'Pick a lead',
+                render: () => (
+                  <Typeahead
+                    label="Lead"
+                    searchSource={source}
+                    value={inner}
+                    onChange={setInner}
+                    hasEntriesOnFocus
+                    debounceMs={0}
+                  />
+                ),
+              }}
+            />
+          </>
+        );
+      }
+      render(<WithDialogMenu />);
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const lead = await screen.findByRole('combobox', {
+        name: 'Lead',
+        hidden: true,
+      });
+      await user.click(lead);
+      await waitFor(() => {
+        expect(lead).toHaveAttribute('aria-expanded', 'true');
+      });
+
+      await user.click(
+        screen.getAllByRole('option', {name: 'Bob', hidden: true}).at(-1)!,
+      );
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(lead).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('closes when focus leaves by Tab after a pick', async () => {

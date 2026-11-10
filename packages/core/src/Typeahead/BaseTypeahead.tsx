@@ -37,7 +37,10 @@ import * as stylex from '@stylexjs/stylex';
 import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
-import {useCommittedChoices} from './committedChoicesKey';
+import {
+  CommittedChoicesKeyContext,
+  useCommittedChoices,
+} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -2311,21 +2314,28 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           </SpinnerOwnerContext>
         </span>
       )}
-      {popover.render(menuContent, {
-        placement: 'below',
-        alignment: 'start',
-        offset: spacingVars['--spacing-1'],
-        xstyle: [
-          styles.popover,
-          menuWidth != null &&
-            styles.popoverCustomWidth(
-              clampInlineSize(
-                menuWidth,
-                layerViewportInset.maxInlineSizeFallback,
+      {popover.render(
+        // The committed values belong to this field. A field rendered in its
+        // menu has its own values, so it does not read them.
+        <CommittedChoicesKeyContext value={undefined}>
+          {menuContent}
+        </CommittedChoicesKeyContext>,
+        {
+          placement: 'below',
+          alignment: 'start',
+          offset: spacingVars['--spacing-1'],
+          xstyle: [
+            styles.popover,
+            menuWidth != null &&
+              styles.popoverCustomWidth(
+                clampInlineSize(
+                  menuWidth,
+                  layerViewportInset.maxInlineSizeFallback,
+                ),
               ),
-            ),
-        ],
-      })}
+          ],
+        },
+      )}
     </>
   );
   return focusWiring == null ? (
