@@ -377,7 +377,11 @@ describe('parseDateInput', () => {
       const originalTZ = process.env.TZ;
       process.env.TZ = 'Asia/Tokyo';
       try {
-        expect(parseDateInput('Dec 31, 2000 20:00 GMT')).not.toBeNull();
+        expect(parseDateInput('Dec 31, 2000 20:00 GMT')).toEqual({
+          year: 2001,
+          month: 1,
+          day: 1,
+        });
       } finally {
         if (originalTZ === undefined) {
           delete process.env.TZ;
