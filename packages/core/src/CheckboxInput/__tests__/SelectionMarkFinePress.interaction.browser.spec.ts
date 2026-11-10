@@ -2,13 +2,14 @@
 
 /**
  * @file SelectionMarkFinePress.interaction.browser.spec.ts
- * @input The CheckboxInput, CheckboxList and RadioList stories, and a mouse
- *   or a pen where the primary pointer is fine
- * @output Browser proofs: a mouse press on a checkbox, a CheckboxList row or
- *   a RadioList row paints at `pointerdown`. The press controller paints it,
- *   and it fades on release. It paints once. Under Reduce Motion the release
- *   ends at once. A right click and a read-only row paint nothing. A pen
- *   presses a checkbox the same way
+ * @input The CheckboxInput, CheckboxList, RadioList and lab
+ *   CircleCheckIndicator stories, and a mouse or a pen where the primary
+ *   pointer is fine
+ * @output Browser proofs: a mouse press on a checkbox, a CheckboxList row, a
+ *   RadioList row or a mapped circle paints at `pointerdown`. The press
+ *   controller paints it, and it fades on release. It paints once. Under Reduce
+ *   Motion the release ends at once. A right click and a read-only row paint
+ *   nothing. A pen presses a checkbox the same way
  * @position Fine-pointer half of the selection marks' press; the finger half
  *   is in CheckboxListPress.a11y.chromium.spec.ts and the indicator specs
  */
@@ -57,6 +58,9 @@ const markWrapper = (page: Page, selector: string, option?: string) => {
 const firstPressable = (page: Page) =>
   page.locator('#storybook-root [data-astryx-pressable]').first();
 
+const circle = (page: Page) =>
+  page.locator('#storybook-root .astryx-circle-check-indicator').first();
+
 const SURFACES: ReadonlyArray<Surface> = [
   {
     name: 'a checkbox',
@@ -78,6 +82,14 @@ const SURFACES: ReadonlyArray<Surface> = [
     layer: page => markWrapper(page, '.astryx-radio-indicator', 'SMS'),
     target: page => optionRow(page, 'SMS'),
     owner: page => optionRow(page, 'SMS'),
+  },
+  {
+    name: 'a circle mapped into a CheckboxInput',
+    story: 'lab-circlecheckindicator--mapped-checkbox-input',
+    layer: circle,
+    target: circle,
+    owner: page =>
+      circle(page).locator('xpath=ancestor::*[@data-astryx-pressable][1]'),
   },
 ];
 
