@@ -155,6 +155,7 @@ const LAB_ONLY_NAMES = [
   'reducedMotionFade',
   'useTouchHitArea',
   'touchHitAreaStyles',
+  'measureLogicalScrollAxis',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */

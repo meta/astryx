@@ -332,7 +332,7 @@ export const doc = {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        'The page threw while rendering. Nothing was written. Raised only by the experimental render command.',
+        'The page threw while rendering, or Node crashed while it rendered the page. Nothing was written. Raised only by the experimental render command.',
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',

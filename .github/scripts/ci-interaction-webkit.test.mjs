@@ -85,7 +85,13 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
-    expect(webkit.if).toBe(chromium.if);
+    // The Chromium proofs also run for main's nightly full run.
+    expect(chromium.if).toBe(
+      webkit.if.replace(
+        "github.event_name != 'workflow_dispatch' && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()",
+      ),
+    );
     expect(ungated(webkit.if)).toBe(
       "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );

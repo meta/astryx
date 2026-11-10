@@ -29,6 +29,7 @@ import {
   thawPage,
   touchDriver,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -453,12 +454,6 @@ const TRACKPAD_IN_CHROMIUM =
   "Chromium's CDP wheels read as a mouse's wheel; the trackpad cases run in WebKit";
 
 /**
- * How long after its last wheel the gesture host ends a horizontal trackpad
- * scroll, ms. A gap this long or longer starts a new gesture.
- */
-const TRACKPAD_SCROLL_END_MS = 220;
-
-/**
  * Reports a coarse primary pointer to script, before the story loads: a
  * tablet with a trackpad, whose wheels a desktop context can inject.
  */
@@ -516,9 +511,7 @@ for (const pointer of ['coarse', 'fine'] as const) {
           steps: Array.from({length: 40}, (_, i) => ({
             dx: i % 2 === 0 ? 7 : 6,
           })),
-          // WebKit stamps wheels in whole ms, so the longest gap that keeps
-          // one scroll is 1 ms shorter than the end.
-          maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+          maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
         });
         await settled(scroller);
         await expect
