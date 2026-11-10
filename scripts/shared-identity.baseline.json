@@ -333,7 +333,7 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
+    "packages/core/src/virtualization/measure.ts:textContext": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },

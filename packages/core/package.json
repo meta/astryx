@@ -878,6 +878,11 @@
       "source": "./src/internal/line-clamp.ts",
       "types": "./dist/internal/line-clamp.d.ts",
       "default": "./dist/internal/line-clamp.js"
+    },
+    "./internal/virtualization": {
+      "source": "./src/internal/virtualization.ts",
+      "types": "./dist/internal/virtualization.d.ts",
+      "default": "./dist/internal/virtualization.js"
     }
   },
   "files": [
