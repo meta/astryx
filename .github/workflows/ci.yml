@@ -4695,6 +4695,7 @@ jobs:
     # the a11y-dependent-audits-record-<attempt> artifact.
     outputs:
       count: ${{ steps.plan.outputs.count || '0' }}
+      legs: ${{ steps.plan.outputs.legs || '[1]' }}
       shares: ${{ steps.plan.outputs.shares || '[]' }}
       owed: ${{ steps.plan.outputs.owed || '[]' }}
       ran: ${{ steps.plan.outputs.ran || '[]' }}
@@ -4792,11 +4793,12 @@ jobs:
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
     # A first run plans at most three legs; a later run at the same head may
-    # plan up to six to run every owed audit.
+    # plan up to six to run every owed audit. The matrix starts only the
+    # planned legs; without a plan it starts all six, which then stop.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3, 4, 5, 6]
+        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}
     permissions:
       contents: read
     steps:
