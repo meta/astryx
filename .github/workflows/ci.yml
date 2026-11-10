@@ -1632,7 +1632,7 @@ jobs:
             # pull request changes its source. A published package the base
             # leaves unbuilt is reported from the head build only when none of
             # its report inputs changed (SHARED_INPUTS in the API report CLI);
-            # otherwise from its committed report.
+            # otherwise it is reported as unknown, with no rows.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
             for pkg in lab charts richtext vega; do
@@ -1651,7 +1651,7 @@ jobs:
                 # report falls back to the committed one. Keep apostrophes
                 # out of these comments: the script is single-quoted.
                 pnpm -F @astryxdesign/cli sync:api-types
-              } || echo "Building the published packages of the merge base failed; those packages compare with its committed reports."
+              } || echo "Building the published packages of the merge base failed; the API changes report those packages as unknown."
             fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
@@ -1863,7 +1863,9 @@ jobs:
       # Advisory API changes (architecture:public-component-api INV24): each
       # published package's report from this build, compared with the merge
       # base's surface (Main's record of it, else the base built above, else
-      # the reports committed there, read with git). A committed report that
+      # the reports committed there, read with git). A package the base built
+      # above cannot surface is reported as unknown, never from its committed
+      # report. A committed report that
       # differs from this build is one stale line, not rows. It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
