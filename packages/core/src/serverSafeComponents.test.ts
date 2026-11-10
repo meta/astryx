@@ -768,16 +768,45 @@ function findServerGraphViolations(
   return problems;
 }
 
+/**
+ * True when every module the barrel re-exports at runtime is a `'use client'`
+ * module, directly or through another pass-through barrel. Such a barrel's
+ * directive changes nothing: each export is a client reference either way.
+ */
+function reExportsOnlyClientModules(
+  file: string,
+  seen = new Set<string>(),
+): boolean {
+  if (seen.has(file)) {
+    return true;
+  }
+  seen.add(file);
+  const info = parseModule(file);
+  const targets = [
+    ...info.imports.map(imp => imp.target),
+    ...info.reExports.map(r => r.target),
+    ...info.starReExports,
+  ];
+  return targets.every((target): boolean => {
+    const targetInfo = parseModule(target);
+    if (targetInfo.hasUseClient && !isPassThrough(target)) {
+      return true;
+    }
+    return isPassThrough(target) && reExportsOnlyClientModules(target, seen);
+  });
+}
+
 describe('RSC boundary of barrels and the package root', () => {
   const ROOT_ENTRY = join(SRC_DIR, 'index.ts');
 
-  it('keeps every pass-through barrel free of "use client"', () => {
-    const marked = indexBarrels()
+  it('keeps "use client" off every pass-through barrel that re-exports a server module', () => {
+    const masking = indexBarrels()
       .filter(isPassThrough)
       .filter(file => parseModule(file).hasUseClient)
+      .filter(file => !reExportsOnlyClientModules(file))
       .map(file => `  ${relative(SRC_DIR, file)}`);
     expect(
-      marked.join('\n'),
+      masking.join('\n'),
       `\nA barrel runs no code, so its directive only turns every module it\n` +
         `re-exports into a client reference — server-safe ones included. Each\n` +
         `module carries its own directive. Remove it from:\n`,
