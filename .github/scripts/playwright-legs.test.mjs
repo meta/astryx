@@ -10,6 +10,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  chromiumSelection,
   costsFor,
   countTests,
   estimateSeconds,
@@ -24,6 +25,7 @@ import {
   testsReader,
 } from './playwright-legs.mjs';
 import {matrixFor} from './ci-matrix.mjs';
+import {importerGraph} from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -60,7 +62,12 @@ describe('legsFitMessage', () => {
 
   it('fits when the proofs need the last leg the matrix has', () => {
     expect(
-      legsFitMessage({seconds: 1480, files: Object.keys(costs), costs, ...limits}),
+      legsFitMessage({
+        seconds: 1480,
+        files: Object.keys(costs),
+        costs,
+        ...limits,
+      }),
     ).toBeNull();
   });
 
@@ -74,13 +81,20 @@ describe('legsFitMessage', () => {
     });
     expect(message).toContain('need 4 legs');
     expect(message).toContain('the matrix has 3');
-    expect(message).toContain('a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)');
+    expect(message).toContain(
+      'a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)',
+    );
   });
 
   it('names the spec when one spec alone outlasts a leg', () => {
     const one = {'huge.spec.ts': 700};
     expect(
-      legsFitMessage({seconds: 700, files: ['huge.spec.ts'], costs: one, ...limits}),
+      legsFitMessage({
+        seconds: 700,
+        files: ['huge.spec.ts'],
+        costs: one,
+        ...limits,
+      }),
     ).toContain('huge.spec.ts (700 s)');
   });
 });
@@ -322,8 +336,18 @@ describe('the list reader and recordLog', () => {
 describe('the interaction leg count job in ci.yml', () => {
   const counter = ci.jobs['interaction-legs'];
   const lanes = [
-    {id: 'pr-interaction', key: 'chromium', count: "Count this run's legs", mine: 'Count the Chromium legs'},
-    {id: 'pr-interaction-webkit', key: 'webkit', count: "Count this run's WebKit legs", mine: 'Count the WebKit legs'},
+    {
+      id: 'pr-interaction',
+      key: 'chromium',
+      count: "Count this run's legs",
+      mine: 'Count the Chromium legs',
+    },
+    {
+      id: 'pr-interaction-webkit',
+      key: 'webkit',
+      count: "Count this run's WebKit legs",
+      mine: 'Count the WebKit legs',
+    },
   ];
 
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
@@ -352,7 +376,9 @@ describe('the interaction leg count job in ci.yml', () => {
     it(`counts the ${lane.key} lane the way its legs do`, () => {
       const job = ci.jobs[lane.id];
       const scope = step(job, "Decide this job's scope");
-      const myScope = counter.steps.find(each => each.id === `scope-${lane.key}`);
+      const myScope = counter.steps.find(
+        each => each.id === `scope-${lane.key}`,
+      );
       expect(myScope.uses).toBe(scope.uses);
       expect(myScope.with).toEqual(scope.with);
       const theirs = step(job, lane.count);
@@ -363,7 +389,10 @@ describe('the interaction leg count job in ci.yml', () => {
       expect(mine['continue-on-error']).toBe(true);
       expect(mine.env ?? {}).toEqual(
         JSON.parse(
-          JSON.stringify(theirs.env ?? {}).replaceAll('steps.scope.', `steps.scope-${lane.key}.`),
+          JSON.stringify(theirs.env ?? {}).replaceAll(
+            'steps.scope.',
+            `steps.scope-${lane.key}.`,
+          ),
         ),
       );
       expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
@@ -395,7 +424,9 @@ describe('the interaction leg count job in ci.yml', () => {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     };
-    expect(outputs(['success', '3'], ['success', '0'])).toBe('chromium=[1, 2, 3]\nwebkit=[1]\n');
+    expect(outputs(['success', '3'], ['success', '0'])).toBe(
+      'chromium=[1, 2, 3]\nwebkit=[1]\n',
+    );
     expect(outputs(['skipped', ''], ['failure', ''])).toBe(
       'chromium=[1]\nwebkit=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n',
     );
@@ -404,12 +435,22 @@ describe('the interaction leg count job in ci.yml', () => {
     );
   });
 
-  it('caps every count at the ceiling the lanes\' fallback matrix lists, ten legs', () => {
-    const ceiling = matrixFor(ci.jobs['pr-interaction'].strategy.matrix.leg, 'pull_request').length;
+  it("caps every count at the ceiling the lanes' fallback matrix lists, ten legs", () => {
+    const ceiling = matrixFor(
+      ci.jobs['pr-interaction'].strategy.matrix.leg,
+      'pull_request',
+    ).length;
     expect(ceiling).toBe(10);
-    expect(matrixFor(ci.jobs['pr-interaction-webkit'].strategy.matrix.leg, 'pull_request')).toHaveLength(ceiling);
+    expect(
+      matrixFor(
+        ci.jobs['pr-interaction-webkit'].strategy.matrix.leg,
+        'pull_request',
+      ),
+    ).toHaveLength(ceiling);
     for (const lane of lanes) {
-      expect(step(ci.jobs[lane.id], lane.count).run).toContain(`--max-legs ${ceiling}`);
+      expect(step(ci.jobs[lane.id], lane.count).run).toContain(
+        `--max-legs ${ceiling}`,
+      );
       expect(step(counter, lane.mine).run).toContain(`--max-legs ${ceiling}`);
     }
     const name = step(counter, "Name each lane's legs").run;
@@ -646,10 +687,7 @@ describe('the interaction proof legs in ci.yml', () => {
             '-c',
             count.run
               .replaceAll('${{ matrix.leg }}', String(leg))
-              .replaceAll(
-                '${{ strategy.job-total }}',
-                '6',
-              ),
+              .replaceAll('${{ strategy.job-total }}', '6'),
           ],
           {
             cwd: dir,
@@ -1039,7 +1077,9 @@ describe('the interaction proof legs in ci.yml', () => {
         // so the next step is proposed before the guard trips.
         const near = nearCeilingMessage({seconds, ...limits});
         if (near)
-          console.log(`::warning title=Interaction legs near the ceiling::${label}: ${near}`);
+          console.log(
+            `::warning title=Interaction legs near the ceiling::${label}: ${near}`,
+          );
         expect(
           legsFitMessage({
             seconds,
@@ -1271,5 +1311,202 @@ describe('what a WebKit run covers for a change', () => {
     expect(
       folderSpecs(listed, ['packages/core/src/DateInput/DateInput.tsx']),
     ).not.toContain('packages/core/src/DateInput/DateInput.tsx');
+  });
+});
+
+describe('what a Chromium run covers for a pull request', () => {
+  // A small tree: Menu renders Tooltip, Card imports only Tooltip's type, and
+  // Tour (Lab) renders Menu. Each folder holds one interaction spec.
+  const files = {
+    'packages/core/src/Tooltip/Tooltip.tsx': 'export function Tooltip() {}\n',
+    'packages/core/src/Tooltip/__tests__/Tooltip.interaction.browser.spec.ts':
+      '',
+    'packages/core/src/Menu/Menu.tsx':
+      "import {Tooltip} from '../Tooltip/Tooltip';\nexport function Menu() {}\n",
+    'packages/core/src/Menu/__tests__/Menu.interaction.browser.spec.ts': '',
+    'packages/core/src/Card/Card.tsx':
+      "import type {Tooltip} from '../Tooltip/Tooltip';\nexport function Card() {}\n",
+    'packages/core/src/Card/__tests__/Card.interaction.browser.spec.ts': '',
+    'packages/core/src/Button/Button.tsx': 'export function Button() {}\n',
+    'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': '',
+    'packages/core/src/Layer/Layer.tsx': 'export function Layer() {}\n',
+    'packages/core/src/utils/clamp.ts': 'export const clamp = 1;\n',
+    'packages/lab/src/Tour/Tour.tsx':
+      "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport function Tour() {}\n",
+    'packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts': '',
+    'apps/storybook/stories/Menu.stories.tsx': '',
+  };
+  const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-selection-'));
+  for (const [file, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+    fs.writeFileSync(path.join(tree, file), text);
+  }
+  const listed = Object.keys(files);
+  const scope = /^(packages\/|apps\/storybook\/|internal\/|\.github\/)/;
+  const selection = JSON.parse(
+    fs.readFileSync(
+      path.join(root, '.github/interaction-selection.json'),
+      'utf8',
+    ),
+  );
+  const primitives = JSON.parse(
+    fs.readFileSync(
+      path.join(root, '.github/a11y-shared-primitives.json'),
+      'utf8',
+    ),
+  ).primitives;
+  const select = (changed, overrides = {}) =>
+    chromiumSelection({
+      listed,
+      changed,
+      scope,
+      fullSuite: false,
+      importers: importerGraph(tree),
+      selection,
+      primitives,
+      ...overrides,
+    });
+  const spec = folder =>
+    listed.find(
+      file => file.includes(`/${folder}/`) && isInteractionSpec(file),
+    );
+
+  it("runs a changed component's specs and those of the folders that render it", () => {
+    expect(select(['packages/core/src/Tooltip/Tooltip.tsx'])).toEqual({
+      full: false,
+      specs: [spec('Menu'), spec('Tooltip'), spec('Tour')].sort(),
+      touched: ['core/Tooltip'],
+      dependents: ['core/Menu', 'lab/Tour'],
+    });
+  });
+
+  it("leaves out a type-only importer's specs", () => {
+    expect(
+      select(['packages/core/src/Tooltip/Tooltip.tsx']).specs,
+    ).not.toContain(spec('Card'));
+  });
+
+  it('runs a changed interaction spec, alone when it is the only change', () => {
+    expect(select([spec('Card')])).toMatchObject({
+      full: false,
+      specs: [spec('Card')],
+    });
+  });
+
+  it("runs a story's component, and the full suite for a story of no one component", () => {
+    expect(select(['apps/storybook/stories/Menu.stories.tsx'])).toMatchObject({
+      full: false,
+      touched: ['core/Menu'],
+    });
+    expect(
+      select(['apps/storybook/stories/Nothing.stories.tsx']),
+    ).toMatchObject({full: true});
+  });
+
+  it('ignores a unit test, doc or record beside the code', () => {
+    expect(
+      select([
+        'packages/core/src/Button/Button.test.tsx',
+        'packages/core/src/Button/Button.doc.mjs',
+      ]),
+    ).toEqual({full: false, specs: [], touched: [], dependents: []});
+  });
+
+  it('runs the full suite for a path in no component folder', () => {
+    for (const file of [
+      'packages/core/src/utils/clamp.ts',
+      'packages/core/src/index.ts',
+      'packages/themes/neutral/src/neutralTheme.ts',
+      'internal/interaction-harness/src/scripts.ts',
+      '.github/workflows/ci.yml',
+    ])
+      expect(select([file]), file).toMatchObject({full: true});
+  });
+
+  it('runs the full suite for a shared path or a listed shared primitive', () => {
+    expect(select(['packages/core/src/Layer/Layer.tsx'])).toMatchObject({
+      full: true,
+      reason: 'packages/core/src/Layer/Layer.tsx is shared code',
+    });
+    expect(select(['packages/core/src/Button/Button.tsx'])).toMatchObject({
+      full: true,
+      reason:
+        'packages/core/src/Button/Button.tsx is in the shared primitive core/Button',
+    });
+  });
+
+  it('fails closed: a full-suite classification, unknown files, no graph, the release check', () => {
+    const change = ['packages/core/src/Tooltip/Tooltip.tsx'];
+    expect(select(change, {fullSuite: true}).full).toBe(true);
+    expect(select(null).full).toBe(true);
+    expect(select(change, {importers: null}).full).toBe(true);
+    expect(select(change, {everySpec: true}).full).toBe(true);
+  });
+
+  it("adds an escape's edge from the selection file", () => {
+    expect(
+      select(['packages/core/src/Tooltip/Tooltip.tsx'], {
+        selection: {
+          ...selection,
+          edges: [
+            {
+              from: 'packages/core/src/Tooltip/',
+              specs: [spec('Card')],
+            },
+          ],
+        },
+      }).specs,
+    ).toContain(spec('Card'));
+  });
+
+  it('ignores a change outside the lane', () => {
+    expect(select(['docs/specs/AST-030/spec.md', spec('Card')])).toMatchObject({
+      full: false,
+      specs: [spec('Card')],
+    });
+  });
+});
+
+describe('the Chromium selection in ci.yml, in shadow', () => {
+  const counter = ci.jobs['interaction-legs'];
+  const select = step(counter, 'Select the Chromium proofs, in shadow');
+  const scope = counter.steps.find(each => each.id === 'scope-chromium');
+
+  it('runs on a pull request in scope, never on a Lab-only change, and never fails the job', () => {
+    expect(select.if).toBe(
+      "github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''",
+    );
+    expect(select['continue-on-error']).toBe(true);
+    expect(scope.with['component-audit']).toBe('true');
+  });
+
+  it("reads the lane's own scope, the classifier's decision and the merge commit's sources", () => {
+    expect(select.env.SCOPE_PATHS).toBe(scope.with.paths);
+    expect(select.env.FULL_SUITE).toBe(
+      '${{ steps.scope-chromium.outputs.full_suite }}',
+    );
+    expect(select.run).toContain('sparse-checkout add');
+    expect(select.run).toContain('--root .test-scope');
+    expect(select.run).toContain(
+      '--selection .test-scope/.github/interaction-selection.json',
+    );
+    expect(select.run).toContain(
+      '--primitives .test-scope/.github/a11y-shared-primitives.json',
+    );
+    expect(select.run).toContain('--every-spec "${WEBKIT_ALL_SPECS:-false}"');
+  });
+
+  it('keeps the selection as an artifact, and still runs every Chromium spec', () => {
+    const keep = step(counter, 'Keep the Chromium selection');
+    expect(keep.if).toBe("steps.select-chromium.outcome == 'success'");
+    expect(keep.with.name).toBe(
+      'interaction-selection-${{ github.run_attempt }}',
+    );
+    for (const run of [
+      step(counter, 'Count the Chromium legs').run,
+      step(ci.jobs['pr-interaction'], "Count this run's legs").run,
+      step(ci.jobs['pr-interaction'], "Plan this leg's interaction proofs").run,
+    ])
+      expect(run).not.toContain('chromium-selection');
   });
 });
