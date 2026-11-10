@@ -546,11 +546,11 @@ describe('gapReport handler isolation', () => {
     });
     configure(['@test/late-exit', '@test/after-late-exit']);
 
-    const projectModule = path.resolve(
-      import.meta.dirname,
+    const projectModule = new URL(
       '../../foundation/config/project.mjs',
-    );
-    const gapModule = path.resolve(import.meta.dirname, 'gap-report.mjs');
+      import.meta.url,
+    ).href;
+    const gapModule = new URL('./gap-report.mjs', import.meta.url).href;
     const source = `
       const {Project} = await import(${JSON.stringify(projectModule)});
       const {collectGapReportHandlers, deliverGapReportHandlers} = await import(${JSON.stringify(gapModule)});
