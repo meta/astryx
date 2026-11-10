@@ -2887,6 +2887,40 @@ describe('Tokenizer pending search after a dismissal', () => {
     expect(search.mock.calls.filter(([q]) => q === 'b')).toHaveLength(1);
   });
 
+  it('reopens the Create entry after a query drops below minQueryLength inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const search = vi.fn(() => []);
+      render(
+        <Tokenizer
+          label="Labels"
+          searchSource={{search, bootstrap: () => []}}
+          value={[]}
+          onChange={vi.fn()}
+          hasCreate
+          minQueryLength={3}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'QAX'}});
+      fireEvent.change(input, {target: {value: 'QA'}});
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reopens the Create entry for a query below minQueryLength with ArrowDown after Escape', async () => {
     const search = vi.fn(() => []);
     render(

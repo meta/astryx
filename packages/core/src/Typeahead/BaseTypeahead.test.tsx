@@ -26,9 +26,10 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import {createRef} from 'react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {BaseTypeahead} from './BaseTypeahead';
+import {BaseTypeahead, type BaseTypeaheadHandle} from './BaseTypeahead';
 import {CommittedChoicesKeyContext} from './committedChoicesKey';
 import {Typeahead} from './Typeahead';
 import {Tokenizer} from '../Tokenizer';
@@ -1351,6 +1352,106 @@ describe('BaseTypeahead pending work after a dismissal', () => {
       expect(input).toHaveAttribute('aria-expanded', 'true');
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('settles a search cancelled by focus leaving without an empty result', async () => {
+    // A source whose cancel rejects the request in flight.
+    let reject: ((reason: unknown) => void) | null = null;
+    const source: SearchSource<SearchableItem> = {
+      search: async () =>
+        new Promise<SearchableItem[]>((_, fail) => {
+          reject = fail;
+        }),
+      bootstrap: () => [],
+      cancel: () => reject?.(new Error('aborted')),
+    };
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'al'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    await act(async () => {});
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(screen.queryByText('No results found')).not.toBeInTheDocument();
+  });
+
+  it('searches the typed text when the handle opens after Escape inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const handleRef = createRef<BaseTypeaheadHandle>();
+      const {input, search, answer} = renderPending({
+        debounceMs: 200,
+        handleRef,
+      });
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      await act(async () => vi.advanceTimersByTime(200));
+      await answer('a', ['Alpha']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.change(input, {target: {value: 'al'}});
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      act(() => handleRef.current?.open());
+      expect(search).toHaveBeenLastCalledWith('al', expect.anything());
+      await answer('al', ['Alpine']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Alpine')).toBeInTheDocument();
+      expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens on an empty answer kept through Escape without searching again', async () => {
+    const {input, search, answer} = renderPending({});
+    input.focus();
+    fireEvent.change(input, {target: {value: 'zz'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    await answer('zz', []);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('No results found')).toBeInTheDocument();
+    expect(search.mock.calls.filter(([query]) => query === 'zz')).toHaveLength(
+      1,
+    );
+  });
+
+  it('announces the count of an answer kept through Escape when the menu reopens', async () => {
+    __resetLiveRegionsForTest();
+    try {
+      const {input, answer} = renderPending({});
+      await openWithPendingQuery(input, answer);
+      fireEvent.keyDown(input, {key: 'Escape'});
+      await answer('al', ['Alpine', 'Alps']);
+      const liveRegion = () =>
+        document.querySelector('[data-astryx-live-region="polite"]');
+      expect(liveRegion()?.textContent ?? '').not.toContain('2 results');
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => expect(liveRegion()).toHaveTextContent('2 results'));
+    } finally {
+      __resetLiveRegionsForTest();
     }
   });
 

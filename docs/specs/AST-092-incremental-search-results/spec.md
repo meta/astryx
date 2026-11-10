@@ -89,7 +89,10 @@ context)` receives an optional `SearchContext` whose `update(items)` replaces
   a non-empty `update` shows its rows and opens the popup. An empty `update`
   leaves the shown rows in place. The control stays busy, with its loading
   indicator, until the query settles. The empty-result row appears only when the
-  query settles with an empty final list.
+  query settles with an empty final list. After the popup is dismissed while the
+  query is pending, a partial list leaves the popup closed and the control not
+  busy; the next open shows the query's latest list (`component:BaseTypeahead`
+  FR3).
 - **FR6 — The highlight and scroll position stay put.** The first list shown for
   a new query highlights its first row. When a later list for the same query
   arrives, the highlighted item stays highlighted and the list keeps its scroll
