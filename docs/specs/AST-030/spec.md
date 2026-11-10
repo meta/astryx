@@ -618,6 +618,36 @@ they are separately named.
   `spec:AST-017/FR61` defines. An empty, unavailable, or truncated file list
   also runs broad CI and records undecided scope; uncertainty never grants the
   generated lane.
+- **FR31 — The Chromium interaction lane runs what the change reaches.** On a
+  pull request, the Chromium interaction proofs (`pr-interaction`) MUST run the
+  interaction specs of the components the change changes or touches and of
+  their dependents, and each interaction spec file the change adds or
+  modifies. The touched components come from the trusted classification
+  (FR1–FR3) through the same touched-component mapping FR12 uses. A dependent
+  is a component folder that renders or imports a changed or touched component
+  through its source value imports, as FR12's contract job finds it; a
+  type-only import adds none. The lane MUST run the full interaction suite
+  when the change touches shared code: a `shared-or-unknown` path (FR2),
+  shared infrastructure (FR13), or a shared primitive that
+  `.github/a11y-shared-primitives.json` lists (FR12). Release checks and a
+  nightly run of `main` MUST run the full interaction suite, as FR13's other
+  full-suite events do. Selection fails closed: when the dependency graph
+  cannot be computed, when a changed source path maps to no component, or on
+  any fail-closed condition of FR3–FR4, the lane MUST run the full suite.
+  For the interaction lanes, a change to a component folder's unit tests
+  (`*.test.*`), docs (`*.doc.mjs`, `*.md`) or accessibility specs touches no
+  component, unless an interaction spec or proof page imports that file,
+  directly or transitively, in the import graph at the pull request's head;
+  such an import selects as a touched component, and a graph that cannot be
+  computed runs the full suite. FR13's theme sources stay shared.
+  Selection changes no required context (FR7) and none of FR16's limits. FR26
+  keeps the Lab-only rule, and the WebKit lane keeps its own scope (FR28). An
+  escape is a regression in an interaction spec that a selective run did not
+  run and that a full run, a release check or `main` then caught. Every escape
+  MUST be logged, and the rule MUST be reviewed against that log four weeks
+  after the lane starts to run selectively. A replay of a recent set of pull
+  requests (the `vjeux` lane's spike set) MUST show that selective runs catch
+  every failure the full runs caught (DEC-28). FR31 gap: the selection and its tests have no implementation yet; the lane runs every interaction spec.
 
 ### Platform support
 
@@ -703,6 +733,8 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR29     | the contributor CI job's rule tests and its dry-run report                                                                                                                       | A contributor head while a release-check or main-break waiter is queued in the capacity tool, or without room for one more pull-request run under the CI job ceiling, does not start; at most one starts per sweep                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | it starts, or more than one starts in a sweep                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR29     | the contributor CI job's rule tests and its dry-run report                                                                                                                       | Of two eligible heads, the one stable longer starts first                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | the one stable for less time starts first                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR30     | `test-scope-action.test.mjs` release-branch cases and the required release-validator contract                                                                                    | generated outputs only; one test-repair path; mixed or product paths; empty, failed, and truncated file lists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a non-generated release candidate gets the narrow lane, uncertainty skips broad CI, or the required release validator disappears                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR31     | Chromium interaction selection cases in `playwright-legs.test.mjs` and the CI workflow contract                                                                                  | a change to one component; a component that another component's folder renders; a type-only importer; a changed interaction spec file; a `shared-or-unknown` path; a listed shared primitive; a changed source path in no component folder; a dependency graph that cannot be computed; a release check, a nightly run of `main` and a merge-group entry                                                                                                                                                                                                                                                                                                                                                                                                                                         | a dependent's spec is left out, a type-only importer's spec runs, a shared, unmapped or fail-closed change runs less than the full suite, or a full-suite event is narrowed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| FR31     | a replay of the `vjeux` lane's spike set: each selective plan against its full run's failures. FR31 gap: the replay validation has no committed record yet                       | every failure a full run caught in that set                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a failure that a full run caught is outside the selective plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Decision log
 
@@ -1276,6 +1308,21 @@ rule, not a skipped or manually overridden check.
 
 Rejected: treating every release-branch pull request as generated, or letting
 the head branch choose its own scope or validator.
+
+### DEC-28 — The Chromium interaction lane runs selectively
+
+**Reference:** `spec:AST-030/DEC-28`
+**Decider:** Chief of staff (delegated CI authority), `2026-11-09`
+
+The chief ruling 11/09 22:24 makes the Chromium interaction lane run the specs
+of the changed and touched components and their dependents on a pull request
+(FR31), because a full interaction run on every pull request spends runner
+time and time to green on specs the change cannot reach, while shared code,
+release checks and a nightly run of `main` keep the full suite.
+
+Rejected: running the full interaction suite on every pull request.
+
+Amended by the same delegated authority (chief ruling 11/09 22:24, refined 11/09 23:19): a component folder's unit tests, docs and accessibility specs select nothing for the interaction lanes unless an interaction spec or proof page imports them.
 
 ## Open questions
 

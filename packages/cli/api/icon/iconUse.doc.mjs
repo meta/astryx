@@ -10,13 +10,21 @@ export const doc = {
   namespace: 'cli/api',
   stability: 'experimental',
   displayName: 'iconUse()',
-  summary: "Choose the project's icon set.",
+  summary: "Choose the project's main icon set and backups.",
   description:
-    "Writes `experimental.iconSet` in the project's astryx.config (creating astryx.config.mjs when there is none), so templates and blocks the project copies use that set's icons. The set must be installed; a name two installed packages both ship is refused with each `<package>/<set>` form. Experimental: it may change or be removed in a patch release.",
+    "Writes `experimental.iconSet` in the project's astryx.config (creating astryx.config.mjs when there is none), so templates and blocks the project copies use that set's icons. With no backups it writes the set name as a string. With backups it writes a list, the main set first and then each backup in order: a copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. Every set must be installed; a name two installed packages both ship is refused with each `<package>/<set>` form. The receipt lists installed sets the list leaves out (`unlisted`), which Doctor fails, with the command that adds them. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
-    'iconUse(set: string, options?: {cwd?: string}): Promise<IconUseResponse>',
-  keywords: ['icon', 'icon set', 'use', 'experimental.iconSet', 'config'],
+    'iconUse(set: string, options?: {cwd?: string, backups?: string[]}): Promise<IconUseResponse>',
+  keywords: [
+    'icon',
+    'icon set',
+    'use',
+    'backup',
+    'main set',
+    'experimental.iconSet',
+    'config',
+  ],
   params: [
     {
       name: 'set',
@@ -29,12 +37,18 @@ export const doc = {
       type: 'string',
       description: 'The project directory.',
     },
+    {
+      name: 'options.backups',
+      type: 'string[]',
+      description:
+        'Backup sets, by name or `<package>/<set>`, in the order a copied template tries them after the main set.',
+    },
   ],
   returns: [
     {
       type: 'icon.use',
       description:
-        "The value written, the set it names, the config file, whether it was created, the value it replaced, and a `warning` when the project's @astryxdesign/cli range admits a release before 0.7.4, which refuses the key.",
+        "The main set and the backups written, the sets they name, the config file, whether it was created, the value it replaced, the installed sets the list leaves out (`unlisted`, with a `next` command), and a `warning` when the project's @astryxdesign/cli range admits a release that refuses the value: before 0.7.4 for a string, before 0.7.12 for a list.",
     },
   ],
   throws: [
@@ -44,7 +58,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'two installed packages ship a set with the name',
+      when: 'two installed packages ship a set with the name, or the list names one set twice',
     },
     {
       code: 'ERR_WRITE_FAILED',
@@ -67,7 +81,13 @@ export const doc = {
       when: 'the set name is missing',
     },
   ],
-  examples: [{label: 'Use a set', code: "await iconUse('outline');"}],
+  examples: [
+    {label: 'Use a set', code: "await iconUse('outline');"},
+    {
+      label: 'Use a main set with a backup',
+      code: "await iconUse('outline', {backups: ['@acme/brand-icons/brand']});",
+    },
+  ],
   command: 'experimental icon use',
   related: ['icon', 'iconMap', 'iconAdd'],
 };

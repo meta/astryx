@@ -38,6 +38,7 @@ import {
   curveOf,
   drag,
   flick,
+  FRAME_STARVATION_MS,
   FrameStarvationError,
   frames,
   freezePageOn,
@@ -901,8 +902,13 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   await driver.play(doubleTap(mid));
   await waitForAnimation(photo);
   await waitForRest(photo);
+  // The offset at which the photo's right side meets the stage's: the stop
+  // check below needs the landing 20 px short of it.
+  const zoomed = await state();
+  const edge =
+    zoomed.stage.width - zoomed.fit.width * zoomed.scale - zoomed.fit.x;
   // The photo's offset at the flick's lift, read in the page.
-  await recordLiftOffset(photo);
+  const liftOffset = await recordLiftOffset(photo);
   await photo.evaluate(el => el.setAttribute('data-freeze-photo', ''));
   // The scene stops once the coast has carried the photo 10 px past the
   // lift, however late this process reacts. A poll from here can land the
@@ -910,11 +916,19 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   const coasting = freezePageWhen(
     page,
     () => {
-      const lift = (globalThis as unknown as {__liftOffset?: number})
-        .__liftOffset;
+      const record = globalThis as unknown as {
+        __liftOffset?: number;
+        __coastFrames?: {t: number}[];
+        __harnessFreeze: {realNow: () => number};
+      };
+      const lift = record.__liftOffset;
       const img = document.querySelector('[data-freeze-photo]') as Element;
       const translate = getComputedStyle(img).translate;
       const x = translate === 'none' ? 0 : parseFloat(translate);
+      // Every frame checked, on the real clock: the longest gap in the coast
+      // tells a late freeze from a fast coast.
+      record.__coastFrames ??= [];
+      record.__coastFrames.push({t: record.__harnessFreeze.realNow()});
       return (
         lift != null &&
         x < lift - 10 &&
@@ -927,6 +941,91 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
     flick(mid, {velocity: {x: -900, y: 0}, durationMs: 80, hz: 120}),
   );
   await coasting;
+  // A starved page draws its first frame past the 10 px late. The
+  // compositor coasts on meanwhile, and the scene freezes where the screen
+  // is, which can be the photo's edge. The landing then catches a photo that
+  // the edge stopped, so the run proves nothing about the finger.
+  const {x: frozenX} = await state();
+  if (frozenX <= edge + 20) {
+    const {coasting, gap, spanMs} = await photo.evaluate(
+      (img, [from, to]) => {
+        const record = globalThis as unknown as {
+          __coastFrames?: {t: number}[];
+          __harnessFreeze: {offset: number};
+        };
+        const coast = img
+          .getAnimations()
+          .find(animation =>
+            (animation.effect as KeyframeEffect | null)
+              ?.getKeyframes()
+              .some(k => k.translate != null),
+          );
+        if (coast == null) {
+          return {coasting: false, gap: 0, spanMs: Number.NaN};
+        }
+        // A gap counts only from the coast's start, on the real clock: a
+        // stall that ends before the coast starts cannot carry it.
+        const start = Number(coast.startTime) + record.__harnessFreeze.offset;
+        const coastFrames = record.__coastFrames ?? [];
+        let longest = 0;
+        for (let i = 1; i < coastFrames.length; i++) {
+          const gapStart = Math.max(coastFrames[i - 1].t, start);
+          longest = Math.max(longest, coastFrames[i].t - gapStart);
+        }
+        // The coast's own time from `from` to `to`. The held coast steps
+        // linearly between its keyframes.
+        const effect = coast.effect as KeyframeEffect;
+        const duration = Number(effect.getComputedTiming().duration);
+        const keys = effect.getKeyframes().map(k => ({
+          offset: k.computedOffset,
+          x: parseFloat(String(k.translate)),
+        }));
+        const timeAt = (bound: number) => {
+          for (let i = 1; i < keys.length; i++) {
+            const [a, b] = [keys[i - 1], keys[i]];
+            if (a.x > bound && b.x <= bound) {
+              const along = (a.x - bound) / (a.x - b.x);
+              return (a.offset + (b.offset - a.offset) * along) * duration;
+            }
+          }
+          return Number.NaN;
+        };
+        return {
+          coasting: true,
+          gap: longest,
+          spanMs: timeAt(to) - timeAt(from),
+        };
+      },
+      [(await liftOffset()) - 10, edge + 20] as const,
+    );
+    const fromEdge = frozenX - edge;
+    // Past the edge, the photo is in its bounce.
+    const place =
+      fromEdge >= 0
+        ? `${fromEdge.toFixed(1)} px from its edge`
+        : `${(-fromEdge).toFixed(1)} px past its edge`;
+    if (!coasting) {
+      throw new Error(
+        `the scene froze with the photo ${place}, with no coast running`,
+      );
+    }
+    // Starvation explains the late freeze only when no frame came for as
+    // long as the coast takes to cross the span.
+    if (gap > FRAME_STARVATION_MS && gap >= spanMs) {
+      throw new FrameStarvationError({
+        by: 'freezePageWhen',
+        during:
+          "the coast ran from 10 px past the lift to 20 px short of the photo's edge",
+        frames: 0,
+        min: 1,
+        longestGapMs: gap,
+        cause: `the coast takes ${spanMs.toFixed(1)} ms over that span, and the scene froze with the photo ${place}. The page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the landing`,
+      });
+    }
+    throw new Error(
+      `the scene froze with the photo ${place}. The longest gap between frames in the coast was ${gap.toFixed(1)} ms, and the coast takes ${spanMs.toFixed(1)} ms from 10 px past the lift to 20 px short of the edge: a frame came in time to stop it there, so starvation does not explain the late freeze`,
+    );
+  }
   // The landing must find the coast still running, or it proves nothing.
   await photo.evaluate(el => {
     // The pointer event comes first, and the photo stops on it.

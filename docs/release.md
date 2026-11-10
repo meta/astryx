@@ -55,7 +55,14 @@ stable package is built from an immutable release tag and published with provena
    undecided-scope contract fallback that treats every file as changed when
    GitHub truncates the file list; it carries no other later `main` workflow or
    product work. The sync is not
-   a pull request, uses no force or admin operation, marks no check, and grants no release state. The repair branch then rebases onto the new release
+   a pull request, uses no force or admin operation, marks no check, and grants no release state. For `v0.7.12` only, if normal CI on that sync proves the
+   carried validator incomplete or finds that the carried fallback lacks its
+   matching workflow-contract test, one second and final reviewed fast-forward
+   may follow. Its exact bundle changes only `active-release.mjs`, its test, and
+   `.github/scripts/touched-components.test.mjs`; every line is an exact port
+   from a normal pull request already merged on `main`; and CodeBunny approves
+   the corrective commit's exact head before the fast-forward. The full release
+   gate reruns at that head. No third sync is allowed. The repair branch then rebases onto the final release
    head, and its required checks run under that trusted base. The repair itself needs exact-head CodeBunny approval and every normal product
    and test lane; after merge, the full exact-head release gate runs again and
    must pass. No retry, skipped check, admin merge, or manual override replaces

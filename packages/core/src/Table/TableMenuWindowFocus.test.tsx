@@ -26,7 +26,7 @@ afterEach(() => {
 function Fixture({items = data}: {items?: typeof data}) {
   const virtualization = useTableRowsVirtualization({
     rowHeight: 56,
-    viewportHeight: 240,
+    initialViewportHeight: 240,
   });
   const menu = useMemo(
     () => ({
