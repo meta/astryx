@@ -106,6 +106,12 @@ export const categories: SandboxCategory[] = [
           'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Refresh Control',
+        href: '/pages/refresh-control/',
+        description:
+          'A RefreshControl list in a card on a page that scrolls with the document, to check a pull to refresh on a phone, also under Reduce Motion',
+      },
+      {
         name: 'BottomSheet Pull',
         href: '/pages/bottom-sheet-pull/',
         description:
