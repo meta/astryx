@@ -92,8 +92,8 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   /** Where the finger landed, while its hold runs. The drift counts from here. */
   private holdFrom: {x: number; y: number} | null = null;
   /**
-   * The held finger's latest pointermove: when it came, on the event clock,
-   * and when the page got it.
+   * The held finger's latest move: the time it came with, and when the page
+   * got it.
    */
   private latestMove: {time: number; arrivedAt: number} | null = null;
   /** When the finger landed, on the arena's clock. The deadlines count from it. */
@@ -146,6 +146,17 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
 
   protected override touchesMoved(touches: ReadonlyArray<GestureTouch>): void {
     const touch = touches.find(each => each.id === this.pressTouchId);
+    if (touch != null) {
+      this.latestMove = {time: touch.inputTime, arrivedAt: performance.now()};
+      // A move from the menu's moment on: the finger stayed inside the
+      // tolerance until then, so the menu shows, and it moves freely after.
+      if (
+        this.isMenuWaiting &&
+        touch.inputTime >= this.holdStart + menuDisplayMs
+      ) {
+        this.showMenu();
+      }
+    }
     const hasDrifted = touch != null && !this.followHold(touch);
     if (hasDrifted && this.state === 'possible') {
       this.setState('failed');
@@ -156,18 +167,6 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
       return;
     }
     super.touchesMoved(touches);
-  }
-
-  /**
-   * ContextMenu's touch layer reports each pointermove of the held finger:
-   * the time it came, on the event clock. A move from the menu's moment on
-   * means no late move can still come before it.
-   */
-  followMove(time: number): void {
-    this.latestMove = {time, arrivedAt: performance.now()};
-    if (this.isMenuWaiting && time >= this.holdStart + menuDisplayMs) {
-      this.showMenu();
-    }
   }
 
   /**

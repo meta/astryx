@@ -1396,6 +1396,22 @@ test('a slow drift past 11.5 px late in the hold cancels it: no menu and no clic
   }
 });
 
+test('a finger still inside 11.5 px at the menu’s moment that crosses it just after still gets the menu (AST-094 FR12)', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  // 14 px over 650–760 ms: 10.6 px at the last move before 735 ms, 12.7 px
+  // at the first move after it.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 14, y: center.y},
+      {holdMs: 650, durationMs: 110, restMs: 300},
+    ),
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+});
+
 test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({
   page,
 }) => {
