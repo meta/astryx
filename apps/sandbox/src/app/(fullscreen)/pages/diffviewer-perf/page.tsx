@@ -48,17 +48,19 @@ import {
 import {
   createMultiFileWorkload,
   createSingleFileWorkload,
-  formatCount,
-  formatDuration,
   formatMegabytes,
   MULTI_FILE_WORKLOADS,
   SINGLE_FILE_LINES,
   type DiffBenchmarkFile,
   type MultiFileWorkloadId,
   type SingleFileChange,
+} from './benchmark';
+import {
+  formatCount,
+  formatDuration,
   type LongTaskReading,
   watchLongTasks,
-} from './benchmark';
+} from '../perfReadings';
 
 type Scenario = 'multi' | 'single';
 type Syntax = 'on' | 'off';
