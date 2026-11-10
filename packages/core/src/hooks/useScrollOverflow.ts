@@ -4,7 +4,7 @@
 
 /**
  * @file useScrollOverflow.ts
- * @input React refs, state and effects
+ * @input React refs, state and effects, and react-dom's flushSync
  * @output useScrollOverflow, which tracks the overflow at the scroll edges,
  *   and the internal useShownScrollOverflow, which can also measure from a
  *   position its caller reports
@@ -16,6 +16,7 @@
  */
 
 import {useState, useCallback, useEffect, useRef} from 'react';
+import {flushSync} from 'react-dom';
 import {observeResize} from '../utils/sharedResizeObserver';
 
 /**
@@ -116,7 +117,10 @@ export function useScrollOverflow() {
 /**
  * `useScrollOverflow`, plus `followShown`: while snap paging holds a row, its
  * scroll offset stays where the hold began and its items move. The caller
- * reports where the row is shown, and the edges follow it. Null measures the
+ * reports where the row is shown, and the edges follow it. A live report
+ * commits an edge change before it returns. A report that the caller's own
+ * call into the paging raises passes `isLive` false. That call can run inside
+ * React's commit, so the report takes React's scheduling. Null measures the
  * scroll offset again from the next frame, when the handed-back offset is
  * current. Internal: not exported from the hooks entry.
  */
@@ -131,8 +135,10 @@ export function useShownScrollOverflow() {
     overflowEnd: false,
     hasOverflow: false,
   });
+  // The edges last set, so a measure that changes no edge renders nothing.
+  const edgesRef = useRef(state);
 
-  const measureNow = useCallback((el: HTMLElement) => {
+  const measureNow = useCallback((el: HTMLElement, isLive = false) => {
     const tolerance = 1;
     const shown = shownRef.current;
     const offset = shown?.offset ?? Math.abs(el.scrollLeft);
@@ -142,16 +148,24 @@ export function useShownScrollOverflow() {
     const overflowEnd = offset < maxScroll - tolerance;
     const hasOverflow = maxScroll > tolerance;
 
-    setState(prev => {
-      if (
-        prev.overflowStart === overflowStart &&
-        prev.overflowEnd === overflowEnd &&
-        prev.hasOverflow === hasOverflow
-      ) {
-        return prev;
-      }
-      return {overflowStart, overflowEnd, hasOverflow};
-    });
+    const prev = edgesRef.current;
+    if (
+      prev.overflowStart === overflowStart &&
+      prev.overflowEnd === overflowEnd &&
+      prev.hasOverflow === hasOverflow
+    ) {
+      return;
+    }
+    const next = {overflowStart, overflowEnd, hasOverflow};
+    edgesRef.current = next;
+    if (isLive) {
+      // A live report comes from the paging's frame or event. An edge change
+      // commits there, before the paging can hand the row back.
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the buttons must change in the frame the row leaves its edge
+      flushSync(() => setState(next));
+    } else {
+      setState(next);
+    }
   }, []);
 
   // Only a rendered container is measured at registration and on a resize or
@@ -178,13 +192,13 @@ export function useShownScrollOverflow() {
   }, [measureNow]);
 
   const followShown = useCallback(
-    (shown: ShownPosition | null) => {
+    (shown: ShownPosition | null, isLive = true) => {
       cancelAnimationFrame(releaseFrameRef.current);
       const el = elRef.current;
       if (shown != null) {
         shownRef.current = shown;
         if (el) {
-          measureNow(el);
+          measureNow(el, isLive);
         }
         return;
       }

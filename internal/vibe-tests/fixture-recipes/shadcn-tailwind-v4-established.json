@@ -37,8 +37,8 @@
     "files": {
       "components.json": "27e08414c8f0ffc12ab6f8f07256972e880e83237cfa386edcf096f90e4b099a",
       "index.html": "b86ce1a6b448761d8e76df200b6d9e7e49eac94e4cf1e31d89b09ac1f27d81dd",
-      "package.json": "7b011c4c37a7dff9f824562f53cbd5a0a75349ed051ad855fbaa9c8936c92863",
-      "pnpm-lock.yaml": "7507bfc1d716f179916d4e551ad46f1f9ba57c3b8fbe33fd22f03b3d3fa624e4",
+      "package.json": "41b5eaa3d4b4939a6f8ee81500ec5c89239e77b570f10c573315a9a972d93337",
+      "pnpm-lock.yaml": "bc4db46b04a1b9ccc75eeb5f91fd7b3cdd0a21f1885429593b184f5f758e4ec6",
       "src/App.tsx": "1721f8ac051579b94ca182e8aec4ce5979fd744f3e79f78c74d669fd4e5d1ab7",
       "src/components/ui/button.tsx": "614113bbe9fbc62d68ee3e945db21a8b08b5cc01d36099b1b6036c8cbd7fa9f9",
       "src/components/ui/card.tsx": "7de658f3074fd050902de9a3e38d0bc88b2db22847f415d747b960eb76267c62",

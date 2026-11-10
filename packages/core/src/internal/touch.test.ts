@@ -188,6 +188,16 @@ describe('internal/touch', () => {
     }
   });
 
+  it("re-exports by name the scroll test Lab's TabBar reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const geometry = await import('../hooks/scrollGeometry');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.measureLogicalScrollAxis).toBe('function');
+    expect(entry.measureLogicalScrollAxis).toBe(
+      geometry.measureLogicalScrollAxis,
+    );
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');

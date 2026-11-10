@@ -8,7 +8,8 @@
  *   boundary, useAnnounce and viewport tokens. It also uses the shared layer
  *   text reset, the active modal outlet, the layer toast host registry and
  *   placement-derived motion variables
- * @output Exports the ToastViewport provider, stack, live announcement dispatch,
+ * @output Exports the ToastViewport provider, stack, live announcement dispatch
+ *   (an open modal's containers when hosted in one, else the shared channel),
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()
  *
@@ -23,7 +24,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -37,7 +37,12 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  announceInModal,
+  enclosingModalDialog,
+  useAnnounce,
+  type AnnouncePoliteness,
+} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -367,9 +372,6 @@ function ToastRow({
 }
 ToastRow.displayName = 'ToastRow';
 
-const hasActiveModalOutlet = (): boolean => getActiveModalOutlet() != null;
-const hasNoModalOutlet = (): boolean => false;
-
 /**
  * Container that renders and manages toast notifications. Place at the root
  * of your app to enable useToast(). Toasts stack with enter/exit
@@ -475,17 +477,26 @@ export function ToastViewport({
   // double-render/double-effect, viewport remounts, and unrelated list
   // re-renders never re-announce). It is client-only (addToast never runs
   // during SSR), so it is SSR-safe.
-  const announce = useAnnounce();
-  // An open native modal hides the body-level channel above from assistive
-  // technology, so while the viewport is hosted in one, each card announces
-  // itself through its own live region instead. Outside a modal the cards
-  // carry none, so a card updated in place is announced once.
-  const hasModalOutlet = useSyncExternalStore(
-    subscribeModalOutlets,
-    hasActiveModalOutlet,
-    hasNoModalOutlet,
+  // The viewport is each toast's only announcement owner; the card carries no
+  // live role. A top-layer viewport's host moves into the latest open native
+  // modal, where the page's shared channel is not exposed, so it writes
+  // through the containers of the modal its host sits in. A
+  // viewport rendered in place uses `useAnnounce`, which finds an enclosing
+  // modal through its context.
+  const announceShared = useAnnounce();
+  // The top-layer host (below), read at write time for the modal it sits in.
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const announce = useCallback(
+    (text: string, politeness: AnnouncePoliteness) => {
+      const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
+      if (modal != null) {
+        announceInModal(modal, text, politeness);
+        return;
+      }
+      announceShared(text, politeness);
+    },
+    [announceShared, isTopLayer],
   );
-  const isModalHosted = isTopLayer && hasModalOutlet;
 
   const addToast = useCallback(
     (entry: ToastEntry) => {
@@ -800,10 +811,12 @@ export function ToastViewport({
     }
     const element = document.createElement('div');
     element.style.display = 'contents';
+    hostRef.current = element;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- the host exists only on the client, so server and hydration markup carry no portal
     setHost(element);
     return () => {
       element.remove();
+      hostRef.current = null;
       setHost(null);
     };
   }, [isTopLayer]);
@@ -975,7 +988,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
-            isLiveRegion={isModalHosted}
+            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>

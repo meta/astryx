@@ -8,7 +8,8 @@
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
  *   module once text is truncated and tracks the first hover, tap or focus on
  *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
- * @position Shared by Text and Heading. Until the first interaction a page of
+ * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
+ *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
  *   answers that interaction as it would once mounted.
  */

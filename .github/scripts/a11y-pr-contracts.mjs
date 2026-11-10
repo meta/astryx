@@ -422,10 +422,23 @@ const RESOLVE_SUFFIXES = [
   '/index.js',
 ];
 
-const componentFolderOf = file => {
+/**
+ * The component folder that holds a file, as `<package>/<Folder>`.
+ * @param {string} file
+ */
+export const componentFolderOf = file => {
   const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
   return match ? `${match[1]}/${match[2]}` : null;
 };
+
+/**
+ * Whether a file is source the import graph follows: code that can put
+ * something on a page, never a test, story, doc or type declaration.
+ * @param {string} file
+ */
+export function isRenderedSource(file) {
+  return SOURCE.test(file) && !NOT_RENDERED.test(file);
+}
 
 function sourceFiles(root, dir) {
   const out = [];
@@ -436,7 +449,7 @@ function sourceFiles(root, dir) {
     if (entry.isDirectory()) {
       if (entry.name !== 'node_modules' && entry.name !== 'dist')
         out.push(...sourceFiles(root, file));
-    } else if (SOURCE.test(entry.name) && !NOT_RENDERED.test(file)) {
+    } else if (isRenderedSource(file)) {
       out.push(file);
     }
   }

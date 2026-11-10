@@ -1209,6 +1209,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+
   // A hover moves the highlight too, but the focus ring follows the shared
   // interaction modality (architecture:interaction-modality INV1): it is read
   // whenever a key or the pointer moves the highlight, so an action cell
@@ -1368,7 +1369,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
 
   const sortedItems = useMemo(() => {
-    const selectedSet = selectedAtOpen ?? new Set<string>();
+    // Closed, the list keeps the order it opens in, so an index picked
+    // before it opens (the opening highlight, a typed match) names the same
+    // option after the selected options move to the top.
+    const selectedSet = selectedAtOpen ?? new Set(optimisticValue);
     const result: MultiSelectorOptionData[] = [];
     let pendingFlat: MultiSelectorOptionData[] = [];
 
@@ -1419,6 +1423,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     searchQuery,
     options,
     selectedAtOpen,
+    optimisticValue,
     hasSelectAll,
     selectAllLabel,
     createQuery,
@@ -1848,6 +1853,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onTriggerClick,
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
+    setHighlightedIndex,
   } = useMultiCombobox({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
@@ -1877,6 +1883,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       [getActionCellIdForActivate],
     ),
   });
+
+  // A new query is a new list: the old highlight's index would name another
+  // row, or one past the end, so it is cleared. With no row highlighted, Left
+  // and Right stay the search field's caret keys. Adjusted during render
+  // rather than in an effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
 
   const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
     useKeyboardHighlight(

@@ -7,8 +7,8 @@
  * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext,
  *   useScrollRegionProps, resizablePane.ts
  * @output Exports LayoutPanel component and LayoutPanelProps
- * @position Sidebar panel for Layout start/end slots. Use for navigation panels,
- *   settings sidebars, detail panels, or any fixed-width side content.
+ * @position Sidebar panel for Layout start/end slots; its resize controller slides it.
+ *   Use for navigation panels, settings sidebars, detail panels, or any fixed-width side content.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Layout/Layout.doc.mjs
@@ -34,6 +34,7 @@ import {
 } from '../Resizable/useResizable';
 import {
   createResizablePaneLink,
+  regionOfProps,
   resizeHandleBeside,
 } from '../Resizable/resizablePane';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
@@ -53,7 +54,6 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexShrink: 0,
     overflow: 'clip',
-    // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingInlineEnd: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingBlockStart: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
@@ -63,21 +63,23 @@ const styles = stylex.create({
     '--container-padding-block-start': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
     '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
   },
-  // Start panel: outer-x on left edge
+  // An edge on the Layout's boundary takes the Layout-edge inset. Each edge
+  // publishes the padding it applies, so full-bleed children line up with it.
   startPanel: {
     paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // End panel: outer-x on right edge
   endPanel: {
     paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // When no header: outer-y on top
   noHeader: {
     paddingBlockStart: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-start': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
-  // When no footer: outer-y on bottom
   noFooter: {
     paddingBlockEnd: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-end': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
   fullBleed: {
     paddingInlineStart: 0,
@@ -141,7 +143,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
    * Adds a themed border on the appropriate edge.
    * - Start panel: border on end edge (right in LTR)
    * - End panel: border on start edge (left in LTR)
-   * When false, spacing collapse is applied automatically for seamless visual flow.
+   * When false and `padding` is unset, the panel and the content share one gap.
    *
    * Note: When using `resizable` with an adjacent `ResizeHandle hasDivider`,
    * set this to `false` to avoid a double-line artifact.
@@ -150,9 +152,10 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   hasDivider?: boolean;
 
   /**
-   * Internal padding of the panel using the spacing scale.
+   * Internal padding of the panel on every edge, using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
-   * Overrides the default padding from the layout container.
+   * Replaces the automatic inset and the gap shared with the content.
+   * `0` is full bleed.
    */
   padding?: SpacingStep;
 
@@ -213,7 +216,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     start={
  *       <LayoutPanel hasDivider role="navigation">
@@ -227,7 +230,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *       </LayoutPanel>
  *     }
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutPanel({
@@ -252,30 +255,57 @@ export function LayoutPanel({
 
   // When resizable props are provided, use the hook-driven size
   const effectiveWidth = resizable ? resizable._size : width;
+  // A collapsed region sizes its panel to 0.
+  const isZeroWidth = effectiveWidth === 0;
+  const elementRef = useRef<HTMLDivElement>(null);
 
-  // With no `resizable`, a ResizeHandle beside the panel that has a region's
-  // props finds the panel and holds it collapsed with the region. The panel
-  // lends its element in its callback ref for that.
+  // A panel sized by a resize controller lends it its element. The
+  // controller slides it on collapse and open. Given the hook's own `props`,
+  // the panel hands itself to that region. With no `resizable`, a
+  // ResizeHandle beside it that has the region's props finds it and holds it
+  // collapsed. A hand-built `resizable` object has no region: it lends
+  // nothing and never slides.
   const [paneLink] = useState(createResizablePaneLink);
   const isHeldCollapsed = useSyncExternalStore(
     paneLink.subscribe,
     paneLink.isCollapsed,
     returnFalse,
   );
-  const isLentBeside = resizable == null;
-  const lendRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      paneLink.attach(isLentBeside ? element : null);
-    },
-    [paneLink, isLentBeside],
-  );
+  const isFoundBeside = resizable == null;
+  const paneRegion = resizable == null ? undefined : regionOfProps(resizable);
+  // Syncs the panel's element with its resize controller. It lends here, not
+  // in the callback ref. The scroll region's ref changes at width 0, so React
+  // runs every merged ref again. A lend taken back mid-collapse would land the
+  // slide.
+  useIsomorphicLayoutEffect(() => {
+    const isLent = isFoundBeside || paneRegion != null;
+    const lend = (element: HTMLDivElement | null) => {
+      const pane = paneLink.attach(isLent ? element : null, isFoundBeside);
+      paneRegion?.attach(pane);
+    };
+    lend(elementRef.current);
+    return () => {
+      lend(null);
+    };
+  }, [paneLink, isFoundBeside, paneRegion]);
+  const contentFacingEdge = area === 'end' ? 'inline-start' : 'inline-end';
+  // A collapse or open reaches the controller before the DOM changes, in the
+  // commit that renders it. That holds for the controller's own change and
+  // for a controlled `isCollapsed` it hears of after this commit.
+  const tellBeforeChange = useCallback(() => {
+    paneLink.beforeChange(isZeroWidth);
+  }, [paneLink, isZeroWidth]);
+  // Syncs the resize controller's pane link with the width and edge this
+  // commit rendered.
+  useIsomorphicLayoutEffect(() => {
+    paneLink.committed(effectiveWidth, contentFacingEdge);
+  });
 
   // A collapsing panel moves focus inside it to its ResizeHandle, through the
   // focus-leaving sequence that disclosures share. It goes inert and hidden
   // from assistive technology a commit later, so inert never drops that focus
   // to the page. Opening drops both at once. The ResizeHandle beside it holds
   // the region's collapse state, or else the `resizable` props hold it.
-  const elementRef = useRef<HTMLDivElement>(null);
   const isRegionCollapsed =
     resizable == null ? isHeldCollapsed : resizable._isCollapsed;
   const noteFocusBeforeCollapse = useFocusLeavingChange(
@@ -313,8 +343,6 @@ export function LayoutPanel({
   const isEndPanel = area === 'end';
 
   const isZeroPadding = padding === 0;
-  // A collapsed region sizes its panel to 0.
-  const isZeroWidth = effectiveWidth === 0;
 
   // When no divider, collapse spacing for seamless visual flow
   const shouldCollapseSpacing =
@@ -325,7 +353,7 @@ export function LayoutPanel({
     role,
     label,
   });
-  const mergedRef = useMergedRefs(ref, region.ref, elementRef, lendRef);
+  const mergedRef = useMergedRefs(ref, region.ref, elementRef);
 
   // Select divider style based on position
   const dividerStyle = isStartPanel
@@ -375,6 +403,10 @@ export function LayoutPanel({
       )}
       {...props}
       {...(isConcealed ? {inert: true, 'aria-hidden': true} : {})}>
+      <LayoutChangeSnapshot
+        value={isZeroWidth}
+        onBeforeChange={tellBeforeChange}
+      />
       <LayoutChangeSnapshot
         value={isRegionCollapsed}
         onBeforeChange={noteFocusBeforeCollapse}

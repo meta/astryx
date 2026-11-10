@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {requireNatively} from '../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../api/integration/check/check.mjs')} */
@@ -167,7 +168,7 @@ let result;
 beforeAll(async () => {
   // Under the repository, so the components check resolves Core. Every kind
   // of root, so every field a check's result can carry is present.
-  pkg = fs.mkdtempSync(path.join(process.cwd(), '.astryx-check-failures-'));
+  pkg = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-check-failures-'));
   const write = (/** @type {string} */ rel, /** @type {string} */ text) => {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), {recursive: true});
     fs.writeFileSync(path.join(pkg, rel), text);

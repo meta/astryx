@@ -76,7 +76,7 @@ describe('native Swift routing', () => {
 
   it('fails closed when the runner cannot be decided', () => {
     expect(step(swift, 'Require a decided Swift runner').if).toBe(
-      "needs.admission.result != 'failure' && needs.native-swift-runner.result != 'success'",
+      "needs.admission.result != 'failure' && needs.admission.result != 'skipped' && needs.native-swift-runner.result != 'success'",
     );
     for (const candidate of swift.steps) {
       if (
@@ -95,7 +95,11 @@ describe('native Swift routing', () => {
   it('fails a run CI admission turned away with that reason, not as a Swift failure', () => {
     const refused = step(swift, 'Stop when CI admission refused the run');
     expect(swift.steps[0]).toBe(refused);
-    expect(refused.if).toBe("needs.admission.result == 'failure'");
+    // Admission fails at its own stop, and skips when room stopped the run.
+    expect(refused.if).toBe(
+      "needs.admission.result == 'failure' || needs.admission.result == 'skipped'",
+    );
+    expect(ci.jobs.room.steps.at(-1).name).toBe('Stop when CI is full');
     expect(refused.run).toContain(
       'CI admission refused this run (CI full); re-run all jobs.',
     );
@@ -124,6 +128,9 @@ describe('native Swift routing', () => {
       );
     expect(evaluate(asJs(refused.if), 'failure', 'skipped')).toBe(true);
     expect(evaluate(asJs(decided.if), 'failure', 'skipped')).toBe(false);
+    // Room stopped the run, so admission skipped.
+    expect(evaluate(asJs(refused.if), 'skipped', 'skipped')).toBe(true);
+    expect(evaluate(asJs(decided.if), 'skipped', 'skipped')).toBe(false);
     expect(evaluate(asJs(refused.if), 'success', 'failure')).toBe(false);
     expect(evaluate(asJs(decided.if), 'success', 'failure')).toBe(true);
     expect(evaluate(asJs(decided.if), 'success', 'success')).toBe(false);
