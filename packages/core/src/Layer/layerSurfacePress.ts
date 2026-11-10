@@ -11,7 +11,12 @@
  *   exported from the package.
  */
 
-const surfaces = new WeakSet<Element>();
+import {sharedWeakSet} from '../utils/sharedRealm';
+
+const surfaces = sharedWeakSet<Element>(
+  'layer/layer-surface-press/surfaces',
+  1,
+);
 
 /**
  * Ref callback for a layer surface's content element. The layer root around
