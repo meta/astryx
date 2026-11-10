@@ -8,6 +8,7 @@ import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Text} from '@astryxdesign/core/Text';
+import {readAnchorNames} from '../../../packages/core/src/Layer/anchorName';
 
 const styles = stylex.create({
   popoverContent: {
@@ -629,16 +630,6 @@ function sameRect(a: DOMRect, b: DOMRect) {
   );
 }
 
-/** The most frames a click may take to open its layer. */
-const OPEN_WITHIN_FRAMES = 2;
-
-const readAnchorNames = (element: HTMLElement) =>
-  element.style
-    .getPropertyValue('anchor-name')
-    .split(',')
-    .map(name => name.trim())
-    .filter(Boolean);
-
 /** The open layer that anchors to this trigger, or null. */
 function openLayerOf(trigger: HTMLElement): HTMLElement | null {
   const names = readAnchorNames(trigger);
@@ -653,25 +644,22 @@ function openLayerOf(trigger: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Wait until the trigger's own layer is open. The click's update can commit
- * in the microtask after `click()` returns. That is still before the next
- * paint, so a read after this wait is the first frame's geometry. A layer
- * that does not open within OPEN_WITHIN_FRAMES frames fails by name.
+ * Fail unless the trigger's own layer is open by the end of the click's task.
+ * The click's update can commit in the microtask after `click()` returns. That
+ * is still before the next paint, so a read after this check is the first
+ * frame's geometry.
  */
-async function layerOpened(trigger: HTMLElement): Promise<void> {
+async function assertLayerOpened(trigger: HTMLElement): Promise<void> {
   await committed();
-  for (let frame = 0; openLayerOf(trigger) == null; frame++) {
-    if (frame === OPEN_WITHIN_FRAMES) {
-      fail(`the layer did not open within ${OPEN_WITHIN_FRAMES} frames`);
-    }
-    await nextFrame();
+  if (openLayerOf(trigger) == null) {
+    fail("the layer did not open by the end of the click's task");
   }
 }
 
 /**
- * Click the trigger, wait until its layer is open, read the first frame's
- * geometry (the rect read forces layout), then settle and read again. A
- * difference is a paint-then-shift (FR8).
+ * Click the trigger, check that its layer opened in the click's task, read the
+ * first frame's geometry (the rect read forces layout), then settle and read
+ * again. A difference is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
   const trigger = canvasElement.querySelector<HTMLElement>(
@@ -681,7 +669,7 @@ async function open(canvasElement: HTMLElement): Promise<Rects> {
     throw new Error('No trigger');
   }
   trigger.click();
-  await layerOpened(trigger);
+  await assertLayerOpened(trigger);
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);
