@@ -27,6 +27,13 @@ import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
+// Some Node 25 releases leave the negative spelling out of this list, so the
+// check reads the positive one.
+const webStorageOff = process.allowedNodeEnvironmentFlags.has(
+  '--experimental-webstorage',
+)
+  ? ['--no-experimental-webstorage']
+  : [];
 // Times the Markdown helper pipeline against the empty one on the CPU clock.
 // CPU time still includes cache and memory-bandwidth contention from other
 // work, so this file runs alone in the `perf` project.
@@ -96,7 +103,9 @@ export default defineConfig({
     // Increase worker heap to prevent OOM crashes on memory-heavy test files
     // (e.g. Chat composer tests with contentEditable + popover portals in
     // jsdom). Vitest 4 removed `poolOptions`; per-worker argv is now top-level.
-    execArgv: ['--max-old-space-size=4096'],
+    // Node 25 and later define their own `localStorage` global, which hides
+    // jsdom's; a Node that knows the flag turns its own off in the workers.
+    execArgv: ['--max-old-space-size=4096', ...webStorageOff],
     // A `--shard` leg of the `node` project runs files chosen by their
     // recorded time, not by count, so the slowest files never share a leg
     // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).
@@ -200,9 +209,19 @@ export default defineConfig({
           // `.doc.mjs` documentation modules the docs catalog imports by the
           // hundred (doctor's first case: 0.7 s natively, 4.7 s inlined).
           // Both grow several times over on a loaded box. Mocks keep working
-          // from inlined callers.
+          // from inlined callers. The CLI's doc importers import doc files
+          // through `import-url.mjs`, which loads natively too, so its imports
+          // make no request to Vitest's main process. Each request waits in
+          // line behind every worker: `template --list` imports 771 doc files,
+          // 0.6 s alone and up to 26 s on a loaded box.
           server: {
-            deps: {external: [/\/packages\/core\/dist\//, /\.doc\.mjs$/]},
+            deps: {
+              external: [
+                /\/packages\/core\/dist\//,
+                /\.doc\.mjs$/,
+                /\/packages\/cli\/foundation\/fs\/import-url\.mjs$/,
+              ],
+            },
           },
           // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
           // (real process boundary). Under the forks pool these cold-starts can

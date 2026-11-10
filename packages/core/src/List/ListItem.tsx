@@ -12,13 +12,18 @@
  *   items of mixed lists. It also reads Item's private exact-marker formatting
  *   scope for numbered
  *   rows. Number markers stay on one line in the List's shared column,
- *   keeping every sibling's text and nested list on the same start line;
- *   they end on one line too, right-aligned with tabular figures, and hang
+ *   keeping every sibling's text and nested list on the same start line.
+ *   They end on one line too, right-aligned with tabular figures, and hang
  *   into the row's inline inset before they widen that column. Markdown's
  *   outside counters keep the themed column and may paint beyond it, matching
  *   RichText's native outside markers without a finite width threshold.
  * @output Exports ListItem component, ListItemProps type
- * @position Core implementation; consumed by List, index.ts, tested by List.test.tsx
+ * @position Core implementation. Consumed by List, index.ts, tested by List.test.tsx
+ *
+ * In a reorderable List (`List reorderable`), each row with an `itemKey`
+ * that the reorderable object lets move ends with its handle. The handle
+ * comes through ListContext's `reorder` with the rest of the reorder
+ * machinery (List/listReorderContext.ts). A row without one keeps its place.
  *
  * Composes Item for the shared start content + label + description + end content layout
  * and the invisible button/anchor interactive pattern.
@@ -31,7 +36,7 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {use, useMemo, type ReactNode} from 'react';
+import {use, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -48,6 +53,8 @@ import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {Item, servesSwipeActions} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
+import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
+import {ItemTrailingContext} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -149,7 +156,9 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
   /**
    * The row's item key, a string or a number from the data, in the shape
    * Table's `idKey` returns. It is the row's identity for the list's
-   * `animatedLayout`. A row without one changes at once. It is separate from
+   * `animatedLayout`. In a reorderable List (`List reorderable`), it is the
+   * key `onReorder` reports and `isReorderable` is asked about. A row without
+   * one changes at once and has no reorder handle. It is separate from
    * React's `key`, which stays React's own.
    */
   itemKey?: string | number;
@@ -212,14 +221,31 @@ const styles = stylex.create({
   },
   // 'bleed': the row fills the list, which reaches the container's padding
   // edge (List.tsx); its text sits on the container's padding line, never
-  // closer to the row's edge than its own inset. Square corners: the row
-  // meets the container's straight sides.
+  // closer to the row's edge than its own inset. Square corners where the row
+  // meets the container's straight sides; the first and last rows take the
+  // corners the list publishes for a rounded container's corner.
   edgeBleed: {
     paddingInlineStart:
       'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))',
     paddingInlineEnd:
       'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))',
     borderRadius: 0,
+    borderStartStartRadius: {
+      default: null,
+      ':first-child': 'var(--_list-corner-start-start, 0px)',
+    },
+    borderStartEndRadius: {
+      default: null,
+      ':first-child': 'var(--_list-corner-start-end, 0px)',
+    },
+    borderEndStartRadius: {
+      default: null,
+      ':last-child': 'var(--_list-corner-end-start, 0px)',
+    },
+    borderEndEndRadius: {
+      default: null,
+      ':last-child': 'var(--_list-corner-end-end, 0px)',
+    },
   },
   // Under a finger, the row's touch band rises above the rows after it. A
   // later row is positioned with no z-index, so it would paint and hit-test
@@ -341,7 +367,7 @@ const markerStyles = stylex.create({
   },
   // Markdown's non-swipe lists allow outside marker paint. Keep their marker
   // column at the ordinary themed width, as RichText's native outside markers
-  // do (spec:AST-061 FR11). The counter itself stays intrinsic and unbroken;
+  // do. The counter itself stays intrinsic and unbroken;
   // flex-end aligns its end even when it overflows toward inline-start. A
   // larger finite negative margin would only move the parity failure threshold.
   gutterHang: {
@@ -438,15 +464,60 @@ export function ListItem({
   ...restProps
 }: ListItemProps) {
   const ctx = use(ListContext);
+  // The row's element, which a row without a handle names for the reorder.
+  const rowRef = useRef<HTMLLIElement | null>(null);
   // A List isolates its rows, so what a row raises stays below a page-level
   // sticky header. Outside a List nothing bounds a raise, so a row raises
   // nothing there.
   const isInList = ctx != null;
+  // In a reorderable List: a trailing handle, or a row that stays put.
+  const reorder = ctx?.reorder;
+  const hasHandle =
+    reorder != null &&
+    itemKey != null &&
+    (reorder.options.isReorderable?.(itemKey) ?? true);
+  // The handle is the one element reordering adds to a row. With end content
+  // it joins the end slot. Without, it is the row's own child
+  // (ItemTrailingContext), since an end slot of its own would be a second
+  // element.
+  const isHandleInRow = hasHandle && endContent == null;
+  const rowLabel = restProps['aria-label'];
+  const rowLabelledBy = restProps['aria-labelledby'];
+  const rowAlign = isHandleInRow ? (align ?? 'center') : undefined;
+  const Handle = reorder?.session.Handle;
+  const reorderHandle = useMemo(
+    () =>
+      hasHandle && Handle != null && itemKey != null ? (
+        <Handle
+          label={label}
+          itemKey={itemKey}
+          isDisabled={isDisabled}
+          rowLabel={rowLabel}
+          rowLabelledBy={rowLabelledBy}
+          rowAlign={rowAlign}
+        />
+      ) : null,
+    [
+      Handle,
+      hasHandle,
+      isDisabled,
+      itemKey,
+      label,
+      rowAlign,
+      rowLabel,
+      rowLabelledBy,
+    ],
+  );
   // Under a finger, the row's hit target grows where its neighbors leave room.
   const isTouchTarget =
     (onClick != null || href != null || interactiveRef != null) && !isDisabled;
   const hitAreaRef = useTouchHitArea(isTouchTarget);
-  const mergedRef = useMergedRefs(ref, hitAreaRef, keepPresentationOnDetach);
+  const mergedRef = useMergedRefs(
+    ref,
+    rowRef,
+    hitAreaRef,
+    keepPresentationOnDetach,
+  );
   // A row that Item serves swipe actions on is a stacking context at rest. So
   // its band's own z-index orders only inside it, and under a finger the row
   // raises itself. Its root is its `<li>`, never a link.
@@ -513,6 +584,14 @@ export function ListItem({
     [task, markerKind, hasMarkerGutter],
   );
 
+  // A row without a handle in a reorderable List still has a name for the
+  // announcements of the moves beside it. It follows the row, so the row's
+  // element is set when it records it.
+  const reorderName =
+    reorder && !reorderHandle ? (
+      <reorder.session.RowName row={rowRef} label={label} />
+    ) : null;
+
   const item = (
     <Item
       as="li"
@@ -521,7 +600,16 @@ export function ListItem({
       startContent={startContent}
       label={label}
       description={description}
-      endContent={endContent}
+      endContent={
+        reorderHandle != null && !isHandleInRow ? (
+          <>
+            {endContent}
+            {reorderHandle}
+          </>
+        ) : (
+          endContent
+        )
+      }
       onClick={onClick}
       interactiveRef={interactiveRef}
       href={href}
@@ -548,6 +636,9 @@ export function ListItem({
           edge === 'flush' && styles.edgeFlush,
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,
+          // A focused handle rings itself; the row's focus-within ring stays
+          // off for it (two rings, and the list clips the row's sides).
+          reorderHandle && reorder?.session.rowStyle,
           xstyle,
         ] as StyleXStyles
       }
@@ -559,10 +650,23 @@ export function ListItem({
   const row = <ItemListRowContext value>{item}</ItemListRowContext>;
   // Only numbered rows contribute two cells to List's shared counter grid.
   // Passing the marker identity keeps this request off unrelated Items in slots.
-  return usesNumberColumns ? (
+  const marked = usesNumberColumns ? (
     <ItemMarkerColumnsContext value={marker}>{row}</ItemMarkerColumnsContext>
   ) : (
     row
+  );
+  return (
+    <>
+      {/* One shape whether or not the handle is the row's own child, so the
+          row keeps its element when that changes. */}
+      <ItemTrailingContext value={isHandleInRow ? reorderHandle : null}>
+        {/* The handle is named after the row's label. */}
+        <ItemLabelNeededContext value={reorderHandle != null}>
+          {marked}
+        </ItemLabelNeededContext>
+      </ItemTrailingContext>
+      {reorderName}
+    </>
   );
 }
 

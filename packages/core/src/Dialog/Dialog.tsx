@@ -42,6 +42,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -68,6 +69,7 @@ import {
   spacingVars,
 } from '../theme/tokens.stylex';
 import {container} from '../Layout/container.stylex';
+import {containerCornerStyles} from '../Layout/containerCorners.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
   paddingStyles,
@@ -80,7 +82,7 @@ import {
 import type {SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
@@ -270,6 +272,7 @@ const styles = stylex.create({
     height: '100dvh',
     maxWidth: '100dvw',
     maxHeight: '100dvh',
+    '--_dialog-radius': '0px',
     borderRadius: 0,
     // Nothing of the page shows around a full-screen dialog: no edge.
     borderWidth: 0,
@@ -304,6 +307,10 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: 'hidden',
     borderRadius: 'inherit',
+  },
+  innerCorners: {
+    '--_container-corner-block-start': 'var(--_dialog-radius)',
+    '--_container-corner-block-end': 'var(--_dialog-radius)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -604,19 +611,27 @@ export function Dialog({
   // own title on mount — would otherwise move document.activeElement inside
   // the dialog before the capture ran, and closing would then restore focus
   // to a detached node, stranding the user's focus on <body>.
+  //
+  // Only the closed-to-open edge captures. StrictMode replays this effect
+  // after the open commit's passive effects. By then Dialog has focused the
+  // title, so a replayed capture would take the title as the opener. The ref
+  // survives the replay. It starts false, so a dialog first mounted open still
+  // captures.
+  const wasOpenRef = useRef(false);
   useLayoutEffect(() => {
-    if (isInline || !isOpen) {
-      return;
+    const isOpenNow = !isInline && isOpen;
+    if (isOpenNow && !wasOpenRef.current) {
+      // The dialog's own document while it holds focus: an app can render a
+      // dialog into a second document (a same-origin iframe, a Document
+      // Picture-in-Picture window) through a portal, and a control there that
+      // opens it is focused in that document, which the page's document reports
+      // only as the iframe element, or not at all. A control in the page that
+      // opens such a dialog leaves focus in the page.
+      const dialogDocument = dialogRef.current?.ownerDocument ?? document;
+      const doc = dialogDocument.hasFocus() ? dialogDocument : document;
+      triggerElementRef.current = doc.activeElement as HTMLElement | null;
     }
-    // The dialog's own document while it holds focus: an app can render a
-    // dialog into a second document (a same-origin iframe, a Document
-    // Picture-in-Picture window) through a portal, and a control there that
-    // opens it is focused in that document, which the page's document reports
-    // only as the iframe element, or not at all. A control in the page that
-    // opens such a dialog leaves focus in the page.
-    const dialogDocument = dialogRef.current?.ownerDocument ?? document;
-    const doc = dialogDocument.hasFocus() ? dialogDocument : document;
-    triggerElementRef.current = doc.activeElement as HTMLElement | null;
+    wasOpenRef.current = isOpenNow;
   }, [isOpen, isInline]);
 
   // Derive dismissal behavior from purpose
@@ -744,27 +759,19 @@ export function Dialog({
   });
 
   // Dev-time guardrail: an open modal should always have an accessible name.
-  // The header-title check reads the DOM, so this stays in an effect; the ref
-  // keeps it to one warning per component instance.
-  const warnedUnnamedDialogRef = useRef(false);
+  // The header-title check reads the DOM, so this stays in an effect.
+  const [warn] = useState(createDevWarnings);
   useEffect(() => {
     const hasHeaderTitle =
       dialogRef.current?.querySelector(`#${CSS.escape(titleId)}`) != null;
-    if (
-      isOpen &&
-      !isInline &&
-      !hasConsumerName &&
-      !hasHeaderTitle &&
-      !warnedUnnamedDialogRef.current
-    ) {
-      warnedUnnamedDialogRef.current = true;
-      devWarn(
+    if (isOpen && !isInline && !hasConsumerName && !hasHeaderTitle) {
+      warn(
         'Dialog',
         'open dialog has no accessible name. Add a DialogHeader ' +
           'with a `title`, or pass `aria-label`/`aria-labelledby`.',
       );
     }
-  }, [isOpen, isInline, hasConsumerName, titleId]);
+  }, [isOpen, isInline, hasConsumerName, titleId, warn]);
 
   // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the
@@ -833,6 +840,8 @@ export function Dialog({
           effectivePadding !== 4 &&
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
+        styles.innerCorners,
+        containerCornerStyles.publish,
       )}>
       <DialogContext value={dialogContextValue}>{children}</DialogContext>
     </div>

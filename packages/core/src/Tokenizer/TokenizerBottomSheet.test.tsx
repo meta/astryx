@@ -3367,3 +3367,91 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
   });
 });
+
+// The sheet calls the source's cancel where the inline field does: when a
+// newer query replaces pending work, and when the sheet closes or unmounts
+// while work is pending (spec:BaseTypeahead PR1, component:Tokenizer).
+describe('Tokenizer sheet presentation: search cancellation', () => {
+  function pendingSource() {
+    const cancel = vi.fn();
+    const pending: SearchSource<SearchableItem> = {
+      search: async () => new Promise<SearchableItem[]>(() => {}),
+      bootstrap: async () => new Promise<SearchableItem[]>(() => {}),
+      cancel,
+    };
+    return {source: pending, cancel};
+  }
+
+  function renderSheet(searchSource: SearchSource<SearchableItem>) {
+    return render(
+      <Tokenizer
+        label="Tags"
+        searchSource={searchSource}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />,
+    );
+  }
+
+  it('cancels a pending search once when a newer query replaces it', async () => {
+    const {source: pending, cancel} = pendingSource();
+    renderSheet(pending);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    expect(cancel).not.toHaveBeenCalled();
+    fireEvent.change(search, {target: {value: 'en'}});
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels pending work once when the sheet closes', async () => {
+    const {source: pending, cancel} = pendingSource();
+    renderSheet(pending);
+    fireEvent.click(openTrigger());
+    await screen.findByLabelText('Search Tags');
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+  });
+
+  it('cancels pending work once when the field unmounts', async () => {
+    const {source: pending, cancel} = pendingSource();
+    const {unmount} = renderSheet(pending);
+    fireEvent.click(openTrigger());
+    await screen.findByLabelText('Search Tags');
+    unmount();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the source that started a request, not a replacement source', async () => {
+    const first = pendingSource();
+    const second = pendingSource();
+    const {rerender} = renderSheet(first.source);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    rerender(
+      <Tokenizer
+        label="Tags"
+        searchSource={second.source}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />,
+    );
+    fireEvent.change(search, {target: {value: 'en'}});
+    expect(first.cancel).toHaveBeenCalledTimes(1);
+    expect(second.cancel).not.toHaveBeenCalled();
+  });
+
+  it('does not cancel when no work is pending', async () => {
+    const cancel = vi.fn();
+    const {unmount} = renderSheet({...source, cancel});
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    fireEvent.change(search, {target: {value: 'en'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    unmount();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+});

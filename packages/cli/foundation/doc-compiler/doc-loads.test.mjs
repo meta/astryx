@@ -342,12 +342,14 @@ const RUNNERS = {
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],
   },
   'foundation/doc-compiler/import.mjs': {
-    runs: 'authored doc files, for the doc reader and discovery, and again after an edit',
+    runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
       '.import() ×2',
       'createJiti ×2',
-      'import(<computed>) ×4',
+      'importUrl ×2',
       'importUserModule ×2',
+      'readFreshInTurn',
+      'readInTurn',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
@@ -355,7 +357,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
       '.import() ×6',
       'createJiti ×2',
@@ -365,16 +367,23 @@ const RUNNERS = {
     ],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render worker, so a page that never finishes can be stopped',
+    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
+    sites: ['child_process.fork', 'child_process.spawnSync'],
+  },
+  'foundation/render/page-host.mjs': {
+    runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
     sites: ['worker_threads.Worker'],
   },
+  'foundation/fs/import-url.mjs': {
+    runs: 'the doc file at a file URL, for the doc importers',
+    sites: ['import(<computed>)'],
+  },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
     sites: [
       '.import() ×3',
       'createJiti ×3',
-      'import(<computed>)',
-      'require(<computed>)',
+      'import(<computed>) ×2',
       'require.cache',
     ],
   },
@@ -435,6 +444,7 @@ const RUNNERS = {
  */
 const LOADER_MODULES = {
   'foundation/doc-compiler/import.mjs': [],
+  'foundation/fs/import-url.mjs': [],
   'foundation/fs/module-loader.mjs': ['findPresentFiles'],
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [
