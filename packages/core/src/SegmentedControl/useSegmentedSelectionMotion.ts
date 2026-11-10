@@ -100,12 +100,6 @@ export const LAYER_GEOMETRY: ReadonlyArray<string> = [
   'visibility',
 ];
 
-/**
- * The lifted lens's shadow: the theme's low elevation, which SegmentedControl's
- * styles define on the radiogroup.
- */
-const LIFTED_SHADOW = 'var(--_segmented-lifted-shadow)';
-
 /** The custom property on the radiogroup that sets `property` of `layer`. */
 export function layerVariable(layer: Layer, property: string): string {
   return `--_segmented-${layer}-${property.replace(/^-+/, '')}`;
@@ -406,9 +400,8 @@ function defaultNow(): number {
  * Under a finger:
  * - A press on the selected segment lifts the lens, as UIKit's does. It
  *   grows by `liftGrowth` on the `lift` spring and shrinks back on the same
- *   spring after the release. A pen's press lifts it too. While lifted it
- *   carries the theme's low elevation shadow, so the track stays visible
- *   around it.
+ *   spring after the release. A pen's press lifts it too. The lifted lens
+ *   keeps the selected surface's own look; it adds no shadow.
  * - A drag from the selected segment carries the lifted lens. Its center
  *   chases the finger, at most `dragOvershoot` past the end segments.
  * - The selected title's color follows the lens's center. It moves to a
@@ -458,11 +451,6 @@ export class SegmentedSelectionMotion {
   private isHeld = false;
   /** The held lens grew by `liftGrowth`; its settle shrinks it back. */
   private isLifted = false;
-  /**
-   * The lifted lens wears the theme's elevation. The hand-back clears this
-   * shadow with the lens, so a commit's repaint keeps it until then.
-   */
-  private hasLiftedEdge = false;
   /**
    * The touch presentation applies (a coarse primary pointer), so every
    * change slides on UIKit's springs. When it is off, a change slides on the
@@ -586,7 +574,7 @@ export class SegmentedSelectionMotion {
       if (carried != null && carried.segment === destination) {
         if (carried.hidden !== destination) {
           showSurface(carried.hidden);
-          this.paintLens(track, destination);
+          paintLayer(track, 'lens', destination);
           hideSurface(destination);
           carried.hidden = destination;
         }
@@ -704,25 +692,7 @@ export class SegmentedSelectionMotion {
       scaleY: (carried.box.height + height) / carried.box.height,
     };
     this.isLifted = true;
-    this.hasLiftedEdge = true;
     this.springLens(lifted, this.springFrom(lifted, 'lift'));
-    this.showLiftedEdge();
-  }
-
-  /** The lifted lens's edge: the theme's low elevation. */
-  private showLiftedEdge(): void {
-    this.track?.style.setProperty(
-      layerVariable('lens', 'box-shadow'),
-      LIFTED_SHADOW,
-    );
-  }
-
-  /** Paints the lens with `segment`'s surface; a lifted lens keeps its edge. */
-  private paintLens(track: HTMLElement, segment: HTMLElement): void {
-    paintLayer(track, 'lens', segment);
-    if (this.hasLiftedEdge) {
-      this.showLiftedEdge();
-    }
   }
 
   /**
@@ -1003,7 +973,6 @@ export class SegmentedSelectionMotion {
     this.endLeaving();
     this.isHeld = false;
     this.isLifted = false;
-    this.hasLiftedEdge = false;
     this.pending = null;
     const carried = this.carried;
     if (carried != null) {
@@ -1247,7 +1216,7 @@ export class SegmentedSelectionMotion {
       if (this.abandoned.has(paint)) {
         showSurface(paint);
       }
-      this.paintLens(track, paint);
+      paintLayer(track, 'lens', paint);
       hideSurface(paint);
       this.abandoned.delete(paint);
     }

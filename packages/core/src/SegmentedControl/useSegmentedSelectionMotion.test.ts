@@ -666,9 +666,9 @@ describe('under a finger', () => {
     expect(ctx.layer('lens', 'width')).toBe('96px');
     expect(ctx.layer('lens', 'height')).toBe('27px');
     expect(ctx.layer('after', 'visibility')).toBe('');
-    // Lifted, it carries the theme's elevation, so the track stays visible.
+    // Lifted, it keeps the selected surface's own shadow: the lift adds none.
     expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
+      'rgba(0, 0, 0, 0.1) 0px 1px 2px',
     );
     // It grows without overshoot: UIKit's lift is critically damped.
     let width = 96;
@@ -689,7 +689,7 @@ describe('under a finger', () => {
     await advance(2000);
     expect(ctx.motion.isSliding).toBe(false);
     expectOwnSurface(ctx.segments.grid);
-    // The hand-back clears the lifted edge with the lens.
+    // The hand-back clears the lens.
     expect(ctx.layer('lens', 'box-shadow')).toBe('');
   });
 
@@ -707,7 +707,7 @@ describe('under a finger', () => {
     expectOwnSurface(ctx.segments.grid);
   });
 
-  it('a drag that commits another segment keeps the lifted edge while the lens travels there, until the hand-back (FR14)', async () => {
+  it('a drag that commits another segment repaints the lens from that segment\u2019s surface and adds no shadow (FR14)', async () => {
     const ctx = setup('grid');
     press(ctx, clientCenterOf('grid'));
     drag(ctx, clientCenterOf('list'));
@@ -715,15 +715,10 @@ describe('under a finger', () => {
     expect(release(ctx, clientCenterOf('list'))).toBe('list');
     ctx.motion.clicked(ctx.track, 'list', false);
     await Promise.resolve();
-    // The new value repaints the lens from List's surface; the edge stays.
     select(ctx, 'grid', 'list');
     expect(ctx.motion.isSliding).toBe(true);
     expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
-    );
-    await advance(100);
-    expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
+      'rgba(0, 0, 0, 0.1) 0px 1px 2px',
     );
     await advance(3000);
     expect(ctx.motion.isSliding).toBe(false);

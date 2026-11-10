@@ -3074,17 +3074,10 @@ test('a finger holding the selected segment lifts its surface by 24 × 16 px, as
   // Lands on Grid, rests 450 ms (a 1 px move to read the lens, well inside
   // the drag's slop), then lifts there.
   let edge = 'none';
-  const theme = await control.group.evaluate(group => {
-    // The theme's low elevation, as the browser resolves it.
-    const probe = group.ownerDocument.createElement('div');
-    probe.style.boxShadow = getComputedStyle(group)
-      .getPropertyValue('--_segmented-lifted-shadow')
-      .trim();
-    group.ownerDocument.body.append(probe);
-    const resolved = getComputedStyle(probe).boxShadow;
-    probe.remove();
-    return resolved;
-  });
+  // The selected surface's own shadow, as the browser resolves it.
+  const own = await control
+    .segment('grid')
+    .evaluate(segment => getComputedStyle(segment).boxShadow);
   const holdAndRead = async () => {
     const held: Awaited<ReturnType<typeof readLayer>>[] = [];
     await control.driver.play(
@@ -3110,11 +3103,9 @@ test('a finger holding the selected segment lifts its surface by 24 × 16 px, as
   expect(lifted?.visible).toBe(true);
   expect(Math.abs((lifted?.width ?? 0) - (grid.width + 24))).toBeLessThan(1);
   expect(Math.abs((lifted?.height ?? 0) - (grid.height + 16))).toBeLessThan(1);
-  // The lifted surface has an edge, the theme's low elevation. So the track
-  // stays visible around the held segment, even where the surface matches
-  // the page.
-  expect(edge).not.toBe('none');
-  expect(edge).toBe(theme);
+  // The lifted surface keeps the selected surface's own shadow: the lift
+  // adds none.
+  expect(edge).toBe(own);
   // It shrinks back and hands the surface back to Grid.
   await expectLensHidden(control);
   await expect(control.segment('grid')).toHaveAttribute('aria-checked', 'true');
@@ -3160,44 +3151,4 @@ test('under the touch presentation a pen holding the selected segment lifts its 
   expect(Math.abs(lifted.width - (grid.width + 24))).toBeLessThan(1.5);
   await expectLensHidden(control);
   await expect(control.segment('grid')).toHaveAttribute('aria-checked', 'true');
-});
-
-test('a drag that commits another segment keeps the lifted edge until the surface is handed back (FR14)', async ({
-  page,
-}) => {
-  const control = await openControl(page);
-  // Every state the lens shows: its visibility and its shadow.
-  await control.group.evaluate(group => {
-    const states: string[] = [];
-    (window as unknown as {__lensStates: string[]}).__lensStates = states;
-    new MutationObserver(() => {
-      const visible = group.style.getPropertyValue(
-        '--_segmented-lens-visibility',
-      );
-      const shadow = group.style.getPropertyValue(
-        '--_segmented-lens-box-shadow',
-      );
-      states.push(`${visible}|${shadow}`);
-    }).observe(group, {attributes: true, attributeFilter: ['style']});
-  });
-  const selections = await recordSelections(control.group);
-  await control.driver.play(
-    touchDrag(
-      await clientCenter(control, 'grid'),
-      await clientCenter(control, 'table'),
-      {durationMs: 300, restMs: 100},
-    ),
-  );
-  await expectLensHidden(control);
-  expect((await selections()).map(change => change.value)).toEqual(['table']);
-  const states = await page.evaluate(
-    () => (window as unknown as {__lensStates: string[]}).__lensStates,
-  );
-  const shown = states.filter(state => state.startsWith('visible|'));
-  expect(shown.length).toBeGreaterThan(0);
-  // From the lift to the hand-back, the commit's repaint included, the lens
-  // always wears the theme's elevation.
-  expect(
-    shown.filter(state => state !== 'visible|var(--_segmented-lifted-shadow)'),
-  ).toEqual([]);
 });
