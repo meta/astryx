@@ -113,6 +113,9 @@ shared icon names under FR17.
   - Each platform package ships its native code as source that the app's
     native build compiles; it registers itself through autolinking and React
     Native's code generation.
+  - `@astryxdesign/native` is the native (Swift) version's package
+    (`spec:AST-082/DEC-7`); the React Native candidate's native code lives in
+    the platform packages of FR1.
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported.
   - `.` is the app API.
@@ -271,9 +274,6 @@ test | sweep`.
 - The package-boundary check gains the FR2 rules: no import from the library in
   the platform, no dependency between capability packages, and no dependency on
   these packages from core or the CLI.
-- `@astryxdesign/native` keeps its contracts, bindings, and native theme
-  configuration. How this record's packages relate to `spec:AST-082/DEC-7` is
-  OQ1.
 
 ## Verification
 
@@ -388,14 +388,6 @@ platform is supported under `spec:AST-082/FR15`.
 
 ## Open questions
 
-- **OQ1 — How do these packages relate to `spec:AST-082/DEC-7`?**
-  (`human-api`) DEC-7 places native implementations in `@astryxdesign/native`.
-  Options: amend DEC-7 so the React Native candidate ships in the packages of
-  FR1, with `@astryxdesign/native` keeping the contracts, the Swift and Kotlin
-  bindings, and native theme configuration; or move the React Native library
-  and platform into `@astryxdesign/native` as entries. Recommendation: amend
-  DEC-7, because the React Native packages need their own native build units
-  (FR3) and their own release train (FR14).
 - **OQ2 — When do the library's component props come from
   `@astryxdesign/native`'s platform contracts?** (`human-api`) Options: now,
   under the `ios` and `android` conditions; or once core's portable entry
