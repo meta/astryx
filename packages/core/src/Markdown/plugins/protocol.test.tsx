@@ -832,6 +832,40 @@ describe('Markdown plugin protocol', () => {
     expect(parseMarkdown('Safe', {plugins: [unsafeDestination]})).toMatchObject(
       [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
     );
+    // A transform may return frozen nodes; a padded URL is still trimmed.
+    const frozenLink = (freezeParent: boolean) =>
+      createMarkdownPlugin({
+        name: `frozen-link-${freezeParent ? 'parent' : 'node'}`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block => {
+              if (block.type !== 'paragraph') {
+                return block;
+              }
+              const link = Object.freeze({
+                type: 'link' as const,
+                url: '  https://example.com/x  ',
+                children: Object.freeze([
+                  Object.freeze({type: 'text' as const, value: 'go'}),
+                ]),
+              });
+              const paragraph = {...block, children: [link]};
+              return freezeParent ? Object.freeze(paragraph) : paragraph;
+            }),
+          };
+        },
+      });
+    for (const freezeParent of [false, true]) {
+      const {container, unmount} = render(
+        <Markdown plugins={[frozenLink(freezeParent)]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('a')?.getAttribute('href')).toBe(
+        'https://example.com/x',
+      );
+      unmount();
+    }
     const setUrl = (type: 'link' | 'image', url: string) =>
       createMarkdownPlugin({
         name: `set-${type}-url`,
