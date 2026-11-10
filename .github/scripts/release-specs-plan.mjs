@@ -4,7 +4,9 @@
 /**
  * @file release-specs-plan.mjs
  * @description Which release specs a pull request runs in `release-specs
- *   (changed)` (spec:AST-030 FR32).
+ *   (changed)`, by FR32's release-file and import triggers (spec:AST-030
+ *   FR32). Specs tagged `@pr-a11y release-only`, visited components and
+ *   Lab-only pull requests are not triggers yet.
  * @input `--listed <file>`: every file of the merge commit. `--changed
  *   <file>`: the changed files. `--root <dir>`: the merge commit's checkout.
  *   `--out <file>`: where the plan goes.
@@ -21,7 +23,7 @@ import {fileURLToPath} from 'node:url';
 
 import {proofImporters} from './a11y-pr-contracts.mjs';
 
-/** A release spec, as FR32 names it. */
+/** A release file: FR32's release spec by name. */
 export const isReleaseSpec = file => /\.release\.[^/]*\.spec\.ts$/.test(file);
 
 /**

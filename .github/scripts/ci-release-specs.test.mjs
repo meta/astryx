@@ -6,7 +6,8 @@
  *   in full in `release-specs (changed)`: alone, on the release check's
  *   runner, with its config and timing gate. Every other pull request plans
  *   nothing on a slim runner and never starts the job.
- * @position Node contract for spec:AST-030 FR32.
+ * @position Node contract for spec:AST-030 FR32's release-file and import
+ *   triggers.
  */
 
 import {execFileSync, spawnSync} from 'node:child_process';
@@ -202,6 +203,30 @@ describe('release-specs (changed)', () => {
     expect(run['timeout-minutes']).toBeUndefined();
     expect(run.run).toContain('set -euo pipefail');
     expect(run.run).not.toContain('--retries');
+  });
+
+  it('fails the plan when the planner fails, never planning nothing', () => {
+    const step = stepOf(plan, 'Plan the release specs');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-plan-fail-'));
+    execFileSync('git', ['init', '-q', path.join(dir, '.plan')]);
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    // A planner that throws.
+    fs.writeFileSync(path.join(bin, 'node'), '#!/bin/sh\nexit 1\n', {
+      mode: 0o755,
+    });
+    const result = spawnSync('bash', ['-e', '-c', step.run], {
+      cwd: dir,
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        RUNNER_TEMP: dir,
+        FILES_PATH: path.join(dir, 'changed.txt'),
+        GITHUB_STEP_SUMMARY: path.join(dir, 'summary'),
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(0);
   });
 
   it('says to split a pull request whose file list GitHub truncated', () => {

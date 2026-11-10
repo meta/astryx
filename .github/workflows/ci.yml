@@ -4867,9 +4867,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The release specs a pull request runs in `release-specs (changed)`
-  # (spec:AST-030 FR32): each release spec (`*.release.*.spec.ts`) it adds or
-  # changes, and each one that imports a module it changes. When the imports
+  # The release specs a pull request runs in `release-specs (changed)`, by
+  # FR32's release-file and import triggers (spec:AST-030 FR32): each
+  # `*.release.*.spec.ts` file it adds or changes, and each one that imports a
+  # module it changes. Specs tagged `@pr-a11y release-only`, visited
+  # components and Lab-only pull requests are not triggers yet. When the imports
   # cannot be followed, every release spec runs. The plan runs on a slim
   # runner, so a pull request that triggers nothing never starts the
   # release check's runner.
@@ -4938,6 +4940,8 @@ jobs:
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
         run: |
+          # A planner failure fails the step, never reads as "nothing to run".
+          set -o pipefail
           git -C .plan ls-files > "$RUNNER_TEMP/listed.txt"
           node .plan/.github/scripts/release-specs-plan.mjs \
             --listed "$RUNNER_TEMP/listed.txt" --changed "$FILES_PATH" \
