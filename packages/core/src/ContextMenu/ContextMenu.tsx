@@ -144,9 +144,10 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   // The trigger's own visual, which the press feedback grows. It lays its
-  // children out as the trigger would, and fills the trigger in a flex or
-  // grid layout. The cursor anchor stays outside it, so a layer never takes
-  // the press's scale.
+  // children out as the trigger would, and fills the trigger in block, flex
+  // and grid layout. A full-height child then keeps a set-height trigger's
+  // height. The cursor anchor stays outside it, so a layer never takes the
+  // press's scale.
   triggerVisual: {
     display: 'inherit',
     flexDirection: 'inherit',
@@ -168,6 +169,7 @@ const styles = stylex.create({
     gridColumn: '1 / -1',
     gridRow: '1 / -1',
     minWidth: 0,
+    height: '100%',
     borderRadius: 'inherit',
   },
   // 1px anchor placed at the cursor point within the trigger. The menu is

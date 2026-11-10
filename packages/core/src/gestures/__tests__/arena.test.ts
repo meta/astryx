@@ -10,7 +10,8 @@
  *   requirements, idle recognizers), shouldBegin and shouldReceiveTouch,
  *   innermost resolution, independent touches, delivery to the view (claims,
  *   cancelsTouchesInView, delaysTouchesBegan, deferred and replayed clicks,
- *   the browser taking a touch), cancellation, and the event clock
+ *   the browser taking a touch), cancellation, and the event clock, which
+ *   holds a late input at its time and keeps the time the input came with
  * @position Unit tests of packages/core/src/gestures/GestureArena.ts and the
  *   state machine of GestureRecognizer.ts
  */
@@ -401,6 +402,24 @@ describe('arena: cancellation and time', () => {
     h.finger(1).down(0, 0, 100, {recognizers: [r]});
     h.finger(1).move(5, 0, 90);
     expect(h.log).toEqual(['r:began@100']);
+  });
+  it('holds a late input at the clock, and keeps the time it came with', () => {
+    const h = createHarness();
+    const seen: {time: number; inputTime: number}[] = [];
+    const r = new Scripted('r', {
+      moved: recognizer => {
+        const [touch] = recognizer.trackedTouches;
+        seen.push({time: touch.time, inputTime: touch.inputTime});
+      },
+    });
+    h.finger(1).down(0, 0, 100, {recognizers: [r]});
+    h.advance(500);
+    h.finger(1).move(5, 0, 300);
+    h.finger(1).move(6, 0, 520);
+    expect(seen).toEqual([
+      {time: 500, inputTime: 300},
+      {time: 520, inputTime: 520},
+    ]);
   });
 });
 

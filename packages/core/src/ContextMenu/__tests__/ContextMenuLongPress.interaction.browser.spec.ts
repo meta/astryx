@@ -874,11 +874,11 @@ for (const input of ['finger', 'pen'] as const) {
   });
 }
 
-test('the trigger’s visual lays out its children as the trigger would: a block, a row and a grid trigger each match a plain box with the same style', async ({
+test('the trigger’s visual lays out its children as the trigger would: a block, a row, a grid and a set-height trigger each match a plain box with the same style', async ({
   page,
 }) => {
   await openStory(page, storybook(), 'core-contextmenu--touch-trigger-layouts');
-  for (const layout of ['block', 'row', 'grid']) {
+  for (const layout of ['block', 'row', 'grid', 'tall']) {
     const read = async (testId: string) =>
       page.getByTestId(testId).evaluate(root => {
         const origin = root.getBoundingClientRect();
@@ -903,7 +903,7 @@ test('the trigger’s visual lays out its children as the trigger would: a block
     const trigger = await read(`layout-${layout}`);
     const reference = await read(`layout-${layout}-reference`);
     const detail = JSON.stringify({layout, trigger, reference});
-    expect(trigger.children.length, detail).toBe(3);
+    expect(trigger.children.length, detail).toBe(layout === 'tall' ? 1 : 3);
     expect(trigger.children.length, detail).toBe(reference.children.length);
     expect(trigger.size.width, detail).toBeCloseTo(reference.size.width, 1);
     expect(trigger.size.height, detail).toBeCloseTo(reference.size.height, 1);
@@ -1475,6 +1475,57 @@ test('a finger that lifts before 400 ms makes a plain tap: one click and no menu
   expect(await menuShownAt(page)).toBeNull();
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
   expect(await clicks()).toBe(1);
+});
+
+/** Two frames on the page: a click the lift makes has reached it by then. */
+const afterTwoFrames = async (page: Page) =>
+  page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+
+test('a slow drift past 11.5 px late in the hold cancels it: no menu and no click (AST-094 FR21)', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  const clicks = await countTriggerClicks(page);
+  // The finger rests past the commit at 400 ms, then drifts 14 px in 250 ms.
+  // It crosses 11.5 px at about 655 ms, before the menu's moment, and it
+  // lifts well after that moment.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 14, y: center.y},
+      {holdMs: 450, durationMs: 250, restMs: 400},
+    ),
+  );
+  await touchStartedAt(page);
+  await afterTwoFrames(page);
+  expect(await menuShownAt(page)).toBeNull();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  // Only Chromium makes a click from a scripted touch, so only it can show
+  // that none came.
+  if (driver.drivesNativeGestures) {
+    expect(await clicks()).toBe(0);
+  }
+});
+
+test('a finger still inside 11.5 px at the menu’s moment that crosses it just after still gets the menu (AST-094 FR12)', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  // 14 px over 650–760 ms: 10.6 px at the last move before 735 ms, 12.7 px
+  // at the first move after it.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 14, y: center.y},
+      {holdMs: 650, durationMs: 110, restMs: 300},
+    ),
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
 test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({

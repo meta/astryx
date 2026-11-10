@@ -752,9 +752,23 @@ const layoutStyles = stylex.create({
     backgroundColor: '#9ca3af',
     gridRow: '1 / 3',
   },
+  tall: {
+    height: '160px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: '8px',
+    backgroundColor: '#d1d5db',
+  },
 });
 
 const LAYOUTS = ['block', 'row', 'grid'] as const;
+
+function TallContent() {
+  return <div {...stylex.props(layoutStyles.fill)}>Fills the trigger</div>;
+}
 
 function LayoutContent() {
   return (
@@ -772,7 +786,7 @@ export const TouchTriggerLayouts: Story = {
     docs: {
       description: {
         story:
-          'The press grows only the trigger’s own visual, an inner box that lays the children out as the trigger would. Each trigger here sits beside a plain box with the same style, and both lay out the same.',
+          'The press grows only the trigger’s own visual, an inner box that lays the children out as the trigger would. Each trigger here sits beside a plain box with the same style, and both lay out the same, a set-height trigger with a full-height child too.',
       },
     },
   },
@@ -797,6 +811,23 @@ export const TouchTriggerLayouts: Story = {
           </div>
         </div>
       ))}
+      <div {...stylex.props(layoutStyles.pair)}>
+        <ContextMenu
+          data-testid="layout-tall"
+          label="Report actions"
+          triggerXstyle={layoutStyles.tall}
+          items={[
+            {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+            {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          ]}>
+          <TallContent />
+        </ContextMenu>
+        <div
+          data-testid="layout-tall-reference"
+          {...stylex.props(layoutStyles.tall)}>
+          <TallContent />
+        </div>
+      </div>
     </div>
   ),
 };
