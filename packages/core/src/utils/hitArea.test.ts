@@ -1018,6 +1018,148 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  describe('when an animation moves boxes between the touch and its click', () => {
+    /** One running animation of `target`, from keyframes jsdom cannot run. */
+    const running = (target: Element, frames: Keyframe[]) => ({
+      playState: 'running',
+      effect: {
+        target,
+        getComputedTiming: () => ({endTime: 300}),
+        getKeyframes: () => frames,
+      },
+      finished: new Promise<void>(() => {}),
+    });
+    const tap = (control: Element, x: number, y: number) => {
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: x, clientY: y});
+      control.dispatchEvent(press);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      return click;
+    };
+    // jsdom has no Web Animations: the page reports the given animations.
+    const reportAnimations = (animations: ReadonlyArray<object>) =>
+      Object.defineProperty(document, 'getAnimations', {
+        configurable: true,
+        value: () => animations,
+      });
+    afterEach(() => {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    });
+
+    it('lets the click through when a glide has moved its control: the fresh box is not the one the finger landed on', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 112, clientY: 112});
+      control.dispatchEvent(press);
+      // By the click, a glide moved the row down. The link is now where the
+      // finger landed.
+      place(control, rect(100, 140, 24, 24));
+      place(link, rect(100, 100, 60, 24));
+      reportAnimations([
+        running(row, [
+          {offset: 0, transform: 'translateY(0px)'},
+          {offset: 1, transform: 'translateY(40px)'},
+        ]),
+      ]);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(false);
+      stop();
+    });
+
+    it('measures at the press a control that a pass saw an ancestor animation move: its box is still where the finger landed', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      // A glide runs, so the pass holds the control back.
+      reportAnimations([
+        running(row, [
+          {offset: 0, transform: 'translateY(0px)'},
+          {offset: 1, transform: 'translateY(40px)'},
+        ]),
+      ]);
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      log.length = 0;
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+      control.dispatchEvent(press);
+      expect(log).toContain('read link');
+      // By the click, the glide moved the row: the press already decided.
+      place(control, rect(100, 140, 24, 24));
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(true);
+      stop();
+    });
+
+    it('leaves out a neighbour that an animation moves: its box now is not its box at the touch', () => {
+      const control = byId('switch');
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link slides in to 8 px away.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        running(link, [
+          {offset: 0, translate: '268px 0'},
+          {offset: 1, translate: '0 0'},
+        ]),
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(false);
+      stop();
+    });
+
+    it('still checks the click when the control’s row only fades or tints: nothing moved since the touch', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        running(row, [
+          {offset: 0, opacity: '1', backgroundColor: 'rgba(0, 0, 0, 0)'},
+          {offset: 1, opacity: '0.6', backgroundColor: 'rgb(0, 0, 0)'},
+        ]),
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+  });
+
   it('leaves the insets alone at the click of a press that scales the control, and measures them once the press’s motion ends', async () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));

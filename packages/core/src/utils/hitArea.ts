@@ -744,6 +744,24 @@ export function settlingAnimations(root: Element | Document): Animation[] {
   });
 }
 
+/** The properties whose animation moves or resizes a box on screen. */
+const BOX_MOTION =
+  /^(transform|translate|scale|rotate|offset[A-Z]\w*|inset\w*|top|right|bottom|left|(min|max)?(Width|Height|width|height|BlockSize|InlineSize)|blockSize|inlineSize|margin\w*|padding\w*)$/;
+
+/**
+ * Whether an animation can move or resize a box on screen. Its keyframes'
+ * properties tell: a fade or a color change moves nothing.
+ */
+function movesBoxes(animation: Animation): boolean {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (typeof effect?.getKeyframes !== 'function') {
+    return true;
+  }
+  return effect
+    .getKeyframes()
+    .some(frame => Object.keys(frame).some(key => BOX_MOTION.test(key)));
+}
+
 /** Runs `then` once each animation has finished or been cancelled. */
 export function whenSettled(
   animations: ReadonlyArray<Animation>,
@@ -881,11 +899,12 @@ function scheduleAll(): void {
 
 /**
  * At a touch's start, arm a check on the control it landed on. The touch's
- * click re-measures the control. If a neighbour moved nearer since the last
- * measurement, the click is swallowed: the tap does nothing rather than toggle
- * the wrong control. Nothing is re-sent to the neighbour, and the next tap
- * uses the fresh insets. A watch whose owner reads its own targets when a press
- * begins skips this (`checkAtPress`).
+ * click re-measures the control, or the press does while an animation moves
+ * it. If a neighbour moved nearer since the last measurement, the click is
+ * swallowed: the tap does nothing rather than toggle the wrong control.
+ * Nothing is re-sent to the neighbour, and the next tap uses the fresh
+ * insets. A watch whose owner reads its own targets when a press begins skips
+ * this (`checkAtPress`).
  */
 function onPress(event: Event): void {
   // One listener on the document for every watched control, so a control, row
@@ -919,8 +938,24 @@ function checkPress(element: Element, event: PointerEvent): void {
     return;
   }
   const press = {x: event.clientX, y: event.clientY, target: event.target};
-  // The press reads no layout, so a scroll it starts never waits on a read.
-  // Its click comes only once the touch is a tap, and measures then.
+  // A control that an ancestor animation moves is measured now. By its
+  // click, its box is no longer where the finger landed.
+  const isMoving = checked.some(watch => watch.heldBy.size > 0);
+  const isNearerAtPress =
+    isMoving &&
+    isNearerNeighbour(
+      element,
+      entry,
+      checked,
+      press,
+      readCandidates(element.ownerDocument),
+    );
+  if (isMoving && !isNearerAtPress) {
+    return;
+  }
+  // A control at rest reads no layout at the press, so a scroll it starts
+  // never waits on a read. Its click comes only once the touch is a tap, and
+  // measures then.
   const check = (click: Event) => {
     disarm();
     // A keyboard or assistive-technology activation (detail 0) is never
@@ -928,7 +963,7 @@ function checkPress(element: Element, event: PointerEvent): void {
     if ((click as MouseEvent).detail === 0) {
       return;
     }
-    if (isNearerNeighbour(element, entry, checked, press)) {
+    if (isNearerAtPress || isNearerAtClick(element, entry, checked, press)) {
       click.preventDefault();
       click.stopPropagation();
     }
@@ -1009,8 +1044,8 @@ function isNearerNeighbour(
   entry: Watched,
   checked: ReadonlyArray<Watch>,
   press: {x: number; y: number; target: EventTarget | null},
+  candidates: ReadonlyArray<Candidate>,
 ): boolean {
-  const candidates = readCandidates(element.ownerDocument);
   // The touch is the control's unless a neighbour is nearer it: inside the
   // fresh area too (a corner beside an offset or diagonal neighbour), and
   // a few px past it, where a browser's own touch adjustment reaches.
@@ -1041,6 +1076,40 @@ function isNearerNeighbour(
     press.target !== element &&
     element.contains(press.target);
   return isNearer && !isOnOwnContent;
+}
+
+/**
+ * Whether a fresh measurement at a touch's click puts the press nearer a
+ * neighbour than the control.
+ */
+function isNearerAtClick(
+  element: Element,
+  entry: Watched,
+  checked: ReadonlyArray<Watch>,
+  press: {x: number; y: number; target: EventTarget | null},
+): boolean {
+  const doc = element.ownerDocument;
+  // The touch landed before its click. An animation that the press did not
+  // see may have moved the control or a neighbour since. Its fresh box is
+  // not the one the finger landed on. The control's click then goes through,
+  // as the browser's hit test took it, and a moving neighbour is left out.
+  const moving = settlingAnimations(doc).filter(movesBoxes);
+  const isMoved = (node: Element, isOwnMotionCounted: boolean) =>
+    moving.some(animation => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return (
+        target != null &&
+        target.contains(node) &&
+        (isOwnMotionCounted || target !== node)
+      );
+    });
+  if (isMoved(element, false)) {
+    return false;
+  }
+  const candidates = readCandidates(doc).filter(
+    candidate => !isMoved(candidate.element, true),
+  );
+  return isNearerNeighbour(element, entry, checked, press, candidates);
 }
 
 function onScopeChange(scope: Element): void {
