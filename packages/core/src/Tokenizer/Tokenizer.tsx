@@ -34,6 +34,7 @@ import React, {
   type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {BaseTypeaheadFocusContext} from '../Typeahead/BaseTypeaheadFocusContext';
 import {
   BusyIndicatorLaneProvider,
   createBusyIndicatorLane,
@@ -59,8 +60,14 @@ import {
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {warnOnce} from '../utils/devWarning';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {SizeValue} from '../utils/types';
-import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
+import {
+  BaseTypeahead,
+  type BaseTypeaheadHandle,
+  type BaseTypeaheadMenu,
+} from '../Typeahead/BaseTypeahead';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   Field,
@@ -146,6 +153,13 @@ export interface TokenizerHandle {
   focus(): void;
   /** Blur the typeahead input. */
   blur(): void;
+  /**
+   * Open the menu (see `BaseTypeaheadHandle.open`). The sheet presentation
+   * ignores it.
+   */
+  open(): void;
+  /** Close the menu. The sheet presentation ignores it. */
+  close(): void;
 }
 
 export interface TokenizerProps<T extends SearchableItem> extends Omit<
@@ -338,8 +352,20 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * sheet can present.
    */
   ref?: React.Ref<HTMLInputElement>;
-  /** Imperative handle ref for focus/blur control. */
+  /** Imperative handle ref for focus, blur, and opening the menu. */
   handleRef?: React.Ref<TokenizerHandle>;
+  /**
+   * What the menu shows: the result list, optionally with information around
+   * it, or content that takes focus. Forwarded to BaseTypeahead; see
+   * `BaseTypeaheadMenu`. The sheet presentation keeps its own sheet and
+   * ignores it.
+   */
+  menu?: BaseTypeaheadMenu;
+  /**
+   * Called when the menu opens or closes. It reports changes only; drive the
+   * menu with `handleRef`. Not called by the sheet presentation.
+   */
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 /** How Tokenizer presents its choices; see `TokenizerProps.presentation`. */
@@ -817,6 +843,8 @@ export function Tokenizer<T extends SearchableItem>({
   controlStyle,
   ref,
   handleRef,
+  menu,
+  onOpenChange,
   onKeyDown,
   presentation = 'adaptive',
   id: idProp,
@@ -899,6 +927,52 @@ export function Tokenizer<T extends SearchableItem>({
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
   const isHandingOffFocusRef = useRef(false);
+  // Focus a pointer puts on a control (a token's own button) stays there: the
+  // person chose that control. The shared tracker says which input moved it.
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  // True while the menu returns focus after it closes. That focus stays on
+  // the token the menu returns to.
+  const isMenuFocusReturnRef = useRef(false);
+  // The custom tokens' slots, and the control in one that the current click
+  // activates. In Safari a click does not focus a button, so the menu's
+  // `open()` reads that control as its opener rather than the focused element.
+  const tokenSlotsRef = useRef(new Set<HTMLElement>());
+  const pressedTokenControlRef = useRef<HTMLElement | null>(null);
+  const baseTypeaheadFocus = useMemo(
+    () => ({
+      menuFocusReturn: isMenuFocusReturnRef,
+      pressedOpener: pressedTokenControlRef,
+    }),
+    [],
+  );
+  const registerTokenSlot = useCallback((slot: HTMLElement | null) => {
+    if (slot == null) {
+      return undefined;
+    }
+    tokenSlotsRef.current.add(slot);
+    return () => {
+      tokenSlotsRef.current.delete(slot);
+    };
+  }, []);
+  // The focusable control inside a custom token that `target` sits in, if any.
+  const findTokenControl = useCallback(
+    (target: EventTarget | null): HTMLElement | null => {
+      if (!(target instanceof Element)) {
+        return null;
+      }
+      const control = target.closest<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (control == null || control === inputRef.current) {
+        return null;
+      }
+      for (const slot of tokenSlotsRef.current) {
+        if (slot.contains(control)) {
+          return control;
+        }
+      }
+      return null;
+    },
+    [],
+  );
   // Whether the caller has been told focus entered the field in this visit,
   // so `onBlur` is never reported without its `onFocus`: in Safari a click
   // or tap does not focus a button, so a pointer-opened sheet reports no
@@ -950,6 +1024,8 @@ export function Tokenizer<T extends SearchableItem>({
           ['hasClear', hasClear || undefined],
           ['hasEntriesOnFocus', hasEntriesOnFocus || undefined],
           ['menuWidth', menuWidth],
+          ['menu', menu],
+          ['onOpenChange', onOpenChange],
           ['tokenOverflowBehavior', tokenOverflowBehavior],
           ['hasAutoFocus', hasAutoFocus || undefined],
         ] as const
@@ -1017,15 +1093,17 @@ export function Tokenizer<T extends SearchableItem>({
       if (el == null) {
         return;
       }
+      const releaseModality = modalityRef(el);
       return () => {
         if (el.contains(el.ownerDocument.activeElement)) {
           isFocusPendingHandOffRef.current = true;
         }
         wrapperRef.current = null;
         tooltipAnchorRef(null);
+        releaseModality?.();
       };
     },
-    [tooltipAnchorRef],
+    [tooltipAnchorRef, modalityRef],
   );
 
   // A swap also removes `endContent` and a custom token's remove. If focus is
@@ -1057,12 +1135,19 @@ export function Tokenizer<T extends SearchableItem>({
     handOffFocusRef,
   );
 
+  const baseHandleRef = useRef<BaseTypeaheadHandle>(null);
   useImperativeHandle(handleRef, () => ({
     focus() {
       (isSheetPresentation ? triggerRef : inputRef).current?.focus();
     },
     blur() {
       (isSheetPresentation ? triggerRef : inputRef).current?.blur();
+    },
+    open() {
+      baseHandleRef.current?.open();
+    },
+    close() {
+      baseHandleRef.current?.close();
     },
   }));
 
@@ -1155,13 +1240,18 @@ export function Tokenizer<T extends SearchableItem>({
           onFocus?.(e);
         }
         // Redirect to the input so the user doesn't have to tab through
-        // every token remove button.
-        if (e.target !== inputRef.current) {
+        // every token remove button. A press, and the menu returning focus
+        // to the token that opened it, keep focus where they put it.
+        if (
+          e.target !== inputRef.current &&
+          readModality() !== 'pointer' &&
+          !isMenuFocusReturnRef.current
+        ) {
           inputRef.current?.focus();
         }
       }
     },
-    [isLayerMode, layer, isFocusInTokenizer, onFocus],
+    [isLayerMode, layer, isFocusInTokenizer, onFocus, readModality],
   );
 
   const handleBlurCapture = useCallback(
@@ -1409,20 +1499,29 @@ export function Tokenizer<T extends SearchableItem>({
   );
 
   // Click wrapper to focus input
-  const handleWrapperClick = useCallback(() => {
-    if (!isDisabled) {
-      if (isLayerMode) {
-        // The input always lives in the popover. Show it and focus.
-        layer.show();
-        setIsFocusedWithin(true);
-        // The input is already mounted in the popover (not conditional),
-        // so we can focus it directly.
-        inputRef.current?.focus();
-      } else {
-        inputRef.current?.focus();
+  const handleWrapperClick = useCallback(
+    (event: React.MouseEvent) => {
+      // The click has run, so a menu opened from it has read the control.
+      pressedTokenControlRef.current = null;
+      // A click on a custom token's own control leaves focus on that control.
+      if (findTokenControl(event.target) != null) {
+        return;
       }
-    }
-  }, [isDisabled, isLayerMode, layer]);
+      if (!isDisabled) {
+        if (isLayerMode) {
+          // The input always lives in the popover. Show it and focus.
+          layer.show();
+          setIsFocusedWithin(true);
+          // The input is already mounted in the popover (not conditional),
+          // so we can focus it directly.
+          inputRef.current?.focus();
+        } else {
+          inputRef.current?.focus();
+        }
+      }
+    },
+    [isDisabled, isLayerMode, layer, findTokenControl],
+  );
 
   const ariaDescribedBy =
     [
@@ -1441,7 +1540,10 @@ export function Tokenizer<T extends SearchableItem>({
 
     if (renderToken) {
       return (
-        <span key={item.id} {...stylex.props(styles.token)}>
+        <span
+          key={item.id}
+          ref={registerTokenSlot}
+          {...stylex.props(styles.token)}>
           {renderToken(item, onRemoveItem)}
         </span>
       );
@@ -1474,6 +1576,21 @@ export function Tokenizer<T extends SearchableItem>({
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
+      // The control a click activates is recorded while the click passes
+      // down through the field, before the token's own handler runs. The
+      // record ends with the click's task, also when the token's handler
+      // stops the click from bubbling back.
+      onClickCapture={event => {
+        const control = findTokenControl(event.target);
+        pressedTokenControlRef.current = control;
+        if (control != null) {
+          setTimeout(() => {
+            if (pressedTokenControlRef.current === control) {
+              pressedTokenControlRef.current = null;
+            }
+          }, 0);
+        }
+      }}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
       // Keys on the field's other controls (clear button, tokens) reach a
@@ -1532,68 +1649,73 @@ export function Tokenizer<T extends SearchableItem>({
       <BusyIndicatorLaneProvider value={busyLane}>
         <TrailingKeyDownContext value={onKeyDown}>
           <CommittedChoicesKeyContext value={committedChoices}>
-            <BaseTypeahead
-              {...rest}
-              ref={useMergedRefs(
-                inputRef,
-                // The ref type admits the sheet's trigger too; in this
-                // presentation it receives the input.
-                ref as React.Ref<HTMLInputElement> | undefined,
-                handOffFocusRef,
-              )}
-              searchSource={isAtMax ? emptySource : filteredSource}
-              value={null}
-              onChange={handleAdd}
-              renderItem={renderItem}
-              // A space keeps :placeholder-shown available as the CSS-only empty
-              // query signal without painting placeholder text beside tokens.
-              placeholder={value.length === 0 ? placeholder : ' '}
-              hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
-              maxMenuItems={maxMenuItems}
-              menuWidth={menuWidth}
-              minQueryLength={minQueryLength}
-              emptySearchText={emptySearchText}
-              isDisabled={isDisabled}
-              // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
-              // unfocusedLayer mode, where the input lives in a layer a disabled
-              // field never opens; how that field takes focus is undecided.
-              isFocusableDisabled={
-                showsDisabledMessage || (isDisabled && !isLayerMode)
-              }
-              hasAutoFocus={hasAutoFocus}
-              inputId={inputId}
-              ariaLabelledBy={fieldLabelledBy}
-              ariaDescribedBy={
-                [ariaDescribedByProp, ariaDescribedBy]
-                  .filter(Boolean)
-                  .join(' ') || undefined
-              }
-              onChangeQuery={onChangeQuery}
-              // The resolved required state reaches the combobox, also when a
-              // FormLayout default hides the visible marker (component:FormLayout
-              // FR5, AR2).
-              aria-required={isEffectivelyRequired || rest['aria-required']}
-              // An error status is exposed on the combobox as on every other field
-              // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-              // aria-required / aria-invalid still applies.
-              aria-invalid={status?.type === 'error' || rest['aria-invalid']}
-              __queryEntries={createEntries}
-              debounceMs={debounceMs}
-              onKeyDown={handleKeyDown}
-              anchorRef={wrapperRef}
-              size={size}
-              inputXStyle={[
-                isAtMax || isTruncated
-                  ? styles.inputAtMax
-                  : value.length > 0
-                    ? styles.inputCompact
-                    : undefined,
-                // With tokens, wrapperWithTokens reserves the lane for every row.
-                // This rule is only for an empty Tokenizer; it still resolves to
-                // zero until the lane publishes a width.
-                !(isAtMax || isTruncated || value.length > 0) && laneReserve,
-              ]}
-            />
+            <BaseTypeaheadFocusContext value={baseTypeaheadFocus}>
+              <BaseTypeahead
+                {...rest}
+                ref={useMergedRefs(
+                  inputRef,
+                  // The ref type admits the sheet's trigger too; in this
+                  // presentation it receives the input.
+                  ref as React.Ref<HTMLInputElement> | undefined,
+                  handOffFocusRef,
+                )}
+                searchSource={isAtMax ? emptySource : filteredSource}
+                value={null}
+                onChange={handleAdd}
+                renderItem={renderItem}
+                // A space keeps :placeholder-shown available as the CSS-only empty
+                // query signal without painting placeholder text beside tokens.
+                placeholder={value.length === 0 ? placeholder : ' '}
+                hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
+                maxMenuItems={maxMenuItems}
+                menuWidth={menuWidth}
+                minQueryLength={minQueryLength}
+                emptySearchText={emptySearchText}
+                isDisabled={isDisabled}
+                // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+                // unfocusedLayer mode, where the input lives in a layer a disabled
+                // field never opens; how that field takes focus is undecided.
+                isFocusableDisabled={
+                  showsDisabledMessage || (isDisabled && !isLayerMode)
+                }
+                hasAutoFocus={hasAutoFocus}
+                inputId={inputId}
+                ariaLabelledBy={fieldLabelledBy}
+                ariaDescribedBy={
+                  [ariaDescribedByProp, ariaDescribedBy]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
+                onChangeQuery={onChangeQuery}
+                // The resolved required state reaches the combobox, also when a
+                // FormLayout default hides the visible marker (component:FormLayout
+                // FR5, AR2).
+                aria-required={isEffectivelyRequired || rest['aria-required']}
+                // An error status is exposed on the combobox as on every other field
+                // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+                // aria-required / aria-invalid still applies.
+                aria-invalid={status?.type === 'error' || rest['aria-invalid']}
+                __queryEntries={createEntries}
+                debounceMs={debounceMs}
+                onKeyDown={handleKeyDown}
+                anchorRef={wrapperRef}
+                menu={menu}
+                onOpenChange={onOpenChange}
+                handleRef={baseHandleRef}
+                size={size}
+                inputXStyle={[
+                  isAtMax || isTruncated
+                    ? styles.inputAtMax
+                    : value.length > 0
+                      ? styles.inputCompact
+                      : undefined,
+                  // With tokens, wrapperWithTokens reserves the lane for every row.
+                  // This rule is only for an empty Tokenizer; it still resolves to
+                  // zero until the lane publishes a width.
+                  !(isAtMax || isTruncated || value.length > 0) && laneReserve,
+                ]}
+              />
+            </BaseTypeaheadFocusContext>
           </CommittedChoicesKeyContext>
         </TrailingKeyDownContext>
       </BusyIndicatorLaneProvider>
