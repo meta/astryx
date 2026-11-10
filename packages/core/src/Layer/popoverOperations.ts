@@ -11,6 +11,8 @@
  * - /packages/core/src/Layer/popoverOperations.test.ts
  */
 
+import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
+
 /**
  * Popover operations in flight, per document.
  *
@@ -42,9 +44,18 @@
  * microtask each, once the document's last operation of either kind has
  * ended and the script that started it has unwound.
  */
-const ownOperationsByDocument = new WeakMap<Document, number>();
-const browserHidesByDocument = new WeakMap<Document, number>();
-const settledCallbacksByDocument = new WeakMap<Document, (() => void)[]>();
+const ownOperationsByDocument = sharedWeakMap<Document, number>(
+  'layer/popover-operations/own-operations-by-document',
+  1,
+);
+const browserHidesByDocument = sharedWeakMap<Document, number>(
+  'layer/popover-operations/browser-hides-by-document',
+  1,
+);
+const settledCallbacksByDocument = sharedWeakMap<Document, (() => void)[]>(
+  'layer/popover-operations/settled-callbacks-by-document',
+  1,
+);
 
 function count(map: WeakMap<Document, number>, doc: Document, delta: number) {
   map.set(doc, Math.max(0, (map.get(doc) ?? 0) + delta));
@@ -112,7 +123,10 @@ export function isBrowserHideInFlight(doc: Document): boolean {
 }
 
 /** Popovers whose browser-run hide is being counted, so one hide is counted once. */
-const browserHidesInFlight = new WeakSet<Element>();
+const browserHidesInFlight = sharedWeakSet<Element>(
+  'layer/popover-operations/browser-hides-in-flight',
+  1,
+);
 
 /**
  * Counts a hide the browser runs itself. Called as the element's `beforetoggle`
