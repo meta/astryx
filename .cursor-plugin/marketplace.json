@@ -1,0 +1,34 @@
+{
+  "name": "astryx",
+  "owner": {
+    "name": "Astryx"
+  },
+  "metadata": {
+    "description": "The Astryx agent skill for Cursor"
+  },
+  "plugins": [
+    {
+      "name": "astryx",
+      "source": "plugins/astryx",
+      "description": "Teaches coding agents that Astryx is available through the astryx command, when to use it, and where to start. Use when building or changing UI, choosing components, layout, styling or theming, or working with @astryxdesign packages.",
+      "version": "0.1.1",
+      "author": {
+        "name": "Astryx"
+      },
+      "homepage": "https://astryx.atmeta.com",
+      "repository": "https://github.com/meta/astryx",
+      "license": "MIT",
+      "keywords": [
+        "astryx",
+        "design-system",
+        "ui",
+        "components",
+        "cli",
+        "stylex",
+        "coding-agents"
+      ],
+      "logo": "plugins/astryx/assets/logo.svg",
+      "category": "developer-tools"
+    }
+  ]
+}

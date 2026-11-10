@@ -2,8 +2,8 @@
 
 /**
  * @file The agent plugin's skill (spec AST-081 FR13): the checked-in file is
- * `renderComputerAgentText`'s output, so the Claude Code and Codex plugins
- * share one skill that cannot drift from the computer-level guidance.
+ * `renderComputerAgentText`'s output, so the Claude Code, Codex, and Cursor
+ * plugins share one skill that cannot drift from the computer-level guidance.
  */
 
 import fs from 'node:fs';

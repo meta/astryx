@@ -1,16 +1,35 @@
 {
   "name": "astryx",
-  "version": "0.1.0",
-  "description": "Tells coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
-  "author": {"name": "Astryx"},
-  "homepage": "https://github.com/meta/astryx",
+  "version": "0.1.1",
+  "description": "Teaches coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
+  "author": {
+    "name": "Astryx",
+    "url": "https://astryx.atmeta.com"
+  },
+  "homepage": "https://astryx.atmeta.com",
   "repository": "https://github.com/meta/astryx",
   "license": "MIT",
-  "keywords": ["astryx", "design-system", "ui"],
+  "keywords": ["astryx", "design-system", "ui", "components", "cli", "stylex"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Astryx",
     "shortDescription": "Build UI with the Astryx design system through its CLI",
-    "category": "Coding"
+    "longDescription": "Astryx is a design system and UI library. This plugin tells coding agents that Astryx is available on this computer through the astryx command, when to use it, and where to start.\n\nUse it when building or changing UI, choosing components, layout, styling or theming, working with a design system, or in any project that depends on @astryxdesign packages. The skill points agents at astryx search, component docs, templates, and astryx init — not at reading package source. If astryx is missing, it tells the agent to install @astryxdesign/cli first.\n\nThe skill text is the same guidance the global CLI install writes to ~/.agents/skills/astryx/SKILL.md.",
+    "developerName": "Astryx",
+    "category": "Coding",
+    "capabilities": [
+      "Design system guidance",
+      "CLI workflow",
+      "UI component discovery"
+    ],
+    "websiteURL": "https://astryx.atmeta.com",
+    "defaultPrompt": [
+      "Build a settings page with Astryx components",
+      "Scaffold an Astryx template for a dashboard",
+      "Find the right Astryx component for a date picker"
+    ],
+    "brandColor": "#225BFF",
+    "composerIcon": "./assets/logo.svg",
+    "logo": "./assets/logo.svg"
   }
 }
