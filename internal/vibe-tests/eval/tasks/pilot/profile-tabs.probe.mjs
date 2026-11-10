@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Probe: three tabs, by mouse and by keyboard
+ * @input a page with the built app
+ * @output named steps for runSteps in lib/probe-kit.mjs
+ * @position Read by the grader for the task of the same name
+ */
+
 import {assert, eventually, hidden, one, press} from '../../lib/probe-kit.mjs';
 
 /** @param {import('playwright-core').Page} page */

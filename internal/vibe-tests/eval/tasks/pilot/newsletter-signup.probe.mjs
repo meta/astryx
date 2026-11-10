@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Probe: a connected error for a bad email and a thank-you for a good one
+ * @input a page with the built app
+ * @output named steps for runSteps in lib/probe-kit.mjs
+ * @position Read by the grader for the task of the same name
+ */
+
 import {assert, describedText, eventually, hidden, one, shown} from '../../lib/probe-kit.mjs';
 
 const ERROR = 'Enter a valid email address';
@@ -13,20 +20,20 @@ export default function steps(page) {
       await one(email, 'Email textbox');
       await one(subscribe, 'Subscribe button');
     }],
-    ['invalid email shows a connected error', async () => {
-      await email.fill('not-an-email');
+    ['empty email shows a connected error', async () => {
       await subscribe.click();
-      await shown(page.getByText(ERROR, {exact: true}), 'error text');
+      await shown(page.getByText(ERROR, {exact: true}), 'error text for an empty field');
       await eventually(
         async () => (await email.getAttribute('aria-invalid')) === 'true',
         'the field is not marked aria-invalid="true"',
       );
       assert((await describedText(email)).includes(ERROR), 'the error is not referenced by aria-describedby or aria-errormessage');
     }],
-    ['empty email shows the error', async () => {
-      await email.fill('');
+    ['invalid email shows the error on a fresh page', async () => {
+      await page.reload({waitUntil: 'load'});
+      await email.fill('not-an-email');
       await subscribe.click();
-      await shown(page.getByText(ERROR, {exact: true}), 'error text for an empty field');
+      await shown(page.getByText(ERROR, {exact: true}), 'error text for an invalid address');
     }],
     ['valid email shows the thank-you message', async () => {
       await email.fill('ada@example.com');

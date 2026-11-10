@@ -4,7 +4,7 @@
  * @file Task sets and the one prompt template every arm shares.
  * @input eval/tasks/<set>/<id>.task.json and <id>.probe.mjs
  * @output validated tasks and rendered agent prompts
- * @position Read by the runner; the grader imports the probes
+ * @position Read by run.mjs; the grader imports the probes
  */
 
 import fs from 'node:fs';

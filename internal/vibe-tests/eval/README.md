@@ -5,11 +5,10 @@ with Astryx, does the result work as often as when it builds the same UI with
 shadcn/ui?**
 
 The eval measures the delivered result in a real browser. It does not score
-code style. It replaces the static scores of the older nightly pipeline in
-`../src`.
+code style, unlike the static scores of the older nightly pipeline in `../src`.
 
-This folder has the arms, the tasks and the deterministic grader. `--self-test`
-proves the grader on every task.
+This folder has the arms, the tasks and the deterministic grader. It does not
+start agents yet. `--self-test` proves the grader on every task.
 
 ## Arms
 
@@ -25,7 +24,7 @@ generated it, with exact versions in a lockfile.
 
 Both arms use the same TypeScript, Vite and React versions, the same `strict`
 type check (`tsc -b`) and the same build (`vite build`). Both start from the
-same empty `src/App.tsx`.
+same empty `src/App.tsx`, and neither has a README or lint and format tooling.
 
 ## Controls
 
@@ -47,7 +46,7 @@ four checks hold:
 - `vite build` exits 0 and writes `dist/index.html`.
 - The task probe passes in headless Chromium against the built app, served from
   127.0.0.1. Requests to other hosts are blocked.
-- The page throws no uncaught error.
+- The page throws no uncaught error, at desktop or phone size.
 
 The grader also records screenshots (desktop 1280×800 before and after the
 probe, phone 390×844), axe WCAG 2 A/AA counts and console errors. Those are
@@ -81,15 +80,16 @@ node internal/vibe-tests/eval/run.mjs --self-test
 ```
 
 It needs Node 22 or later, npm registry access and a Chromium build. Install
-the grader's dependencies with `pnpm install` at the repository root. Set
-`VIBE_EVAL_CHROMIUM` to use a Chromium that Playwright did not install. The run
+the grader's dependencies with `pnpm install` at the repository root, then a
+browser with `pnpm -F @astryxdesign/vibe-tests exec playwright-core install
+chromium`. Set `VIBE_EVAL_CHROMIUM` to use another Chromium build. The run
 directory defaults to a new folder in the system temp folder. It must be
 outside the repository.
 
 ## Refreshing an arm
 
 Regenerate the arm with the commands above, at the new versions. Keep the empty
-`src/App.tsx`, drop lint and format tooling, and align the TypeScript, Vite and
+`src/App.tsx`, drop the README and the lint and format tooling, and align the TypeScript, Vite and
 React versions with the other arm. Then run `--self-test`. A refresh changes
 what the eval measures, so compare results only within one arm version.
 

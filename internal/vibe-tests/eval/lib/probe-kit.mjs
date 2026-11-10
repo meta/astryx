@@ -4,7 +4,7 @@
  * @file Small assertion kit for task probes.
  * @input a Playwright page
  * @output named steps; the first failed step ends the probe
- * @position Imported by eval/tasks/<set>/<id>.probe.mjs and lib/browser.mjs
+ * @position Imported by eval/tasks/<set>/<id>.probe.mjs and lib/grade.mjs
  */
 
 const STEP_TIMEOUT_MS = 5000;
@@ -51,12 +51,12 @@ export async function shown(locator, description) {
   return locator;
 }
 
+/** Waits until no match is visible. */
 export async function hidden(locator, description) {
-  try {
-    await locator.first().waitFor({state: 'hidden', timeout: STEP_TIMEOUT_MS});
-  } catch {
-    throw new ProbeFailure(`${description}: still visible`);
-  }
+  await eventually(
+    async () => (await locator.filter({visible: true}).count()) === 0,
+    `${description}: still visible`,
+  );
 }
 
 /** Polls a predicate; Playwright checks auto-wait, plain DOM reads do not. */
@@ -64,7 +64,9 @@ export async function eventually(predicate, message) {
   const deadline = Date.now() + STEP_TIMEOUT_MS;
   for (;;) {
     if (await predicate()) return;
-    if (Date.now() > deadline) throw new ProbeFailure(message);
+    if (Date.now() > deadline) {
+      throw new ProbeFailure(typeof message === 'function' ? message() : message);
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 }

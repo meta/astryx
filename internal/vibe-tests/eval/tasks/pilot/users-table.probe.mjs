@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Probe: search and name sort in a real table
+ * @input a page with the built app
+ * @output named steps for runSteps in lib/probe-kit.mjs
+ * @position Read by the grader for the task of the same name
+ */
+
 import {assert, eventually, one, shown} from '../../lib/probe-kit.mjs';
 
 const NAMES = ['Ada Lovelace', 'Alan Turing', 'Grace Hopper', 'Katherine Johnson', 'Linus Torvalds', 'Margaret Hamilton'];
@@ -13,7 +20,8 @@ export default function steps(page) {
     .or(page.getByRole('searchbox', {name: /Search users/}));
   const nameHeader = page.getByRole('columnheader', {name: /^\s*Name/});
   const rowCount = async expected => {
-    await eventually(async () => (await dataRows().count()) === expected, `expected ${expected} data rows, found ${await dataRows().count()}`);
+    let found = -1;
+    await eventually(async () => (found = await dataRows().count()) === expected, () => `expected ${expected} data rows, found ${found}`);
   };
   const firstAndLast = async () => {
     const rows = await dataRows().allInnerTexts();

@@ -4,7 +4,7 @@
  * @file Arm bases, their controls, and per-run workspaces outside the repo.
  * @input an arm descriptor and a run directory
  * @output an installed, control-checked base and fresh copies of it
- * @position Called by the runner before any agent starts
+ * @position Called by run.mjs before it grades anything
  */
 
 import {spawn} from 'node:child_process';
@@ -21,7 +21,8 @@ const REPO_ROOT = path.resolve(
 );
 
 /**
- * Runs a command without a shell.
+ * Runs a command without a shell, in its own process group. npx starts the
+ * real tool as a grandchild, so a timeout kills the whole group.
  * @returns {Promise<{code: number | null, output: string, timedOut: boolean, ms: number}>}
  */
 export function run(command, {cwd, timeoutMs = 300_000, env} = {}) {
@@ -31,6 +32,7 @@ export function run(command, {cwd, timeoutMs = 300_000, env} = {}) {
       cwd,
       env: {...process.env, ...env},
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     });
     let output = '';
     const append = chunk => {
@@ -40,26 +42,39 @@ export function run(command, {cwd, timeoutMs = 300_000, env} = {}) {
     child.stdout.on('data', append);
     child.stderr.on('data', append);
     let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-    child.on('close', code => {
+    let settled = false;
+    const finish = code => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       resolve({code, output, timedOut, ms: Date.now() - started});
-    });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      finish(null);
+    }, timeoutMs);
+    child.on('close', code => finish(code));
     child.on('error', error => {
-      clearTimeout(timer);
-      resolve({code: null, output: String(error), timedOut, ms: Date.now() - started});
+      output += String(error);
+      finish(null);
     });
   });
+}
+
+function isInside(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 /** A run directory must sit outside the repository so agents cannot reach it. */
 export function assertOutsideRepo(dir) {
   const resolved = path.resolve(dir);
-  const relative = path.relative(REPO_ROOT, resolved);
-  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+  if (isInside(resolved, REPO_ROOT)) {
     throw new Error(`run directory must be outside the repository: ${resolved}`);
   }
   return resolved;

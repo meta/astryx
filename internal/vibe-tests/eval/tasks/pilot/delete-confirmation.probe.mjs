@@ -1,6 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {assert, dialogNamed, eventually, hidden, isFocusedWithin, one, press, shown} from '../../lib/probe-kit.mjs';
+/**
+ * @file Probe: a confirmation dialog that returns focus and deletes one file
+ * @input a page with the built app
+ * @output named steps for runSteps in lib/probe-kit.mjs
+ * @position Read by the grader for the task of the same name
+ */
+
+import {dialogNamed, eventually, hidden, isFocusedWithin, one, press, shown} from '../../lib/probe-kit.mjs';
 
 /** @param {import('playwright-core').Page} page */
 export default function steps(page) {

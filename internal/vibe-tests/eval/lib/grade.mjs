@@ -4,7 +4,7 @@
  * @file Grades one workspace: type check, build, then the task probe in Chromium.
  * @input a workspace, its arm, its task, and a shared browser
  * @output a pass or fail with the reason, probe steps, screenshots, axe counts
- * @position Called by the runner after each agent run, and by self-test
+ * @position Called by the self-test in run.mjs
  */
 
 import fs from 'node:fs';
@@ -21,6 +21,8 @@ const VIEWPORTS = {
   desktop: {viewport: {width: 1280, height: 800}},
   mobile: {viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
 };
+
+const ACTION_TIMEOUT_MS = 5000;
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -42,13 +44,27 @@ export async function launchBrowser() {
 /** Serves a built app from 127.0.0.1 only; unknown paths get index.html. */
 export function serveStatic(root) {
   const server = http.createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    let file = path.join(root, decodeURIComponent(url.pathname));
-    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    let file;
+    try {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      file = path.resolve(root, `.${decodeURIComponent(url.pathname)}`);
+    } catch {
+      response.statusCode = 400;
+      response.end();
+      return;
+    }
+    const relative = path.relative(root, file);
+    const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+    if (outside || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       file = path.join(root, 'index.html');
     }
     response.setHeader('content-type', CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream');
-    fs.createReadStream(file).pipe(response);
+    fs.createReadStream(file)
+      .on('error', () => {
+        response.statusCode = 500;
+        response.end();
+      })
+      .pipe(response);
   });
   return new Promise(resolve => {
     server.listen(0, '127.0.0.1', () => {
@@ -78,37 +94,56 @@ async function localOnly(context, origin) {
   );
 }
 
+/** A context that only reaches the local server and fails fast like the probe steps. */
+async function openContext(browser, options, origin) {
+  const context = await browser.newContext(options);
+  context.setDefaultTimeout(ACTION_TIMEOUT_MS);
+  await localOnly(context, origin);
+  return context;
+}
+
+function watchErrors(page, pageErrors, consoleErrors) {
+  page.on('pageerror', error => pageErrors.push(String(error.message ?? error)));
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 500));
+  });
+}
+
 async function probeInBrowser({browser, url, task, outDir}) {
   const steps = await loadProbe(task);
   const screenshots = {};
   const pageErrors = [];
   const consoleErrors = [];
+  let axe;
+  let probe;
 
-  const desktop = await browser.newContext(VIEWPORTS.desktop);
-  await localOnly(desktop, url);
-  const page = await desktop.newPage();
-  page.on('pageerror', error => pageErrors.push(String(error.message ?? error)));
-  page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 500));
-  });
-  await page.goto(url, {waitUntil: 'load'});
-  await page.waitForTimeout(300);
-  screenshots.desktopInitial = path.join(outDir, 'desktop-initial.png');
-  await page.screenshot({path: screenshots.desktopInitial, fullPage: true});
-  const axe = await axeCounts(page).catch(error => ({error: String(error)}));
-  const probe = await runSteps(steps(page));
-  screenshots.desktopFinal = path.join(outDir, 'desktop-final.png');
-  await page.screenshot({path: screenshots.desktopFinal, fullPage: true});
-  await desktop.close();
+  const desktop = await openContext(browser, VIEWPORTS.desktop, url);
+  try {
+    const page = await desktop.newPage();
+    watchErrors(page, pageErrors, consoleErrors);
+    await page.goto(url, {waitUntil: 'load'});
+    await page.waitForTimeout(300);
+    screenshots.desktopInitial = path.join(outDir, 'desktop-initial.png');
+    await page.screenshot({path: screenshots.desktopInitial, fullPage: true});
+    axe = await axeCounts(page).catch(error => ({error: String(error)}));
+    probe = await runSteps(steps(page));
+    screenshots.desktopFinal = path.join(outDir, 'desktop-final.png');
+    await page.screenshot({path: screenshots.desktopFinal, fullPage: true});
+  } finally {
+    await desktop.close();
+  }
 
-  const mobile = await browser.newContext(VIEWPORTS.mobile);
-  await localOnly(mobile, url);
-  const phone = await mobile.newPage();
-  await phone.goto(url, {waitUntil: 'load'});
-  await phone.waitForTimeout(300);
-  screenshots.mobileInitial = path.join(outDir, 'mobile-initial.png');
-  await phone.screenshot({path: screenshots.mobileInitial, fullPage: true});
-  await mobile.close();
+  const mobile = await openContext(browser, VIEWPORTS.mobile, url);
+  try {
+    const phone = await mobile.newPage();
+    watchErrors(phone, pageErrors, consoleErrors);
+    await phone.goto(url, {waitUntil: 'load'});
+    await phone.waitForTimeout(300);
+    screenshots.mobileInitial = path.join(outDir, 'mobile-initial.png');
+    await phone.screenshot({path: screenshots.mobileInitial, fullPage: true});
+  } finally {
+    await mobile.close();
+  }
 
   return {probe, axe, pageErrors, consoleErrors, screenshots};
 }

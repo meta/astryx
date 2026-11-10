@@ -4,7 +4,7 @@
  * @file The two arms of the vibe eval: a fresh Vite app per library.
  * @input committed starter apps under eval/arms/<id>
  * @output arm descriptors: library name, commands, and the negative control
- * @position Read by the runner and the grader
+ * @position Read by run.mjs and the grader
  */
 
 import path from 'node:path';
@@ -16,11 +16,7 @@ export const ARMS_ROOT = path.join(
   'arms',
 );
 
-/**
- * Both arms use the same commands, so the grader treats them the same.
- * The negative control must fail the type check and the build in every arm.
- * If it passes, the grader is broken and the run stops.
- */
+/** Both arms use the same commands, so the grader treats them the same. */
 const SHARED = {
   install: ['npm', 'ci', '--no-audit', '--no-fund', '--ignore-scripts'],
   typecheck: ['npx', '--no-install', 'tsc', '-b'],
@@ -71,7 +67,9 @@ export const ARMS = {
  * @property {string[]} build
  * @property {string} entry File the agent builds the task in
  * @property {string} placeholder Starting content of the entry file
- * @property {string} negativeControl Entry content that must fail both checks
+ * @property {string} negativeControl Entry content that must fail the type
+ *   check and the build. If it passes either, the grader is broken and the
+ *   run stops.
  */
 
 /**
