@@ -628,13 +628,13 @@ works on is `spec:AST-040` FR9's.
     lists as available, with the project's install command.
 
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
-  Code, Codex, and Cursor plugins.** The repository MAY ship one plugin skill,
-  shared by the Claude Code, Codex, and Cursor plugins, separate from the
-  computer-level file (FR8). Each host's plugin and marketplace manifests MAY
-  carry that host's listing metadata (description, homepage, logo, and related
-  presentation fields) while pointing at the same skill. `renderComputerAgentText`
-  generates the skill. A `--check` run MUST fail when the committed file differs
-  from the generated skill.
+  Code and Codex plugins.** The repository MAY ship one plugin skill, shared
+  by the Claude Code and Codex plugins, separate from the computer-level file
+  (FR8). Each host's plugin and marketplace manifests MAY carry that host's
+  listing metadata (description, homepage, logo, and related presentation
+  fields) while pointing at the same skill. `renderComputerAgentText` generates
+  the skill. A `--check` run MUST fail when the committed file differs from the
+  generated skill.
 
 ### Computer-level agent files
 

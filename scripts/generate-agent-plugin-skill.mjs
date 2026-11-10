@@ -2,8 +2,8 @@
 
 /**
  * Generates `plugins/astryx/skills/astryx/SKILL.md`, the agent plugin's skill,
- * from `renderComputerAgentText`, so the Claude Code, Codex, and Cursor plugins
- * share the same guidance the computer-level skill uses (spec AST-081 FR8, FR13).
+ * from `renderComputerAgentText`, so the Claude Code and Codex plugins share
+ * the same guidance the computer-level skill uses (spec AST-081 FR8, FR13).
  *
  * `--check` writes nothing and exits 1 when the checked-in file differs from
  * the rendering.
