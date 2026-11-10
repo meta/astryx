@@ -109,7 +109,7 @@ interface ValidationState {
   isPositionWidthMeasured: boolean;
   totalHeight: number;
   /** The last height-limit reading, so an unchanged one sets no state. */
-  isUnbounded: boolean | undefined;
+  isUnbounded: boolean;
 }
 interface Violation {
   data: unknown[];
@@ -265,11 +265,6 @@ function hasClippedRowNumber(cell: HTMLTableCellElement): boolean {
 }
 
 /**
- * Diagnostics inspect only mounted native rows/cells; all observers belong to Table.
- * Rows in `checkedRows` passed since the last layout invalidation, so only
- * newly mounted rows are read.
- */
-/**
  * Whether the scroll area has no height limit from its parent: it is as tall
  * as its content and holds more rows than the first window. Undefined before
  * it is measured.
@@ -290,6 +285,11 @@ function isScrollAreaUnbounded(
   );
 }
 
+/**
+ * Diagnostics inspect only mounted native rows/cells; all observers belong to Table.
+ * Rows in `checkedRows` passed since the last layout invalidation, so only
+ * newly mounted rows are read.
+ */
 function getGeometryViolation(
   body: HTMLTableSectionElement,
   viewport: HTMLDivElement,
@@ -627,7 +627,7 @@ export function useTableWindow<T>({
         layoutRevision: undefined,
         isPositionWidthMeasured: false,
         totalHeight: Number.NaN,
-        isUnbounded: undefined,
+        isUnbounded: false,
       };
       validationRef.current = state;
     }
