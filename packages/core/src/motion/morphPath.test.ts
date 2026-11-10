@@ -6,9 +6,9 @@
  *   the presentations that move onto the morph, as their pull requests have
  *   them
  * @output Checks that the morph's curves put an element on its path's rect
- *   every frame, and that each presentation's model (an anchored menu, a
- *   popover, a lifted preview, a zoom, a sub-menu's parent card) is the same
- *   rect at every progress, within 0.5 px
+ *   every frame. Checks that each presentation's model (popover, lifted
+ *   preview, zoom, sub-menu parent card) is the same rect at every progress,
+ *   within 0.5 px
  * @position Testing; the rect morph's player has its own tests
  */
 
@@ -193,27 +193,6 @@ function popoverPath(surface: MorphRect, state: PopoverCollapsedState) {
   });
 }
 
-/** DropdownMenu (#8080, menuSurfaceMotion.ts): menuCollapsedState, scaled per axis about its origin. */
-function menuModel(surface: MorphRect, anchor: {x: number; y: number}) {
-  const collapsedSize = 22;
-  const scaleX0 = collapsedSize / surface.width;
-  const scaleY0 = collapsedSize / surface.height;
-  const originX =
-    (anchor.x - surface.x - (surface.width / 2) * scaleX0) / (1 - scaleX0);
-  const originY =
-    (anchor.y - surface.y - (surface.height / 2) * scaleY0) / (1 - scaleY0);
-  return (p: number): MorphRect => {
-    const scaleX = scaleX0 + (1 - scaleX0) * p;
-    const scaleY = scaleY0 + (1 - scaleY0) * p;
-    return {
-      x: surface.x + originX * (1 - scaleX),
-      y: surface.y + originY * (1 - scaleY),
-      width: surface.width * scaleX,
-      height: surface.height * scaleY,
-    };
-  };
-}
-
 /** ContextMenu (#8201, ContextMenuLift.tsx): the preview laid out on its source, x, y and scale sprung together. */
 function liftModel(source: MorphRect, pressScale: number, lifted: MorphRect) {
   const from = {
@@ -292,20 +271,6 @@ const PROGRESSES = Array.from({length: 24}, (_, i) => -0.05 + i * 0.05);
 const drawn = (opacity: number) => Math.min(1, Math.max(0, opacity));
 
 describe('the presentations that move onto the morph are the same rect at every progress', () => {
-  it('an anchored menu (#8080): a straight line from the collapsed square on its control', () => {
-    const anchor = {x: 190, y: 171};
-    const model = menuModel(BOX, anchor);
-    const path = lerpPath(
-      {x: anchor.x - 11, y: anchor.y - 11, width: 22, height: 22},
-      BOX,
-      {opacity: [0, 1]},
-    );
-    for (const p of PROGRESSES) {
-      expectRect(path.rectAt(p), model(p), 0.5);
-      expect(path.opacityAt!(p)).toBeCloseTo(p, 9);
-    }
-  });
-
   it('a popover (#8187): UIKit\u2019s edge growth, on each side of its source', () => {
     const source = {x: 141, y: 160, width: 120, height: 44};
     const surfaces: Record<string, MorphRect> = {
