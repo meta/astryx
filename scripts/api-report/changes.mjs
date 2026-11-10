@@ -246,16 +246,23 @@ const short = pkg => code(String(pkg ?? '').replace(/^@astryxdesign\//, ''));
 /**
  * The advisory API changes for the pull request report: one visible summary
  * line, with every row inside a closed disclosure. Fields other than
- * `baseline`, `counts`, and `rows`, such as those an older head wrote, are
- * ignored.
+ * `baseline`, `baseUnknown`, `counts`, and `rows`, such as those an older
+ * head wrote, are ignored.
+ *
+ * With `compared: false` (no built surface of the merge base), the line says
+ * that nothing was compared and names each listed package as unknown. Rows
+ * are not shown: they do not come from a comparison of builds.
  * @param {ReturnType<typeof computeChanges>} changes
- * @returns {string} empty when no package has a change
+ * @param {{compared?: boolean}} [options]
+ * @returns {string} empty when no package has a change, or when nothing was
+ *   compared and no package is listed
  */
-export function renderChanges(changes) {
+export function renderChanges(changes, {compared = true} = {}) {
   const list = (Array.isArray(changes) ? changes : []).map(c => ({
     ...c,
     rows: Array.isArray(c?.rows) ? c.rows : [],
   }));
+  if (!compared) return renderNotCompared(list);
   const unknown = list.filter(c => c.baseUnknown === true);
   const touched = list.filter(
     c => c.baseUnknown !== true && (c.rows.length || c.baseline === true),
@@ -310,4 +317,13 @@ function rowTable(packages) {
     );
   }
   return L;
+}
+
+/** The summary line when the merge base had no built surface. */
+function renderNotCompared(list) {
+  const unknown = list.filter(
+    c => c.baseUnknown === true || c.baseline === true || c.rows.length,
+  );
+  if (!unknown.length) return '';
+  return `**API changes:** not compared: no built surface of the merge base; unknown: ${unknown.map(c => short(c.pkg)).join(', ')}\n`;
 }

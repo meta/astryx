@@ -25,7 +25,9 @@
  * SHARED_INPUTS changed since `--base`. A package the surface lists, built
  * or skipped, but has no report for is marked unknown, with no rows. A
  * package the surface does not list is new. With no surface, nothing is
- * compared.
+ * compared: each published package whose inputs changed since `--base` (all
+ * of them without `--base`) is marked unknown, so the file never reads as a
+ * pull request with no API change.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -191,6 +193,21 @@ export function chooseBase({surface, unchanged, listed = false, head}) {
 }
 
 /**
+ * The changes when the merge base has no built surface: each published
+ * package whose report inputs changed is unknown, with no rows. A pull
+ * request that changes no published package lists none.
+ * @param {Array<{name: string, dir: string}>} packages
+ * @param {(dir: string) => boolean} unchanged
+ */
+export function uncomparedChanges(packages, unchanged) {
+  return computeChanges(
+    packages
+      .filter(p => !unchanged(p.dir))
+      .map(p => ({pkg: p.name, base: null, head: '', baseSource: 'unknown'})),
+  );
+}
+
+/**
  * Write the built packages' reports of the checkout at `root` under `out`,
  * mirroring their directories, and list them in `surface.json`. A package
  * whose build is missing is listed as skipped.
@@ -270,11 +287,18 @@ async function writeChanges(args) {
       });
     }
     changes.push(...computeChanges(inputs));
+  } else {
+    changes.push(
+      ...uncomparedChanges(
+        publishedPackages(REPO_ROOT),
+        dir => !!args.base && unchangedSince(args.base, dir),
+      ),
+    );
   }
   fs.mkdirSync(args.out, {recursive: true});
   fs.writeFileSync(
     path.join(args.out, 'api-changes.md'),
-    renderChanges(changes),
+    renderChanges(changes, {compared: haveSurface}),
   );
   fs.writeFileSync(
     path.join(args.out, 'api-changes.json'),
@@ -288,7 +312,7 @@ async function writeChanges(args) {
   console.log(
     haveSurface
       ? `API changes: ${total} row(s) against the merge base's built surface (${args.baseRecord ?? 'main'})`
-      : 'API changes: no built surface of the merge base; nothing compared',
+      : `API changes: no built surface of the merge base; nothing compared; unknown: ${changes.length ? changes.map(c => c.pkg).join(', ') : 'none (no published package changed)'}`,
   );
 }
 

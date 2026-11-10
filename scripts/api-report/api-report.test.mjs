@@ -23,9 +23,17 @@ import {
   renderChanges,
   usageFor,
 } from './changes.mjs';
-import {chooseBase, publishedPackages} from './cli.mjs';
+import {
+  chooseBase,
+  publishedPackages,
+  uncomparedChanges,
+} from './cli.mjs';
 import {generateReport} from './generate.mjs';
 
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
 const FIXTURE_ROOT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '__fixtures__/repo',
@@ -379,6 +387,84 @@ describe('API changes', () => {
     ]);
     expect(renderChanges(changes)).toBe('');
   });
+
+  it('renders nothing when nothing was compared and no published package changed', () => {
+    expect(renderChanges([], {compared: false})).toBe('');
+  });
+
+  it('names each changed package as unknown when nothing was compared', () => {
+    const changes = uncomparedChanges(
+      [
+        {name: '@astryxdesign/demo', dir: 'packages/demo'},
+        {name: '@astryxdesign/quiet', dir: 'packages/quiet'},
+      ],
+      dir => dir === 'packages/quiet',
+    );
+    expect(changes).toEqual([
+      {
+        pkg: '@astryxdesign/demo',
+        baseline: true,
+        baseUnknown: true,
+        baseSource: 'unknown',
+        counts: {added: 0, changed: 0, removed: 0},
+        rows: [],
+      },
+    ]);
+    expect(renderChanges(changes, {compared: false})).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `demo`\n',
+    );
+  });
+});
+
+describe('--changes without a merge-base surface', () => {
+  const changes = (...args) => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.mjs'),
+          '--changes',
+          ...args,
+          '--out',
+          out,
+        ],
+        {encoding: 'utf8'},
+      );
+      return {
+        json: JSON.parse(
+          fs.readFileSync(path.join(out, 'api-changes.json'), 'utf8'),
+        ),
+        md: fs.readFileSync(path.join(out, 'api-changes.md'), 'utf8'),
+      };
+    } finally {
+      fs.rmSync(out, {recursive: true, force: true});
+    }
+  };
+
+  it('writes no empty delta: with no merge base to read, every published package is unknown', () => {
+    const {json, md} = changes();
+    const published = publishedPackages(REPO_ROOT).map(p => p.name);
+    expect(json.version).toBe(2);
+    expect(json.baseRecord).toBeNull();
+    expect(json.packages.map(p => p.pkg).sort()).toEqual(published.sort());
+    for (const p of json.packages)
+      expect(p).toMatchObject({
+        baseline: true,
+        baseUnknown: true,
+        baseSource: 'unknown',
+        rows: [],
+      });
+    expect(md.split('\n')[0]).toMatch(
+      /^\*\*API changes:\*\* not compared: no built surface of the merge base; unknown: /,
+    );
+  }, 60_000);
+
+  it('lists no package and renders nothing when no published package changed since the merge base', () => {
+    const {json, md} = changes('--base', 'HEAD');
+    expect(json).toMatchObject({version: 2, baseRecord: null, packages: []});
+    expect(md).toBe('');
+  }, 60_000);
 });
 
 describe('--surface', () => {

@@ -547,6 +547,33 @@ describe('apiChangesLine', () => {
     expect(out).toContain("…and 10 more in this run's api-changes.json.");
   });
 
+  it('says the API was not compared when the merge base had no built surface', () => {
+    // No published package changed: nothing to compare, and no error.
+    expect(apiChangesLine({version: 2, baseRecord: null, packages: []})).toBe(
+      '',
+    );
+    const unknown = pkg('core', [], {
+      baseline: true,
+      baseUnknown: true,
+      baseSource: 'unknown',
+    });
+    expect(
+      apiChangesLine({version: 2, baseRecord: null, packages: [unknown]}),
+    ).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `core`\n\n',
+    );
+    // An older head compared committed reports and wrote their rows with a
+    // null baseRecord; those rows are not a comparison of builds.
+    const out = apiChangesLine({
+      version: 2,
+      baseRecord: null,
+      packages: [pkg('core', [row('added', 'component AppShell')])],
+    });
+    expect(out).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `core`\n\n',
+    );
+  });
+
   it('is absent when no package has a change, or without a file', () => {
     expect(
       apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),

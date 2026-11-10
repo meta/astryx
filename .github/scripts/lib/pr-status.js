@@ -522,11 +522,14 @@ const {renderChanges} = require('../../../scripts/api-report/changes.mjs');
 /**
  * API changes (the API report step's api-changes.json): one visible line per
  * package, the rows in one closed disclosure; nothing when no package has a
- * change.
+ * change. A null `baseRecord` means no built surface of the merge base, so
+ * nothing was compared; the line says so for each package it lists.
  */
 function apiChangesLine(report) {
   if (!report || !Array.isArray(report.packages)) return '';
-  const out = renderChanges(report.packages);
+  const out = renderChanges(report.packages, {
+    compared: report.baseRecord !== null,
+  });
   return out ? `${out}\n` : '';
 }
 
