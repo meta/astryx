@@ -16,36 +16,36 @@ on:
     # request runs once a maintainer labels it ci:run and pushes or reopens
     # (spec:AST-030 FR17).
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: ["main", "release/**"]
+    branches: ['main', 'release/**']
   merge_group:
   # Explicit release checks and baseline capture share the canonical owners.
   # Reviewed captures are committed through a normal pull request.
   workflow_dispatch:
     inputs:
       operation:
-        description: "Run the canonical check on exact main or a marked release branch, capture a main baseline candidate, or run every Chromium interaction proof on main"
+        description: 'Run the canonical check on exact main or a marked release branch, capture a main baseline candidate, or run every Chromium interaction proof on main'
         type: choice
         options: [capture, release-check, interaction-full]
         default: capture
         required: true
       release-branch:
-        description: "Exact branch to check: main before a cut, or marked release/vX.Y.Z after the bump"
+        description: 'Exact branch to check: main before a cut, or marked release/vX.Y.Z after the bump'
         type: string
         required: false
       release-version:
-        description: "Exact X.Y.Z version recorded by the active marker; required only for a marked release branch"
+        description: 'Exact X.Y.Z version recorded by the active marker; required only for a marked release branch'
         type: string
         required: false
       expected-head:
-        description: "Exact full main or release branch SHA; required for release-check"
+        description: 'Exact full main or release branch SHA; required for release-check'
         type: string
         required: false
       plan-digest:
-        description: "Exact SHA-256 digest recorded by the active marker; required only for a marked release branch"
+        description: 'Exact SHA-256 digest recorded by the active marker; required only for a marked release branch'
         type: string
         required: false
       recheck:
-        description: "Release re-check, sent by the release re-check workflow: takes the main check lane at once"
+        description: 'Release re-check, sent by the release re-check workflow: takes the main check lane at once'
         type: boolean
         default: false
 
@@ -510,7 +510,7 @@ jobs:
         if: steps.release-merge-back-scope.outputs.required == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Verify immutable tag package bytes match npm
         if: steps.release-merge-back-scope.outputs.required == 'true'
@@ -630,7 +630,7 @@ jobs:
         with:
           paths: '^(?:apps/docsite/|(?!(?:.*/)?__tests__/|.*\.(?:test|spec)\.[cm]?[jt]sx?$|apps/storybook/|.*\.stories\.[jt]sx?$|docs/specs/|\.changeset/|internal/a11y-spec/|internal/interaction-harness/))'
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
@@ -828,7 +828,7 @@ jobs:
           echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: needs.docsite-build.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
@@ -905,7 +905,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job runs the Lab package's tests, the source-reading guard tests and the repository guards (spec:AST-030 FR26)."
@@ -1164,7 +1164,7 @@ jobs:
 
       # A Lab-only change may carry a Lab component's CLI discovery entry; the
       # committed list must match its generator (spec:AST-030 FR26).
-      - name: "Lab-only: CLI official-packages check"
+      - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
@@ -1185,7 +1185,7 @@ jobs:
       - name: Offline-media browser cases
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
-          ASTRYX_OFFLINE_MEDIA_BROWSER: "1"
+          ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
 
@@ -1316,14 +1316,14 @@ jobs:
       - name: Verify hidden production discovery surfaces
         if: matrix.leg == 'production' && matrix.mode == 'typescript'
         env:
-          ASTRYX_VERIFY_HIDDEN_PRODUCTION: "1"
+          ASTRYX_VERIFY_HIDDEN_PRODUCTION: '1'
           NEXT_PUBLIC_DOCS_TARGET: latest
         run: pnpm -F @astryxdesign/docsite exec vitest run src/__tests__/hidden-shadcn-production.test.ts
 
       - name: Install and build every hidden production registry item
         if: matrix.leg == 'production'
         env:
-          ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES: "1"
+          ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES: '1'
         run: node internal/shadcn-registry/verify-full-catalog.mjs --mode ${{ matrix.mode }}
 
   # Historical required check name. The Vitest lanes, the Build test owner,
@@ -1401,7 +1401,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
@@ -1668,14 +1668,14 @@ jobs:
       # Lab package and the Storybook stories that import it are typechecked
       # here, against the packages this job just built: a type error that
       # landed would fail every later pull request's typecheck.
-      - name: "Lab-only: typecheck Lab and its stories"
+      - name: 'Lab-only: typecheck Lab and its stories'
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only == 'true'
         run: pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck
 
       # A Lab-only change whose route lock differs from the merge base checks
       # the lock against the registry the docsite builds from these packages
       # (spec:AST-030 FR26). Without a merge base, it checks anyway.
-      - name: "Lab-only: check the ShadCN route lock"
+      - name: 'Lab-only: check the ShadCN route lock'
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only == 'true'
         env:
           DOCSITE_TARGET: canary
@@ -1943,7 +1943,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
@@ -2018,7 +2018,7 @@ jobs:
           echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: needs.build-storybook.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The Storybook build job built the packages and typechecked Lab and its stories (spec:AST-030 FR26)."
@@ -2066,7 +2066,7 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         uses: actions/download-artifact@v8
@@ -2176,7 +2176,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -2195,7 +2195,7 @@ jobs:
         if: steps.scope.outputs.has_components == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download analysis artifact
         if: steps.scope.outputs.has_components == 'true'
@@ -2317,7 +2317,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -2334,7 +2334,7 @@ jobs:
         if: steps.scope.outputs.has_components == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download analysis artifact
         if: steps.scope.outputs.has_components == 'true'
@@ -2464,7 +2464,7 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         uses: actions/download-artifact@v8
@@ -2619,7 +2619,7 @@ jobs:
           # A Lab-only change still runs each interaction spec it edits.
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Keep the leg planner from the workflow's commit
         if: steps.scope-chromium.outputs.applies == 'true' || steps.scope-webkit.outputs.applies == 'true'
@@ -2857,7 +2857,7 @@ jobs:
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
-        run: "true"
+        run: 'true'
 
       # The pull request's head, or the main commit a nightly run checks.
       - name: Checkout
@@ -2885,7 +2885,7 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3043,7 +3043,7 @@ jobs:
           # A Lab-only change still runs each interaction spec it edits.
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -3148,7 +3148,7 @@ jobs:
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
-        run: "true"
+        run: 'true'
 
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3181,7 +3181,7 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3305,7 +3305,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: "Lab-only: Lab tests + Storybook build"
+      - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
@@ -3320,7 +3320,7 @@ jobs:
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        run: "true"
+        run: 'true'
 
       - uses: ./.github/actions/setup
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
@@ -3341,7 +3341,7 @@ jobs:
       - name: Verify canonical setup compositions
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         env:
-          ASTRYX_CANONICAL_SETUP_BROWSER: "1"
+          ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
@@ -3389,7 +3389,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -3422,7 +3422,7 @@ jobs:
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
@@ -3508,7 +3508,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -3541,7 +3541,7 @@ jobs:
         if: github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download analysis artifact
         if: (github.event_name == 'pull_request') && (github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true')
@@ -3892,7 +3892,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -3909,7 +3909,7 @@ jobs:
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download analysis artifact
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -3936,7 +3936,7 @@ jobs:
       - name: Verify D7 native target regression
         if: (matrix.package == 'core' && matrix.part == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
         env:
-          ASTRYX_RTL_BROWSER: "1"
+          ASTRYX_RTL_BROWSER: '1'
         run: |
           D7_TEST=.github/scripts/rtl-audit-coarse-hit.browser.test.mjs
           if [ ! -f "$D7_TEST" ]; then
@@ -4092,7 +4092,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -4206,7 +4206,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       - uses: actions/checkout@v7
 
@@ -4263,7 +4263,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          component-audit: "true"
+          component-audit: 'true'
 
       # The tested merge commit, as pr-visual checks out: a branch that
       # predates this check has none of its scripts at its own head.
@@ -4328,7 +4328,7 @@ jobs:
         if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
@@ -4492,9 +4492,9 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: "^(packages/[^/]+/src/|internal/a11y-spec/)"
+          paths: '^(packages/[^/]+/src/|internal/a11y-spec/)'
           outside-pull-request: skip
-          component-audit: "true"
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -4626,7 +4626,7 @@ jobs:
         if: steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'
@@ -4715,9 +4715,9 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: "^packages/[^/]+/src/"
+          paths: '^packages/[^/]+/src/'
           outside-pull-request: skip
-          component-audit: "true"
+          component-audit: 'true'
 
       # Out of scope the run still writes its record, so merge-guard reads
       # "nothing owed" rather than a missing record.
@@ -4869,7 +4869,7 @@ jobs:
         if: steps.leg.outputs.runs == 'true'
         uses: ./.github/actions/setup
         with:
-          install: "false"
+          install: 'false'
 
       - name: Download Storybook artifact
         if: steps.leg.outputs.runs == 'true'
