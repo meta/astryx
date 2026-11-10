@@ -83,9 +83,11 @@ function main(args) {
     );
 }
 
+// Real paths: a temporary folder can be a symbolic link, as on macOS.
 if (
   process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  fs.realpathSync(process.argv[1]) ===
+    fs.realpathSync(fileURLToPath(import.meta.url))
 ) {
   main(process.argv.slice(2));
 }

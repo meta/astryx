@@ -4926,6 +4926,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/scripts
+            scripts/lib
             packages
             internal
           path: .plan
@@ -5017,8 +5018,8 @@ jobs:
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SPECS: ${{ needs.release-specs-plan.outputs.specs }}
-          # Timing budgets gate on the release check's runner, so they gate
-          # here too.
+          # The Table release proof reads it: timing budgets gate on the
+          # release check's runner, so they gate here too.
           ASTRYX_TABLE_TIMING_GATE: '1'
         run: |
           set -euo pipefail
@@ -5037,7 +5038,7 @@ jobs:
             process.exitCode = outside.length > 0 ? 1 : 0;
           ' "${RUN[@]}"
           # One worker: a release spec judges timing alone, as the release
-          # check's isolated timing step runs it.
+          # check gives an isolated timing proof a contract leg of its own.
           pnpm exec playwright test "${RUN[@]}" --config playwright.config.ts --project chromium --workers=1
 
   # Dependent audits (spec:AST-030 FR12): a change to a component's source runs

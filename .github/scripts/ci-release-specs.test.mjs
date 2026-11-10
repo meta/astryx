@@ -9,7 +9,7 @@
  * @position Node contract for spec:AST-030 FR32.
  */
 
-import {spawnSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -124,6 +124,45 @@ describe('release-specs (changed)', () => {
     expect(stepOf(plan, 'Plan the release specs').run).toContain(
       'release-specs-plan.mjs',
     );
+  });
+
+  it("starts the planner from only the plan job's sparse checkout", () => {
+    const checkout = plan.steps.find(
+      each => each.name === "Check out the merge commit's sources",
+    );
+    const sparse = checkout.with['sparse-checkout'].trim().split('\n');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-plan-'));
+    const copy = path.join(dir, '.plan');
+    // The script folders the job checks out; the planner reads no others.
+    for (const folder of sparse.filter(each => /(^|\/)scripts/.test(each)))
+      fs.cpSync(path.join(root, folder), path.join(copy, folder), {
+        recursive: true,
+      });
+    const spec =
+      'packages/core/src/Table/__tests__/Table.release.a11y.chromium.spec.ts';
+    fs.mkdirSync(path.join(copy, path.dirname(spec)), {recursive: true});
+    fs.writeFileSync(path.join(copy, spec), '\n');
+    fs.writeFileSync(path.join(dir, 'listed.txt'), `${spec}\n`);
+    fs.writeFileSync(path.join(dir, 'changed.txt'), `${spec}\n`);
+    const out = execFileSync(
+      'node',
+      [
+        path.join(copy, '.github/scripts/release-specs-plan.mjs'),
+        '--listed',
+        path.join(dir, 'listed.txt'),
+        '--changed',
+        path.join(dir, 'changed.txt'),
+        '--root',
+        copy,
+        '--out',
+        path.join(dir, 'plan.json'),
+      ],
+      {encoding: 'utf8', env: {...process.env, GITHUB_OUTPUT: ''}},
+    );
+    expect(out).toContain(spec);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(dir, 'plan.json'), 'utf8')).specs,
+    ).toEqual([spec]);
   });
 
   it("uses the gating release check's runner, config and timing gate, on one worker", () => {
