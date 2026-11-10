@@ -155,6 +155,19 @@ describe('status phrases', () => {
     ).toEqual(['has not started']);
   });
 
+  it('stays silent on behavior that shares words with a status phrase', () => {
+    expect(
+      phrases(
+        record(
+          'For a theme that was not built ahead of time, the provider compiles it.',
+          'The reader reports an export whose package target not built yet.',
+          'Each read lands before the next frame paints.',
+          'If the fix lands before final-patch lock, it ships in the patch.',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
   it('ignores frontmatter', () => {
     expect(
       phrases('---\nsummary: no code yet\n---\n\n# Record\n\nRows window.\n'),
