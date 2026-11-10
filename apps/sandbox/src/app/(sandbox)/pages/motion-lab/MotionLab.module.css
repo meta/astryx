@@ -61,7 +61,7 @@
    the classes are what the demos actually apply. Three of those loops animate a
    paint-only or layout property deliberately — they are the demonstration of
    what criterion 13 forbids — and without containment the demonstration would
-   repaint the whole lab around itself at 60fps, which is the kt-fr88 bug being
+   repaint the whole lab around itself at 60fps, which is the idle-repaint bug being
    committed by the page that documents it. The layer, where one is warranted,
    is gated on no-preference so a reduced-motion reader is not charged layer
    memory for a mark that has been stilled. */

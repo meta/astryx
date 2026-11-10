@@ -685,6 +685,96 @@ describe('Node-tooling CI routing', () => {
     expect(step(job, 'Report API changes')['continue-on-error']).toBe(true);
   });
 
+  // The merge base's background build, run with stub git, pnpm and node:
+  // git reports which paths the pull request changes, and pnpm records each
+  // build it is asked for.
+  const runBaseBuild = ({needApi, changed}) => {
+    const start = step(
+      ci.jobs['build-storybook'],
+      'Start building the merge base without a record',
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    const bin = path.join(root, '.bin');
+    try {
+      fs.mkdirSync(bin);
+      const stub = (name, body) => {
+        fs.writeFileSync(path.join(bin, name), `#!/bin/bash\n${body}\n`);
+        fs.chmodSync(path.join(bin, name), 0o755);
+      };
+      stub(
+        'git',
+        [
+          'if [ "$1" = worktree ]; then mkdir -p "$4"; exit 0; fi',
+          'if [ "$1" = diff ]; then',
+          '  for p in "${@:6}"; do',
+          `    case " ${changed.join(' ')} " in *" \${p%/} "*) exit 1;; esac`,
+          '  done',
+          '  exit 0',
+          'fi',
+        ].join('\n'),
+      );
+      stub('pnpm', `echo "$*" >> "${root}/pnpm.log"`);
+      stub('node', 'exit 0');
+      // The step's script runs in the merge base's worktree.
+      fs.mkdirSync(path.join(root, '.size-base/packages/themes/neutral'), {
+        recursive: true,
+      });
+      execFileSync('bash', ['-e', '-c', start.run], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          GITHUB_OUTPUT: path.join(root, 'output'),
+          BASE_SHA: 'base',
+          HEAD_SHA: 'head',
+          NEED_API: String(needApi),
+        },
+      });
+      const deadline = Date.now() + 20_000;
+      while (
+        !fs.existsSync(path.join(root, 'base-build.done')) &&
+        !fs.existsSync(path.join(root, 'base-build.failed'))
+      ) {
+        if (Date.now() > deadline)
+          throw new Error('the base build did not finish');
+        execFileSync('sleep', ['0.1']);
+      }
+      expect(fs.existsSync(path.join(root, 'base-build.done'))).toBe(true);
+      const log = path.join(root, 'pnpm.log');
+      return fs.existsSync(log)
+        ? fs.readFileSync(log, 'utf8').trim().split('\n')
+        : [];
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  };
+
+  it.each([
+    ['changes only Core', ['packages/core']],
+    ['changes only a theme', ['packages/themes/neutral']],
+    ['changes the CLI', ['packages/cli']],
+  ])(
+    "writes the CLI's API declarations for a merge base without Main's surface when a pull request %s",
+    (_label, changed) => {
+      // The head build always writes them, so the base must too: without
+      // them the CLI's base report falls back to its committed report, and
+      // a stale committed report reads as added rows the pull request never
+      // made.
+      const builds = runBaseBuild({needApi: true, changed});
+      expect(builds).toContain('-F @astryxdesign/cli sync:api-types');
+      // A theme still builds only when its own directory changes.
+      expect(builds.includes('-F ./packages/themes/neutral/ build')).toBe(
+        changed.includes('packages/themes/neutral'),
+      );
+    },
+  );
+
+  it("builds no published package's API for a merge base whose surface Main kept", () => {
+    const builds = runBaseBuild({needApi: false, changed: ['packages/cli']});
+    expect(builds).not.toContain('-F @astryxdesign/cli sync:api-types');
+    expect(builds).toContain('-F @astryxdesign/core build');
+  });
+
   // The stub CLI writes a surface when asked for one (or fails to, for a
   // base whose surface cannot be written) and prints the --changes call.
   const stubCli = ({supported, surfaceWrites = true}) =>
