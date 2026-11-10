@@ -15,15 +15,8 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {isInteractionSpec} from './playwright-legs.mjs';
+import {isInteractionSpec, isProofPage} from './playwright-legs.mjs';
 import {proofImporters} from './a11y-pr-contracts.mjs';
-
-// What a proof's page loads: the interaction specs, the stories they open,
-// and Storybook's preview.
-const isProofPage = file =>
-  isInteractionSpec(file) ||
-  /\.stories\.[cm]?[jt]sx?$/.test(file) ||
-  file === 'apps/storybook/.storybook/preview.tsx';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
