@@ -5,8 +5,8 @@
  * @input Nothing
  * @output Exports the synthetic-input harness the gesture tests share: a
  *   manual clock, an arena wired to a transition log, fingers that land,
- *   move and lift at explicit timestamps, and a coarse primary pointer for
- *   tests that go through the document's host
+ *   move (with coalesced samples) and lift at explicit timestamps, and a
+ *   coarse primary pointer for tests that go through the document's host
  * @position Test-only helper of packages/core/src/gestures (excluded from the
  *   build with the rest of __tests__)
  */
@@ -18,6 +18,7 @@ import type {
   GestureTouch,
   NativeScrollProbe,
   TouchConsumer,
+  TouchSample,
 } from '../types';
 
 /**
@@ -189,12 +190,20 @@ export class Finger {
     return this;
   }
 
-  move(x: number, y: number, time: number): this {
+  /** `history`: the coalesced samples before this one, oldest first. */
+  move(
+    x: number,
+    y: number,
+    time: number,
+    history?: ReadonlyArray<TouchSample>,
+  ): this {
     this.x = x;
     this.y = y;
     this.time = time;
     this.harness.clock.time = time;
-    this.harness.arena.moved([{id: this.id, x, y, time}]);
+    this.harness.arena.moved([
+      {id: this.id, x, y, time, ...(history == null ? {} : {history})},
+    ]);
     return this;
   }
 

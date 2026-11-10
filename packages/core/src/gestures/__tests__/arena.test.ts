@@ -11,7 +11,8 @@
  *   innermost resolution, independent touches, delivery to the view (claims,
  *   cancelsTouchesInView, delaysTouchesBegan, deferred and replayed clicks,
  *   the browser taking a touch), cancellation, and the event clock, which
- *   holds a late input at its time and keeps the time the input came with
+ *   holds a late input at its time and keeps the times the input and its
+ *   coalesced samples came with
  * @position Unit tests of packages/core/src/gestures/GestureArena.ts and the
  *   state machine of GestureRecognizer.ts
  */
@@ -419,6 +420,29 @@ describe('arena: cancellation and time', () => {
     expect(seen).toEqual([
       {time: 500, inputTime: 300},
       {time: 520, inputTime: 520},
+    ]);
+  });
+  it('keeps a late move’s coalesced samples at the times they came with', () => {
+    const h = createHarness();
+    const seen: {samples: number[]; inputSamples: number[]}[] = [];
+    const r = new Scripted('r', {
+      moved: recognizer => {
+        const [touch] = recognizer.trackedTouches;
+        seen.push({
+          samples: touch.samples.map(sample => sample.time),
+          inputSamples: touch.inputSamples.map(sample => sample.time),
+        });
+      },
+    });
+    h.finger(1).down(0, 0, 100, {recognizers: [r]});
+    h.advance(500);
+    h.finger(1).move(5, 0, 300);
+    // Both late: the clock holds them at 500 ms, and `samples` drops the
+    // earlier one, which comes before the touch's held time.
+    h.finger(1).move(7, 0, 320, [{x: 6, y: 0, time: 310}]);
+    expect(seen).toEqual([
+      {samples: [500], inputSamples: [300]},
+      {samples: [500], inputSamples: [310, 320]},
     ]);
   });
 });
