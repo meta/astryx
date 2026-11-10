@@ -219,7 +219,10 @@ that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
 callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
-the settle begins. An animation counts once it is no longer pending and has
+the settle begins. With `thaw`, it starts a scene that a freeze holds instead. One page task
+thaws the scene, and the loop runs from the first task after the next frame.
+A motion the freeze held at its start then runs on the compositor as the block
+begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
 created in the frame the page looks is not on the compositor yet. It counts
 only before its curve's held tail (keyframes that end in a run of identical

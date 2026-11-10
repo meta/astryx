@@ -762,8 +762,10 @@ export interface BlockedWindow extends BusyWindow {
  * next frame, once that frame has handed the held motion to the compositor.
  * So a motion the freeze held at its start runs on the compositor as the block
  * begins, however late the page's frames are. A page that is not frozen
- * throws. With `thaw`, `during` only names the animation the block caught
- * (`animation`): its wait does not apply, nor does `minProgressMs`.
+ * throws. With `thaw`, `during` names the animation the block caught
+ * (`animation`), with its replay, as a block that waits for it does. It is read
+ * in the loop's task, and one still pending there throws. The wait does not
+ * apply, nor does `minProgressMs`.
  *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
@@ -937,9 +939,9 @@ export async function blockMainThread(
       };
     }, ms);
   }
-  // The wait reads the curve end and the property match, defined in the page
-  // first. Both are sent before the wait and not awaited: the wait starts no
-  // later than before.
+  // The wait reads the curve end, the property match and the caught
+  // animation's helpers, defined in the page first. All are sent before the
+  // wait and not awaited: the wait starts no later than before.
   const defined = page.evaluate(
     `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${defineCaughtAnimation.toString()})();`,
   );
@@ -995,271 +997,6 @@ export async function blockMainThread(
         let heldSeen: ReturnType<typeof numbersOf> | null = null;
         const tooLate = (numbers: ReturnType<typeof numbersOf>) =>
           new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
-        // The caught animation, replayed once the loop ends, for the proof to
-        // predict each frame's move (`BlockedWindow.animation`). The element's
-        // geometry animations replay, paused, on a hidden clone of its box in
-        // the same parent. A fade or a pseudo-element replays one numeric
-        // channel instead, on a hidden registered <number>. Each held seek
-        // reads the browser's own easing, and the element is untouched.
-        const geometry = ['translate', 'scale', 'rotate', 'transform'];
-        const keyframesOf = (a: Animation) =>
-          (a.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
-        const isGeometry = (a: Animation) =>
-          keyframesOf(a).some(k => geometry.some(p => p in k));
-        const realStart = (a: Animation) =>
-          performance.timeOrigin +
-          Number(a.startTime) +
-          ((window as unknown as {__harnessFreeze?: {offset: number}})
-            .__harnessFreeze?.offset ?? 0);
-        const boxOf = (el: Element): [number, number, number, number] => {
-          const r = el.getBoundingClientRect();
-          return [r.x, r.y, r.width, r.height];
-        };
-        const replayOf = (
-          caught: Animation,
-          fromMs: number,
-          toMs: number,
-        ): Record<string, unknown> => {
-          const effect = caught.effect as KeyframeEffect | null;
-          const target = effect?.target;
-          if (
-            target instanceof HTMLElement &&
-            effect?.pseudoElement == null &&
-            isGeometry(caught)
-          ) {
-            // Only the element that carries the harness marker predicts the
-            // tracked box.
-            if (!target.hasAttribute('data-harness-marker')) {
-              return {
-                notPredicted: 'the tracked marker is not on the caught element',
-              };
-            }
-            for (
-              let up = target.parentElement;
-              up != null;
-              up = up.parentElement
-            ) {
-              if (
-                up
-                  .getAnimations()
-                  .some(
-                    a =>
-                      isGeometry(a) &&
-                      a.playState !== 'finished' &&
-                      a.playState !== 'idle',
-                  )
-              ) {
-                return {
-                  unpredictable:
-                    'an ancestor of the element moves too, so its box cannot be predicted',
-                };
-              }
-            }
-            const runs = target.getAnimations().filter(isGeometry);
-            // A run that already left the element shows where it stopped, so a
-            // replay of the rest cannot place it.
-            if (!runs.includes(caught)) {
-              return {
-                notPredicted: 'the caught animation ended before its replay',
-              };
-            }
-            if (
-              runs.some(
-                a =>
-                  a.startTime == null ||
-                  (a.effect as KeyframeEffect).composite !== 'replace' ||
-                  keyframesOf(a).some(
-                    k =>
-                      k.composite != null &&
-                      k.composite !== 'auto' &&
-                      k.composite !== 'replace',
-                  ),
-              )
-            ) {
-              return {
-                unpredictable:
-                  'a geometry animation of the element composites onto another or has not started, so its box cannot be predicted',
-              };
-            }
-            if (
-              getComputedStyle(target).position === 'fixed' ||
-              target.parentElement == null
-            ) {
-              return {
-                unpredictable:
-                  'the element is fixed, so its box cannot be replayed in its parent',
-              };
-            }
-            const style = getComputedStyle(target);
-            const clone = document.createElement('div');
-            clone.setAttribute('aria-hidden', 'true');
-            // The layout box to the sub-pixel: the computed size with its
-            // padding and border. The offset is in whole px: it is aligned
-            // below.
-            const px = (name: string) =>
-              Number.parseFloat(style.getPropertyValue(name)) || 0;
-            const contentBox = style.boxSizing === 'content-box';
-            const width =
-              px('width') +
-              (contentBox
-                ? px('padding-left') +
-                  px('padding-right') +
-                  px('border-left-width') +
-                  px('border-right-width')
-                : 0);
-            const height =
-              px('height') +
-              (contentBox
-                ? px('padding-top') +
-                  px('padding-bottom') +
-                  px('border-top-width') +
-                  px('border-bottom-width')
-                : 0);
-            clone.style.cssText = `position:absolute;left:${target.offsetLeft}px;top:${target.offsetTop}px;width:${width}px;height:${height}px;box-sizing:border-box;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none;transform-origin:${style.transformOrigin};transform-box:${style.transformBox}`;
-            // A geometry property no run animates keeps the element's own value.
-            for (const name of geometry) {
-              if (!runs.some(a => keyframesOf(a).some(k => name in k))) {
-                clone.style.setProperty(name, style.getPropertyValue(name));
-              }
-            }
-            const chip = target.querySelector(
-              ':scope > [data-harness-marker-chip]',
-            );
-            let read: Element = clone;
-            if (chip instanceof HTMLElement) {
-              const copy = document.createElement('div');
-              copy.style.cssText = chip.style.cssText;
-              clone.append(copy);
-              read = copy;
-            }
-            target.parentElement.append(clone);
-            const replays = runs.map(a => {
-              const replay = clone.animate(
-                keyframesOf(a).map(k => {
-                  const {computedOffset, ...rest} = k as ComputedKeyframe;
-                  return {...rest, offset: computedOffset};
-                }),
-                (a.effect as KeyframeEffect).getTiming(),
-              );
-              replay.pause();
-              return {
-                replay,
-                source: a,
-                origin: realStart(a),
-                rate: a.playbackRate,
-              };
-            });
-            const seek = (t: number) => {
-              for (const {replay, origin, rate} of replays) {
-                replay.currentTime = (t - origin) * rate;
-              }
-            };
-            // Aligned once: each replay at its own animation's current time,
-            // which the element's own box is read at, then the clone moved by
-            // what remains. The cast's frame at rest checks the replay.
-            for (const {replay, source} of replays) {
-              replay.currentTime = source.currentTime;
-            }
-            const unaligned = boxOf(read);
-            const actual = boxOf(chip ?? target);
-            clone.style.left = `${target.offsetLeft + actual[0] - unaligned[0]}px`;
-            clone.style.top = `${target.offsetTop + actual[1] - unaligned[1]}px`;
-            const check = {predicted: boxOf(read), actual};
-            const samples: Array<[number, number, number, number, number]> = [];
-            for (let t = fromMs; t <= toMs; t += 2) {
-              seek(t);
-              samples.push([t, ...boxOf(read)]);
-            }
-            for (const {replay} of replays) {
-              replay.cancel();
-            }
-            clone.remove();
-            return {geometry: samples, check};
-          }
-          // One numeric channel: the one that changes the most, for its size.
-          const keyframes = keyframesOf(caught);
-          const meta = new Set([
-            'offset',
-            'computedOffset',
-            'easing',
-            'composite',
-          ]);
-          const numbers = (value: unknown): number[] =>
-            (
-              String(value).match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []
-            ).map(Number);
-          let channel: {
-            key: string;
-            index: number;
-            first: number;
-            last: number;
-          } | null = null;
-          let largest = 0;
-          for (const key of Object.keys(keyframes[0] ?? {})) {
-            if (meta.has(key)) {
-              continue;
-            }
-            const values = keyframes.map(k =>
-              numbers((k as Record<string, unknown>)[key]),
-            );
-            const width = Math.min(...values.map(v => v.length));
-            for (let index = 0; index < width; index += 1) {
-              const first = values[0][index];
-              const last = values[values.length - 1][index];
-              const size =
-                Math.abs(last - first) /
-                Math.max(Math.abs(first), Math.abs(last));
-              if (last !== first && size > largest) {
-                largest = size;
-                channel = {key, index, first, last};
-              }
-            }
-          }
-          if (channel == null || effect == null) {
-            return {};
-          }
-          const {key, index, first, last} = channel;
-          const name = '--harness-busy-progress';
-          try {
-            CSS.registerProperty({
-              name,
-              syntax: '<number>',
-              inherits: false,
-              initialValue: '0',
-            });
-          } catch {
-            // An earlier block registered it.
-          }
-          const probe = document.createElement('div');
-          probe.setAttribute('aria-hidden', 'true');
-          probe.style.cssText =
-            'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none';
-          document.body.append(probe);
-          const replay = probe.animate(
-            keyframes.map(k => ({
-              offset: (k as ComputedKeyframe).computedOffset,
-              easing: k.easing,
-              [name]: String(
-                (numbers((k as Record<string, unknown>)[key])[index] - first) /
-                  (last - first),
-              ),
-            })),
-            {...effect.getTiming(), fill: 'both'},
-          );
-          replay.pause();
-          const origin = realStart(caught);
-          const progress: Array<[number, number]> = [];
-          for (let t = fromMs; t <= toMs; t += 2) {
-            replay.currentTime = (t - origin) * caught.playbackRate;
-            progress.push([
-              t,
-              Number(getComputedStyle(probe).getPropertyValue(name)),
-            ]);
-          }
-          replay.cancel();
-          probe.remove();
-          return {progress};
-        };
         // The animations that counted at the frame before, pending ones too.
         let seen = new Set<Animation>();
         const tick = () => {
@@ -1301,27 +1038,18 @@ export async function blockMainThread(
               }
               const blockFrom = performance.timeOrigin + start;
               const blockTo = performance.timeOrigin + now;
-              const controlStarts = (
-                window as unknown as {__harnessControlStarts?: number[]}
-              ).__harnessControlStarts;
+              const controlStarts = caughtAnimation.controlStarts();
               resolve({
                 from: blockFrom,
                 to: blockTo,
                 spanMs: now - start,
-                ...(controlStarts?.[0] == null
-                  ? {}
-                  : {
-                      controlStarts: [controlStarts[0], controlStarts[1]] as [
-                        number,
-                        number?,
-                      ],
-                    }),
+                ...(controlStarts == null ? {} : {controlStarts}),
                 ...(animation == null
                   ? {}
                   : {
                       animation: {
                         ...animation,
-                        ...replayOf(
+                        ...caughtAnimation.replayOf(
                           caught,
                           blockFrom - look,
                           Math.min(blockTo, animation.to) + look,
@@ -1409,6 +1137,18 @@ interface CaughtAnimation {
     animation: Animation,
     fillHolds: boolean,
   ): BlockedWindow['animation'];
+  /**
+   * The caught animation replayed from `fromMs` to `toMs`, epoch ms. It
+   * returns what `BlockedWindow.animation` holds: `geometry` and `check`, or
+   * `progress`, or why it could not be read.
+   */
+  replayOf(
+    animation: Animation,
+    fromMs: number,
+    toMs: number,
+  ): Record<string, unknown>;
+  /** The busy controls' starts on the page clock, when any started. */
+  controlStarts(): [number, number?] | undefined;
 }
 
 /**
@@ -1432,7 +1172,266 @@ function defineCaughtAnimation(): void {
     const timing = a.effect?.getComputedTiming();
     return Number(timing?.delay ?? 0) + Number(timing?.activeDuration ?? 0);
   };
+  // The caught animation, replayed once the loop ends, for the proof to
+  // predict each frame's move (`BlockedWindow.animation`). The element's
+  // geometry animations replay, paused, on a hidden clone of its box in
+  // the same parent. A fade or a pseudo-element replays one numeric
+  // channel instead, on a hidden registered <number>. Each held seek
+  // reads the browser's own easing, and the element is untouched.
+  const geometry = ['translate', 'scale', 'rotate', 'transform'];
+  const keyframesOf = (a: Animation) =>
+    (a.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+  const isGeometry = (a: Animation) =>
+    keyframesOf(a).some(k => geometry.some(p => p in k));
+  const realStart = (a: Animation) =>
+    performance.timeOrigin +
+    Number(a.startTime) +
+    ((window as unknown as {__harnessFreeze?: {offset: number}}).__harnessFreeze
+      ?.offset ?? 0);
+  const boxOf = (el: Element): [number, number, number, number] => {
+    const r = el.getBoundingClientRect();
+    return [r.x, r.y, r.width, r.height];
+  };
+  const replayOf = (
+    caught: Animation,
+    fromMs: number,
+    toMs: number,
+  ): Record<string, unknown> => {
+    const effect = caught.effect as KeyframeEffect | null;
+    const target = effect?.target;
+    if (
+      target instanceof HTMLElement &&
+      effect?.pseudoElement == null &&
+      isGeometry(caught)
+    ) {
+      // Only the element that carries the harness marker predicts the
+      // tracked box.
+      if (!target.hasAttribute('data-harness-marker')) {
+        return {
+          notPredicted: 'the tracked marker is not on the caught element',
+        };
+      }
+      for (let up = target.parentElement; up != null; up = up.parentElement) {
+        if (
+          up
+            .getAnimations()
+            .some(
+              a =>
+                isGeometry(a) &&
+                a.playState !== 'finished' &&
+                a.playState !== 'idle',
+            )
+        ) {
+          return {
+            unpredictable:
+              'an ancestor of the element moves too, so its box cannot be predicted',
+          };
+        }
+      }
+      const runs = target.getAnimations().filter(isGeometry);
+      // A run that already left the element shows where it stopped, so a
+      // replay of the rest cannot place it.
+      if (!runs.includes(caught)) {
+        return {
+          notPredicted: 'the caught animation ended before its replay',
+        };
+      }
+      if (
+        runs.some(
+          a =>
+            a.startTime == null ||
+            (a.effect as KeyframeEffect).composite !== 'replace' ||
+            keyframesOf(a).some(
+              k =>
+                k.composite != null &&
+                k.composite !== 'auto' &&
+                k.composite !== 'replace',
+            ),
+        )
+      ) {
+        return {
+          unpredictable:
+            'a geometry animation of the element composites onto another or has not started, so its box cannot be predicted',
+        };
+      }
+      if (
+        getComputedStyle(target).position === 'fixed' ||
+        target.parentElement == null
+      ) {
+        return {
+          unpredictable:
+            'the element is fixed, so its box cannot be replayed in its parent',
+        };
+      }
+      const style = getComputedStyle(target);
+      const clone = document.createElement('div');
+      clone.setAttribute('aria-hidden', 'true');
+      // The layout box to the sub-pixel: the computed size with its
+      // padding and border. The offset is in whole px: it is aligned
+      // below.
+      const px = (name: string) =>
+        Number.parseFloat(style.getPropertyValue(name)) || 0;
+      const contentBox = style.boxSizing === 'content-box';
+      const width =
+        px('width') +
+        (contentBox
+          ? px('padding-left') +
+            px('padding-right') +
+            px('border-left-width') +
+            px('border-right-width')
+          : 0);
+      const height =
+        px('height') +
+        (contentBox
+          ? px('padding-top') +
+            px('padding-bottom') +
+            px('border-top-width') +
+            px('border-bottom-width')
+          : 0);
+      clone.style.cssText = `position:absolute;left:${target.offsetLeft}px;top:${target.offsetTop}px;width:${width}px;height:${height}px;box-sizing:border-box;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none;transform-origin:${style.transformOrigin};transform-box:${style.transformBox}`;
+      // A geometry property no run animates keeps the element's own value.
+      for (const name of geometry) {
+        if (!runs.some(a => keyframesOf(a).some(k => name in k))) {
+          clone.style.setProperty(name, style.getPropertyValue(name));
+        }
+      }
+      const chip = target.querySelector(':scope > [data-harness-marker-chip]');
+      let read: Element = clone;
+      if (chip instanceof HTMLElement) {
+        const copy = document.createElement('div');
+        copy.style.cssText = chip.style.cssText;
+        clone.append(copy);
+        read = copy;
+      }
+      target.parentElement.append(clone);
+      const replays = runs.map(a => {
+        const replay = clone.animate(
+          keyframesOf(a).map(k => {
+            const {computedOffset, ...rest} = k as ComputedKeyframe;
+            return {...rest, offset: computedOffset};
+          }),
+          (a.effect as KeyframeEffect).getTiming(),
+        );
+        replay.pause();
+        return {
+          replay,
+          source: a,
+          origin: realStart(a),
+          rate: a.playbackRate,
+        };
+      });
+      const seek = (t: number) => {
+        for (const {replay, origin, rate} of replays) {
+          replay.currentTime = (t - origin) * rate;
+        }
+      };
+      // Aligned once: each replay at its own animation's current time,
+      // which the element's own box is read at, then the clone moved by
+      // what remains. The cast's frame at rest checks the replay.
+      for (const {replay, source} of replays) {
+        replay.currentTime = source.currentTime;
+      }
+      const unaligned = boxOf(read);
+      const actual = boxOf(chip ?? target);
+      clone.style.left = `${target.offsetLeft + actual[0] - unaligned[0]}px`;
+      clone.style.top = `${target.offsetTop + actual[1] - unaligned[1]}px`;
+      const check = {predicted: boxOf(read), actual};
+      const samples: Array<[number, number, number, number, number]> = [];
+      for (let t = fromMs; t <= toMs; t += 2) {
+        seek(t);
+        samples.push([t, ...boxOf(read)]);
+      }
+      for (const {replay} of replays) {
+        replay.cancel();
+      }
+      clone.remove();
+      return {geometry: samples, check};
+    }
+    // One numeric channel: the one that changes the most, for its size.
+    const keyframes = keyframesOf(caught);
+    const meta = new Set(['offset', 'computedOffset', 'easing', 'composite']);
+    const numbers = (value: unknown): number[] =>
+      (String(value).match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []).map(
+        Number,
+      );
+    let channel: {
+      key: string;
+      index: number;
+      first: number;
+      last: number;
+    } | null = null;
+    let largest = 0;
+    for (const key of Object.keys(keyframes[0] ?? {})) {
+      if (meta.has(key)) {
+        continue;
+      }
+      const values = keyframes.map(k =>
+        numbers((k as Record<string, unknown>)[key]),
+      );
+      const width = Math.min(...values.map(v => v.length));
+      for (let index = 0; index < width; index += 1) {
+        const first = values[0][index];
+        const last = values[values.length - 1][index];
+        const size =
+          Math.abs(last - first) / Math.max(Math.abs(first), Math.abs(last));
+        if (last !== first && size > largest) {
+          largest = size;
+          channel = {key, index, first, last};
+        }
+      }
+    }
+    if (channel == null || effect == null) {
+      return {};
+    }
+    const {key, index, first, last} = channel;
+    const name = '--harness-busy-progress';
+    try {
+      CSS.registerProperty({
+        name,
+        syntax: '<number>',
+        inherits: false,
+        initialValue: '0',
+      });
+    } catch {
+      // An earlier block registered it.
+    }
+    const probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText =
+      'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none';
+    document.body.append(probe);
+    const replay = probe.animate(
+      keyframes.map(k => ({
+        offset: (k as ComputedKeyframe).computedOffset,
+        easing: k.easing,
+        [name]: String(
+          (numbers((k as Record<string, unknown>)[key])[index] - first) /
+            (last - first),
+        ),
+      })),
+      {...effect.getTiming(), fill: 'both'},
+    );
+    replay.pause();
+    const origin = realStart(caught);
+    const progress: Array<[number, number]> = [];
+    for (let t = fromMs; t <= toMs; t += 2) {
+      replay.currentTime = (t - origin) * caught.playbackRate;
+      progress.push([
+        t,
+        Number(getComputedStyle(probe).getPropertyValue(name)),
+      ]);
+    }
+    replay.cancel();
+    probe.remove();
+    return {progress};
+  };
   w.__harnessCaught = {
+    replayOf,
+    controlStarts() {
+      const starts = (window as unknown as {__harnessControlStarts?: number[]})
+        .__harnessControlStarts;
+      return starts?.[0] == null ? undefined : [starts[0], starts[1]];
+    },
     counts(element, a, prop, pseudo) {
       // The busy-window control animates on its own, inside a dialog with
       // `within`: it never stands for the animation under test.
@@ -1498,7 +1497,7 @@ async function blockFromThaw(
     `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${defineCaughtAnimation.toString()})();(${defineThawScene.toString()})();`,
   );
   const blocked = (during ?? page.locator(':root')).evaluate(
-    (element, {duration, named, prop, pseudo, fillHolds}) =>
+    (element, {duration, named, prop, pseudo, fillHolds, look}) =>
       new Promise<BlockedWindow | 'not frozen' | 'pending'>(resolve => {
         const w = window as unknown as {
           __harnessFreeze?: {frozen: boolean};
@@ -1552,11 +1551,26 @@ async function blockFromThaw(
             while (now - start < duration) {
               now = read();
             }
+            const blockFrom = performance.timeOrigin + start;
+            const blockTo = performance.timeOrigin + now;
+            const controlStarts = w.__harnessCaught.controlStarts();
             resolve({
-              from: performance.timeOrigin + start,
-              to: performance.timeOrigin + now,
+              from: blockFrom,
+              to: blockTo,
               spanMs: now - start,
-              ...(animation == null ? {} : {animation}),
+              ...(controlStarts == null ? {} : {controlStarts}),
+              ...(animation == null || caught == null
+                ? {}
+                : {
+                    animation: {
+                      ...animation,
+                      ...w.__harnessCaught.replayOf(
+                        caught,
+                        blockFrom - look,
+                        Math.min(blockTo, animation.to) + look,
+                      ),
+                    },
+                  }),
             });
           }, 0);
         });
@@ -1567,6 +1581,7 @@ async function blockFromThaw(
       prop: property ?? null,
       pseudo: pseudoElement ?? null,
       fillHolds: fillHoldsOn(page),
+      look: BUSY_PROOF_LOOKAROUND_MS,
     },
   );
   const [, held] = await Promise.all([defined, blocked]);

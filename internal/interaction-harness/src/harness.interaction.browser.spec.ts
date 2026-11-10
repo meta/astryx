@@ -8011,6 +8011,31 @@ test.describe('page freeze', () => {
     expect(xs[xs.length - 1] - xs[0], trace).toBeGreaterThan(40);
   });
 
+  test('a block that thaws carries the replay of the motion it names, as a block that waits for it does', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    // The harness marker on the box itself, so its replay predicts the box.
+    await markElement(box, {mode: 'outline'});
+    await freezePage(page);
+    await startRun(page);
+    const block = await blockMainThread(page, 300, {thaw: true, during: box});
+    const animation = block.animation;
+    const trace = JSON.stringify({...animation, geometry: undefined});
+    expect(animation?.unpredictable, trace).toBeUndefined();
+    expect(animation?.notPredicted, trace).toBeUndefined();
+    expect(animation?.check, trace).toBeDefined();
+    // The replay runs from before the block to after it, and moves the box.
+    const geometry = animation?.geometry ?? [];
+    expect(geometry.length, trace).toBeGreaterThan(100);
+    expect(geometry[0][0], trace).toBeLessThan(block.from);
+    const travel = geometry[geometry.length - 1][1] - geometry[0][1];
+    expect(travel, trace).toBeGreaterThan(40);
+  });
+
   test('a block that thaws throws by name on a page the freeze does not hold', async ({
     page,
   }) => {
