@@ -630,10 +630,8 @@ works on is `spec:AST-040` FR9's.
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
   Code and Codex plugins.** The repository MAY ship one plugin skill, shared
   by the Claude Code and Codex plugins, separate from the computer-level file
-  (FR8). `renderPluginSkillText` generates the skill as
-  a shortened form of the CLI's computer-level guidance, sharing `bodyLines`
-  with `renderComputerAgentText`. A `--check` run MUST fail when the
-  committed file differs from the generated skill.
+  (FR8). `renderComputerAgentText` generates the skill. A `--check` run MUST
+  fail when the committed file differs from the generated skill.
 
 ### Computer-level agent files
 

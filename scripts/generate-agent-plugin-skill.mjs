@@ -2,8 +2,8 @@
 
 /**
  * Generates `plugins/astryx/skills/astryx/SKILL.md`, the agent plugin's skill,
- * from the same renderer that writes the computer-level skill, so the two
- * cannot drift (spec AST-081 FR8).
+ * from `renderComputerAgentText`, so the Claude Code and Codex plugins share
+ * the same guidance the computer-level skill uses (spec AST-081 FR8, FR13).
  *
  * `--check` writes nothing and exits 1 when the checked-in file differs from
  * the rendering.
@@ -12,7 +12,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {renderPluginSkillText} from '../packages/cli/foundation/agent-docs/computer-agent-text.mjs';
+import {
+  COMPUTER_COMMAND,
+  renderComputerAgentText,
+} from '../packages/cli/foundation/agent-docs/computer-agent-text.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -25,6 +28,11 @@ export const PLUGIN_SKILL_FILE = path.join(
   'SKILL.md',
 );
 
+/** The plugin skill always names the global `astryx` command. */
+function pluginSkillText() {
+  return renderComputerAgentText({command: COMPUTER_COMMAND});
+}
+
 /**
  * Whether the checked-in file is the rendering.
  * @param {string} [file]
@@ -32,8 +40,7 @@ export const PLUGIN_SKILL_FILE = path.join(
  */
 export function isPluginSkillCurrent(file = PLUGIN_SKILL_FILE) {
   return (
-    fs.existsSync(file) &&
-    fs.readFileSync(file, 'utf8') === renderPluginSkillText()
+    fs.existsSync(file) && fs.readFileSync(file, 'utf8') === pluginSkillText()
   );
 }
 
@@ -41,12 +48,12 @@ function main(args) {
   if (args.includes('--check')) {
     if (isPluginSkillCurrent()) return 0;
     console.error(
-      `${path.relative(REPO_ROOT, PLUGIN_SKILL_FILE)} is out of date with renderPluginSkillText. Run \`pnpm generate:agent-plugin-skill\` and commit the result.`,
+      `${path.relative(REPO_ROOT, PLUGIN_SKILL_FILE)} is out of date with renderComputerAgentText. Run \`pnpm generate:agent-plugin-skill\` and commit the result.`,
     );
     return 1;
   }
   fs.mkdirSync(path.dirname(PLUGIN_SKILL_FILE), {recursive: true});
-  fs.writeFileSync(PLUGIN_SKILL_FILE, renderPluginSkillText());
+  fs.writeFileSync(PLUGIN_SKILL_FILE, pluginSkillText());
   console.log(`Wrote ${path.relative(REPO_ROOT, PLUGIN_SKILL_FILE)}`);
   return 0;
 }

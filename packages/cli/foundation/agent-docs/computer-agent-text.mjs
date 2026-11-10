@@ -201,14 +201,8 @@ export const STABLE_COMMANDS = Object.freeze([
  * When an agent should load the skill; the frontmatter `description`. One
  * sentence.
  */
-const SKILL_USE_WHEN =
-  'use it when building or changing UI, choosing components, layout, styling or theming, working with a design system, or in any project that depends on @astryxdesign packages or mentions Astryx.';
-const SKILL_DESCRIPTION = `Astryx, a design system and UI library, is available on this computer through the astryx command; ${SKILL_USE_WHEN}`;
-/**
- * The plugin's description: the same sentence, without claiming the CLI is
- * already on this computer, since the plugin installs before it.
- */
-const PLUGIN_SKILL_DESCRIPTION = `Astryx, a design system and UI library, is used through the astryx command; ${SKILL_USE_WHEN}`;
+const SKILL_DESCRIPTION =
+  'Astryx, a design system and UI library, is available on this computer through the astryx command; use it when building or changing UI, choosing components, layout, styling or theming, working with a design system, or in any project that depends on @astryxdesign packages or mentions Astryx.';
 
 /**
  * A home-folder path as a person reads it: `~/.claude/skills/astryx`.
@@ -258,19 +252,14 @@ export function computerAgentCommand() {
 
 /**
  * The body lines, with `run` as the command and `install` as the step that
- * installs it. `plugin` renders the agent plugin's shortened form: the first
- * line does not claim the CLI is already here, and the build workflow and
- * self-check lines are left out for the agent docs `astryx init` writes to carry.
+ * installs it.
  * @param {string} run
  * @param {string} install
- * @param {{plugin?: boolean}} [options]
  * @returns {string[]}
  */
-function bodyLines(run, install, {plugin = false} = {}) {
+function bodyLines(run, install) {
   return [
-    plugin
-      ? 'Astryx, a design system and UI library, is used through the `astryx` command.'
-      : 'Astryx, a design system and UI library, is available on this computer.',
+    'Astryx, a design system and UI library, is available on this computer.',
     'Use it when you build or change UI, pick components, or style or theme an app.',
     `Its docs, components, templates, and themes are all reachable through \`${run}\`. Start with \`${run} search '<what you need>'\`.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
@@ -281,15 +270,9 @@ function bodyLines(run, install, {plugin = false} = {}) {
     // A project that already installs Core gets the CLI at that version, as
     // the CLI's own hint for that state says, never a newer CLI beside it.
     `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version. Run \`${run} init\` there and follow the agent docs it writes.`,
-    ...(plugin
-      ? []
-      : [
-          WORKFLOW_TITLE,
-          ...WORKFLOW_STEPS.map(step =>
-            step.replaceAll('`astryx ', `\`${run} `),
-          ),
-          `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
-        ]),
+    WORKFLOW_TITLE,
+    ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
+    `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
     // A host's door is the host's to restore; only the global command has an
     // install step to name.
     ...(run === COMPUTER_COMMAND ? [computerRestoreLine(install)] : []),
@@ -330,33 +313,6 @@ export function renderComputerAgentText({
       '',
     ].join('\n'),
   );
-}
-
-/**
- * The agent plugin's skill file, `plugins/astryx/skills/astryx/SKILL.md`:
- * the shortened form of {@link renderComputerAgentText}, always naming the
- * global `astryx` command. It carries no markers or hash because no
- * installer manages it; `scripts/generate-agent-plugin-skill.mjs` writes it
- * and checks that the checked-in copy has not drifted. Plain single-quoted
- * YAML, the form Prettier writes, so a format run leaves the file unchanged.
- * @param {{install?: string}} [options]
- * @returns {string}
- */
-export function renderPluginSkillText({install = COMPUTER_INSTALL_STEP} = {}) {
-  if (PLUGIN_SKILL_DESCRIPTION.includes("'")) {
-    throw new Error(
-      'The plugin skill description holds an apostrophe, which single-quoted YAML cannot carry unescaped.',
-    );
-  }
-  return [
-    '---',
-    'name: astryx',
-    `description: '${PLUGIN_SKILL_DESCRIPTION}'`,
-    '---',
-    '',
-    ...bodyLines(COMPUTER_COMMAND, install, {plugin: true}),
-    '',
-  ].join('\n');
 }
 
 /** The line, right after the start marker, that records the file's hash. */
