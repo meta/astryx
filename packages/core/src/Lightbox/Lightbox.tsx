@@ -949,25 +949,75 @@ export function Lightbox({
     bandCaptionRef,
     captionTruncation.ref,
   );
-  // How many lines the caption shows.
   const [captionShownLines, setCaptionShownLines] = useState(0);
+  // The current caption's lines, without its toggle's place.
+  const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
+  // The caption's width at its last measure, and the cancel of a smaller
+  // count that waits for the next frame.
+  const captionWidthRef = useRef(0);
+  const cancelCaptionShrinkRef = useRef<(() => void) | null>(null);
   // Whether the open caption scrolls inside its panel.
   const [isCaptionScrolling, setIsCaptionScrolling] = useState(false);
   const measureCaptionLines = useCallback(() => {
+    // A measure in the same frame cancels a waiting smaller count, so it
+    // counts the text's lines again.
+    const wasShrinking = cancelCaptionShrinkRef.current != null;
+    cancelCaptionShrinkRef.current?.();
+    cancelCaptionShrinkRef.current = null;
     const caption = bandCaptionRef.current;
     if (caption != null) {
       const view = caption.ownerDocument.defaultView ?? window;
       const style = view.getComputedStyle(caption);
-      const lines =
-        caption.clientHeight -
-        parseFloat(style.paddingTop) -
-        parseFloat(style.paddingBottom);
       const line = parseFloat(style.lineHeight);
+      const hasLine = Number.isFinite(line) && line > 0;
+      const linesOf = (height: number) =>
+        Math.round(
+          (height -
+            parseFloat(style.paddingTop) -
+            parseFloat(style.paddingBottom)) /
+            line,
+        );
       // The client height rounds to whole pixels, so this rounds to whole
       // lines.
-      setCaptionShownLines(
-        Number.isFinite(line) && line > 0 ? Math.round(lines / line) : 0,
-      );
+      const lineCount = hasLine ? linesOf(caption.clientHeight) : 0;
+      setCaptionShownLines(lineCount);
+      // An open caption scrolls, so its height also holds the toggle's place.
+      // So its count never falls by itself. A new width can need fewer lines.
+      // The flow's height counts only the text's own lines.
+      const flow = bandCaptionFlowRef.current;
+      const width = caption.clientWidth;
+      if (
+        isCaptionOpen &&
+        hasLine &&
+        flow != null &&
+        (width !== captionWidthRef.current || wasShrinking)
+      ) {
+        const textLines = Math.round(
+          flow.getBoundingClientRect().height / line,
+        );
+        if (textLines < lineCount) {
+          // Fewer lines shrink the caption. Inside this delivery that is a
+          // resize loop, so they wait for the next frame. A toggle that no
+          // longer fits beside the last line then takes a line of its own.
+          const frame = view.requestAnimationFrame(() => {
+            cancelCaptionShrinkRef.current = null;
+            if (bandCaptionRef.current !== caption) {
+              return;
+            }
+            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the smaller count must lay out before the caption is read again in this frame
+            flushSync(() => {
+              setCaptionShownLines(textLines);
+            });
+            setCaptionShownLines(
+              Math.max(textLines, linesOf(caption.clientHeight)),
+            );
+          });
+          cancelCaptionShrinkRef.current = () => {
+            view.cancelAnimationFrame(frame);
+          };
+        }
+      }
+      captionWidthRef.current = width;
     }
     setIsCaptionScrolling(
       isCaptionOpen &&
@@ -1902,6 +1952,11 @@ export function Lightbox({
                                           ),
                                       ]}>
                                       <div
+                                        ref={
+                                          i === index
+                                            ? bandCaptionFlowRef
+                                            : undefined
+                                        }
                                         {...stylex.props(styles.captionFlow)}>
                                         <span
                                           aria-hidden="true"
