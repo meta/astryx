@@ -46,7 +46,9 @@ affects_consumer_docs: []
 
 A product that renders its pages from React Server Components imports Astryx
 components the way it always does, and the parts of a page that only present
-render on the server. The page ships no Astryx client JavaScript for them. A
+render on the server. The page ships no Astryx client JavaScript for them. The
+saving holds for components that Server Components render; a component that
+client code renders resolves its client build. A
 component loads client code only where it needs the client: to read React
 context, to hold state, or to handle interaction. The HTML a person receives,
 the props a builder passes, and the behavior after hydration are the same as
