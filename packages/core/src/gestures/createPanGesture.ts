@@ -7,13 +7,11 @@
  * @position Public face of packages/core/src/gestures. It reports a drag as
  *   values and hands out no recognizer; `usePanGesture` is its React layer.
  *   Importing it does no DOM work.
- * SYNC: When modified, update ../hooks/usePanGesture.ts, its .doc.mjs and
- * __tests__/createPanGesture.test.tsx.
+ * SYNC: When modified, update ../hooks/usePanGesture.ts, its .doc.mjs,
+ * createPan.ts and __tests__/createPanGesture.test.tsx.
  */
 
-import {getGestureHost} from './GestureHost';
-import {PanGestureRecognizer} from './PanGestureRecognizer';
-import type {Point} from './types';
+import {createPan} from './createPan';
 
 /** Where a drag is: it began, moved, ended at the release, or was cancelled. */
 export type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled';
@@ -44,8 +42,6 @@ export interface PanGesture {
   destroy(): void;
 }
 
-const ZERO = {x: 0, y: 0};
-
 /**
  * Report drags on `element` as values. The drag claims its touch at UIKit's
  * 10 pt, as `UIPanGestureRecognizer` does, so a tap stays a tap. The pan sets
@@ -67,41 +63,11 @@ export function createPanGesture(
   options: PanGestureOptions,
 ): PanGesture {
   const {axis, onPan} = options;
-  const recognizer = new PanGestureRecognizer({
-    name: 'pan',
-    direction: axis === 'x' ? 'horizontal' : axis === 'y' ? 'vertical' : 'any',
-  });
-  const along = (point: Point) =>
-    axis === 'x'
-      ? {x: point.x, y: 0}
-      : axis === 'y'
-        ? {x: 0, y: point.y}
-        : {x: point.x, y: point.y};
-  recognizer.addListener(() => {
-    const state = recognizer.state;
-    if (
-      state !== 'began' &&
-      state !== 'changed' &&
-      state !== 'ended' &&
-      state !== 'cancelled'
-    ) {
-      return;
-    }
-    onPan({
-      state,
-      translation: along(recognizer.translation()),
-      velocity:
-        state === 'cancelled' ? {...ZERO} : along(recognizer.velocity()),
-    });
-  });
-  let detach: (() => void) | null = getGestureHost(
-    element.ownerDocument,
-  ).attach(element, recognizer);
-  return {
-    destroy() {
-      const current = detach;
-      detach = null;
-      current?.();
+  // totalTranslation and input stay internal.
+  return createPan(element, {
+    axis,
+    onPan: ({state, translation, velocity}) => {
+      onPan({state, translation, velocity});
     },
-  };
+  });
 }
