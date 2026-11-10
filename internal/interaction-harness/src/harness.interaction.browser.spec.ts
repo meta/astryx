@@ -183,6 +183,59 @@ async function busyFixture(page: Page) {
 
 // A real navigation (not setContent, whose document.open() erases the window
 // listeners the input log installs).
+/** A double tap: the second touch lands 120 ms after the first lift. */
+const DOUBLE_TAP = [
+  {t: 0, fingers: [{id: 0, x: 160, y: 150}]},
+  {t: 50, fingers: []},
+  {t: 170, fingers: [{id: 0, x: 160, y: 150}]},
+  {t: 220, fingers: []},
+];
+
+/**
+ * Holds the page's main thread for `holdMs`, from 50 ms after the first lift,
+ * as a page's own long task does. Records when each touch reached the page.
+ */
+async function holdAfterFirstLift(page: Page, holdMs: number): Promise<void> {
+  await page.evaluate(ms => {
+    const seen: {type: string; at: number}[] = [];
+    (window as unknown as {__tapsSeen: typeof seen}).__tapsSeen = seen;
+    for (const type of ['touchstart', 'touchend']) {
+      addEventListener(type, () => seen.push({type, at: performance.now()}), {
+        capture: true,
+      });
+    }
+    addEventListener(
+      'touchend',
+      () => {
+        setTimeout(() => {
+          const end = performance.now() + ms;
+          while (performance.now() < end) {
+            // The page's own task holds the main thread.
+          }
+        }, 50);
+      },
+      {capture: true, once: true},
+    );
+  }, holdMs);
+}
+
+/** How long after the first lift the next touch-down reached the page, ms. */
+async function secondTouchGapMs(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const seen = (
+      window as unknown as {__tapsSeen: {type: string; at: number}[]}
+    ).__tapsSeen;
+    const lift = seen.findIndex(entry => entry.type === 'touchend');
+    const down = seen.findIndex(
+      (entry, index) => index > lift && entry.type === 'touchstart',
+    );
+    if (lift < 0 || down < 0) {
+      throw new Error(`no second touch-down: ${JSON.stringify(seen)}`);
+    }
+    return seen[down].at - seen[lift].at;
+  });
+}
+
 async function fixture(page: Page) {
   await installInputLog(page);
   await page.route('http://harness.test/', route =>
@@ -567,13 +620,7 @@ test.describe('touch input', () => {
     // The driver comes first, so its mark does too.
     const driver = await touchDriver(page);
     await fixture(page);
-    const at = {x: 160, y: 150};
-    const doubleTap = [
-      {t: 0, fingers: [{id: 0, ...at}]},
-      {t: 50, fingers: []},
-      {t: 170, fingers: [{id: 0, ...at}]},
-      {t: 220, fingers: []},
-    ];
+    const doubleTap = DOUBLE_TAP;
     const boundaries = {tapIntervalMs: 350};
     // On time, the second tap lands 120 ms after the lift.
     await driver.play(doubleTap, {boundaries});
@@ -595,9 +642,63 @@ test.describe('touch input', () => {
     expect(fault.step).toBe(2);
     expect(fault.scriptedGapMs).toBe(120);
     expect(fault.gapMs).toBeGreaterThan(350);
-    expect((late as Error).message).toContain('The page drew a frame');
+    // The page kept drawing across the close, so the error names the runner.
+    expect(fault.closeFrameGapMs).toBeLessThanOrEqual(FRAME_STARVATION_MS);
+    expect((late as Error).message).toContain('as on a starved runner');
     // Without the boundary, the play does not judge its taps.
     await driver.play(doubleTap, {onEvent: stall});
+  });
+
+  test("a page task that holds the main thread across the tap interval's close never names the runner", async ({
+    page,
+    browserName,
+  }) => {
+    // The driver comes first, so its mark does too.
+    const driver = await touchDriver(page);
+    await fixture(page);
+    // The page holds its main thread from 50 ms after the lift for 400 ms,
+    // past the close at 350 ms. The runner keeps its schedule.
+    await holdAfterFirstLift(page, 400);
+    const outcome = await driver
+      .play(DOUBLE_TAP, {boundaries: {tapIntervalMs: 350}})
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    // The page read separate taps, but its own task held the touch-down.
+    expect(await secondTouchGapMs(page)).toBeGreaterThan(350);
+    // Chromium draws a frame after the task, before the touch-down it held.
+    // So the play names the held main thread. WebKit draws no frame between
+    // them, so the component decides (touch.taps.test.ts covers that case).
+    const named =
+      outcome instanceof Error &&
+      outcome.name === 'TouchTapIntervalError' &&
+      (outcome as Error & {fault: TapIntervalFault}).fault.closeFrameGapMs >
+        FRAME_STARVATION_MS &&
+      !outcome.message.includes('runner')
+        ? 'a held main thread'
+        : outcome;
+    expect(named).toBe(
+      browserName === 'webkit' ? 'resolved' : 'a held main thread',
+    );
+  });
+
+  test('a page task that ends before the tap interval closes leaves the double tap on time', async ({
+    page,
+  }) => {
+    // The driver comes first, so its mark does too.
+    const driver = await touchDriver(page);
+    await fixture(page);
+    // The same task, cut to 250 ms, ends before the close.
+    await holdAfterFirstLift(page, 250);
+    const outcome = await driver
+      .play(DOUBLE_TAP, {boundaries: {tapIntervalMs: 350}})
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(await secondTouchGapMs(page)).toBeLessThan(350);
+    expect(outcome).toBe('resolved');
   });
 
   test("a page's own window capture listener counts as the page's listeners when the driver is created before the page loads", async ({

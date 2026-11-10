@@ -926,19 +926,33 @@ export interface TapIntervalFault {
   readonly frameAfterCloseMs: number;
   /** How many frames the page drew between the close and the touch-down. */
   readonly framesAfterClose: number;
+  /**
+   * The gap between the page's last frame before the interval closed and its
+   * first frame after, ms. Past `FRAME_STARVATION_MS`, the page's main thread
+   * was held across the close.
+   */
+  readonly closeFrameGapMs: number;
 }
 
 /**
  * A multi-tap play's touch-down reached the page past the component's tap
  * interval after the lift before it, where the script taps within it. So the
- * page read separate taps, not the gesture the script makes: a dispatch
- * stalled before the page, as on a starved runner. Always a red, never a
- * pass: the proof judges no gesture the page did not receive.
+ * page read separate taps, not the gesture the script makes. The error names
+ * the cause by the page's frames across the close. Where the page kept
+ * drawing, a dispatch stalled before the page, as on a starved runner. Where
+ * it drew no frame for longer than `FRAME_STARVATION_MS`, its main thread was
+ * held across the close. Always a red, never a pass: the proof judges no
+ * gesture the page did not receive.
  */
 export class TouchTapIntervalError extends Error {
   constructor(readonly fault: TapIntervalFault) {
+    const after = fault.frameAfterCloseMs.toFixed(0);
+    const cause =
+      fault.closeFrameGapMs > FRAME_STARVATION_MS
+        ? `The page drew no frame for ${fault.closeFrameGapMs.toFixed(0)} ms across that window's close, then a frame ${after} ms after it, before the touch-down. Its main thread was held across the close, by a task of its own or a starved machine. So the page read separate taps: the touch-down waited for that main thread.`
+        : `The page kept drawing across that window's close, and drew a frame ${after} ms after it, before the touch-down (${fault.framesAfterClose} in all). So the page read separate taps: a dispatch stalled before the page, as on a starved runner.`;
     super(
-      `touchDriver: the touch-down at step ${fault.step} reached the page ${fault.gapMs.toFixed(0)} ms after the lift before it, past the ${fault.tapIntervalMs} ms the component waits for the next tap. The page drew a frame ${fault.frameAfterCloseMs.toFixed(0)} ms after that window closed, before the touch-down (${fault.framesAfterClose} in all). The script spaces them ${fault.scriptedGapMs.toFixed(0)} ms. So the page read separate taps: a dispatch stalled before the page, as on a starved runner.`,
+      `touchDriver: the touch-down at step ${fault.step} reached the page ${fault.gapMs.toFixed(0)} ms after the lift before it, past the ${fault.tapIntervalMs} ms the component waits for the next tap. The script spaces them ${fault.scriptedGapMs.toFixed(0)} ms. ${cause}`,
     );
     this.name = 'TouchTapIntervalError';
   }
@@ -966,6 +980,11 @@ export interface TouchPageTimes {
  * the script itself spaces past the interval is no fault. Only a lift that
  * leaves no finger down ends a tap. Without the page's times, nothing proves
  * the window closed first.
+ *
+ * The fault keeps the frame gap across the close, and the error names the
+ * cause by it. In Chromium, a page task that holds the main thread across the
+ * close ends with a frame before the touch-down it held. So a frame after the
+ * close does not prove that the runner was late.
  */
 export function tapIntervalFault(
   steps: readonly TouchEventStep[],
@@ -979,6 +998,7 @@ export function tapIntervalFault(
   ) {
     return null;
   }
+  const frames = [...page.frames].sort((a, b) => a - b);
   let lift: number | null = null;
   for (const [index, step] of steps.entries()) {
     if (step.type === 'touchEnd' && step.fingers.length === 0) {
@@ -991,10 +1011,11 @@ export function tapIntervalFault(
     const scriptedGapMs = step.t - steps[lift].t;
     const closesAt = page.stamps[lift] + tapIntervalMs;
     const receivedAt = page.receivedAt[index];
-    const drawn = page.frames.filter(
-      time => time > closesAt && time < receivedAt,
-    );
+    const drawn = frames.filter(time => time > closesAt && time < receivedAt);
     if (scriptedGapMs <= tapIntervalMs && drawn.length > 0) {
+      // Without a frame before the close, the page last ran at the lift.
+      const lastBefore =
+        frames.filter(time => time <= closesAt).at(-1) ?? page.receivedAt[lift];
       return {
         step: index,
         gapMs: receivedAt - page.stamps[lift],
@@ -1002,6 +1023,7 @@ export function tapIntervalFault(
         tapIntervalMs,
         frameAfterCloseMs: drawn[0] - closesAt,
         framesAfterClose: drawn.length,
+        closeFrameGapMs: drawn[0] - lastBefore,
       };
     }
     lift = null;

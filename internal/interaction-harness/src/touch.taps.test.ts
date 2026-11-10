@@ -5,10 +5,11 @@
  * @input touch.ts's tap-interval rule (`tapIntervalFault`, a play's
  *   `boundaries.tapIntervalMs`)
  * @output Unit cases: a second touch-down received after the tap interval
- *   closed is a fault only where the page drew a frame in between. A main
- *   thread held across the close leaves the pairing to the component. Neither are taps the script spaces past the
- *   interval, nor a lift that leaves a finger down, nor a play without the
- *   page's times.
+ *   closed is a fault only where the page drew a frame in between. The fault
+ *   keeps the frame gap across the close, and the error names the cause by
+ *   it. A frameless arrival leaves the pairing to the component. Neither are
+ *   taps the script spaces past the interval, nor a lift that leaves a finger
+ *   down, nor a play without the page's times.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update touch.ts (tapIntervalFault).
@@ -16,7 +17,8 @@
 
 import {describe, expect, it} from 'vitest';
 import {toTouchEvents, type TouchScript} from './scripts';
-import {tapIntervalFault} from './touch';
+import {FRAME_STARVATION_MS} from './frame-starvation';
+import {tapIntervalFault, TouchTapIntervalError} from './touch';
 
 const at = {x: 100, y: 200};
 const doubleTap: TouchScript = [
@@ -45,6 +47,7 @@ describe('tapIntervalFault', () => {
       tapIntervalMs: 350,
       frameAfterCloseMs: 16,
       framesAfterClose: 7,
+      closeFrameGapMs: 16,
     });
   });
 
@@ -57,6 +60,46 @@ describe('tapIntervalFault', () => {
       frames: everyFrame.filter(time => time <= 384 || time >= 528),
     };
     expect(tapIntervalFault(steps, page, 350)).toBeNull();
+  });
+
+  it('keeps the frame gap across the close when the page drew again only before the touch-down', () => {
+    const steps = toTouchEvents(doubleTap);
+    // The page's own task holds its main thread from 384 ms. It draws again
+    // at 512 ms, before the touch-down it held arrives at 525 ms.
+    const page = {
+      stamps: [0, 50, 170, 220],
+      receivedAt: [5, 60, 525, 540],
+      frames: everyFrame.filter(time => time <= 384 || time >= 512),
+    };
+    expect(tapIntervalFault(steps, page, 350)).toMatchObject({
+      step: 2,
+      frameAfterCloseMs: 112,
+      framesAfterClose: 1,
+      closeFrameGapMs: 128,
+    });
+  });
+
+  it('names a held main thread, not the runner, where a frame gap past the starvation bound spans the close', () => {
+    const fault = {
+      step: 2,
+      gapMs: 475,
+      scriptedGapMs: 120,
+      tapIntervalMs: 350,
+      frameAfterCloseMs: 112,
+      framesAfterClose: 1,
+      closeFrameGapMs: FRAME_STARVATION_MS + 1,
+    };
+    const held = new TouchTapIntervalError(fault).message;
+    expect(held).toContain(
+      `drew no frame for ${FRAME_STARVATION_MS + 1} ms across that window's close`,
+    );
+    expect(held).not.toContain('runner');
+    const kept = new TouchTapIntervalError({
+      ...fault,
+      closeFrameGapMs: FRAME_STARVATION_MS,
+    }).message;
+    expect(kept).toContain('kept drawing across');
+    expect(kept).toContain('as on a starved runner');
   });
 
   it('finds none when the touch-down arrives before the interval closes', () => {
