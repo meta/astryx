@@ -70,6 +70,30 @@ test('a pointer pick keeps focus and the list, with the next choice active', asy
   expect(await activeOption(page)).toBe(before[2]);
 });
 
+test('picks in a row by pointer and by keyboard keep the list open', async ({
+  page,
+}) => {
+  const input = await openFocusList(page);
+  const before = await optionNames(page);
+  expect(before.length).toBeGreaterThan(4);
+
+  await page.getByRole('option', {name: before[0]}).click();
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('option', {name: before[1]}).click();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  expect(await activeOption(page)).toBe(before[2]);
+
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  expect(await activeOption(page)).toBe(before[3]);
+  await page.keyboard.press('Enter');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  expect(await activeOption(page)).toBe(before[4]);
+  await expect(page.getByRole('option')).toHaveCount(before.length - 4);
+});
+
 test('a keyboard pick of the last choice makes the one before it active', async ({
   page,
 }) => {

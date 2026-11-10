@@ -574,6 +574,10 @@ function startsWithRows<T extends SearchableItem>(
  * threshold. An empty query is not "below the minimum" — it is the
  * untouched state, and `hasEntriesOnFocus` owns what happens there.
  */
+function preventOptionFocus(event: React.MouseEvent) {
+  event.preventDefault();
+}
+
 function isBelowMinQueryLength(query: string, minQueryLength: number): boolean {
   const length = characterCount(query);
   return length > 0 && length < minQueryLength;
@@ -951,10 +955,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Set when a pick kept the menu open; the open after the commit then
   // reloads a listbox or lets a dialog take focus.
   const pickKeptOpenRef = useRef(false);
-  // Set when a pick kept the focus list open. Holds the committed-choices key
-  // from before the pick. The reload for that commit keeps the list that the
-  // pick's render already filtered, and does not ask the source again.
-  const keptFocusListPickRef = useRef<{key: string | undefined} | null>(null);
+  // Set when a pick kept the focus list open. Holds the picked id and the
+  // committed-choices key from before the pick. When the commit adds that id,
+  // the reload keeps the list that the pick's render already filtered, and
+  // does not ask the source again. Otherwise the list closes, as after any
+  // other pick.
+  const keptFocusListPickRef = useRef<{
+    id: string;
+    key: string | undefined;
+  } | null>(null);
   // True while a list that a pick kept open is shown. That list closes when
   // the field becomes disabled.
   const isFocusListKeptRef = useRef(false);
@@ -1409,10 +1418,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     if (keptFocusListPick != null) {
-      // The pick's render already removed the picked choice from the list.
-      if (results.length === 0) {
+      if (
+        committedChoices?.ids.has(keptFocusListPick.id) !== true ||
+        results.length === 0
+      ) {
         hideList();
+        return;
       }
+      // The commit replaced the filtered source, and the pick's render
+      // already filtered the rows the same way. They stay current, so the
+      // next pick keeps the list too.
+      resultsGenRef.current = searchGenRef.current;
       return;
     }
     if (!isShowingRef.current && !hadPendingSearch) {
@@ -1432,6 +1448,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [
     isDisabled,
     isAtCommitLimit,
+    committedChoices,
     query,
     minQueryLength,
     hasEntriesOnFocus,
@@ -1448,11 +1465,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const reloadedKeyRef = useRef(committedChoicesKey);
   useIsomorphicLayoutEffect(() => {
     if (reloadedKeyRef.current === committedChoicesKey) {
-      // A pick the caller did not commit changes no committed value, so no
-      // reload reads the mark.
-      if (keptFocusListPickRef.current?.key === committedChoicesKey) {
-        keptFocusListPickRef.current = null;
-      }
       return;
     }
     reloadedKeyRef.current = committedChoicesKey;
@@ -1465,6 +1477,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       }
     });
   }, [committedChoicesKey]);
+
+  // A pick that the caller did not commit changes no committed value, so no
+  // reload reads the mark. The list then closes, as after any other pick.
+  useIsomorphicLayoutEffect(() => {
+    const keptFocusListPick = keptFocusListPickRef.current;
+    if (
+      keptFocusListPick != null &&
+      keptFocusListPick.key === committedChoicesKey
+    ) {
+      keptFocusListPickRef.current = null;
+      hideList();
+    }
+  });
 
   // Handle query change
   const handleQueryChange = useCallback(
@@ -1584,7 +1609,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         pickedIndex >= 0 &&
         nextIndex >= 0;
       if (keepsFocusList) {
-        keptFocusListPickRef.current = {key: committedChoicesKey};
+        keptFocusListPickRef.current = {
+          id: item.id,
+          key: committedChoicesKey,
+        };
         isFocusListKeptRef.current = true;
         openRequestedRef.current = false;
         onChange(item);
@@ -1645,6 +1673,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       replaceResults,
     ],
   );
+
+  // A pick from a list that can stay open keeps DOM focus on the input. A
+  // press on an option then does not move focus into the popup, so the
+  // popup does not return focus to the input when a later press elsewhere
+  // closes it.
+  const canKeepFocusList =
+    committedChoices != null &&
+    hasEntriesOnFocus &&
+    query === '' &&
+    !isDialogMenu;
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
   // loaded yet, or re-show cached results that haven't been invalidated by
@@ -2107,6 +2145,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 role="option"
                 aria-selected={isSelected}
                 tabIndex={-1}
+                onMouseDown={canKeepFocusList ? preventOptionFocus : undefined}
                 onClick={() => handleSelect(item)}
                 // Highlight follows pointer movement, not pointer
                 // presence: a menu that opens or reflows under a resting
