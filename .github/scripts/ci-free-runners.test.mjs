@@ -45,6 +45,11 @@ const PAID_ALLOWED = {
   'release.yml/publish': RELEASE_POOL,
   'ci.yml/release-merge-back': `${RELEASE_POOL}; byte parity with the publisher`,
   'ci.yml/release-bump': RELEASE_POOL,
+  // Release specs judge timing; their budgets hold only on the runner the
+  // gating release check uses. The job runs only when a pull request changes
+  // a release spec.
+  'ci.yml/release-specs':
+    'the release check contract runner, for timing budgets',
 };
 /** Jobs that use the paid pool only for a release-check a person dispatches. */
 const RELEASE_CHECK_JOBS = [

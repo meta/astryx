@@ -4771,6 +4771,148 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Release specs a pull request adds or changes (`*.release.*.spec.ts`) run
+  # here, each in full, with the runner, Playwright workers and config of the
+  # release check's spec-test contracts: a changed spec always runs
+  # (spec:AST-030 FR26, FR31). The touched check above caps its run at eight
+  # minutes and reports a release spec that does not fit as not run; this job
+  # has no budget, and a failing spec fails it. merge-guard waits for it by
+  # name. With no changed release spec, every step after the scope step skips
+  # and the job succeeds.
+  release-specs:
+    name: release-specs (changed)
+    needs: [room, admission, heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    # The gating release check runs its contracts on four cores, one
+    # Playwright worker a core; timing budgets hold only on that runner.
+    runs-on: 4-core-ubuntu
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '\.release\.[^/]*\.spec\.ts$'
+          outside-pull-request: skip
+          # Lists the changed files, so the next step finds the release specs.
+          component-audit: 'true'
+
+      - name: Find the changed release specs
+        id: specs
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          list="$RUNNER_TEMP/changed-release-specs.txt"
+          : > "$list"
+          if [ -z "${FILES_PATH:-}" ] || [ ! -f "$FILES_PATH" ]; then
+            echo "::error::The scope step could not list the changed files, so the release specs to run are unknown. Re-run the job."
+            exit 1
+          fi
+          grep -E '\.release\.[^/]*\.spec\.ts$' "$FILES_PATH" | sort -u > "$RUNNER_TEMP/release-candidates.txt" || true
+          echo "path=$list" >> "$GITHUB_OUTPUT"
+          cp "$RUNNER_TEMP/release-candidates.txt" "$list"
+          if [ -s "$list" ]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed release specs:"; sed 's/^/  /' "$list"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip when no release spec changed
+        if: steps.scope.outputs.applies != 'true' || steps.specs.outputs.has_specs != 'true'
+        run: echo "No release spec changed; nothing to run."
+
+      - name: Require this pull request's Storybook build
+        if: steps.specs.outputs.has_specs == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The release specs read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      # The head checkout below replaces the workspace, so the lane's
+      # environment marker and the spec-glob list move out of the workflow's
+      # commit first.
+      - name: Keep the workflow commit's lane marker and spec globs
+        if: steps.specs.outputs.has_specs == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lane-environment/.github/scripts" "$RUNNER_TEMP/release-specs/.github/scripts/lib"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
+          cp .test-scope/.github/scripts/lib/a11y-spec-files.mjs "$RUNNER_TEMP/release-specs/.github/scripts/lib/"
+
+      # The specs, their helpers and the lockfile come from the head that
+      # built the Storybook, as the release check runs them against its own
+      # build.
+      - name: Check out the head that built the Storybook
+        if: steps.specs.outputs.has_specs == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Require this lane's environment in the branch
+        if: steps.specs.outputs.has_specs == 'true'
+        run: >-
+          node "$RUNNER_TEMP/lane-environment/.github/scripts/lane-environment.mjs" check --lane a11y-contracts
+          --workflow "$RUNNER_TEMP/lane-environment/.github/lane-environments.json"
+          --head .github/lane-environments.json
+
+      - name: Setup Node and pnpm
+        if: steps.specs.outputs.has_specs == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.specs.outputs.has_specs == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.specs.outputs.has_specs == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # A changed release spec that the head deleted has nothing to run; one
+      # outside the config's spec globs would run nowhere, so it fails here by
+      # name.
+      - name: Run the changed release specs
+        if: steps.specs.outputs.has_specs == 'true'
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SPECS_PATH: ${{ steps.specs.outputs.path }}
+          A11Y_CONTRACT_WORKERS: 4
+        run: |
+          set -euo pipefail
+          mapfile -t CANDIDATES < "$SPECS_PATH"
+          SPECS=()
+          for file in "${CANDIDATES[@]}"; do [ -f "$file" ] && SPECS+=("$file"); done
+          if [ "${#SPECS[@]}" -eq 0 ]; then
+            echo "Every changed release spec was deleted; nothing to run."
+            exit 0
+          fi
+          SPEC_FILES="$RUNNER_TEMP/release-specs/.github/scripts/lib/a11y-spec-files.mjs" node --input-type=module -e '
+            import {pathToFileURL} from "node:url";
+            const {isA11ySpecFile} = await import(pathToFileURL(process.env.SPEC_FILES));
+            const outside = process.argv.slice(1).filter(file => !isA11ySpecFile(file));
+            for (const file of outside) console.log("::error file=" + file + "::" + file + " is a release spec outside playwright.config.ts, so no release check runs it.");
+            process.exitCode = outside.length > 0 ? 1 : 0;
+          ' "${SPECS[@]}"
+          pnpm exec playwright test "${SPECS[@]}" --config playwright.config.ts --project chromium
+
   # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
   # that component's own `audit` specs, and a change to a shared primitive that
   # .github/a11y-shared-primitives.json lists also runs the `audit` specs of
