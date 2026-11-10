@@ -257,7 +257,7 @@ useChatPasteAsToken useChatPasteAsToken Chat/Chat.doc.mjs Chat/useChatPasteAsTok
 useChatStreamScroll useChatStreamScroll Chat/Chat.doc.mjs Chat/useChatStreamScroll.ts
 useCloseMobileDrawerOnActivate useCloseMobileDrawerOnActivate AppShell/AppShell.doc.mjs AppShell/useCloseMobileDrawerOnActivate.ts
 useComponentTranslator useComponentTranslator i18n/InternationalizationProvider.doc.mjs i18n/useComponentTranslator.ts
-useDirection useDirection i18n/InternationalizationProvider.doc.mjs i18n/useDirection.ts
+useDirection useDirection i18n/useDirection.doc.mjs i18n/useDirection.ts
 useDrawerDialogPresence useDrawerDialogPresence Drawer/Drawer.doc.mjs Drawer/useDrawerDialogPresence.ts
 useEndLaneReserve useEndLaneReserve Tokenizer/Tokenizer.doc.mjs Tokenizer/useEndLaneReserve.ts
 useFieldStatusAnnouncement useFieldStatusAnnouncement FieldStatus/FieldStatus.doc.mjs FieldStatus/useFieldStatusAnnouncement.ts
