@@ -197,10 +197,6 @@ and the repository proves it before a change that could break it merges.
 - Copies include spec records and test files and leave out nested folders
   (FR2), and `swizzle --list` offers folders that are not components
   (`spec:AST-035` FR12).
-- The layer stack, the modal outlet, and `useAnnounce` keep module state, so
-  a copied Dialog or BottomSheet starts its own stack, or mounts a second pair
-  of live regions, breaking `spec:AST-086` FR9's one channel per document
-  (FR3).
 - In the reverse direction, a package picker inside a copied Dialog announces
   outside the copied modal (`spec:AST-086` FR14) (FR3).
 - The result does not yet report whether each shared module was written,

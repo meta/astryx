@@ -763,6 +763,47 @@ describe('Wheel — a key step on a page starved of frames', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['Tab', 'moves focus out of the column'],
+    ['ArrowLeft', 'scrolls nothing in a column'],
+  ])('keeps the row a key steps to through %s, which %s', key => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    scrollTo.mockClear();
+    // The key scrolls nothing. Then the step's first frame, and no frame for
+    // longer than the quiet period.
+    fireEvent.keyDown(listbox, {key});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    // The step still owns the column: it re-aims at 11 and never commits 10.
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    frame(11 * ROW);
+    act(() => {
+      listbox.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+  });
+
+  it('ends a key step on a key that scrolls the column, as Space, and commits the row shown', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait} = renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    // Space scrolls a focused column by itself: the person's scroll replaces
+    // the step, and the rest commits the row it shows.
+    fireEvent.keyDown(listbox, {key: ' '});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    expect(onChange.mock.calls).toEqual([[11], [10]]);
+  });
+
   it('keeps the row a key steps to when the quiet period of a scroll before the key ends first', () => {
     vi.useFakeTimers();
     const {listbox, onChange, frame, wait, scrollTo, land, expectRestOn} =
