@@ -12,7 +12,8 @@
  *   blocks as one. `BusyWindowTooLateError`, for a block that began too late
  *   for the motion it was meant to catch. `BusyFrameUnjudgedError`, for a
  *   frame the cast could not judge in a proof that judges every frame
- *   (`judgeEveryFrame`).
+ *   (`judgeEveryFrame`). `BusyPredictionError`, for a window whose motion the
+ *   proof cannot predict.
  *   `BUSY_PROOF_LOOKAROUND_MS` is how far around its judged part a proof
  *   reads frames.
  *   `trackControl` and `controlClock` read the control's box and its own
@@ -119,10 +120,12 @@ export async function trackControl(
  * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
  * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
- * A WebKit busy proof dates its frames on the controls' clock. Without the
- * control ahead, a frame stamped late near the first control's turn keeps its
- * lateness. A proof that judges every frame near a turn starts the one ahead
- * too, and passes its frames to `busyWindowProof` as `ahead`.
+ * A busy proof dates a cast's frames on the controls' clock, in either
+ * engine, when the frames carry their engine (`trackMarker` keeps it).
+ * Without the control ahead, a frame stamped late near the first control's
+ * turn keeps its lateness. A proof that judges every frame near a turn
+ * starts the one ahead too, and passes its frames to `busyWindowProof` as
+ * `ahead`.
  */
 export async function startBusyControl(
   page: Page,
@@ -225,7 +228,14 @@ export async function startBusyControl(
             Number(animation.currentTime ?? 0) >= 16 &&
             (aheadMs === 0 || ticks >= 2)
           ) {
-            resolve(performance.timeOrigin + Number(animation.startTime));
+            const start = performance.timeOrigin + Number(animation.startTime);
+            // Kept on the page for the block's window, which dates frames on
+            // the controls' clock (`BlockedWindow.controlStarts`).
+            const page = window as unknown as {
+              __harnessControlStarts?: number[];
+            };
+            (page.__harnessControlStarts ??= [])[aheadMs > 0 ? 1 : 0] = start;
+            resolve(start);
           } else if (realNow() > deadline) {
             reject(new Error('startBusyControl: the control did not start'));
           } else {
@@ -459,8 +469,15 @@ function controlPageTimes(
     return null;
   }
   const dated = [...read.keys()];
+  // Agreement is read against the run's usual lag: a cast whose stamps all
+  // trail their content by the same time agrees with itself.
+  const lags = dated
+    .map(stamp => stamp - (read.get(stamp) ?? stamp))
+    .sort((a, b) => a - b);
+  const lag = lags[Math.floor(lags.length / 2)] ?? 0;
   const agreeing = dated.filter(
-    stamp => Math.abs(stamp - (read.get(stamp) ?? stamp)) <= CONTROL_AGREE_MS,
+    stamp =>
+      Math.abs(stamp - (read.get(stamp) ?? stamp) - lag) <= CONTROL_AGREE_MS,
   );
   const anchors = agreeing.length > 0 ? agreeing : dated;
   const times = new Map<number, number>();
@@ -664,6 +681,12 @@ export interface BlockedWindow extends BusyWindow {
    */
   readonly spanMs: number;
   /**
+   * The busy controls' starts on the page clock, epoch ms, when
+   * `startBusyControl` started any: the first control, then the one ahead.
+   * A proof dates its frames from them unless its options name others.
+   */
+  readonly controlStarts?: readonly [number, number?];
+  /**
    * With `during`: the animation the block caught, epoch ms on the page's
    * clock. `from` is its start, and `to` is where its curve ends, its held
    * tail excluded. It is absent when the animation's `playbackRate` is 0 or
@@ -671,11 +694,33 @@ export interface BlockedWindow extends BusyWindow {
    * element keeps the curve's end value after `to`. A held tail keeps it, and
    * so does a fill the engine's compositor honors (not WebKit on Linux). When
    * it does not, `busyWindowProof` judges the block up to `to`.
+   *
+   * Once the loop ends, the page also replays the caught animation, for the
+   * proof to predict each frame's move. It reads the replay every 2 ms, from
+   * `BUSY_PROOF_LOOKAROUND_MS` before the block to as long after its end.
+   * `geometry` holds the element's box as `[epoch ms, x, y, width, height]`,
+   * or the marker chip's when the element holds one. For a fade or a
+   * pseudo-element, `progress` holds one numeric channel scaled from 0 to 1.
+   * `check` is the replayed box and the element's own at the loop's end, once
+   * the replay is aligned to it. `unpredictable` says why neither could be
+   * read, and fails the proof. `notPredicted` says why the cast-step rule
+   * judges each frame instead. Either the caught element carries no harness
+   * marker, or the run left the element before its replay.
    */
   readonly animation?: {
     readonly from: number;
     readonly to: number;
     readonly holds: boolean;
+    readonly geometry?: ReadonlyArray<
+      readonly [number, number, number, number, number]
+    >;
+    readonly check?: {
+      readonly predicted: readonly [number, number, number, number];
+      readonly actual: readonly [number, number, number, number];
+    };
+    readonly progress?: ReadonlyArray<readonly [number, number]>;
+    readonly unpredictable?: string;
+    readonly notPredicted?: string;
   };
 }
 
@@ -764,12 +809,20 @@ export interface UnjudgedFrame {
   /** When the frame was presented, ms after the window began. */
   readonly atMs: number;
   /**
-   * The component's move per frame there, px: the change that ends the run of
-   * equal positions that holds the frame, over the run's frames.
+   * The component's move per frame there, px. With a prediction, it is the
+   * predicted move since the frame before. Without one, it is the change
+   * that ends the run of equal positions that holds the frame, over the
+   * run's frames.
    */
   readonly movePx: number;
   /** The cast's position step for the judged value, px. */
   readonly stepPx: number;
+  /**
+   * With a prediction, why the proof names the frame. `step`: its predicted
+   * move falls under one cast step. `clock`: it, or the frame before it, has
+   * no control reading of its own to date it.
+   */
+  readonly why?: 'step' | 'clock';
 }
 
 /**
@@ -795,6 +848,19 @@ export class BusyFrameUnjudgedError extends Error {
         .join('; ')}. ${summary}`,
     );
     this.name = 'BusyFrameUnjudgedError';
+  }
+}
+
+/**
+ * A busy proof could not predict the component's motion. An ancestor moved
+ * it too, a geometry animation composites onto another, or the replay that
+ * predicts it disagreed with the element or the cast. The run is not judged.
+ * It fails by name, never as a pass and never as a red on the component.
+ */
+export class BusyPredictionError extends Error {
+  constructor(message: string) {
+    super(`busyWindowProof: ${message}`);
+    this.name = 'BusyPredictionError';
   }
 }
 
@@ -871,7 +937,7 @@ export async function blockMainThread(
     process.platform === 'linux'
   );
   const waited = during.evaluate(
-    (element, {duration, minProgress, prop, pseudo, wait, fillHolds}) =>
+    (element, {duration, minProgress, prop, pseudo, wait, fillHolds, look}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -947,6 +1013,271 @@ export async function blockMainThread(
         let heldSeen: ReturnType<typeof numbersOf> | null = null;
         const tooLate = (numbers: ReturnType<typeof numbersOf>) =>
           new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
+        // The caught animation, replayed once the loop ends, for the proof to
+        // predict each frame's move (`BlockedWindow.animation`). The element's
+        // geometry animations replay, paused, on a hidden clone of its box in
+        // the same parent. A fade or a pseudo-element replays one numeric
+        // channel instead, on a hidden registered <number>. Each held seek
+        // reads the browser's own easing, and the element is untouched.
+        const geometry = ['translate', 'scale', 'rotate', 'transform'];
+        const keyframesOf = (a: Animation) =>
+          (a.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+        const isGeometry = (a: Animation) =>
+          keyframesOf(a).some(k => geometry.some(p => p in k));
+        const realStart = (a: Animation) =>
+          performance.timeOrigin +
+          Number(a.startTime) +
+          ((window as unknown as {__harnessFreeze?: {offset: number}})
+            .__harnessFreeze?.offset ?? 0);
+        const boxOf = (el: Element): [number, number, number, number] => {
+          const r = el.getBoundingClientRect();
+          return [r.x, r.y, r.width, r.height];
+        };
+        const replayOf = (
+          caught: Animation,
+          fromMs: number,
+          toMs: number,
+        ): Record<string, unknown> => {
+          const effect = caught.effect as KeyframeEffect | null;
+          const target = effect?.target;
+          if (
+            target instanceof HTMLElement &&
+            effect?.pseudoElement == null &&
+            isGeometry(caught)
+          ) {
+            // Only the element that carries the harness marker predicts the
+            // tracked box.
+            if (!target.hasAttribute('data-harness-marker')) {
+              return {
+                notPredicted: 'the tracked marker is not on the caught element',
+              };
+            }
+            for (
+              let up = target.parentElement;
+              up != null;
+              up = up.parentElement
+            ) {
+              if (
+                up
+                  .getAnimations()
+                  .some(
+                    a =>
+                      isGeometry(a) &&
+                      a.playState !== 'finished' &&
+                      a.playState !== 'idle',
+                  )
+              ) {
+                return {
+                  unpredictable:
+                    'an ancestor of the element moves too, so its box cannot be predicted',
+                };
+              }
+            }
+            const runs = target.getAnimations().filter(isGeometry);
+            // A run that already left the element shows where it stopped, so a
+            // replay of the rest cannot place it.
+            if (!runs.includes(caught)) {
+              return {
+                notPredicted: 'the caught animation ended before its replay',
+              };
+            }
+            if (
+              runs.some(
+                a =>
+                  a.startTime == null ||
+                  (a.effect as KeyframeEffect).composite !== 'replace' ||
+                  keyframesOf(a).some(
+                    k =>
+                      k.composite != null &&
+                      k.composite !== 'auto' &&
+                      k.composite !== 'replace',
+                  ),
+              )
+            ) {
+              return {
+                unpredictable:
+                  'a geometry animation of the element composites onto another or has not started, so its box cannot be predicted',
+              };
+            }
+            if (
+              getComputedStyle(target).position === 'fixed' ||
+              target.parentElement == null
+            ) {
+              return {
+                unpredictable:
+                  'the element is fixed, so its box cannot be replayed in its parent',
+              };
+            }
+            const style = getComputedStyle(target);
+            const clone = document.createElement('div');
+            clone.setAttribute('aria-hidden', 'true');
+            // The layout box to the sub-pixel: the computed size with its
+            // padding and border. The offset is in whole px: it is aligned
+            // below.
+            const px = (name: string) =>
+              Number.parseFloat(style.getPropertyValue(name)) || 0;
+            const contentBox = style.boxSizing === 'content-box';
+            const width =
+              px('width') +
+              (contentBox
+                ? px('padding-left') +
+                  px('padding-right') +
+                  px('border-left-width') +
+                  px('border-right-width')
+                : 0);
+            const height =
+              px('height') +
+              (contentBox
+                ? px('padding-top') +
+                  px('padding-bottom') +
+                  px('border-top-width') +
+                  px('border-bottom-width')
+                : 0);
+            clone.style.cssText = `position:absolute;left:${target.offsetLeft}px;top:${target.offsetTop}px;width:${width}px;height:${height}px;box-sizing:border-box;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none;transform-origin:${style.transformOrigin};transform-box:${style.transformBox}`;
+            // A geometry property no run animates keeps the element's own value.
+            for (const name of geometry) {
+              if (!runs.some(a => keyframesOf(a).some(k => name in k))) {
+                clone.style.setProperty(name, style.getPropertyValue(name));
+              }
+            }
+            const chip = target.querySelector(
+              ':scope > [data-harness-marker-chip]',
+            );
+            let read: Element = clone;
+            if (chip instanceof HTMLElement) {
+              const copy = document.createElement('div');
+              copy.style.cssText = chip.style.cssText;
+              clone.append(copy);
+              read = copy;
+            }
+            target.parentElement.append(clone);
+            const replays = runs.map(a => {
+              const replay = clone.animate(
+                keyframesOf(a).map(k => {
+                  const {computedOffset, ...rest} = k as ComputedKeyframe;
+                  return {...rest, offset: computedOffset};
+                }),
+                (a.effect as KeyframeEffect).getTiming(),
+              );
+              replay.pause();
+              return {
+                replay,
+                source: a,
+                origin: realStart(a),
+                rate: a.playbackRate,
+              };
+            });
+            const seek = (t: number) => {
+              for (const {replay, origin, rate} of replays) {
+                replay.currentTime = (t - origin) * rate;
+              }
+            };
+            // Aligned once: each replay at its own animation's current time,
+            // which the element's own box is read at, then the clone moved by
+            // what remains. The cast's frame at rest checks the replay.
+            for (const {replay, source} of replays) {
+              replay.currentTime = source.currentTime;
+            }
+            const unaligned = boxOf(read);
+            const actual = boxOf(chip ?? target);
+            clone.style.left = `${target.offsetLeft + actual[0] - unaligned[0]}px`;
+            clone.style.top = `${target.offsetTop + actual[1] - unaligned[1]}px`;
+            const check = {predicted: boxOf(read), actual};
+            const samples: Array<[number, number, number, number, number]> = [];
+            for (let t = fromMs; t <= toMs; t += 2) {
+              seek(t);
+              samples.push([t, ...boxOf(read)]);
+            }
+            for (const {replay} of replays) {
+              replay.cancel();
+            }
+            clone.remove();
+            return {geometry: samples, check};
+          }
+          // One numeric channel: the one that changes the most, for its size.
+          const keyframes = keyframesOf(caught);
+          const meta = new Set([
+            'offset',
+            'computedOffset',
+            'easing',
+            'composite',
+          ]);
+          const numbers = (value: unknown): number[] =>
+            (
+              String(value).match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []
+            ).map(Number);
+          let channel: {
+            key: string;
+            index: number;
+            first: number;
+            last: number;
+          } | null = null;
+          let largest = 0;
+          for (const key of Object.keys(keyframes[0] ?? {})) {
+            if (meta.has(key)) {
+              continue;
+            }
+            const values = keyframes.map(k =>
+              numbers((k as Record<string, unknown>)[key]),
+            );
+            const width = Math.min(...values.map(v => v.length));
+            for (let index = 0; index < width; index += 1) {
+              const first = values[0][index];
+              const last = values[values.length - 1][index];
+              const size =
+                Math.abs(last - first) /
+                Math.max(Math.abs(first), Math.abs(last));
+              if (last !== first && size > largest) {
+                largest = size;
+                channel = {key, index, first, last};
+              }
+            }
+          }
+          if (channel == null || effect == null) {
+            return {};
+          }
+          const {key, index, first, last} = channel;
+          const name = '--harness-busy-progress';
+          try {
+            CSS.registerProperty({
+              name,
+              syntax: '<number>',
+              inherits: false,
+              initialValue: '0',
+            });
+          } catch {
+            // An earlier block registered it.
+          }
+          const probe = document.createElement('div');
+          probe.setAttribute('aria-hidden', 'true');
+          probe.style.cssText =
+            'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none';
+          document.body.append(probe);
+          const replay = probe.animate(
+            keyframes.map(k => ({
+              offset: (k as ComputedKeyframe).computedOffset,
+              easing: k.easing,
+              [name]: String(
+                (numbers((k as Record<string, unknown>)[key])[index] - first) /
+                  (last - first),
+              ),
+            })),
+            {...effect.getTiming(), fill: 'both'},
+          );
+          replay.pause();
+          const origin = realStart(caught);
+          const progress: Array<[number, number]> = [];
+          for (let t = fromMs; t <= toMs; t += 2) {
+            replay.currentTime = (t - origin) * caught.playbackRate;
+            progress.push([
+              t,
+              Number(getComputedStyle(probe).getPropertyValue(name)),
+            ]);
+          }
+          replay.cancel();
+          probe.remove();
+          return {progress};
+        };
         // The animations that counted at the frame before, pending ones too.
         let seen = new Set<Animation>();
         const tick = () => {
@@ -1010,11 +1341,35 @@ export async function blockMainThread(
               while (now - start < duration) {
                 now = read();
               }
+              const blockFrom = performance.timeOrigin + start;
+              const blockTo = performance.timeOrigin + now;
+              const controlStarts = (
+                window as unknown as {__harnessControlStarts?: number[]}
+              ).__harnessControlStarts;
               resolve({
-                from: performance.timeOrigin + start,
-                to: performance.timeOrigin + now,
+                from: blockFrom,
+                to: blockTo,
                 spanMs: now - start,
-                ...(animation == null ? {} : {animation}),
+                ...(controlStarts?.[0] == null
+                  ? {}
+                  : {
+                      controlStarts: [controlStarts[0], controlStarts[1]] as [
+                        number,
+                        number?,
+                      ],
+                    }),
+                ...(animation == null
+                  ? {}
+                  : {
+                      animation: {
+                        ...animation,
+                        ...replayOf(
+                          caught,
+                          blockFrom - look,
+                          Math.min(blockTo, animation.to) + look,
+                        ),
+                      },
+                    }),
               });
             }, 0);
           } else if (running) {
@@ -1046,6 +1401,7 @@ export async function blockMainThread(
       pseudo: pseudoElement ?? null,
       wait: timeout,
       fillHolds,
+      look: BUSY_PROOF_LOOKAROUND_MS,
     },
   );
   try {
@@ -1080,12 +1436,12 @@ export interface BusyProof extends FrameStats {
   readonly window: BusyWindow;
   /**
    * The part of the window judged: inside the margins, up to `settledWithin`,
-   * and from `onScreenFromMs` when that is set. On a WebKit cast dated on the
+   * and from `onScreenFromMs` when that is set. On a cast dated on the
    * controls' clock, it runs from the cast's stamp of the first frame judged
    * to that of the last. So a caller selects the judged part by its stamps.
-   * Frames the display-rate keep left out fall inside it too. Only this part
-   * moves back to the stamps. The summary's times, its stall and its control
-   * read stay on the controls' clock.
+   * In WebKit, frames the display-rate keep left out fall inside it too.
+   * Only this part moves back to the stamps. The summary's times, its stall
+   * and its control read stay on the controls' clock.
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
@@ -1159,6 +1515,11 @@ export interface BusyProof extends FrameStats {
   readonly movedFraction: number;
   /** With a `control`: what it presented in the judged part; null without one. */
   readonly control: BusyControlRead | null;
+  /**
+   * The control's frames too little to judge: the component's predicted move
+   * there fell under one cast step (see `busyWindowProof`).
+   */
+  readonly unjudged: readonly UnjudgedFrame[];
   /** The judgment against the limits (see `busyWindowProof`). */
   readonly verdict: BusyVerdict;
   /** One line with the raw numbers, for an annotation or a failure message. */
@@ -1217,6 +1578,155 @@ export function castStep(
     );
   }
   return Math.max(...steps);
+}
+
+/** Frames too little to judge, as a summary or a failure names them. */
+function unjudgedList(frames: readonly UnjudgedFrame[]): string {
+  return frames
+    .map(frame =>
+      frame.why === 'clock'
+        ? `+${frame.atMs.toFixed(0)} ms, no control reading dates it`
+        : `+${frame.atMs.toFixed(0)} ms, a predicted ${frame.movePx.toFixed(2)} under the ${frame.stepPx} step`,
+    )
+    .join('; ');
+}
+
+/** A sampled curve read at any time, linear between samples, held at its ends. */
+function sampled(
+  points: ReadonlyArray<readonly [number, number]>,
+): (t: number) => number {
+  return t => {
+    if (t <= points[0][0]) {
+      return points[0][1];
+    }
+    const last = points[points.length - 1];
+    if (t >= last[0]) {
+      return last[1];
+    }
+    let lo = 0;
+    let hi = points.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (points[mid][0] <= t) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    const [t0, v0] = points[lo];
+    const [t1, v1] = points[hi];
+    return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+  };
+}
+
+/**
+ * What the component should show at each time, from the animation
+ * `blockMainThread` caught and replayed (`BlockedWindow.animation`). Null
+ * when the window holds no replay to read. Throws `BusyPredictionError` when
+ * the replay could not be read, or its end check disagrees with the element
+ * by more than one cast step. A replay that disagrees with the cast gives a
+ * `fallback` reason instead: its travel, its first judged position, or a
+ * fade's fit against its anchors.
+ */
+function predictionOf(
+  tracked: readonly TrackedFrame[],
+  axis: 'x' | 'y' | 'width' | 'height',
+  window: BusyWindow,
+  judged: {from: number; to: number},
+  stepPx: number,
+  settledAt: number | undefined,
+): ((t: number) => number) | {readonly fallback: string} | null {
+  const animation = (window as BlockedWindow).animation;
+  if (animation == null) {
+    return null;
+  }
+  if (animation.unpredictable != null) {
+    throw new BusyPredictionError(
+      `${animation.unpredictable}. The window is not judged.`,
+    );
+  }
+  const column = {x: 0, y: 1, width: 2, height: 3}[axis];
+  const shown = tracked.flatMap(f =>
+    f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
+  );
+  const geometry = animation.geometry;
+  if (geometry != null && geometry.length > 1) {
+    const value = sampled(
+      geometry.map(sample => [sample[0], sample[1 + column]]),
+    );
+    const check = animation.check;
+    if (
+      check != null &&
+      Math.abs(check.predicted[column] - check.actual[column]) > stepPx
+    ) {
+      throw new BusyPredictionError(
+        `the replay drifted from the element: at the block's end it read ${check.predicted[column].toFixed(2)} for the ${axis}, the element ${check.actual[column].toFixed(2)}. The window is not judged.`,
+      );
+    }
+    // Over the judged part, the replay sits and moves as the cast does, to
+    // within two steps or a tenth of the travel. A replay of another element,
+    // or of a run the element no longer follows, sits or moves another way.
+    const judgedShown = shown.filter(
+      f => f.t >= judged.from && f.t <= judged.to,
+    );
+    const first = judgedShown[0];
+    const last = judgedShown.at(-1);
+    if (first != null && last != null && last !== first) {
+      const castTravel = last.value - first.value;
+      const allowed = Math.max(2 * stepPx, Math.abs(castTravel) / 10);
+      const replayTravel = value(last.t) - value(first.t);
+      if (Math.abs(replayTravel - castTravel) > allowed) {
+        return {
+          fallback: `over the judged part the replay moved ${replayTravel.toFixed(2)} for the ${axis}, the cast ${castTravel.toFixed(2)}`,
+        };
+      }
+      if (Math.abs(value(first.t) - first.value) > allowed) {
+        return {
+          fallback: `at the first judged frame the replay read ${value(first.t).toFixed(2)} for the ${axis}, the cast ${first.value.toFixed(2)}`,
+        };
+      }
+    }
+    return value;
+  }
+  if (animation.progress != null && animation.progress.length > 1) {
+    const progress = sampled(animation.progress);
+    // Anchored on frames outside the judged part: the value at rest before
+    // the motion, and where it ends. Frames judged never shape their own
+    // prediction.
+    const start = shown.filter(f => f.t <= animation.from).at(-1)?.value;
+    const end =
+      settledAt ?? shown.filter(f => f.t >= animation.to).at(-1)?.value;
+    if (start == null || end == null) {
+      return null;
+    }
+    const value = (t: number) => start + (end - start) * progress(t);
+    // A least-squares fit of the same curve checks the anchors.
+    const points = shown.map(f => [progress(f.t), f.value] as const);
+    const meanP = points.reduce((sum, [p]) => sum + p, 0) / points.length;
+    const meanV = points.reduce((sum, [, v]) => sum + v, 0) / points.length;
+    const spread = points.reduce((sum, [p]) => sum + (p - meanP) ** 2, 0);
+    if (spread > 0) {
+      const slope =
+        points.reduce((sum, [p, v]) => sum + (p - meanP) * (v - meanV), 0) /
+        spread;
+      const worst = Math.max(
+        ...shown
+          .filter(f => f.t >= judged.from && f.t <= judged.to)
+          .map(f =>
+            Math.abs(meanV + slope * (progress(f.t) - meanP) - value(f.t)),
+          ),
+      );
+      // A component that holds or skips bends the fit too, so a mismatch
+      // falls back to the cast-step rule, which judges that hold.
+      if (worst > stepPx) {
+        return {
+          fallback: `the fade's fit and its anchors disagree by ${worst.toFixed(2)}, more than one step (${stepPx}), so the component may have held`,
+        };
+      }
+    }
+    return value;
+  }
+  return null;
 }
 
 /**
@@ -1323,7 +1833,7 @@ function motionStepPx(values: readonly number[]): number {
  * compositor animation presents fewer frames there, the control too. The
  * component passes when:
  * - the control moved on at least `minJudgedFrames` frames of the judged part
- *   (fewer: the machine presented too little to judge, which fails);
+ *   (fewer: the compositor presented too little to judge, as below);
  * - the component moved on every frame the control moved: both are read from
  *   the same screencast frames, so a compositor animation misses none;
  * - its longest stall is no longer than the control's.
@@ -1357,8 +1867,14 @@ function motionStepPx(values: readonly number[]): number {
  * alike. A frame with no reading keeps its stamp's distance from the nearest
  * frame whose stamp agrees with its reading. The dated frames keep the cast's
  * order. Without the control `ahead`, a late frame near the first control's
- * turn keeps its lateness. Chromium casts and casts with no control are
- * judged on their stamps.
+ * turn keeps its lateness. A Chromium cast with a control is dated the same
+ * way. Its cast stamps each frame as it arrives. Under load, the stamps
+ * trail the frames unevenly, so the frame interval read from them is wrong.
+ * Two frames a whole frame apart can carry stamps 2 ms apart. Without the
+ * control `ahead`, such a pair near the first control's turn keeps its
+ * stamps. Only frames that carry their engine, as `trackMarker` reads them,
+ * are dated. Frames built without it, and a cast with no control, are judged
+ * on their stamps.
  *
  * A WebKit proof keeps one dated frame per display interval, the earlier
  * one. A frame with no reading always stays. The proof judges motion on every
@@ -1366,25 +1882,54 @@ function motionStepPx(values: readonly number[]): number {
  * apart, so it judges no 30 Hz cadence. A note in the summary says so, with
  * the count of such pairs.
  *
- * With a control, a run the machine starved of frames proves nothing. So it
- * throws `FrameStarvationError` with its numbers and returns no verdict. A
- * starved run has two marks. Its control moved on fewer than
- * `minJudgedFrames` frames, and the cast showed no frame for longer than
- * `FRAME_STARVATION_MS` in the block. Without a control, a block with no
- * frame is a frozen animation's, and it fails the verdict. `pooledBusyProof`
- * reads each run without the throw and judges the runs together.
+ * With a control, a window whose control moved on fewer than
+ * `minJudgedFrames` frames of the judged part is under the floor. Under the
+ * floor, a run with no component failure on the frames shown is too little to
+ * judge. It throws `FrameStarvationError` and returns no verdict. The error
+ * names the control's moves, the floor, the cast's frames in the block and its
+ * longest gap. A component that missed a frame the control moved on, or
+ * stalled longer than it, failed on frames the compositor presented. The
+ * verdict keeps that red, unless the machine starved the run: no frame for
+ * longer than `FRAME_STARVATION_MS`. `maxMedianFrameMs` judges the cast's
+ * pace, not the component, so under the floor it keeps no red. Without a
+ * control, a block with no frame is a frozen animation's, and it fails the
+ * verdict. `pooledBusyProof` reads each run without the throw and judges the
+ * runs together.
+ *
+ * With a prediction, each frame the control moved on is judged by the
+ * component's own predicted move since its last new position. The prediction is
+ * the caller's (`predicted`), or the animation `blockMainThread` caught,
+ * replayed once the loop ended (`window.animation`). A replay predicts in
+ * Chromium when the proof passes the `ahead` control. A geometry replay also
+ * needs the harness marker on the caught element. A move of one cast step or
+ * more always changes the cast's reading, whatever the pixel phase. So such a
+ * frame must show a new position, with no run excused. A predicted move under
+ * one step may show none: that frame is too little to judge. It is listed in
+ * `unjudged` and in the summary, and counts neither as moved nor as missed.
+ * When too few judged frames remain, the proof throws `FrameStarvationError`
+ * naming them. Where a replay predicts, one it cannot read throws
+ * `BusyPredictionError`. Every other window falls back by name to the cast-step
+ * rule above, exactly as without a replay.
  *
  * With `judgeEveryFrame`, a frame the cast could not show the component's
  * step on is too little to judge (the frames `belowStep` counts). When the
  * verdict otherwise passes, the proof throws `BusyFrameUnjudgedError` with
  * each such frame, the component's move there and the cast's step. A failed
- * verdict is returned as it is: it is the component's red.
+ * verdict is returned as it is: it is the component's red. A prediction
+ * excuses no frame, so then nothing throws: it names such frames instead.
  */
 export function busyWindowProof(
   ...args: Parameters<typeof readBusyWindow>
 ): BusyProof {
-  const {proof, starvation, unjudged} = readBusyWindow(...args);
-  if (starvation != null) {
+  const {proof, starvation, unjudged, componentFailed} = readBusyWindow(
+    ...args,
+  );
+  // Under the control's floor, a cast that kept pace still shows a missed
+  // frame or a longer stall. That failure is the component's red.
+  if (
+    starvation != null &&
+    (starvation.longestGapMs > FRAME_STARVATION_MS || !componentFailed)
+  ) {
     throw new FrameStarvationError(starvation);
   }
   // A failed verdict is the component's red, whatever else the cast hid.
@@ -1402,10 +1947,12 @@ export function busyWindowProof(
 export const BUSY_PROOF_LOOKAROUND_MS = 250;
 
 /**
- * The proof `busyWindowProof` returns, and the starvation it throws. A WebKit
- * cast with a control is judged on the controls' clock
- * (`datedOnControlClock`); any other cast on its stamps. WebKit stamps the
- * frame after a delivery gap about 60 ms late, carrying one frame of motion.
+ * The proof `busyWindowProof` returns, and the starvation it throws. A cast
+ * with a control, its frames tagged with their engine, is judged on the
+ * controls' clock (`datedOnControlClock`); any other cast on its stamps.
+ * WebKit stamps the frame after a delivery gap about 60 ms late, carrying one
+ * frame of motion. Chromium stamps each frame as it arrives, unevenly behind
+ * its presentation under load.
  */
 function readBusyWindow(
   tracked: readonly TrackedFrame[],
@@ -1417,9 +1964,8 @@ function readBusyWindow(
   }: NonNullable<Parameters<typeof judgeBusyWindow>[2]> & {
     /**
      * The control started `ahead` (`startBusyControl`), tracked from the same
-     * screencast (`trackControl` with `ahead`). It dates the WebKit frames
-     * that fall near the first control's turns, where that control gives no
-     * time.
+     * screencast (`trackControl` with `ahead`). It dates the frames that
+     * fall near the first control's turns, where that control gives no time.
      */
     ahead?: readonly TrackedFrame[];
     /**
@@ -1430,38 +1976,110 @@ function readBusyWindow(
     controlStarts?: readonly [number, number?];
   } = {},
 ): ReturnType<typeof judgeBusyWindow> {
-  const {control} = options;
+  const {control, predicted} = options;
+  // A prediction reads each frame at its content's time. The cast's stamps
+  // trail that time, by 26 to 31 ms at rest in Chromium and unevenly under
+  // load. So a window with a prediction is dated in every engine.
+  const animation = (window as BlockedWindow).animation;
+  const predicts =
+    predicted != null ||
+    animation?.geometry != null ||
+    animation?.progress != null ||
+    animation?.unpredictable != null;
+  const fallBack = (why: string) => {
+    // The replay cannot predict the frames: the cast-step rule judges them
+    // as if there were no replay, and the notes say why.
+    const {
+      from: start,
+      to: end,
+      holds,
+    } = animation ?? {
+      from: window.from,
+      to: window.to,
+      holds: false,
+    };
+    const plain: BlockedWindow = {
+      ...(window as BlockedWindow),
+      animation: {from: start, to: end, holds, notPredicted: why},
+    };
+    return readBusyWindow(tracked, plain, {...options, ahead, controlStarts});
+  };
+  // WebKit reads the element's box at the loop's end before its animation's
+  // current time, so the replay cannot be aligned to it there.
+  if (
+    animation != null &&
+    predicted == null &&
+    predicts &&
+    tracked.some(frame => frame.engine === 'webkit')
+  ) {
+    return fallBack(
+      "the element's box in WebKit lags its animation at the loop's end and cannot align the replay",
+    );
+  }
+  // A prediction reads each frame at its own time, which only a control
+  // reading gives. Near the first control's turns, only the one ahead reads.
+  if (
+    animation != null &&
+    predicted == null &&
+    predicts &&
+    (control == null || ahead == null)
+  ) {
+    return fallBack(
+      'the proof starts no ahead control, so a frame near a turn has no time of its own',
+    );
+  }
+  // A prediction is on the page clock, so its frames are dated from the
+  // controls' own starts. The window keeps them when the options name none.
+  const starts =
+    controlStarts ??
+    (predicts ? (window as BlockedWindow).controlStarts : undefined);
   const dated =
-    control != null && control.every(frame => frame.engine === 'webkit')
-      ? datedOnControlClock(tracked, control, ahead, controlStarts)
+    control != null &&
+    (predicts || control.every(frame => frame.engine != null))
+      ? datedOnControlClock(tracked, control, ahead, starts)
       : null;
   if (dated == null) {
-    return judgeBusyWindow(tracked, window, options);
+    const read = judgeBusyWindow(tracked, window, options);
+    return read.fallback == null ? read : fallBack(read.fallback);
   }
-  const shown = atDisplayRate(dated);
-  const read = judgeBusyWindow(shown.tracked, window, {
-    ...options,
-    control: shown.control,
-  });
+  const webkit = control?.every(frame => frame.engine === 'webkit') === true;
+  const shown = webkit ? atDisplayRate(dated) : dated;
+  const unread = new Set(
+    shown.tracked.filter(frame => !shown.readTimes.has(frame.t)),
+  );
+  const read = judgeBusyWindow(
+    shown.tracked,
+    window,
+    {...options, control: shown.control},
+    dated.tracked,
+    unread,
+  );
+  if (read.fallback != null) {
+    return fallBack(read.fallback);
+  }
   // A WebKit cast rarely shows two frames one interval apart, so the proof
   // cannot judge a 30 Hz cadence there. It says so, with the count.
-  const {pairs, unmatched} = displayIntervalPairs(
-    shown.tracked,
-    shown.control,
-    read.proof.judged,
-  );
+  const cadence = webkit
+    ? displayIntervalPairs(shown.tracked, shown.control, read.proof.judged)
+    : null;
   const note =
-    `cadence not judged: ${pairs} display-interval pairs` +
-    (unmatched > 0
-      ? `, ${unmatched} without a control frame at their time`
-      : '');
+    cadence == null
+      ? null
+      : `cadence not judged: ${cadence.pairs} display-interval pairs` +
+        (cadence.unmatched > 0
+          ? `, ${cadence.unmatched} without a control frame at their time`
+          : '');
   return {
     ...read,
     proof: {
       ...read.proof,
       judged: judgedOnStamps(read.proof.judged, shown),
-      notes: [...read.proof.notes, note],
-      summary: `${read.proof.summary}; note: ${note}`,
+      ...(note == null
+        ? {}
+        : {
+            notes: [...read.proof.notes, note],
+            summary: `${read.proof.summary}; note: ${note}`,
+          }),
     },
   };
 }
@@ -1484,6 +2102,7 @@ function judgeBusyWindow(
     presented,
     control,
     judgeEveryFrame = false,
+    predicted,
   }: {
     axis?: 'x' | 'y' | 'width' | 'height';
     marginMs?: number;
@@ -1556,14 +2175,39 @@ function judgeBusyWindow(
      * component's own step. A frame the cast could not show that step on
      * (`belowStep`) is then too little to judge, and `busyWindowProof` throws
      * `BusyFrameUnjudgedError`. Such a frame is never a pass, and never a red
-     * on the component.
+     * on the component. With a prediction, no frame is excused, so none
+     * throws.
      */
     judgeEveryFrame?: boolean;
+    /**
+     * The tracked value the component should show at an epoch ms (or, after
+     * a page freeze, on the window's clock). Defaults to the caught
+     * animation's replay (`window.animation`).
+     */
+    predicted?: (t: number) => number;
   } = {},
+  /**
+   * The frames the cast drew, dated. In WebKit they are the frames before the
+   * display-rate keep, so a frame left out never lengthens the cast's gap.
+   */
+  drawn: readonly TrackedFrame[] = tracked,
+  /** The frames dated from another frame's reading (`datedOnControlClock`). */
+  unread: ReadonlySet<TrackedFrame> = new Set(),
 ): {
   proof: BusyProof;
   starvation: FrameShortfall | null;
+  /** Under `judgeEveryFrame`, the frames the cast's step excused. */
   unjudged: readonly UnjudgedFrame[];
+  /**
+   * The component failed on frames the control moved on: it missed one, or
+   * stalled longer than the control. The cast's median interval is no part
+   * of it.
+   */
+  componentFailed: boolean;
+  /** The frames the cast drew in the block, and its longest gap there, ms. */
+  cast: {frames: number; longestGapMs: number};
+  /** Why the replay could not predict the frames: the caller judges again. */
+  fallback?: string;
 } {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
@@ -1906,6 +2550,12 @@ function judgeBusyWindow(
       ? 0
       : Math.abs(last.value - first.value) / ((last.t - first.t) / cadence);
   const notes: string[] = [];
+  const notPredicted = (window as BlockedWindow).animation?.notPredicted;
+  if (notPredicted != null) {
+    notes.push(
+      `no prediction: ${notPredicted}, so the cast-step rule judges each frame`,
+    );
+  }
   if (presented != null && compositorFrameMs == null) {
     notes.push(
       'no compositor frames recorded around the window: judged from the screencast alone',
@@ -1950,6 +2600,36 @@ function judgeBusyWindow(
     return changes;
   };
   let controlRead: BusyControlRead | null = null;
+  // The cast step a predicted move is judged against: the coarser of the
+  // motion's own step and the frames' own (`castStep`).
+  const judgeStepPx = Math.max(
+    stepPx,
+    tracked.some(f => f.step != null) ? castStep(tracked, axis) : 0,
+  );
+  const prediction =
+    predicted ??
+    predictionOf(
+      tracked.filter(f => !unread.has(f)),
+      axis,
+      window,
+      judged,
+      judgeStepPx,
+      settledAt,
+    );
+  if (prediction != null && typeof prediction !== 'function') {
+    return {
+      proof: null as unknown as BusyProof,
+      starvation: null,
+      unjudged: [],
+      componentFailed: false,
+      cast: {frames: 0, longestGapMs: 0},
+      fallback: prediction.fallback,
+    };
+  }
+  const predictedAt = prediction;
+  // With a prediction, the frames it names as too little to judge.
+  const named: UnjudgedFrame[] = [];
+  // Without one, under `judgeEveryFrame`: the frames the cast's step excused.
   let unjudged: UnjudgedFrame[] = [];
   if (control != null) {
     const controlChanges = controlChangesUpTo(control, judged.to);
@@ -1960,7 +2640,7 @@ function judgeBusyWindow(
     // A freeze ends in a larger catch-up, and a run that no change ends stays
     // a miss.
     const series = tracked.flatMap(f =>
-      f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
+      f.box == null ? [] : [{t: f.t, value: f.box[axis], frame: f}],
     );
     const seriesIndex = new Map(series.map((f, i) => [f.t, i]));
     const same = (a: number, b: number) =>
@@ -2088,14 +2768,51 @@ function judgeBusyWindow(
       const before = start > 0 ? start - 1 - runStart(start - 1) : 0;
       return unchanged <= before + 1;
     };
-    const componentEdges = [
-      judged.from,
-      ...delivered.filter(t => changed.has(t) || underStep(t)),
-      judged.to,
-    ];
-    const excused = controlChanges.filter(underStep);
-    if (judgeEveryFrame) {
-      unjudged = excused.map(t => {
+    // With a prediction, a frame predicted to move under one cast step since
+    // the last new position is too little to judge. It is named, and counts
+    // neither as moved nor as missed. Every other frame the control moved on
+    // must show a new position, so a hold ends once its moves add up to a
+    // step. Without a prediction, a run the cast's step explains counts as
+    // moved.
+    const excluded = new Set<number>();
+    if (predictedAt != null) {
+      for (const t of controlChanges) {
+        const i = seriesIndex.get(t);
+        if (i == null || i === 0) {
+          continue;
+        }
+        let last = i - 1;
+        while (
+          last > 0 &&
+          Math.abs(series[last].value - series[last - 1].value) <= epsilon
+        ) {
+          last -= 1;
+        }
+        // The run's first frame with a control reading of its own anchors the
+        // move. A frame dated from another frame's reading has no time of
+        // its own.
+        let anchor = last;
+        while (anchor < i - 1 && unread.has(series[anchor].frame)) {
+          anchor += 1;
+        }
+        const move = Math.abs(predictedAt(t) - predictedAt(series[anchor].t));
+        const undated =
+          unread.has(series[i].frame) || unread.has(series[i - 1].frame);
+        if (undated || move < judgeStepPx) {
+          excluded.add(t);
+          named.push({
+            atMs: t - window.from,
+            movePx: move,
+            stepPx: judgeStepPx,
+            why: undated ? 'clock' : 'step',
+          });
+        }
+      }
+    }
+    const excused = (t: number) => predictedAt == null && underStep(t);
+    const judgedChanges = controlChanges.filter(t => !excluded.has(t));
+    if (judgeEveryFrame && predictedAt == null) {
+      unjudged = judgedChanges.filter(excused).map(t => {
         const i = seriesIndex.get(t);
         if (i == null) {
           throw new Error(
@@ -2114,11 +2831,15 @@ function judgeBusyWindow(
         };
       });
     }
+    const componentEdges = [
+      judged.from,
+      ...delivered.filter(t => changed.has(t) || excluded.has(t) || excused(t)),
+      judged.to,
+    ];
     controlRead = {
-      moved: controlChanges.length,
-      movedWith: controlChanges.filter(t => changed.has(t) || underStep(t))
-        .length,
-      belowStep: excused.length,
+      moved: judgedChanges.length,
+      movedWith: judgedChanges.filter(t => changed.has(t) || excused(t)).length,
+      belowStep: judgedChanges.filter(excused).length,
       longestStallMs: Math.max(
         ...controlEdges.slice(1).map((t, i) => t - controlEdges[i]),
       ),
@@ -2131,7 +2852,8 @@ function judgeBusyWindow(
   // block's end would have held enough. Otherwise the run fails as before,
   // as starvation when the cast was starved.
   if (endsInBlock) {
-    const framesLeft = controlRead?.moved ?? expectedFrames;
+    const framesLeft =
+      controlRead == null ? expectedFrames : controlRead.moved + named.length;
     const framesWithoutCurve =
       control == null
         ? Math.floor(
@@ -2144,6 +2866,7 @@ function judgeBusyWindow(
   }
   const failures: string[] = [];
   let starvation: FrameShortfall | null = null;
+  const cast = castFramesIn(drawn, window);
   if (stats.frames === 0 && controlRead == null) {
     failures.push('no frame presented in the judged part');
   } else if (stats.medianFrameMs > maxMedianFrameMs) {
@@ -2152,34 +2875,41 @@ function judgeBusyWindow(
     );
   }
   if (controlRead != null) {
-    if (controlRead.moved < minJudgedFrames) {
-      // How starved the cast was over the whole block, as the pacing and
-      // frame errors say it. Every frame the cast delivered counts, with the
-      // component on screen or not.
-      const blockFrames = tracked
-        .filter(f => f.t > window.from && f.t < window.to)
-        .map(f => f.t);
-      const castEdges = [window.from, ...blockFrames, window.to];
-      const castGapMs = Math.max(
-        ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
-      );
-      // The control is a compositor animation: when it moved too little and
-      // no frame came for that long, the machine starved the run.
-      if (castGapMs > FRAME_STARVATION_MS) {
-        starvation = {
-          by: 'busyWindowProof',
-          during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
-          frames: blockFrames.length,
-          min: minJudgedFrames,
-          longestGapMs: castGapMs,
-        };
-      }
-      failures.push(
-        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
-      );
-    }
     const visible = controlRead.movedWith - controlRead.belowStep;
-    if (visible < minJudgedFrames) {
+    if (
+      controlRead.moved < minJudgedFrames &&
+      named.length > 0 &&
+      controlRead.moved + named.length >= minJudgedFrames
+    ) {
+      // The prediction named too many frames too little to judge, so too
+      // few are left: the run proves nothing.
+      starvation = {
+        by: 'busyWindowProof',
+        during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and ${named.length} of the control's ${controlRead.moved + named.length} frames were too little to judge (${unjudgedList(named)}), so ${controlRead.moved} were left to judge`,
+        frames: cast.frames,
+        min: minJudgedFrames,
+        longestGapMs: cast.longestGapMs,
+        cause:
+          'the motion moved under one cast step, or had no reading of its own, on too many frames, so the run proves nothing about the motion',
+      };
+    } else if (controlRead.moved < minJudgedFrames) {
+      // The control is a compositor animation. When it moved on too few
+      // frames, the compositor presented too little to judge the component,
+      // however long the cast's longest gap was.
+      starvation = {
+        by: 'busyWindowProof',
+        during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
+        frames: cast.frames,
+        min: minJudgedFrames,
+        longestGapMs: cast.longestGapMs,
+        ...(cast.longestGapMs > FRAME_STARVATION_MS
+          ? {}
+          : {
+              cause:
+                'the compositor presented too little in this window to judge, so the run proves nothing about the motion',
+            }),
+      };
+    } else if (visible < minJudgedFrames) {
       failures.push(
         `the component showed a new position on ${visible} of the control's frames, under ${minJudgedFrames}: too little motion in this window to judge`,
       );
@@ -2237,6 +2967,9 @@ function judgeBusyWindow(
     (controlRead == null
       ? ''
       : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
+    (named.length === 0
+      ? ''
+      : `; too little to judge: ${unjudgedList(named)}`) +
     notes.map(note => `; note: ${note}`).join('');
   const proof = {
     ...stats,
@@ -2257,10 +2990,33 @@ function judgeBusyWindow(
     moved,
     movedFraction,
     control: controlRead,
+    unjudged: named,
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
-  return {proof, starvation, unjudged};
+  const componentFailed =
+    controlRead != null &&
+    (controlRead.movedWith < controlRead.moved ||
+      controlRead.componentStallMs > controlRead.longestStallMs);
+  return {proof, starvation, unjudged, componentFailed, cast};
+}
+
+/**
+ * The frames the cast delivered inside `window`, with the component on screen
+ * or not, and the longest gap between them and the window's edges, ms.
+ */
+function castFramesIn(
+  tracked: readonly TrackedFrame[],
+  window: {readonly from: number; readonly to: number},
+): {frames: number; longestGapMs: number} {
+  const inside = tracked
+    .filter(f => f.t > window.from && f.t < window.to)
+    .map(f => f.t);
+  const edges = [window.from, ...inside, window.to];
+  return {
+    frames: inside.length,
+    longestGapMs: Math.max(...edges.slice(1).map((t, k) => t - edges[k])),
+  };
 }
 
 /** One run of a pooled busy proof (see `pooledBusyProof`). */
@@ -2328,16 +3084,25 @@ export interface PooledBusyProof {
  *   control's.
  * `maxMedianFrameMs`, when given, applies to every run. A main-thread
  * animation still fails: in every run the control moves and it does not.
+ *
+ * With fewer judged runs than `minJudgedRuns`, or a control that moved on
+ * fewer than `minJudgedFrames` frames over them, the pool is under the floor.
+ * Under the floor, a pool with no component failure on the frames shown is too
+ * little to judge, and it throws `FrameStarvationError`. A pool left short of
+ * judged runs by a run that began too late keeps its failure instead. So does a
+ * pool whose judged runs show a component red.
  */
 export function pooledBusyProof(
   runs: readonly BusyRun[],
   options: Omit<
     NonNullable<Parameters<typeof busyWindowProof>[2]>,
+    // A prediction belongs to one window, never to the pool.
     | 'control'
     | 'ahead'
     | 'controlStarts'
     | 'minMovedFraction'
     | 'judgeEveryFrame'
+    | 'predicted'
   > & {
     /** The fewest frames a run's control must move on for the run to count. */
     minRunFrames?: number;
@@ -2360,21 +3125,31 @@ export function pooledBusyProof(
     );
   }
   const late: (BusyWindowTooLateError | null)[] = [];
+  const failedRuns: boolean[] = [];
+  const runCasts: ({frames: number; longestGapMs: number} | null)[] = [];
   const proofs = runs.map(run => {
     try {
-      const {proof} = readBusyWindow(run.tracked, run.window, {
-        ...windowOptions,
-        control: run.control,
-        ahead: run.ahead,
-        controlStarts: run.controlStarts,
-      });
+      const {proof, componentFailed, cast} = readBusyWindow(
+        run.tracked,
+        run.window,
+        {
+          ...windowOptions,
+          control: run.control,
+          ahead: run.ahead,
+          controlStarts: run.controlStarts,
+        },
+      );
       late.push(null);
+      failedRuns.push(componentFailed);
+      runCasts.push(cast);
       return proof;
     } catch (error) {
       if (!(error instanceof BusyWindowTooLateError)) {
         throw error;
       }
       late.push(error);
+      failedRuns.push(false);
+      runCasts.push(null);
       return null;
     }
   });
@@ -2395,20 +3170,17 @@ export function pooledBusyProof(
       ? `${runs.length} runs`
       : `the ${judgedReads.length} judged runs of ${runs.length}`;
   const failures: string[] = [];
-  if (judgedReads.length < minJudgedRuns) {
+  if (judgedReads.length < minJudgedRuns && lateRuns > 0) {
     failures.push(
-      lateRuns === 0
-        ? `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`
-        : `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
+      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
     );
   }
-  if (judgedReads.length > 0 && moved < minJudgedFrames) {
-    failures.push(
-      `the control moved on ${moved} frames over ${over}, under ${minJudgedFrames}: the compositor presented too little in these windows to judge`,
-    );
-  }
+  // Too few control frames or judged runs is too little to judge. A judged
+  // run's component red still fails: a frame it missed, or a longer stall.
+  const tooFewFrames = judgedReads.length > 0 && moved < minJudgedFrames;
+  const tooFewRuns = judgedReads.length < minJudgedRuns && lateRuns === 0;
   const visible = movedWith - total('belowStep');
-  if (judgedReads.length > 0 && visible < minJudgedFrames) {
+  if (!tooFewFrames && judgedReads.length > 0 && visible < minJudgedFrames) {
     failures.push(
       `the component showed a new position on ${visible} of the control's frames over ${over}, under ${minJudgedFrames}: too little motion in these windows to judge`,
     );
@@ -2442,6 +3214,43 @@ export function pooledBusyProof(
       );
     }
   });
+  // A pool whose compositor presented too little proves nothing about the
+  // motion, as one starved window does. A run that began too late keeps the
+  // pool's failure. So does a judged run's component red.
+  const lateFailure = judgedReads.length < minJudgedRuns && lateRuns > 0;
+  const componentFailed = failedRuns.some((failed, i) => judged[i] && failed);
+  if ((tooFewFrames || tooFewRuns) && !lateFailure && !componentFailed) {
+    const casts = runCasts.filter(
+      (cast, i): cast is {frames: number; longestGapMs: number} =>
+        cast != null && (tooFewRuns || judged[i]),
+    );
+    const frames = casts.reduce((sum, cast) => sum + cast.frames, 0);
+    const longestGapMs = Math.max(...casts.map(cast => cast.longestGapMs));
+    throw new FrameStarvationError(
+      tooFewRuns
+        ? {
+            by: 'pooledBusyProof',
+            during: `${runs.length} blocks held the main thread, and ${judgedReads.length} of them had enough control frames to judge`,
+            frames,
+            min: minJudgedRuns,
+            longestGapMs,
+            cause: `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}, and the control moved on ${moved} frames over them: the compositor presented too little in the others to judge, so the pool proves nothing about the motion`,
+          }
+        : {
+            by: 'pooledBusyProof',
+            during: `the blocks of ${over} held the main thread, and the control moved on ${moved} of them`,
+            frames,
+            min: minJudgedFrames,
+            longestGapMs,
+            ...(longestGapMs > FRAME_STARVATION_MS
+              ? {}
+              : {
+                  cause:
+                    'the compositor presented too little in these windows to judge, so the pool proves nothing about the motion',
+                }),
+          },
+    );
+  }
   const summary =
     `${runs.length} runs pooled` +
     (judgedReads.length === runs.length
