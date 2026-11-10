@@ -327,10 +327,11 @@ export function selectProofs({listed, changed, shared, filters}) {
   return [...out];
 }
 
-// Files in a component package that put nothing on a page a proof loads.
-// Theme sources and every other package are shared code.
+// Files in a component folder (`packages/<component package>/src/<Component>/`)
+// that put nothing on a page a proof loads. Shared folders, src roots, theme
+// sources and every other package are shared code.
 const NOT_ON_A_PAGE =
-  /^packages\/(?:core|lab|charts|richtext|vega)\/src\/(?!theme\/).*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$/;
+  /^packages\/(?:core|lab|charts|richtext|vega)\/src\/[A-Z][^/]*\/.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$/;
 
 /** What a proof's page loads: the specs, the stories they open, the preview. */
 export const isProofPage = file =>

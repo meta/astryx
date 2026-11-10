@@ -1445,11 +1445,14 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it('runs the full suite for a test outside the component packages or in a theme folder', () => {
+  it('runs the full suite for a test outside a component folder', () => {
     for (const file of [
       'packages/build/src/babel.test.mjs',
       'packages/native/src/contract/contracts.test.ts',
       'packages/core/src/theme/Theme.test.tsx',
+      // A component package's shared folders and src root are shared too.
+      'packages/core/src/gestures/README.md',
+      'packages/charts/src/Chart.test.tsx',
     ])
       expect(select([file]), file).toMatchObject({full: true});
   });
