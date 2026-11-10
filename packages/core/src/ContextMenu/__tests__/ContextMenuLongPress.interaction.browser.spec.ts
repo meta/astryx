@@ -35,6 +35,7 @@ import {
   markElement,
   merge,
   openStory,
+  PEN_SKIP,
   readInputLog,
   releaseAnimations,
   startScreencast,
@@ -45,6 +46,7 @@ import {
   trackMarker,
   traceRendering,
   waitForAnimation,
+  webInputDriver,
   withFinger,
   withStorybook,
   writeEvidence,
@@ -556,6 +558,199 @@ test('the lift after the menu shows keeps it open and sends no click', async ({
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   const log = await readInputLog(page);
   expect(log.filter(record => record.type === 'click')).toEqual([]);
+});
+
+/** Polls until no animation runs on the menu's popover or inside it. */
+async function untilMenuSettled(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const surfaces = Array.from(
+            document.querySelectorAll('[popover]'),
+          ).filter(popover => popover.querySelector('[role="menu"]') != null);
+          return document.getAnimations().filter(animation => {
+            const target =
+              animation.effect instanceof KeyframeEffect
+                ? animation.effect.target
+                : null;
+            return (
+              target != null &&
+              animation.playState === 'running' &&
+              surfaces.some(
+                surface => surface === target || surface.contains(target),
+              )
+            );
+          }).length;
+        }),
+      {timeout: 4000},
+    )
+    .toBe(0);
+}
+
+/**
+ * The open menu's box and computed transform. Also every element from the
+ * cursor anchor up that carries a transform, and the anchor's inline
+ * geometry.
+ */
+async function readMenuPlacement(page: Page) {
+  return page.evaluate(() => {
+    const trigger = document.querySelector<HTMLElement>(
+      '[data-testid="touch-context-menu"]',
+    );
+    const anchor = trigger?.lastElementChild as HTMLElement | null;
+    const surface =
+      document
+        .querySelector('[role="menu"]')
+        ?.closest<HTMLElement>('[popover]') ?? null;
+    const transformed: string[] = [];
+    for (let el: Element | null = anchor; el != null; el = el.parentElement) {
+      const style = getComputedStyle(el);
+      const scales = style.scale === 'none' ? [] : style.scale.split(' ');
+      if (
+        style.transform !== 'none' ||
+        scales.some(value => Number.parseFloat(value) !== 1) ||
+        (style.translate !== 'none' && style.translate !== '0px')
+      ) {
+        const name = el === trigger ? 'trigger' : el.tagName.toLowerCase();
+        transformed.push(
+          `${name}: scale ${style.scale}, translate ${style.translate}, transform ${style.transform}`,
+        );
+      }
+    }
+    const box = surface?.getBoundingClientRect();
+    return {
+      menu:
+        box == null
+          ? null
+          : {x: box.x, y: box.y, width: box.width, height: box.height},
+      transform: surface == null ? null : getComputedStyle(surface).transform,
+      transformed,
+      anchorGeometry:
+        anchor == null
+          ? null
+          : ['scale', 'translate', 'transform', 'transform-origin'].filter(
+              property => anchor.style.getPropertyValue(property) !== '',
+            ),
+    };
+  });
+}
+
+/** The largest scale on the trigger or inside it: the press's growth. */
+async function grownScale(trigger: Locator) {
+  return trigger.evaluate(root =>
+    Math.max(
+      ...[root, ...root.querySelectorAll('*')].map(el => {
+        const scale = getComputedStyle(el).scale;
+        return scale === 'none' ? 1 : Number.parseFloat(scale);
+      }),
+    ),
+  );
+}
+
+for (const input of ['finger', 'pen'] as const) {
+  test(`a ${input}’s press grows only the trigger’s visual: the open menu matches an unpressed open, and nothing above its anchor is transformed (layer-runtime INV22)`, async ({
+    page,
+  }) => {
+    const {driver, trigger} = await openTouchStory(page);
+    const pen = input === 'pen' ? await webInputDriver(page) : null;
+    test.skip(pen != null && !pen.pens, PEN_SKIP);
+    const box = await trigger.boundingBox();
+    if (box == null) {
+      throw new Error('no trigger');
+    }
+    // Near the far corner, where a scaled anchor would land furthest off.
+    const p = {
+      x: Math.round(box.x + box.width * 0.9),
+      y: Math.round(box.y + box.height * 0.85),
+    };
+    const menu = page.getByRole('menu', {name: 'Photo actions'});
+    // Held well past the menu's moment, so the first read is inside the
+    // press.
+    const holdMs = menuDisplayMs + 1500;
+    const playing =
+      pen == null
+        ? driver.play(hold(p, holdMs))
+        : pen.pen([
+            {...p, t: 0},
+            {...p, t: holdMs},
+          ]);
+    await expect(menu).toBeVisible();
+    await untilMenuSettled(page);
+    const during = await readMenuPlacement(page);
+    const grown = await grownScale(trigger);
+    await playing;
+    await untilMenuSettled(page);
+    const after = await readMenuPlacement(page);
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect.poll(async () => grownScale(trigger), {timeout: 3000}).toBe(1);
+    // Unpressed: a mouse opens the menu at the same point.
+    await page.mouse.click(p.x, p.y, {button: 'right'});
+    await expect(menu).toBeVisible();
+    await untilMenuSettled(page);
+    const unpressed = await readMenuPlacement(page);
+    const detail = JSON.stringify({p, grown, during, after, unpressed});
+    expect(grown, detail).toBeGreaterThan(1);
+    expect(unpressed.menu, detail).not.toBeNull();
+    for (const read of [during, after]) {
+      expect(read.transformed, detail).toEqual([]);
+      expect(read.anchorGeometry, detail).toEqual([]);
+      expect(read.transform, detail).toBe(unpressed.transform);
+      expect(read.menu?.x, detail).toBeCloseTo(unpressed.menu?.x ?? NaN, 0);
+      expect(read.menu?.y, detail).toBeCloseTo(unpressed.menu?.y ?? NaN, 0);
+      expect(read.menu?.width, detail).toBeCloseTo(
+        unpressed.menu?.width ?? NaN,
+        0,
+      );
+      expect(read.menu?.height, detail).toBeCloseTo(
+        unpressed.menu?.height ?? NaN,
+        0,
+      );
+    }
+  });
+}
+
+test('the trigger’s visual lays out its children as the trigger would: a block, a row and a grid trigger each match a plain box with the same style', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-contextmenu--touch-trigger-layouts');
+  for (const layout of ['block', 'row', 'grid']) {
+    const read = async (testId: string) =>
+      page.getByTestId(testId).evaluate(root => {
+        const origin = root.getBoundingClientRect();
+        const leaves = [...root.querySelectorAll('*')].filter(
+          el =>
+            el.childElementCount === 0 &&
+            el.getAttribute('aria-hidden') == null,
+        );
+        return {
+          size: {width: origin.width, height: origin.height},
+          children: leaves.map(el => {
+            const box = el.getBoundingClientRect();
+            return {
+              x: box.x - origin.x,
+              y: box.y - origin.y,
+              width: box.width,
+              height: box.height,
+            };
+          }),
+        };
+      });
+    const trigger = await read(`layout-${layout}`);
+    const reference = await read(`layout-${layout}-reference`);
+    const detail = JSON.stringify({layout, trigger, reference});
+    expect(trigger.children.length, detail).toBe(3);
+    expect(trigger.children.length, detail).toBe(reference.children.length);
+    expect(trigger.size.width, detail).toBeCloseTo(reference.size.width, 1);
+    expect(trigger.size.height, detail).toBeCloseTo(reference.size.height, 1);
+    for (const [i, child] of trigger.children.entries()) {
+      const twin = reference.children[i];
+      for (const key of ['x', 'y', 'width', 'height'] as const) {
+        expect(child[key], detail).toBeCloseTo(twin[key], 1);
+      }
+    }
+  }
 });
 
 test('the menu’s anchor sits under the finger, on screen and as laid out, while the trigger is grown, and the menu stays put', async ({
