@@ -5,7 +5,7 @@
 /**
  * @file useTableStickyColumns.tsx
  * @input React, StyleX, theme tokens, Table types
- * @output Exports useTableStickyColumns hook and UseTableStickyColumnsConfig type
+ * @output Exports useTableStickyColumns hook and UseTableStickyColumnsConfig type; declares its pinned runs to Table
  * @position Sticky-columns plugin; consumed by Table via plugins prop
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -37,6 +37,8 @@ import {resolveColumnFloorWidths} from '../../columnUtils';
 import {
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
+  registerPinnedColumnRuns,
+  type PinnedColumnRuns,
 } from '../../tableColumnAdmission';
 import {collapsedBottom} from '../../rowDivider';
 import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
@@ -161,6 +163,29 @@ function computeEndOffsets(
     }
   }
   return offsets;
+}
+
+/**
+ * The pinned runs as column counts. A column in both runs pins to the start,
+ * as resolveStickySide does.
+ */
+function countPinnedRuns(
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>>,
+  startKeys: string[],
+  endKeys: string[],
+): PinnedColumnRuns {
+  let startCount = 0;
+  columns.forEach((column, index) => {
+    if (startKeys.includes(column.key)) {
+      startCount = index + 1;
+    }
+  });
+  const firstEnd = columns.findIndex(column => endKeys.includes(column.key));
+  return {
+    startCount,
+    endCount:
+      firstEnd === -1 ? 0 : columns.length - Math.max(firstEnd, startCount),
+  };
 }
 
 type StickySide = {edge: 'start' | 'end'; offset: string};
@@ -759,6 +784,9 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     // `attachScrollShadow` is stable (empty deps), so the plugin object can be
     // computed once and reused across renders.
     [attachScrollShadow],
+  );
+  registerPinnedColumnRuns(plugin, columns =>
+    countPinnedRuns(columns, stateRef.current.start, stateRef.current.end),
   );
   return registerCountIndependentPlugin(plugin);
 }

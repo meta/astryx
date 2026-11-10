@@ -617,8 +617,13 @@ export interface BaseTableProps<
   T extends Record<string, unknown>,
 > extends BaseProps<HTMLTableElement> {
   ref?: React.Ref<HTMLTableElement>;
-  /** Geometry-only, fixed-height capability; Styled Table owns its coordinated viewport. */
-  virtualization?: TableVirtualizationCapability;
+  /**
+   * Geometry-only windowing: one capability, or a list with at most one rows
+   * and one columns capability. Styled Table owns its coordinated viewport.
+   */
+  virtualization?:
+    | TableVirtualizationCapability
+    | ReadonlyArray<TableVirtualizationCapability>;
   /** Array of data items to render as rows */
   data?: T[];
   /** Column definitions. If omitted, auto-generated from data keys. */

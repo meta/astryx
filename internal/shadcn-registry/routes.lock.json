@@ -4372,6 +4372,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []

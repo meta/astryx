@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
- * @file Private fixed-height column admission.
- * @input First-party columns whose structural renderer is owned and bounded.
- * @output Identity-based admission without a new caller assertion prop.
+ * @file Private fixed-height column admission and pinned column runs.
+ * @input First-party columns and plugins that declare bounded renderers or pinned runs.
+ * @output Identity-based admission and pinned runs without a new caller prop.
  * @position Shared Table protocol, with actual pitch validated after mount.
  */
 import type {ReactNode} from 'react';
@@ -67,4 +67,44 @@ export function isFixedHeightColumn<T extends Record<string, unknown>>(
   column: TableColumn<T>,
 ): boolean {
   return column.renderCell == null || heightSafe.get(column) === true;
+}
+
+/** Column counts in the pinned start and end runs. */
+export interface PinnedColumnRuns {
+  startCount: number;
+  endCount: number;
+}
+type PinnedRunResolver = (
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>>,
+) => PinnedColumnRuns;
+const pinnedRunResolvers = new WeakMap<object, PinnedRunResolver>();
+
+/**
+ * Lets a first-party plugin that pins columns tell Table its pinned runs, so
+ * column windowing keeps them mounted without reading the plugin's config.
+ */
+export function registerPinnedColumnRuns(
+  plugin: object,
+  resolve: PinnedRunResolver,
+): void {
+  pinnedRunResolvers.set(plugin, resolve);
+}
+
+/** The widest pinned start and end runs that the plugins declare. */
+export function resolvePinnedColumnRuns<T extends Record<string, unknown>>(
+  plugins: ReadonlyArray<object>,
+  columns: ReadonlyArray<TableColumn<T>>,
+): PinnedColumnRuns {
+  let startCount = 0;
+  let endCount = 0;
+  for (const plugin of plugins) {
+    const runs = pinnedRunResolvers.get(plugin)?.(
+      columns as ReadonlyArray<TableColumn<Record<string, unknown>>>,
+    );
+    if (runs != null) {
+      startCount = Math.max(startCount, runs.startCount);
+      endCount = Math.max(endCount, runs.endCount);
+    }
+  }
+  return {startCount, endCount};
 }

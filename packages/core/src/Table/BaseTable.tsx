@@ -3,7 +3,7 @@
 'use client';
 /**
  * @file BaseTable.tsx
- * @input React, canonical identity/admission, private window planning and tracked row context
+ * @input React, canonical identity/admission, private row and column window planning and tracked row context
  * @output Exports BaseTable component and passes immutable transform contexts
  * @position Core structural component; wrapped by Table.tsx
  *
@@ -31,12 +31,18 @@ import {
 import {resolveTableIdentity, resolveTableAdmission} from './tableIdentity';
 import {useTableWindow} from './plugins/virtualization/useTableWindow';
 import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
+import {
+  resolveTableVirtualization,
+  useTableColumnWindow,
+  type TableColumnSegment,
+} from './plugins/virtualization/useTableColumnWindow';
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
   isFixedHeightColumn,
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
+  resolvePinnedColumnRuns,
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
@@ -99,6 +105,13 @@ const styles = stylex.create({
     lineHeight: 0,
   }),
   fixedRow: (height: number) => ({height}),
+  columnSpacer: (width: number) => ({
+    width,
+    minWidth: width,
+    maxWidth: width,
+    padding: 0,
+    borderWidth: 0,
+  }),
   table: {
     width: '100%',
     borderCollapse: 'collapse',
@@ -180,6 +193,22 @@ function applyRowPlugins<
   );
 }
 
+/**
+ * An inaccessible native cell that keeps the place of unmounted columns. The
+ * header row and every body row render the same spacers, so columns align.
+ */
+function renderColumnSpacer(
+  segment: Extract<TableColumnSegment, {type: 'gap'}>,
+): ReactElement {
+  return (
+    <td
+      key={`\u0000spacer:${segment.start}`}
+      aria-hidden="true"
+      {...stylex.props(styles.columnSpacer(segment.width))}
+    />
+  );
+}
+
 // =============================================================================
 // Memoized Table Row Component
 // =============================================================================
@@ -227,6 +256,8 @@ interface TableRowProps<T extends Record<string, unknown>> {
   };
   renderContext: TableRenderContext;
   rowHeight?: number;
+  /** Mounted columns and spacers, only while columns window. */
+  columnSegments?: ReadonlyArray<TableColumnSegment>;
   onRowFocus?: (key: string | number, focusTarget?: HTMLElement) => void;
   onRowBlur?: () => void;
 }
@@ -249,6 +280,7 @@ function TableRowInner<T extends Record<string, unknown>>({
   contextIdentity,
   renderContext,
   rowHeight,
+  columnSegments,
   onRowFocus,
   onRowBlur,
 }: TableRowProps<T>): ReactElement {
@@ -267,9 +299,10 @@ function TableRowInner<T extends Record<string, unknown>>({
     [contextIdentity, rowIndex, renderContext],
   );
   // Build cells first
-  const cells = columns.map((col, columnIndex) => {
+  const renderCell = (col: TableColumn<T>, columnIndex: number) => {
     // Apply column alignment to body cells
-    const initialCellHtmlProps: Record<string, unknown> = {};
+    const initialCellHtmlProps: Record<string, unknown> =
+      columnSegments == null ? {} : {'aria-colindex': columnIndex + 1};
     if (col.align) {
       initialCellHtmlProps.style = {textAlign: col.align};
     }
@@ -333,7 +366,17 @@ function TableRowInner<T extends Record<string, unknown>>({
         {content}
       </CellComponent>
     );
-  });
+  };
+  const cells =
+    columnSegments == null
+      ? columns.map(renderCell)
+      : columnSegments.flatMap(segment =>
+          segment.type === 'gap'
+            ? [renderColumnSpacer(segment)]
+            : columns
+                .slice(segment.start, segment.end)
+                .map((col, offset) => renderCell(col, segment.start + offset)),
+        );
 
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
@@ -440,6 +483,7 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
         prevProps.renderContext.viewport !==
           nextProps.renderContext.viewport)) ||
     prevProps.rowHeight !== nextProps.rowHeight ||
+    prevProps.columnSegments !== nextProps.columnSegments ||
     prevProps.onRowFocus !== nextProps.onRowFocus ||
     prevProps.onRowBlur !== nextProps.onRowBlur
   ) {
@@ -614,11 +658,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }
   const resolvedColumns = resolvedColumnsRef.current;
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
-  const config = getTableVirtualizationConfig(virtualization);
-  const windowFallbackReason = useMemo(() => {
-    if (virtualization != null && config == null) {
-      return 'virtualization is not a value from useTableRowsVirtualization';
-    }
+  const resolvedVirtualization = useMemo(
+    () => resolveTableVirtualization(virtualization),
+    [virtualization],
+  );
+  const rowsCapability = resolvedVirtualization.invalidReason
+    ? undefined
+    : resolvedVirtualization.rows;
+  const columnsConfig = resolvedVirtualization.invalidReason
+    ? undefined
+    : resolvedVirtualization.columns;
+  const config = getTableVirtualizationConfig(rowsCapability);
+  // Conditions both axes need before any cell renders.
+  const sharedFallbackReason = useMemo(() => {
     if (mode !== 'data') {
       return 'windowing requires data mode';
     }
@@ -637,10 +689,23 @@ function BaseTableInner<T extends Record<string, unknown>>({
     if (textOverflowProp === 'wrap') {
       return 'explicit wrapped content is not fixed-height';
     }
+    return undefined;
+  }, [mode, ScrollWrapper, admission.rowModel, identity, textOverflowProp]);
+  const hasFixedHeightColumns = useMemo(
+    () => resolvedColumns.every(isFixedHeightColumn),
+    [resolvedColumns],
+  );
+  const windowFallbackReason = useMemo(() => {
+    if (resolvedVirtualization.invalidReason != null) {
+      return resolvedVirtualization.invalidReason;
+    }
+    if (sharedFallbackReason != null) {
+      return sharedFallbackReason;
+    }
     if (rowIndexStart != null || rowCount != null) {
       return 'legacy row offsets or counts conflict with windowed metadata';
     }
-    if (!resolvedColumns.every(isFixedHeightColumn)) {
+    if (!hasFixedHeightColumns) {
       return 'a custom cell renderer has no fixed-height admission';
     }
     if (
@@ -654,22 +719,21 @@ function BaseTableInner<T extends Record<string, unknown>>({
     }
     return undefined;
   }, [
-    mode,
-    ScrollWrapper,
-    admission.rowModel,
-    identity,
-    textOverflowProp,
+    resolvedVirtualization.invalidReason,
+    sharedFallbackReason,
     rowIndexStart,
     rowCount,
-    resolvedColumns,
-    virtualization,
+    hasFixedHeightColumns,
     config,
   ]);
   const windowAdmitted = windowFallbackReason === undefined;
   useDevWarningPerMessage(
     'Table',
-    `Windowing disabled: ${windowFallbackReason}. Rendering all rows.`,
-    virtualization != null && windowFallbackReason != null,
+    `Windowing disabled: ${windowFallbackReason}. Rendering all rows${
+      resolvedVirtualization.invalidReason != null ? ' and columns' : ''
+    }.`,
+    (rowsCapability != null || resolvedVirtualization.invalidReason != null) &&
+      windowFallbackReason != null,
   );
   const logicalPositionColumns = useMemo(
     () =>
@@ -681,7 +745,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     [resolvedColumns],
   );
   const windowPlan = useTableWindow({
-    capability: virtualization,
+    capability: rowsCapability,
     data: data ?? [],
     keys,
     isAdmitted: windowAdmitted,
@@ -702,8 +766,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
       }),
     [mode, admission, data?.length, headerRowCount, runtime],
   );
-  const textOverflow =
-    textOverflowProp ?? (windowPlan.isWindowed ? 'truncate' : 'wrap');
 
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
@@ -734,10 +796,68 @@ function BaseTableInner<T extends Record<string, unknown>>({
     htmlProps: {},
     xstyle: children ? [styles.table, styles.tableAutoLayout] : [styles.table],
   } satisfies TableRenderProps);
+  const mergedStyle: React.CSSProperties = {
+    ...tableRenderProps.htmlProps.style,
+    ...style,
+  };
+
+  // Column pitch is the width each column renders at the table's minimum
+  // width, the same widths pinned offsets use.
+  const columnPitches = useMemo(() => {
+    const floors = resolveColumnFloorWidths(sizedColumns);
+    return sizedColumns.map(column => floors.get(column.key) ?? 0);
+  }, [sizedColumns]);
+  const hasFloorMinWidth =
+    mergedStyle.minWidth == null ||
+    resolveTableMinWidth(mergedStyle.minWidth, resolvedWidths.tableMinWidth) ===
+      `${resolvedWidths.tableMinWidth}px`;
+  let columnFallbackReason: string | undefined;
+  if (columnsConfig != null) {
+    columnFallbackReason =
+      sharedFallbackReason ??
+      (!hasFixedHeightColumns
+        ? 'a custom cell renderer has no single-line admission'
+        : !(
+              Number.isFinite(columnsConfig.initialViewportWidth) &&
+              columnsConfig.initialViewportWidth > 0
+            )
+          ? 'the inline viewport seed must be a positive finite CSS pixel width'
+          : rowsCapability != null
+            ? 'windowing rows and columns together comes in a later release'
+            : !hasFloorMinWidth
+              ? 'a table min-width wider than the column floors changes the column pitch'
+              : undefined);
+  }
+  useDevWarningPerMessage(
+    'Table',
+    `Column windowing disabled: ${columnFallbackReason}. Rendering every column.`,
+    columnFallbackReason != null,
+  );
+  const pinnedRuns = resolvePinnedColumnRuns(plugins, resolvedColumns);
+  const columnWindow = useTableColumnWindow({
+    config: columnsConfig,
+    isAdmitted: columnsConfig != null && columnFallbackReason == null,
+    widths: columnPitches,
+    startCount: pinnedRuns.startCount,
+    endCount: pinnedRuns.endCount,
+    table: runtime.table,
+    geometry: runtime.geometry,
+  });
+  const columnSegments = columnWindow.isWindowed
+    ? columnWindow.segments
+    : undefined;
+  // Admitted column windowing keeps content single-line at every width, so
+  // rows keep their height as the viewport crosses the table minimum width.
+  const textOverflow =
+    textOverflowProp ??
+    (windowPlan.isWindowed ||
+    (columnsConfig != null && columnFallbackReason == null)
+      ? 'truncate'
+      : 'wrap');
 
   // --- Plugin pipeline: header cells ---
   const headerLabelIdBase = useId();
-  const headerCells = resolvedColumns.map((col, columnIndex) => {
+  const renderHeaderCell = (col: TableColumn<T>, columnIndex: number) => {
     const headerContent = col.header ?? col.key;
 
     // Build initial htmlProps with column alignment if specified.
@@ -747,6 +867,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     const initialHeaderHtmlProps: Record<string, unknown> = {
       'data-column-key': col.key,
       scope: 'col',
+      ...(columnSegments == null ? null : {'aria-colindex': columnIndex + 1}),
     };
     if (col.align) {
       initialHeaderHtmlProps.style = {textAlign: col.align};
@@ -772,7 +893,15 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
     // Apply pre-computed column width styles on the <th>.
     // With table-layout: fixed, header cell sizing controls column widths.
-    const widthStyle = resolvedWidths.columns.get(col.key)?.style ?? {};
+    // A windowed table renders at its minimum width, so each mounted column
+    // takes its pitch in pixels: a percentage would resolve against spacers.
+    const widthStyle =
+      columnSegments == null
+        ? (resolvedWidths.columns.get(col.key)?.style ?? {})
+        : {
+            width: `${columnPitches[columnIndex]}px`,
+            minWidth: `${columnPitches[columnIndex]}px`,
+          };
 
     const existingStyle = cellRenderProps.htmlProps.style;
     const mergedHtmlProps = {
@@ -845,7 +974,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
         {headerInner}
       </HeaderCellComponent>
     );
-  });
+  };
+  const headerCells =
+    columnSegments == null
+      ? resolvedColumns.map(renderHeaderCell)
+      : columnSegments.flatMap(segment =>
+          segment.type === 'gap'
+            ? [renderColumnSpacer(segment)]
+            : resolvedColumns
+                .slice(segment.start, segment.end)
+                .map((col, offset) =>
+                  renderHeaderCell(col, segment.start + offset),
+                ),
+        );
 
   // --- Plugin pipeline: header row ---
   const headerRowRenderProps = applyPlugins(
@@ -865,10 +1006,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // The table is at least as wide as the column floors require and at least
   // as wide as any minWidth the consumer (or a plugin) set: whichever is
   // larger wins, so column floors never shrink a consumer's minimum.
-  const mergedStyle: React.CSSProperties = {
-    ...tableRenderProps.htmlProps.style,
-    ...style,
-  };
   const tableStyle: React.CSSProperties = {
     ...(resolvedWidths.tableMinWidth > 0
       ? {
@@ -890,6 +1027,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
         : ariaRowCount != null
           ? {'aria-rowcount': ariaRowCount}
           : null)}
+      {...(columnSegments == null
+        ? null
+        : {'aria-colcount': resolvedColumns.length})}
       {...tableRenderProps.htmlProps}
       {...mergeProps(
         themeProps('table'),
@@ -958,6 +1098,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                         rowHeight={
                           windowPlan.isWindowed ? config?.rowHeight : undefined
                         }
+                        columnSegments={columnSegments}
                         onRowFocus={
                           windowPlan.isWindowed
                             ? windowPlan.onRowFocus
