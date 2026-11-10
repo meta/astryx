@@ -242,13 +242,16 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
     for (const {path: target, kind} of importsOf(from)) {
       if (!STATIC_KINDS.has(kind) || !isLive(target, 'eagerBytes')) continue;
       const toName = moduleName(target);
-      let invariant = null;
-      if (isSurface(toName)) invariant = 'INV1';
-      else if (capabilityOf(toName, boundaries)) invariant = 'INV7';
-      else if (isTouchModule(toName, boundaries) && defersSurface(from)) {
-        invariant = 'INV8';
+      // A module can be in more than one kind: the layer's touch tap
+      // recognizer is a surface module and a touch module.
+      const invariants = [];
+      if (isSurface(toName)) invariants.push('INV1');
+      if (capabilityOf(toName, boundaries)) invariants.push('INV7');
+      if (isTouchModule(toName, boundaries) && defersSurface(from)) {
+        invariants.push('INV8');
       }
-      if (invariant !== null) {
+      if (invariants.length > 0) {
+        const invariant = invariants.join(', ');
         const key = `${fromName} → ${toName}`;
         if (!crossingKeys.has(key)) {
           crossingKeys.add(key);

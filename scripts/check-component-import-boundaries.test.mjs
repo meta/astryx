@@ -175,6 +175,41 @@ describe('a static import from an entry', () => {
       },
     ]);
   });
+
+  it('names both invariants for a touch module in a surface folder that a module deferring a surface imports', () => {
+    const graph = graphOf('Text/__entry__.mjs', {
+      'Text/__entry__.mjs': {imports: [['Text/TruncationTooltip.tsx']]},
+      'Text/TruncationTooltip.tsx': {
+        imports: [
+          ['Layer/useTouchTrigger.ts'],
+          ['Tooltip/Tooltip.tsx', 'dynamic-import'],
+        ],
+      },
+      'Layer/useTouchTrigger.ts': {},
+      'Tooltip/Tooltip.tsx': {bytes: 0},
+    });
+    const {crossings} = violationsOf('Text', graph);
+    expect(
+      crossings.map(({from, to, invariant}) => ({from, to, invariant})),
+    ).toEqual([
+      {
+        from: 'Text/TruncationTooltip',
+        to: 'Layer/useTouchTrigger',
+        invariant: 'INV1, INV8',
+      },
+    ]);
+  });
+
+  it('names only INV1 for a touch module in a surface folder that a module deferring no surface imports', () => {
+    const graph = graphOf('Text/__entry__.mjs', {
+      'Text/__entry__.mjs': {imports: [['Text/Text.tsx']]},
+      'Text/Text.tsx': {imports: [['Layer/useTouchTrigger.ts']]},
+      'Layer/useTouchTrigger.ts': {},
+    });
+    expect(
+      violationsOf('Text', graph).crossings.map(({invariant}) => invariant),
+    ).toEqual(['INV1']);
+  });
 });
 
 describe('an import() from an entry', () => {
