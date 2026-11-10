@@ -78,9 +78,21 @@ describe('Markdown render boundary — URLs come only from the parser', () => {
     );
   });
 
-  it('renders an empty destination as text', () => {
-    const {container} = render(<Markdown>{'[go]()'}</Markdown>);
-    expect(container.querySelector('a')).toBeNull();
-    expect(container.textContent).toContain('go');
-  });
+  it.each(['[go]()', '[go](< >)', '[go](&#9;)', '[go](<&#10;>)'])(
+    'renders the empty or blank destination in %j as text',
+    markdown => {
+      const {container} = render(<Markdown>{markdown}</Markdown>);
+      expect(container.querySelector('a')).toBeNull();
+      expect(container.textContent).toContain('go');
+    },
+  );
+
+  it.each(['![alt]()', '![alt](< >)', '![alt](&#9;)', 'see ![alt](< >) here'])(
+    'renders the empty or blank image source in %j as its fallback',
+    markdown => {
+      const {container} = render(<Markdown>{markdown}</Markdown>);
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('[alt]');
+    },
+  );
 });

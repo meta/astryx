@@ -1328,6 +1328,23 @@ const rejectionCases: RejectionCase[] = [
     reason: /rejected by the navigation owner/,
   },
   {
+    name: 'a data: link destination',
+    plugin: () => tree =>
+      mutateFirst(tree, 'link', node => {
+        node.url = 'data:image/png;base64,iVBORw0KGgo=';
+      }),
+    reason: /rejected by the navigation owner/,
+  },
+  {
+    name: 'a data: image source',
+    source: '![alt](/logo.png)',
+    plugin: () => tree =>
+      mutateFirst(tree, 'image', node => {
+        node.url = 'data:image/png;base64,iVBORw0KGgo=';
+      }),
+    reason: /rejected by the resource owner/,
+  },
+  {
     name: 'an image without its text alternative',
     source: '![alt](/logo.png)',
     plugin: () => tree =>

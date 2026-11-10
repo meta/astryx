@@ -142,6 +142,15 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
     });
   });
 
+  it.each(['< >', '&#9;', '<&#10;>', '&#32;'])(
+    'gives a blank destination %j an empty URL',
+    destination => {
+      expect(urlsIn(parseMarkdown(`[x](${destination})`))).toEqual(['']);
+      expect(urlsIn(parseMarkdown(`![x](${destination})\n`))).toEqual(['']);
+      expect(urlsIn(parseInline(`![x](${destination})`))).toEqual(['']);
+    },
+  );
+
   it('rejects an angle-bracket autolink with an unsafe scheme', () => {
     for (const url of [
       'data:image/png;base64,iVBORw0KGgo=',

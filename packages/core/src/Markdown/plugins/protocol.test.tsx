@@ -832,6 +832,34 @@ describe('Markdown plugin protocol', () => {
     expect(parseMarkdown('Safe', {plugins: [unsafeDestination]})).toMatchObject(
       [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
     );
+    for (const node of [
+      {
+        type: 'link' as const,
+        url: 'data:image/png;base64,iVBORw0KGgo=',
+        children: [{type: 'text' as const, value: 'unsafe'}],
+      },
+      {
+        type: 'image' as const,
+        url: 'data:image/png;base64,iVBORw0KGgo=',
+        alt: 'unsafe',
+      },
+    ]) {
+      const dataDestination = createMarkdownPlugin({
+        name: `data-${node.type}`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block =>
+              block.type === 'paragraph' ? {...block, children: [node]} : block,
+            ),
+          };
+        },
+      });
+      expect(parseMarkdown('Safe', {plugins: [dataDestination]})).toMatchObject(
+        [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
+      );
+    }
     expect(parseMarkdown('Safe', {plugins: [nestedLink]})).toMatchObject([
       {type: 'paragraph', children: [{type: 'text', content: 'Safe'}]},
     ]);
