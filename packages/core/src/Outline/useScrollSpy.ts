@@ -66,6 +66,25 @@ function getScrollMarginTop(element: HTMLElement): number {
   );
 }
 
+/**
+ * Whether `element` scrolls the viewport instead of a box of its own. The
+ * root always does. The body does while the root's overflow is `visible`,
+ * because the body then gives its overflow to the viewport. The viewport
+ * sends its scroll events to the window.
+ */
+function scrollsViewport(element: HTMLElement): boolean {
+  const doc = element.ownerDocument;
+  if (element === doc.documentElement) {
+    return true;
+  }
+  const view = doc.defaultView;
+  if (element !== doc.body || view == null) {
+    return false;
+  }
+  const rootStyle = view.getComputedStyle(doc.documentElement);
+  return rootStyle.overflowX === 'visible' && rootStyle.overflowY === 'visible';
+}
+
 /** The top of the scroll root in viewport coordinates (0 for the viewport). */
 function getRootTop(scrollRoot: HTMLElement | null): number {
   return scrollRoot != null ? scrollRoot.getBoundingClientRect().top : 0;
@@ -249,10 +268,10 @@ export function useScrollSpy({
    * (meaning the viewport).
    */
   const getScrollRoot = useCallback((): HTMLElement | null => {
-    return (
+    const scroller =
       scrollContainerRef?.current ??
-      (rootRef.current == null ? null : scrollingAncestor(rootRef.current))
-    );
+      (rootRef.current == null ? null : scrollingAncestor(rootRef.current));
+    return scroller == null || scrollsViewport(scroller) ? null : scroller;
   }, [rootRef, scrollContainerRef]);
 
   // Syncs a scroll listener on the scroll root and a window resize listener
