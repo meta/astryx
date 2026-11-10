@@ -30,17 +30,20 @@ export interface ParsedTime {
  *
  * Every field must be digits only. parseISOTime reads each field with
  * parseInt, which stops at the first non-digit, so on its own it would turn
- * "2:30 PM" into 02:30 (12 hours off) and "14:30abc" into 14:30.
+ * "2:30 PM" into 02:30 (12 hours off) and "14:30abc" into 14:30. Surrounding
+ * whitespace and fractional seconds ("14:30:15.250", as a native time input
+ * gives) are accepted; the fraction is dropped.
  */
 export function createISOTimeString(value: string): ISOTimeString | null {
-  if (!/^\d{1,2}:\d{1,2}(?::\d{1,2})?$/.test(value)) {
+  const trimmed = value.trim();
+  if (!/^\d{1,2}:\d{1,2}(?::\d{1,2}(?:\.\d+)?)?$/.test(trimmed)) {
     return null;
   }
-  const parsed = parseISOTime(value);
+  const parsed = parseISOTime(trimmed);
   if (!parsed) {
     return null;
   }
-  return formatISOTime(parsed, value.split(':').length === 3);
+  return formatISOTime(parsed, trimmed.split(':').length === 3);
 }
 
 /**

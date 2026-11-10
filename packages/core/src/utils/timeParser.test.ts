@@ -63,6 +63,11 @@ describe('createISOTimeString', () => {
     expect(createISOTimeString('14:30:45')).toBe('14:30:45');
   });
 
+  it('accepts what main read as the right time', () => {
+    expect(createISOTimeString(' 14:30 ')).toBe('14:30');
+    expect(createISOTimeString('14:30:15.250')).toBe('14:30:15');
+  });
+
   it('rejects a 12-hour time instead of reading it 12 hours off', () => {
     expect(createISOTimeString('2:30 PM')).toBeNull();
     expect(createISOTimeString('2:30pm')).toBeNull();
@@ -73,7 +78,7 @@ describe('createISOTimeString', () => {
     expect(createISOTimeString('14.9:30')).toBeNull();
     expect(createISOTimeString('1e1:30')).toBeNull();
     expect(createISOTimeString('14:30:00Z')).toBeNull();
-    expect(createISOTimeString(' 14:30')).toBeNull();
+    expect(createISOTimeString('14:30.5')).toBeNull();
   });
 
   it('rejects an out-of-range time', () => {
