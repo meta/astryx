@@ -162,13 +162,23 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
     expect(urlsIn(parseInline('![x](< /a.png >)'))).toEqual(['/a.png']);
   });
 
-  it('rejects an angle-bracket autolink with an unsafe scheme', () => {
-    for (const url of [
+  describe('GFM autolinks', () => {
+    const gfm = {autolink: 'gfm'} as const;
+
+    it.each([
       'data:image/png;base64,iVBORw0KGgo=',
       'data:text/plain,hello',
+      'DATA:image/png;base64,iVBORw0KGgo=',
       'javascript:alert(1)',
-    ]) {
-      expect(unsafeUrlsIn(parseMarkdown(`see <${url}> here`))).toEqual([]);
-    }
+    ])('keeps no link for the angle-bracket autolink <%s>', url => {
+      expect(urlsIn(parseMarkdown(`see <${url}> here`, gfm))).toEqual([]);
+      expect(urlsIn(parseInline(`see <${url}> here`, gfm))).toEqual([]);
+    });
+
+    it('keeps a safe angle-bracket autolink', () => {
+      expect(
+        urlsIn(parseMarkdown('see <https://example.com/x> here', gfm)),
+      ).toEqual(['https://example.com/x']);
+    });
   });
 });

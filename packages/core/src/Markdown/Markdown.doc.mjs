@@ -993,7 +993,7 @@ export const docsDense = {
     isStreaming:
       'Incremental parse + fade-in for streamed chunks. Default: false.',
     onLinkClick:
-      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href); blocked ones render as text. Image URLs: separate stricter policy.',
+      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href), and every data: link or image URL is also dropped; rejected ones render as text.',
     sources:
       'Record<string, MarkdownSource>. Citation sources by ID. [id]/【id】 markers render as chips.',
     citationStyle:
