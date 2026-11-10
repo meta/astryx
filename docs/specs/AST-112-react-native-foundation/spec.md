@@ -174,7 +174,7 @@ shared icon names under FR17.
     held, and the package exports the entry only once it holds them.
   - Apart from the Jest setup file, no entry installs a global when it is
     imported (DEC-10). `./network` exports two installer functions that an
-    app calls when it wants these globals:
+    app calls when it wants the globals below:
     - One installs each of `crypto.getRandomValues` and `crypto.randomUUID`
       that the runtime lacks, from the system's secure random generator, and
       leaves an existing one in place. Without that generator it installs
@@ -512,7 +512,7 @@ Rejected: building on React Navigation, react-native-screens, and
 react-native-safe-area-context, because their gesture handling couples to the
 platform's and their state model would bound Astryx's.
 
-### DEC-10 — Importing an app entry changes no globals
+### DEC-10 — Importing the package changes no globals outside its Jest setup
 
 **Reference:** `spec:AST-112/DEC-10`
 **Decider:** imdreamrunner, 2026-11-10
