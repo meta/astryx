@@ -559,6 +559,43 @@ test(`a clamped caption's "more" still ends its second line after the viewport n
   }).toPass({timeout: 3_000});
 });
 
+test(`an open caption's "less" still ends its last line after the viewport widens (402×874 → 874×402)`, async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const errors: string[] = [];
+    (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+    window.addEventListener('error', event => {
+      errors.push(event.message);
+    });
+  });
+  const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+  await dialog.getByRole('button', {name: 'more'}).click();
+  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+  const narrow = await readToggle(dialog);
+  // A phone turned on its side: the open caption needs fewer lines.
+  await page.setViewportSize({width: 874, height: 402});
+  await expect(async () => {
+    const facts = await readToggle(dialog);
+    const detail = JSON.stringify({narrow, facts});
+    expect(facts.textWidth, detail).toBeGreaterThan(narrow.textWidth);
+    expect(facts.isClamped, detail).toBe(false);
+    // The text's last line holds words, and "less" ends it.
+    expect(facts.lastLineWords, detail).toBeGreaterThan(0);
+    expect(facts.lastLineEnd, detail).toBeLessThanOrEqual(
+      facts.toggleLeft + 0.5,
+    );
+    expect(
+      Math.abs(facts.toggleMiddle - (facts.textBottom - facts.lineHeight / 2)),
+      detail,
+    ).toBeLessThanOrEqual(1);
+  }).toPass({timeout: 3_000});
+  const errors = await page.evaluate(
+    () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+  );
+  expect(errors).toEqual([]);
+});
+
 for (const width of [360, 390]) {
   test(`an open caption scrolled to its end keeps every line beside "less" clear of it (${width}×150)`, async ({
     page,
