@@ -11,18 +11,25 @@ import {AvatarStatusDot} from './AvatarStatusDot';
 import {AvatarGroup} from '../AvatarGroup';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 
-/** The initials an avatar draws, from the attribute its generated content reads. */
+/**
+ * The initials an avatar draws: the plain CSS string in the fallback's private
+ * inline custom property (the one not followed by empty alternative text).
+ */
+function quotedInitials(fallback: Element | null): string {
+  const style = fallback?.getAttribute('style') ?? '';
+  const match = /--[\w-]+:\s*("(?:[^"\\]|\\.)*")\s*(?:;|$)/.exec(style);
+  return match ? (JSON.parse(match[1]) as string) : '';
+}
+
 function initialsIn(el: Element): string {
-  return (
-    el.querySelector('[data-initials]')?.getAttribute('data-initials') ?? ''
-  );
+  return quotedInitials(el.querySelector('.astryx-avatar-fallback'));
 }
 
 /** The element that draws the given initials. */
 function initialsElement(initials: string): HTMLElement {
-  const el = document.querySelector<HTMLElement>(
-    `[data-initials="${initials}"]`,
-  );
+  const el = Array.from(
+    document.querySelectorAll<HTMLElement>('.astryx-avatar-fallback'),
+  ).find(fallback => quotedInitials(fallback) === initials);
   if (el == null) {
     throw new Error(`No avatar draws the initials ${initials}`);
   }
@@ -217,15 +224,66 @@ describe('Avatar', () => {
       },
     );
 
-    it('draws the initials with empty alternative text', () => {
-      render(<Avatar name="Ada Lovelace" onClick={() => {}} />);
-      const before = rulesDeclaredFor(initialsElement('AL')).filter(rule =>
+    it('draws the initials with empty alternative text from a private property', () => {
+      render(<Avatar name="Ada Lovelace" onClick={() => {}} data-testid="a" />);
+      const fallback = initialsElement('AL');
+      const rules = rulesDeclaredFor(fallback).filter(rule =>
         rule.slice(0, rule.indexOf('{')).includes('::before'),
       );
-      expect(before.some(rule => rule.includes('attr(data-initials)'))).toBe(
+      expect(rules.some(rule => /content: var\(--[\w-]+\)/.test(rule))).toBe(
         true,
       );
-      expect(before.some(rule => rule.includes('/ ""'))).toBe(true);
+      expect(fallback.getAttribute('style')).toMatch(
+        /--[\w-]+:\s*"AL"\s*\/\s*"";/,
+      );
+    });
+
+    it('draws the plain string where alternative text is unsupported, and the empty alternative where it is', () => {
+      render(<Avatar name="Ada Lovelace" onClick={() => {}} />);
+      const fallback = initialsElement('AL');
+      const classes = fallback.className.split(/\s+/).filter(Boolean);
+      const selectsFallback = (selector: string) =>
+        selector.includes('::before') &&
+        classes.some(name => selector.includes(`.${name}`));
+      const plain: string[] = [];
+      const supported: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          if (
+            rule instanceof CSSStyleRule &&
+            selectsFallback(rule.selectorText)
+          ) {
+            plain.push(rule.style.getPropertyValue('content'));
+          }
+          if (
+            rule instanceof CSSSupportsRule &&
+            rule.conditionText.includes('content')
+          ) {
+            for (const inner of Array.from(rule.cssRules)) {
+              if (
+                inner instanceof CSSStyleRule &&
+                selectsFallback(inner.selectorText)
+              ) {
+                supported.push(inner.style.getPropertyValue('content'));
+              }
+            }
+          }
+        }
+      }
+      // Older engines (no alternative text for generated content) use the
+      // plain string; the control's aria-label still names it.
+      expect(plain.some(value => /^var\(--[\w-]+\)$/.test(value))).toBe(true);
+      expect(supported.some(value => /^var\(--[\w-]+\)$/.test(value))).toBe(
+        true,
+      );
+      expect(fallback.getAttribute('style')).toMatch(/--[\w-]+:\s*"AL";/);
+    });
+
+    it('renders no public attribute for the initials', () => {
+      render(<Avatar name="Ada Lovelace" onClick={() => {}} data-testid="a" />);
+      const root = screen.getByTestId('a');
+      expect(root.querySelector('[data-initials]')).toBeNull();
+      expect(initialsIn(root)).toBe('AL');
     });
 
     it('keeps the photo path free of initials', () => {

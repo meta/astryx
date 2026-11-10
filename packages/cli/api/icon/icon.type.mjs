@@ -84,6 +84,8 @@
  * @property {string[] | null} variants - The variants the set declares: named looks such as outline or solid; size comes from CSS.
  * @property {IconSetCoverage} coverage - Which icon definitions the set's `map` covers.
  * @property {boolean} project - Whether this is the project's icon set.
+ * @property {'main' | 'backup' | null} role - The set's place in the project's list: its main set, a backup, or not listed.
+ * @property {number | null} rank - The set's position in the list, the main set at 1; null when it is not listed.
  */
 
 /**
@@ -113,7 +115,10 @@
  * @property {'selected' | 'none' | 'ambiguous' | 'missing' | 'withdrawn'} data.status - The project's icon-set state.
  * @property {string | null} data.projectSet - The project's set, as `<package>/<set>`, when selected.
  * @property {string} data.reason - Why the project has that set, or none.
- * @property {IconSetEntry[]} data.sets - Installed sets, the project's first.
+ * @property {string[]} data.order - The project's list as `<package>/<set>`: the main set, then each backup that resolves; empty when no main set is selected.
+ * @property {Array<{iconSet: string, status: 'selected' | 'ambiguous' | 'missing' | 'withdrawn', reason: string}>} data.backups - Each backup the list names, and whether it resolves.
+ * @property {string} [data.next] - Present when two or more sets are installed and none is the main set: the command that chooses the order.
+ * @property {IconSetEntry[]} data.sets - Installed sets in list order: the main set, its backups, then the rest.
  * @property {IconWithdrawnEntry[]} data.withdrawn - Sets found but withdrawn.
  */
 
@@ -123,12 +128,15 @@
  * @typedef {object} IconUseResponse
  * @property {'icon.use'} type
  * @property {object} data
- * @property {string} data.iconSet - The value written to `experimental.iconSet`.
- * @property {string} data.set - The set it names, as `<package>/<set>`.
+ * @property {string} data.iconSet - The main set, as written to `experimental.iconSet` (alone, or first in the list).
+ * @property {string} data.set - The main set it names, as `<package>/<set>`.
+ * @property {Array<{iconSet: string, set: string}>} data.backups - The backup sets, in order, as written and as `<package>/<set>`; empty when there are none.
  * @property {string} data.config - The config file, relative to the project.
  * @property {boolean} data.created - Whether the config file was created.
- * @property {string | null} data.previous - The `experimental.iconSet` value it replaced.
+ * @property {string | string[] | null} data.previous - The `experimental.iconSet` value it replaced.
  * @property {boolean} data.changed - Whether anything was written.
+ * @property {string[]} data.unlisted - Installed sets the list leaves out, as `<package>/<set>`. Doctor fails a project that installs more than one set and leaves one out.
+ * @property {string} [data.next] - Present when `unlisted` is not empty: the command that adds them as backups.
  * @property {string} [data.warning] - Present when the project's
  *   `@astryxdesign/cli` range admits a release before 0.7.4, which refuses
  *   an astryx.config that sets `experimental.iconSet`: what fails, and the

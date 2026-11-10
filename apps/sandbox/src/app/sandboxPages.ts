@@ -106,6 +106,12 @@ export const categories: SandboxCategory[] = [
           'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'BottomSheet Pull',
+        href: '/pages/bottom-sheet-pull/',
+        description:
+          'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:

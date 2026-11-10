@@ -91,6 +91,18 @@ always resolve `@astryxdesign/core` from the bundled workspace version.
 To preview the `latest` view locally, run the pipeline with
 `DOCSITE_TARGET=latest` (needs network to fetch the published tarballs).
 
+## Template preview icons (experimental)
+
+Template and block previews render the icons their templates import. To draw
+them with an installed icon set instead, build with
+`DOCSITE_ICON_SET=<package>/<set>`. Name backup sets after the main set,
+separated by commas: `DOCSITE_ICON_SET=<package>/<set>,<package>/<backup>`.
+Each icon comes from the first set in the list that has its meaning, the same
+rule `astryx template` uses, and an icon no set has draws a placeholder that
+the preview's source declares. Install each set's package in the docsite first. Unset, the build is
+unchanged. This setting is experimental: it may change or be removed in a
+patch release.
+
 ## Adding a New Theme
 
 1. Create the theme package under `packages/themes/<name>/`

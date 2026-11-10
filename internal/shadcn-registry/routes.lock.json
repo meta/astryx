@@ -693,6 +693,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
+      "aliases": []
+    },
+    {
       "name": "component-lab-three-d-bar",
       "path": "components/lab/three-d-bar",
       "aliases": []
@@ -1390,6 +1395,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {

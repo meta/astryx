@@ -226,7 +226,18 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`BusyWindowTooLateError`. A wait that times out with no animation reads the
+page's animation recorder too. A run that counts, began after the call and
+before the wait, and has ended is the action's run: the page received the
+action before the wait, as a late runner can deliver it. That also rejects
+with `BusyWindowTooLateError`, with `startedBeforeWaitMs` and
+`endedBeforeWaitMs`. A run that began before the call is an earlier action's,
+and the wait still finds no start. The call's time maps onto the page's clock
+through its time origin, with 5 ms of slack. A clock that slews further moves
+that line, and only the error's name changes. `blockMainThread` starts the
+recorder passive: the `animate()` wrapper and the CSS events log what starts,
+with no frame loop and no document-wide read. The first call of `curves.ts`
+adopts it as if it started then. With `pseudoElement` (`'::before'` or
 `'::after'`), only that pseudo-element's animations on `during` itself count,
 as `sampleCurve` reads them: a child's animation, such as a switch thumb's
 press, does not start the block. With `property`, only animations that set
@@ -237,7 +248,10 @@ a component can rebuild a running animation on its old clock, and the page sees
 it running before the compositor shows a frame of it. The window names the
 animation it caught (`animation`): when it started and where its curve ends.
 These times are on the real clock, as the window's own are, after a page
-freeze too.
+freeze too. The page waits up to `TARGET_WAIT_MS` (5 s) for `during` to be on
+the page. Past it, the wait fails by name: the element is gone, or it never
+came. An element that leaves the page while the wait looks fails the wait at
+once, with when it left.
 The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
@@ -556,10 +570,8 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 `Date.now()` sees one event per photograph, about 100 ms apart, so a
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
-`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
-the page's surface right after it changes ("Unable to capture screenshot"); a
-storyboard takes that photograph again two frames later, up to three attempts
-in all, and lists each retake under `recaptures` in the trace.
+`startScreencast` and `castStoryboard`. A photograph the engine fails
+throws the engine's error; a storyboard never takes it again.
 
 ## Page freeze
 
@@ -715,8 +727,11 @@ as it does a trackpad's.
 WebKit dispatches a step only once the page's main thread is free, and the
 steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). Three things can split a run past
-`maxGapMs`. When a step reached the page within one frame of its own wheel
+listener received it (`wheelArrivals`). A gap of `maxGapMs` or more splits the
+run, as Core's gesture host ends a wheel gesture at a pause of its end window or
+more. A proof whose component reads the run as one trackpad scroll passes its
+axis's `WHEEL_SCROLL_END_MS`. Three things can split a run. When a step reached
+the page within one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
@@ -737,7 +752,7 @@ arrived, and never later than the next step's arrival. So its handling, with
 any work queued before that task, counts as the page's. Other main-thread work
 between steps that leaves frames running still counts as the dispatch's stall.
 Chromium stamps a step with its dispatch time, so a page that holds its main
-thread does not widen the gaps there, and every gap past `maxGapMs` is a
+thread does not widen the gaps there, and every gap of `maxGapMs` or more is a
 `WheelPacingError`.
 
 The WebKit input command is reached through Playwright's in-process server
