@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A RefreshControl list in a card on a page that scrolls with the document, to check a pull to refresh on a phone, also under Reduce Motion',
       },
       {
+        name: 'Refresh Control A/B',
+        href: '/pages/refresh-control-ab/',
+        description:
+          'Two ways a pulled RefreshControl list returns under Reduce Motion, behind a switch, on a page that scrolls with the document',
+      },
+      {
         name: 'BottomSheet Pull',
         href: '/pages/bottom-sheet-pull/',
         description:

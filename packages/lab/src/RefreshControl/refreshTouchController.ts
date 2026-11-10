@@ -285,7 +285,12 @@ export function useRefreshTouchController({
         content.animator.reducedMotion({touchRelease}) !== 'crossfade'
           ? null
           : reducedMotionFade(element, {touchRelease});
-      if (element == null || fade == null) {
+      // Preview only: a page compares the cross-fade with the animator's dip.
+      if (
+        element == null ||
+        fade == null ||
+        element.closest('[data-refresh-reduce-motion-form="dip"]') != null
+      ) {
         return null;
       }
       stopPlacing();
