@@ -182,13 +182,15 @@ export function usageFor(pkg, row) {
 
 /**
  * @param {Array<{pkg: string, base: string|null, head: string,
- *   baseSource?: 'build'|'head'}>} packages
+ *   baseSource?: 'build'|'head'|'unknown'}>} packages
+ *   `unknown`: the merge base could not be surfaced; `base` is null
  */
 export function computeChanges(packages) {
   return packages
     .map(({pkg, base, head, baseSource = 'build'}) => {
       // With no report at the merge base there is nothing to compare: the
-      // package is new there, and every row would read as added.
+      // package is new there, or its merge base could not be surfaced, and
+      // every row would read as added.
       const baseline = base == null;
       const d = baseline
         ? {added: [], changed: [], removed: []}
@@ -196,6 +198,7 @@ export function computeChanges(packages) {
       return {
         pkg,
         baseline,
+        ...(baseSource === 'unknown' ? {baseUnknown: true} : {}),
         baseSource,
         counts: {
           added: d.added.length,
@@ -253,13 +256,21 @@ export function renderChanges(changes) {
     ...c,
     rows: Array.isArray(c?.rows) ? c.rows : [],
   }));
-  const touched = list.filter(c => c.rows.length || c.baseline === true);
-  if (!touched.length) return '';
+  const unknown = list.filter(c => c.baseUnknown === true);
+  const touched = list.filter(
+    c => c.baseUnknown !== true && (c.rows.length || c.baseline === true),
+  );
+  if (!touched.length && !unknown.length) return '';
   const parts = touched.map(c =>
     c.baseline === true
       ? `${short(c.pkg)} not in the merge base's build`
       : `${short(c.pkg)} +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`,
   );
+  // Packages the merge base could not surface share one headline entry.
+  if (unknown.length)
+    parts.push(
+      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
+    );
   return (
     [`**API changes:** ${parts.join('; ')}`, ...rowTable(touched)].join('\n') +
     '\n'

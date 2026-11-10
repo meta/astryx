@@ -144,7 +144,11 @@ describe('CommentPin', () => {
     expect(pin).not.toHaveAttribute('data-grouped');
     expect(container.querySelector('.astryx-status-dot')).not.toBeNull();
     expect(pin.textContent).toBe('');
-    expect(pin.querySelector('[data-initials="AL"]')).not.toBeNull();
+    // The initials are generated content from a private inline property.
+    expect(
+      pin.querySelector('.astryx-avatar-fallback')?.getAttribute('style'),
+    ).toMatch(/--[\w-]+:\s*"AL";/);
+    expect(pin).not.toHaveAttribute('data-initials');
   });
 
   it.each([

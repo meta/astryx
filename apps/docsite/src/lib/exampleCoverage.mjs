@@ -14,7 +14,7 @@
  * unpaired label is a NAME mismatch, not proof the component has no demos —
  * blocks attach to a page via exampleFor regardless of name.
  *
- * It also lists each public hook (a hook in a committed API report) that has
+ * It also lists each public hook (a hook in the built API surface) that has
  * no hook doc, or no block that names it in exampleFor/alsoExampleFor. The
  * caller supplies the hook-doc names from the generated component registry,
  * so the list matches the hook pages the docsite renders. It cannot tell

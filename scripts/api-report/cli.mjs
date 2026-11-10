@@ -22,7 +22,10 @@
  * The merge base's report for each package comes from its built surface
  * (`--base-surface`), or from this build when the surface lacks it (a merge
  * base CI built without that package) and neither its directory nor any of
- * SHARED_INPUTS changed since `--base`. With no surface, nothing is compared.
+ * SHARED_INPUTS changed since `--base`. A package the surface lists, built
+ * or skipped, but has no report for is marked unknown, with no rows. A
+ * package the surface does not list is new. With no surface, nothing is
+ * compared.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -39,7 +42,9 @@ export const REPORT_FILE = 'api-report.md';
 export const SURFACE_FILE = 'surface.json';
 /**
  * api-changes.json's shape. Its readers (the pull request report and
- * merge-guard) accept version 2.
+ * merge-guard) accept version 2 and a missing `baseUnknown`. A package with
+ * `baseUnknown: true` has `baseline: true`, `baseSource: 'unknown'` and no
+ * rows.
  */
 export const CHANGES_VERSION = 2;
 
@@ -170,13 +175,18 @@ function unchangedSince(ref, dir) {
 
 /**
  * The merge base's report for one package, and where it came from.
- * @param {{surface: string|null, unchanged: boolean, head: string}} input
- * @returns {{base: string|null, baseSource: 'build'|'head'}}
+ * @param {{surface: string|null, unchanged: boolean, listed?: boolean,
+ *   head: string}} input
+ *   `listed`: the surface.json lists the package (built or skipped), so the
+ *   package existed at the merge base
+ * @returns {{base: string|null, baseSource: 'build'|'head'|'unknown',
+ *   baseUnknown?: true}}
  */
-export function chooseBase({surface, unchanged, head}) {
+export function chooseBase({surface, unchanged, listed = false, head}) {
   if (surface != null) return {base: surface, baseSource: 'build'};
   // A merge base built without this package, which has not changed since.
   if (unchanged) return {base: head, baseSource: 'head'};
+  if (listed) return {base: null, baseSource: 'unknown', baseUnknown: true};
   return {base: null, baseSource: 'build'};
 }
 
@@ -213,6 +223,20 @@ async function writeSurface(root, out) {
   );
 }
 
+/** The package directories a surface lists, built or skipped. */
+function surfaceListing(dir) {
+  try {
+    const surface = JSON.parse(
+      fs.readFileSync(path.join(dir, SURFACE_FILE), 'utf8'),
+    );
+    return new Set(
+      [...(surface.packages ?? []), ...(surface.skipped ?? [])].map(p => p.dir),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 /** A report from a surface directory, or null. */
 function surfaceReport(dir, pkgDir) {
   const file = path.join(dir, pkgDir, REPORT_FILE);
@@ -226,6 +250,7 @@ async function writeChanges(args) {
     fs.existsSync(path.join(args.baseSurface, SURFACE_FILE));
   const changes = [];
   if (haveSurface) {
+    const listed = surfaceListing(args.baseSurface);
     const inputs = [];
     for (const p of publishedPackages(REPO_ROOT)) {
       if (unbuilt(p.dir).length) continue;
@@ -238,6 +263,7 @@ async function writeChanges(args) {
         head,
         ...chooseBase({
           surface: surfaceReport(args.baseSurface, p.dir),
+          listed: listed.has(p.dir),
           unchanged: !!args.base && unchangedSince(args.base, p.dir),
           head,
         }),

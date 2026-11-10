@@ -295,8 +295,51 @@ describe('API changes', () => {
       {surface: null, unchanged: false},
       {base: null, baseSource: 'build'},
     ],
+    [
+      'no report for a changed package the surface lists but could not build',
+      {surface: null, unchanged: false, listed: true},
+      {base: null, baseSource: 'unknown', baseUnknown: true},
+    ],
+    [
+      'this build for an unchanged package the surface lists but could not build',
+      {surface: null, unchanged: true, listed: true},
+      {base: 'H', baseSource: 'head'},
+    ],
   ])("takes the merge base's report from %s", (_label, input, expected) => {
     expect(chooseBase({...input, head: 'H'})).toEqual(expected);
+  });
+
+  it('marks a package whose merge-base surface is unavailable as unknown, with no rows', () => {
+    const [change] = computeChanges([
+      {
+        pkg: '@astryxdesign/demo',
+        base: null,
+        baseSource: 'unknown',
+        head: report,
+      },
+    ]);
+    // merge-guard reads `baseline` as an unknown base for a package the pull
+    // request touches; `baseUnknown` says why it is unknown.
+    expect(change).toMatchObject({
+      baseline: true,
+      baseUnknown: true,
+      baseSource: 'unknown',
+      rows: [],
+      counts: {added: 0, changed: 0, removed: 0},
+    });
+    expect(renderChanges([change]).split('\n')[0]).toBe(
+      '**API changes:** unknown (base surface unavailable): `demo`',
+    );
+    expect(
+      renderChanges([
+        change,
+        computeChanges([
+          {pkg: '@astryxdesign/other', base: report, head: resize(report)},
+        ])[0],
+      ]).split('\n')[0],
+    ).toBe(
+      '**API changes:** `other` +0 · ~1 · −0; unknown (base surface unavailable): `demo`',
+    );
   });
 
   it('gives package-level rows a usage example of their own kind', () => {

@@ -95,15 +95,24 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   its `doctor integration` subcommands for an installed package included,
   give the output they give without this feature, whatever sets are
   installed, and so do `integration check` and `verify` for a package that
-  declares no `experimental.iconSets`, with two differences, both because a
-  CLI without this feature does not know the manifest key `experimental`.
-  With a package that declares `experimental.iconSets` installed, that CLI
+  declares no `experimental.iconSets`, with four differences. Two come
+  from the manifest key `experimental`, which a CLI without this feature
+  does not know. With a package that declares `experimental.iconSets` installed, that CLI
   warns about the key in Doctor's `integration-issues` check and in
   `doctor integration validate <package>`, and in text mode every command
   that prints the integration-issue nudge (`component`,
   `discover`, `search`, `template`, `theme list`, `theme add`, `theme remove`,
   `theme use`, `theme eject`, and `upgrade`) prints "Warning: <package> has 1
-  integration issue(s)" to stderr; this CLI does neither. Discover refuses
+  integration issue(s)" to stderr; this CLI does neither. The other two
+  apply to a package whose templates declare `icons`, with or without
+  `experimental.iconSets`. The third is the `template_icon_undeclared` note
+  (FR10): `integration check` lists it, marked `next`, and a CLI without
+  this feature does not. The fourth is the `templateIcons` not-checked list
+  (FR10): `integration check` lists each template import the check does not
+  judge, and its not-checked count is higher by that number; a CLI without
+  this feature has neither. The note and the list fail nothing under
+  `--strict`.
+  Discover refuses
   `--type icon-set` and ignores `icon-set` catalog items and their fields
   exactly as it does any unknown kind or field. With the opt-in, `icon-set`
   is a discover kind (FR17). `astryx search` never reads icon sets, with or
@@ -191,11 +200,23 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   with each set's coverage of built-in, Astryx, and its own definitions, the
   project's icon-set state, and each withdrawn set. A set is named by its name
   or `<package>/<set>`; a name two packages ship needs the qualified form.
-- **FR8 — The project's set.** `experimental.iconSet` names the project's set
-  (`"<set>"` or `"<package>/<set>"`) and opts the project in. Within
-  `astryx experimental icon`, a project without it treats its only installed
-  set as its set. A name two installed packages ship names no set. Lookups put
-  the project's set first, then the integration load order.
+- **FR8 — The project's main set and backups.** `experimental.iconSet` names
+  the project's main set (`"<set>"` or `"<package>/<set>"`), or lists the main
+  set first and then backup sets in order (`["<main>", "<backup>", ...]`; a
+  string is a one-entry list), and opts the project in. `astryx experimental
+icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
+  the string, and with backups the list, in the order given. Every set it
+  names must be installed and named once; its receipt (`icon.use`) adds
+  `backups`, the installed sets the list leaves out (`unlisted`), and the
+  command that adds them (`next`). Within `astryx experimental icon`, a
+  project without the key treats its only installed set as its set; with two
+  or more installed and none chosen, `--list` and the refusal of a `use` with
+  no set name the command `astryx experimental icon use <main> --backup
+<set>`. `--list` adds the project's `order` and each set's `role` (`main`,
+  `backup`, or none) and `rank`, and each backup's status. A name two
+  installed packages ship names no set. Lookups put the main set first, then
+  its backups in list order, then the integration load order. Only the main
+  set's theme map feeds the theme (FR12).
 
 ### Templates and themes
 
@@ -204,29 +225,61 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 'delete'}`), keyed by the name a named import reads (`{Trash as TrashIcon}`
   is `Trash`) or by a default import's local name. In a project with a set
   (FR8, opted in), `astryx template` (printed or copied) rewrites each
-  declared icon, and each icon another installed set ships, to the project
-  set's icon that names it in an `exact` or `strong` match, else the icon its
-  `map` names for the definition. Every reference uses the mapped export,
+  declared icon, and each icon another installed set ships, to the icon of
+  the first set in the project's list that has one for it: the icon that
+  names it in an `exact` or `strong` match, else the icon that set's `map`
+  names for the definition. One icon never mixes sets, and the list order
+  decides between two sets that both have it. When no set in the list has an
+  icon for a declared definition, the template's import of that icon is
+  removed and the file declares a local placeholder component once, above
+  its first statement that is not an import: `MissingIcon`, or `MissingIcon2`
+  and up when the file already uses that name (FR19). Each reference to the
+  icon renders the placeholder, with a comment that names the definition
+  (`MissingIcon /* missing icon: cut */`). The copied file imports nothing
+  new and keeps no import that no set in the list has. Every reference uses the mapped export,
   under an alias when the name is taken; a mapped default import becomes the
   set's named import aliased to its local name. Nothing is guessed from names,
   and a `likely` match is only suggested. One key covers a name imported from
   two modules (outline and solid `TrashIcon`); each keeps its variant when its
-  module belongs to an installed set. A mapped icon's elements lose the
+  module belongs to an installed set and the chosen set's icon has that
+  variant, and otherwise draws the chosen set's default look; a missing look
+  never moves an icon to a backup. A mapped or placeholder icon's elements lose the
   library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`): size
   comes from CSS (FR14). Comments on a rewritten import line are kept.
 - **FR10 — The template reports every icon.** The result, and the copy
-  receipt, gain `icons`: the set state, each icon `mapped` (source, target,
-  the rule, and the sizing props `dropped`) or `kept` (with why, and a
-  `likely` suggestion when one exists). With a set, every declared key is
-  mapped or kept: a key bound only by a namespace import, a type-only import,
-  a re-export, or an import from an Astryx package or the project's set, or
-  by no import at all (`module` null), is kept with the reason; a side-effect
-  import binds nothing. An unmapped icon keeps its import, and its library
-  stays a needed dependency. Printed source keeps the report on stderr.
-  Without the opt-in there is no `icons` field and no rewrite.
-  `integration check` notes each key a template's source never imports
-  (`template_icon_not_imported`), never counted or failing, under `--strict`
-  or `--next`.
+  receipt, gain `icons`: the set state, the list `order` when the project
+  lists backups, each icon `mapped` (source, target with the set used, the
+  rule, the sizing props `dropped`, and `variant: {asked, used}` when the
+  chosen set lacks the look), a `placeholder` (source, the placeholder's local name,
+  its `definitions`, and `fixes`: `astryx experimental icon map <definition>
+<icon> --set <main>` and `astryx experimental icon use <main> --backup
+<set>`), or `kept` (with why, and a `likely` suggestion when one exists),
+  and `sets`, each set the mapped icons come from with its license. With a
+  set, every declared key is mapped, a placeholder, or kept: a key bound only
+  by a namespace import, a type-only import, a re-export, or an import from
+  an Astryx package or a set in the list, or by no import at all (`module`
+  null), is kept with the reason, and so is an icon that draws no definition
+  and has no match; a side-effect import binds nothing. Text output prints a
+  line per placeholder that names the definition and both fixes. Printed
+  source keeps the report on stderr. Without the opt-in there is no `icons`
+  field and no rewrite. `integration check` notes each key a template's
+  source never imports (`template_icon_not_imported`), never counted or
+  failing, under `--strict` or `--next`. In a package whose templates declare
+  `icons`, it notes each icon a template imports but does not declare
+  (`template_icon_undeclared`): an import from a module some template in
+  the package declares an icon from, which the template renders as a JSX
+  element with no children and no icon-choosing prop (`<Scissors />`) or
+  passes as a value (`icon={Scissors}`, `[Scissors]`, `{icon: Scissors}`).
+  Any other import from that module, such as a type, a function the
+  template calls, or a provider with children, is listed as not checked
+  (not rendered as an icon), because a declared key makes `astryx template`
+  swap it for an icon. An import from another package whose name ends in
+  `Icon` matches by name only and is listed as not checked, and a generic
+  renderer (a bare `Icon`, or one every use gives an icon prop) is listed as
+  not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
+  it fails `--strict --next`, and `--strict` does not fail on it. A package
+  whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
+  declared.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
   Icons join it only at promotion.
@@ -464,21 +517,30 @@ message}`) names each template or namespace doc that sets `stability`, and
   check (DEC-9). A CLI before 0.7.4 also refuses an astryx.config that sets
   `experimental.iconSet` ("Unrecognized key"), so commands that load the
   project configuration, such as `doctor` and `discover`, fail in that
-  project. `experimental icon use` adds `warning` to its receipt, printed as a
+  project, and a CLI before 0.7.12 refuses `experimental.iconSet` written as
+  a list. `experimental icon use` adds `warning` to its receipt, printed as a
   `[warn]` line, when the project declares an `@astryxdesign/cli` range (in
-  any dependency field) that admits such a release; a project that declares no
+  any dependency field) that admits a release that refuses the value it
+  wrote; a project that declares no
   range, or a `workspace:`, `file:`, or `link:` one, gets none. A CLI reads a
   set's data file strictly: a key it does not know withdraws the set, naming
   the key (FR17). `exclude` is read only by a CLI whose data-file reference
   lists it, and `new-set` writes it only when `--exclude` is given; a set
   without it is read by every CLI that has `astryx experimental icon`.
 - **FR17 — Doctor and discover read sets only with the opt-in.** In a project
-  that sets `experimental.iconSet`, the project's set is one of: valid
-  (`selected`), not installed (`missing`), or installed but withdrawn
-  (`withdrawn`: invalid, or its module does not resolve, with that reason).
-  Doctor's `icon-sets` check fails when it names a set that is not installed
-  or one that was withdrawn, saying which and why, and warns when two packages
-  ship that name or another set is withdrawn. The template `icons` report and
+  that sets `experimental.iconSet`, each set the list names is one of: valid
+  (`selected`), not installed (`missing`), shipped by two packages under that
+  name (`ambiguous`), or installed but withdrawn (`withdrawn`: invalid, or
+  its module does not resolve, with that reason). Doctor's `icon-sets` check
+  fails when the list names a set, main or backup, that is not valid, saying
+  which and why, and fails when more than one set is installed and the list
+  leaves one out, with the `use` command that adds it; it warns when another
+  installed set is withdrawn. Doctor's `icon-placeholders` check reads the
+  project's own source (not dependencies or build output) as syntax trees
+  for the FR19 declaration in the exact shape the CLI writes, under any
+  name, and for its uses; a commented-out or quoted copy never counts. It
+  warns while any use remains, naming each file and the definitions its
+  uses' comments record, with both fixes, and passes when none remain. The template `icons` report and
   `experimental icon --list` carry the same status and reason, and
   `experimental icon` with `--set` (with words or `--all-icons`) or
   `<set>/<id>`, `experimental icon use`, and `discover <package>/<set>` name a
@@ -488,12 +550,29 @@ message}`) names each template or namespace doc that sets `stability`, and
   a kind: `--type icon-set`, catalog entries with `iconCount` and
   `definitions`, and `discover <package>/<set>`; a withdrawn set is not
   listed. Without the opt-in, Doctor has no such check and reports no icon-set
-  issue, `doctor integration` checks an installed package's icon sets only
+  issue and no placeholder check, `doctor integration` checks an installed package's icon sets only
   with it (the package being authored, read by `doctor integration validate`
   with no package, `integration check`, and `verify`, is always checked), and
   discover treats `icon-set` as an unknown kind and `iconCount` and
   `definitions` as unknown fields before it validates a catalog, so a
   malformed icon-set item never fails a source (`spec:AST-051/FR7`).
+
+### Placeholder and previews
+
+- **FR19 — The local placeholder.** The placeholder that FR9 writes is a
+  function component in the copied file, typed by the props of an `<svg>`.
+  It draws a dashed square, `1em` wide and high, in `currentColor`, so it
+  sizes like the text around it, and CSS or `Icon` sizes it like any icon
+  component. It is decorative (`aria-hidden`) unless a use gives it
+  `aria-label` or `aria-labelledby`, which makes it `role="img"`; a prop the
+  use passes wins. It has no custom data attributes. No package exports it,
+  so no Astryx package, route, or dependency changes (DEC-10).
+- **FR20 — Docs site previews.** The docs site's build setting
+  `DOCSITE_ICON_SET`, experimental, names a main set and optional backups,
+  separated by commas. Set, a build-time loader runs each template and block
+  preview source through the FR9 rewrite with the sets installed in the docs
+  site; a main set that is not usable fails the build. Unset, no loader is
+  added and previews keep their templates' icons.
 
 ### Supporting pieces
 
@@ -520,8 +599,10 @@ message}`) names each template or namespace doc that sets `stability`, and
   `experimental icon` commands with their response types, the
   `experimental.iconSets` manifest root, the `icon-set` and `icon-definition`
   descriptor kinds, the `cli/experimental` docs namespace, the `icon-sets`
-  Doctor check, the icon-set checks and the `iconSets` and `olderCliNotes`
+  and `icon-placeholders` Doctor checks, the icon-set checks, the
+  `template_icon_undeclared` next note, and the `iconSets` and `olderCliNotes`
   validate fields.
+- Docs site: the experimental `DOCSITE_ICON_SET` build setting.
 - `contributing:cli-conventions`: `IconSetDoc`, `IconSetData`, and
   `IconDefinitionDoc` join the authoring types.
 - Consumer docs: `cli/experimental/icon-sets`,
@@ -530,17 +611,18 @@ message}`) names each template or namespace doc that sets `stability`, and
 
 ## Verification
 
-| Contract  | Verification                                                                   | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Mutation or failure expectation                                                                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR0, FR11 | experimental-isolation tests against the output of the CLI without the feature | help; the manifest; every stable docs topic and tree node, the `cli` listings, and every stable `cli` docs node; search for `delete`, `close`, `icon`, `trash can`, `search`, `experimental`, and `icon set`, with no set and with a set opted in; template printed and copied; discover, Doctor, and `doctor integration validate <package>` with a set and no opt-in; stderr of every command that prints the integration-issue nudge, with a set and no opt-in. Goldens hold identities, structure, counts, every `stability`, and every sentence or link that names an experimental surface, an icon set, or an icon definition, not prose | a stable output gains a result, field, section, count, `stability`, or a sentence or link naming an experimental surface that the CLI without the feature lacks (apart from FR18's `stability` field); or a stable command gains an icon-set subcommand or kind |
-| FR1–FR5   | descriptor, data-file, and definition parser and discovery tests               | valid set; invalid data; definitions Astryx and the set both have                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an invalid set answers, or a definition file is not read                                                                                                                                                                                                        |
-| FR6–FR8   | `experimental icon` text and JSON tests                                        | definition, name, and meaning matches; `<set>/<id>`; `--list`; two sets of one name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | ranking or tie order changes, or a bare ambiguous name answers                                                                                                                                                                                                  |
-| FR9–FR10  | template mapping tests                                                         | mapped by match and by definition; kept with a suggestion; no opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a name is guessed, or a project without the opt-in gets a rewrite                                                                                                                                                                                               |
-| FR12–FR14 | writer and command tests                                                       | wrap and refresh; adapter; generated types and theme map                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a write is left half done, or the theme map drifts from `map`                                                                                                                                                                                                   |
-| FR15      | `integration check` tests, with and without `--strict`                         | every code; unmapped optional definitions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                           |
-| FR16      | validate tests; a scratch project on published CLI 0.7.3                       | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                      |
-| FR17      | Doctor and discover tests                                                      | opted in; installed set and no opt-in; invalid set and no opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a project without the opt-in sees an icon-set check, issue, or kind                                                                                                                                                                                             |
-| FR18      | docs tree, help, and search tests                                              | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a stable namespace adopts another package's doc, or a marked doc reaches search                                                                                                                                                                                 |
+| Contract  | Verification                                                                              | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Mutation or failure expectation                                                                                                                                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR0, FR11 | experimental-isolation tests against the output of the CLI without the feature            | help; the manifest; every stable docs topic and tree node, the `cli` listings, and every stable `cli` docs node; search for `delete`, `close`, `icon`, `trash can`, `search`, `experimental`, and `icon set`, with no set and with a set opted in; template printed and copied; discover, Doctor, and `doctor integration validate <package>` with a set and no opt-in; stderr of every command that prints the integration-issue nudge, with a set and no opt-in. Goldens hold identities, structure, counts, every `stability`, and every sentence or link that names an experimental surface, an icon set, or an icon definition, not prose | a stable output gains a result, field, section, count, `stability`, or a sentence or link naming an experimental surface that the CLI without the feature lacks (apart from FR18's `stability` field); or a stable command gains an icon-set subcommand or kind |
+| FR1–FR5   | descriptor, data-file, and definition parser and discovery tests                          | valid set; invalid data; definitions Astryx and the set both have                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an invalid set answers, or a definition file is not read                                                                                                                                                                                                        |
+| FR6–FR8   | `experimental icon` text and JSON tests                                                   | definition, name, and meaning matches; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | ranking or tie order changes, or a bare ambiguous name answers                                                                                                                                                                                                  |
+| FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; an undeclared icon; no opt-in                                                                                                                                                                                                                                                                                                                                                                                                           | a name is guessed, an icon keeps a library import no set has, sets mix within one icon, or a project without the opt-in gets a rewrite                                                                                                                          |
+| FR12–FR14 | writer and command tests                                                                  | wrap and refresh; adapter; generated types and theme map                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a write is left half done, or the theme map drifts from `map`                                                                                                                                                                                                   |
+| FR15      | `integration check` tests, with and without `--strict`                                    | every code; unmapped optional definitions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                           |
+| FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                      |
+| FR17      | Doctor and discover tests                                                                 | opted in; a placeholder in use, commented out, and quoted; installed set and no opt-in; invalid set and no opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a project without the opt-in sees an icon-set check, issue, or kind                                                                                                                                                                                             |
+| FR19–FR20 | template mapping tests of the placeholder declaration; docs site loader and config tests  | the declaration's size, color, and labels; no data attributes; setting unset and set; a set that is not installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | the placeholder is announced without a name, or an unset build changes                                                                                                                                                                                          |
+| FR18      | docs tree, help, and search tests                                                         | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a stable namespace adopts another package's doc, or a marked doc reaches search                                                                                                                                                                                 |
 
 ## Decision log
 
@@ -563,13 +645,19 @@ An icon answer needs its import line, variants, and definitions, so
 `astryx experimental icon` answers with the full record. `astryx search` is a
 stable surface the experiment never feeds; icons join it at promotion.
 
-### DEC-3 — Templates keep their icon when nothing maps
+### DEC-3 — An icon no set has becomes a placeholder
 
 **Reference:** `spec:AST-084/DEC-3`
-**Decider:** `josephfarina`, `2026-10-20`
+**Decider:** `josephfarina`, `2026-11-09`
 
-A wrong icon is worse than a familiar one, so an unmapped icon keeps its
-import and the report says so.
+A project chooses its icons. An icon from a library the project never chose
+is a stray dependency and a mismatched look, so an icon with a meaning that
+no set in the project's list has becomes a placeholder, with a note and
+the two commands that fix it, and Doctor lists each one left in the
+project's code.
+
+Rejected: keeping the template's original library import, which leaves a
+dependency and an icon the project did not choose.
 
 ### DEC-4 — Astryx owns the definitions; sets map to them
 
@@ -631,6 +719,33 @@ An author whose peer range admits an older CLI needs to know what that CLI
 drops, but the package is valid for the CLI that checks it. So validate adds
 the field `olderCliNotes`: it is never counted in a summary and never fails a
 check, with or without `--strict` or `--next`.
+
+### DEC-10 — The placeholder is local to the copied file
+
+**Reference:** `spec:AST-084/DEC-10`
+**Decider:** `josephfarina`, `2026-11-09`
+
+Icon sets are experimental, and a copied file must not depend on an export
+that may change in a patch release. So the CLI writes the placeholder into
+the file, once, and no package, registry route, or dependency changes.
+Doctor finds it reliably because it reads the declaration's exact shape from
+the syntax tree, not from text.
+
+Rejected: an experimental Core export, which adds a public component and a
+registry route to every Astryx project for a gap marker that lives in a few
+copied files.
+
+### DEC-11 — The list decides every icon, one set per icon
+
+**Reference:** `spec:AST-084/DEC-11`
+**Decider:** `josephfarina`, `2026-11-09`
+
+A main set and ordered backups let a project fill gaps without mixing looks
+within one meaning. Choosing a main set is the opt-in, and it declares the
+order, so a project that has not opted in keeps its output whatever sets are
+installed. After the opt-in, an installed set left out of the list is a
+Doctor failure, because which set a template uses would otherwise depend on
+install order.
 
 ## Open questions
 
