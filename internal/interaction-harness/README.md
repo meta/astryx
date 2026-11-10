@@ -517,7 +517,9 @@ counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
 counts the elements it restyled (`elements`). A proof that expects no Layout
 can explain one: `traceRendering(page, body, {keepEvents: true})` keeps the
 window's main-thread events, and `layoutSources` names the task that ran each
-Layout and each invalidation before it. The
+Layout and each invalidation before it. Each also says whether its task ran
+page script or a DevTools command, so a proof can judge only the Layouts that
+script caused. The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a

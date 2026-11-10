@@ -119,8 +119,8 @@ export interface RenderingTrace {
   readonly window: {readonly from: number; readonly to: number};
   /**
    * Every main-thread trace event inside the window, in time order, when the
-   * trace keeps them (`keepEvents`). A proof reads them only to explain a
-   * failure.
+   * trace keeps them (`keepEvents`). A proof reads them to explain a failure,
+   * or to tell the Layouts that page script caused (`layoutSources`).
    */
   readonly mainThread?: readonly TimedTraceEvent[];
 }
@@ -152,6 +152,17 @@ export interface LayoutSource {
   /** The task that ran the Layout: its dispatches and calls, in order. */
   readonly task: readonly string[];
   /**
+   * Whether that task ran page script anywhere in it (`PAGE_SCRIPT_EVENTS`):
+   * a listener, a timer, a frame callback or a function call.
+   */
+  readonly ranScript: boolean;
+  /**
+   * Whether that task ran a DevTools command: a test's evaluate, or a
+   * harness read. Such a command can call page code directly and leave no
+   * script event in the trace.
+   */
+  readonly ranDevTools: boolean;
+  /**
    * Each layout or style invalidation since the previous Layout, with the
    * task it ran in. The trace names the reason and the node only when it
    * tracks invalidations.
@@ -160,6 +171,10 @@ export interface LayoutSource {
     readonly t: number;
     readonly what: string;
     readonly task: readonly string[];
+    /** Whether that task ran page script, as for the Layout. */
+    readonly ranScript: boolean;
+    /** Whether that task ran a DevTools command, as for the Layout. */
+    readonly ranDevTools: boolean;
   }>;
 }
 
@@ -209,6 +224,8 @@ function describeEvent(e: TraceEvent): string {
  * kept its events (`traceRendering(page, body, {keepEvents: true})`). For a
  * Layout it gives the steps of the task that ran it. It also gives every
  * invalidation since the previous Layout, with the steps of its own task.
+ * Each says whether its task ran page script or a DevTools command. A proof
+ * can then tell a Layout that script caused from one the engine ran alone.
  */
 export function layoutSources(
   trace: RenderingTrace,
@@ -222,8 +239,26 @@ export function layoutSources(
     );
   }
   const tasks = main.filter(e => e.name === 'RunTask' && e.ph === 'X');
+  const taskOf = (e: TimedTraceEvent) =>
+    tasks.find(t => t.ts <= e.ts && t.ts + (t.dur ?? 0) >= e.ts);
+  const ranIn = (
+    e: TimedTraceEvent,
+    ran: (x: TimedTraceEvent) => boolean,
+  ): boolean => {
+    const task = taskOf(e);
+    return (
+      task != null &&
+      main.some(
+        x => x.ts >= task.ts && x.ts <= task.ts + (task.dur ?? 0) && ran(x),
+      )
+    );
+  };
+  const marks = (e: TimedTraceEvent) => ({
+    ranScript: ranIn(e, x => PAGE_SCRIPT_EVENTS.has(x.name)),
+    ranDevTools: ranIn(e, isDevToolsCommand),
+  });
   const stepsBefore = (e: TimedTraceEvent): string[] => {
-    const task = tasks.find(t => t.ts <= e.ts && t.ts + (t.dur ?? 0) >= e.ts);
+    const task = taskOf(e);
     if (task == null) {
       return [];
     }
@@ -243,6 +278,7 @@ export function layoutSources(
       return {
         t: layout.t,
         task: stepsBefore(layout),
+        ...marks(layout),
         invalidations: main
           .filter(
             e =>
@@ -251,7 +287,12 @@ export function layoutSources(
               e.ts <= layout.ts,
           )
           .slice(-12)
-          .map(e => ({t: e.t, what: describeEvent(e), task: stepsBefore(e)})),
+          .map(e => ({
+            t: e.t,
+            what: describeEvent(e),
+            task: stepsBefore(e),
+            ...marks(e),
+          })),
       };
     });
 }
@@ -408,6 +449,21 @@ export async function traceRendering(
 }
 
 /**
+ * A DevTools command reaching the page: it comes over the DevTools session's
+ * pipe. Page script it sets off shows as its listener, timer or frame
+ * callback, but code it calls directly leaves no script event.
+ */
+function isDevToolsCommand(e: TraceEvent): boolean {
+  return (
+    e.name === 'Receive mojo message' &&
+    (
+      e.args?.chrome_mojo_event_info as
+        {mojo_interface_tag?: unknown} | undefined
+    )?.mojo_interface_tag === 'blink.mojom.DevToolsSession'
+  );
+}
+
+/**
  * The main thread's tasks longer than 50 ms, split into the page's own and the
  * harness's marked reads. A page task is long when its main thread ran longer
  * than 50 ms; one only the wall clock stretched past that is apart
@@ -436,14 +492,7 @@ export function longTasksOf(
     const inside = main.filter(
       e => e !== task && e.ts >= task.ts && e.ts <= end,
     );
-    const devtools = inside.some(
-      e =>
-        e.name === 'Receive mojo message' &&
-        (
-          e.args?.chrome_mojo_event_info as
-            {mojo_interface_tag?: unknown} | undefined
-        )?.mojo_interface_tag === 'blink.mojom.DevToolsSession',
-    );
+    const devtools = inside.some(isDevToolsCommand);
     // Only the harness's own reads are set apart: a test's evaluate may call
     // page code directly, which leaves no listener or timer in the trace.
     const harnessRead = inside.some(

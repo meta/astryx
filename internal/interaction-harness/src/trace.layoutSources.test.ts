@@ -5,7 +5,8 @@
  * @input Synthetic main-thread trace events (no browser)
  * @output A counted Layout gets the steps of the task that ran it. It also
  *   gets every invalidation since the previous Layout, each with the steps of
- *   its task.
+ *   its task. Each says whether its task ran page script, or a DevTools
+ *   command, anywhere in it.
  *   A Layout outside the window is not explained. No step ends in a line and
  *   a column. A trace that kept no events fails by name.
  * @position Unit test of ./trace's layoutSources
@@ -83,16 +84,22 @@ describe('layoutSources', () => {
       {
         t: 116.4,
         task: ['BeginMainThreadFrame', 'UpdateLayoutTree'],
+        ranScript: false,
+        ranDevTools: false,
         invalidations: [
           {
             t: 100.3,
             what: 'ScheduleStyleRecalculation',
             task: ['TimerFire', 'FunctionCall[move a.js:4:2]'],
+            ranScript: true,
+            ranDevTools: false,
           },
           {
             t: 116.3,
             what: 'InvalidateLayout',
             task: ['BeginMainThreadFrame', 'UpdateLayoutTree'],
+            ranScript: false,
+            ranDevTools: false,
           },
         ],
       },
@@ -119,11 +126,68 @@ describe('layoutSources', () => {
       {
         t: 50.2,
         task: [],
+        ranScript: false,
+        ranDevTools: false,
         invalidations: [
-          {t: 50.1, what: 'InvalidateLayout[Style changed DIV]', task: []},
+          {
+            t: 50.1,
+            what: 'InvalidateLayout[Style changed DIV]',
+            task: [],
+            ranScript: false,
+            ranDevTools: false,
+          },
         ],
       },
     ]);
+  });
+
+  it('marks a Layout whose task ran page script anywhere in it, and leaves an event outside a task unmarked', () => {
+    // A frame callback that reads layout, and a frame whose listener runs
+    // after its Layout.
+    const callback = [
+      at(200, 'RunTask', {durMs: 3}),
+      at(200.1, 'FireAnimationFrame'),
+      at(200.2, 'FunctionCall'),
+      at(200.3, 'Layout'),
+    ];
+    const listenerAfter = [
+      at(300, 'RunTask', {durMs: 3}),
+      at(300.1, 'UpdateLayoutTree'),
+      at(300.2, 'Layout'),
+      at(300.3, 'EventDispatch'),
+    ];
+    const outside = [at(400, 'InvalidateLayout'), at(400.1, 'Layout')];
+    const sources = layoutSources(
+      traceOf([...callback, ...listenerAfter, ...outside]),
+      150,
+      450,
+    );
+    expect(sources.map(s => s.ranScript)).toEqual([true, true, false]);
+    expect(sources[2].invalidations.map(i => i.ranScript)).toEqual([false]);
+  });
+
+  it('marks a Layout whose task ran a DevTools command, which leaves no script event', () => {
+    // A test's evaluate that writes a style and reads layout.
+    const evaluate = [
+      at(500, 'RunTask', {durMs: 1}),
+      {
+        ...at(500.1, 'Receive mojo message'),
+        args: {
+          chrome_mojo_event_info: {
+            mojo_interface_tag: 'blink.mojom.DevToolsSession',
+          },
+        },
+      },
+      at(500.2, 'ScheduleStyleRecalculation'),
+      at(500.3, 'UpdateLayoutTree'),
+      at(500.4, 'Layout'),
+    ];
+    const [source] = layoutSources(traceOf(evaluate), 450, 550);
+    expect(source.ranScript).toBe(false);
+    expect(source.ranDevTools).toBe(true);
+    expect(source.invalidations.map(i => i.ranDevTools)).toEqual([true]);
+    const other = layoutSources(traceOf([...timer, ...frame]), 110, 120);
+    expect(other.map(s => s.ranDevTools)).toEqual([false]);
   });
 
   it('writes no step that ends in a line and a column, which reads as a stack frame', () => {

@@ -54,6 +54,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import type {CastFrame} from './frames';
+import {layoutSources, type RenderingTrace} from './trace';
 import {
   advanceFrozenPage,
   ANSWER_SLACK_MS,
@@ -139,6 +140,38 @@ import {
   withFinger,
   writeEvidence,
 } from './index';
+
+/**
+ * Each Layout in `[from, to]` (epoch ms) that script caused, named by its
+ * source. Script is page script, or a DevTools command such as the test's own
+ * evaluate. The source is the steps of its own task, and each invalidation
+ * before it with the steps of that task. Times are ms after `origin`. A
+ * Layout whose task and invalidations ran neither is the engine's own, and is
+ * left out.
+ */
+function scriptLayouts(
+  trace: RenderingTrace,
+  from: number,
+  to: number,
+  origin: number,
+): string[] {
+  const at = (t: number) => `${(t - origin).toFixed(1)} ms`;
+  const byScript = (task: {ranScript: boolean; ranDevTools: boolean}) =>
+    task.ranScript || task.ranDevTools;
+  const steps = (task: {task: readonly string[]; ranDevTools: boolean}) =>
+    `${task.task.join(' > ')}${task.ranDevTools ? ' (a DevTools command)' : ''}`;
+  return layoutSources(trace, from, to)
+    .filter(source => byScript(source) || source.invalidations.some(byScript))
+    .map(source =>
+      [
+        `Layout at ${at(source.t)}, in: ${steps(source)}`,
+        ...source.invalidations.map(
+          change =>
+            `  after ${change.what} at ${at(change.t)}, in: ${steps(change)}`,
+        ),
+      ].join('\n'),
+    );
+}
 
 // An element positioned against an anchor: a composited animation of it lays
 // out in every main-thread frame, so it shows any per-frame main-thread work.
@@ -3097,25 +3130,90 @@ test.describe('frame evidence', () => {
     const pop = page.locator('#pop');
     await waitForRest(pop);
     let started = 0;
-    const trace = await traceRendering(page, async () => {
-      started = await pop.evaluate(el => {
-        el.animate(
-          [
-            {transform: 'translateY(0px)', opacity: 1},
-            {transform: 'translateY(100px)', opacity: 0.5},
-          ],
-          {duration: 600},
-        );
-        return performance.timeOrigin + performance.now();
-      });
-      // A per-frame wait here would make every frame a main-thread frame.
-      await waitForRest(pop);
-    });
-    expect(countBetween(trace, started + 100, started + 500).Layout ?? 0).toBe(
-      0,
+    const trace = await traceRendering(
+      page,
+      async () => {
+        started = await pop.evaluate(el => {
+          el.animate(
+            [
+              {transform: 'translateY(0px)', opacity: 1},
+              {transform: 'translateY(100px)', opacity: 0.5},
+            ],
+            {duration: 600},
+          );
+          return performance.timeOrigin + performance.now();
+        });
+        // A per-frame wait here would make every frame a main-thread frame.
+        await waitForRest(pop);
+      },
+      {keepEvents: true},
+    );
+    // The frames that hand the animation to the compositor restyle the
+    // anchored element, so they lay it out too, for longer on a loaded
+    // runner. A wait that did not stand down would run its script in the
+    // middle. That script lays the element out, or changes what a later
+    // frame lays out. So no Layout in the middle may come from script, in its
+    // own task or in an invalidation before it.
+    expect(scriptLayouts(trace, started + 100, started + 500, started)).toEqual(
+      [],
     );
     // It still waited for the curve to end.
     expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
+  });
+
+  test('a Layout that script causes in a traced body is named by its source, from the page or from the test', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    let started = 0;
+    const trace = await traceRendering(
+      page,
+      async () => {
+        started = await pop.evaluate(el => {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(100px)'}],
+            {duration: 600},
+          );
+          // The page's own script: a timer that writes a layout property,
+          // and a frame callback that reads layout.
+          setTimeout(() => {
+            (el as HTMLElement).style.marginLeft = '1px';
+          }, 100);
+          setTimeout(() => {
+            requestAnimationFrame(() => {
+              void el.getBoundingClientRect();
+            });
+          }, 200);
+          return performance.timeOrigin + performance.now();
+        });
+        // The test's own write and read.
+        await pop.evaluate(el => {
+          (el as HTMLElement).style.paddingTop = '1px';
+          return el.getBoundingClientRect().top;
+        });
+        await waitForRest(pop);
+      },
+      {keepEvents: true},
+    );
+    const named = scriptLayouts(
+      trace,
+      trace.window.from,
+      trace.window.to,
+      started,
+    ).join('\n');
+    expect(named).toMatch(/after [^\n]*, in: [^\n]*TimerFire/);
+    expect(named).toMatch(/Layout at [^\n]*, in: FireAnimationFrame/);
+    expect(named).toMatch(/Layout at [^\n]*\(a DevTools command\)/);
   });
 
   test('a waitForAnimation or watch.started() awaited inside a traced body stands down too, so the trace counts no Layout from it', async ({
