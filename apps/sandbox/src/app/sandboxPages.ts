@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
       },
       {
+        name: 'NavigationStack Edge',
+        href: '/pages/navigation-stack-edge/',
+        description:
+          'A NavigationStack on a pushed screen, with a Done row or a strip at its edge, on a page that scrolls with the document, to check a tap and a slow pull on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:
