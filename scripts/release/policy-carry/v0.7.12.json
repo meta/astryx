@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "releaseBranch": "release/v0.7.12",
+  "base": "b4266ddfb453e8572c4453dcef8d0470fc18545b",
+  "patch": "scripts/release/policy-carry/v0.7.12.diff",
+  "patchSha256": "b6e22ae5318fbf2b3ee4367c98875891cab47ef95a60d88a4850b5ee2d973941",
+  "targets": {
+    ".github/actions/test-scope/action.yml": "987626f51d322f0c51ac78033b075f7607fb65cf4251d56e79750acd5addd3a0",
+    ".github/scripts/test-scope-action.test.mjs": "73aafc08e00b2d76519193f3d87bc26c8d0c42a722e6d81a05fe7f27933d7172",
+    ".github/workflows/ci.yml": "237fee543e4933bc85e8bad889d3b90e3310ebbc5e0e418cb50d70f45d74dba9",
+    "scripts/release/active-release.mjs": "0306bbc3986c918b7563edb6d307e00276cdbf894c29809a406186253c0d8602",
+    "scripts/release/release-paths.mjs": "5ec851b4c242265a7b2f2daf3dbefb6bf2d8137991179bb648a06616e2bc93ae"
+  }
+}
