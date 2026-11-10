@@ -1219,7 +1219,7 @@ describe('BaseTypeahead pending work after a dismissal', () => {
 
       // Asking for the menu searches the text the field holds now.
       fireEvent.keyDown(input, {key: 'ArrowDown'});
-      expect(search).toHaveBeenLastCalledWith('alp');
+      expect(search).toHaveBeenLastCalledWith('alp', expect.anything());
       expect(input).toHaveAttribute('aria-busy', 'true');
       await answer('alp', ['Alpine']);
       expect(input).toHaveAttribute('aria-expanded', 'true');
@@ -1341,12 +1341,12 @@ describe('BaseTypeahead pending work after a dismissal', () => {
       fireEvent.change(input, {target: {value: 'al'}});
       fireEvent.keyDown(input, {key: 'Escape'});
       await act(async () => vi.advanceTimersByTime(400));
-      expect(search).not.toHaveBeenCalledWith('al');
+      expect(search.mock.calls.some(([query]) => query === 'al')).toBe(false);
       expect(input).not.toHaveAttribute('aria-busy');
       expect(input).toHaveAttribute('aria-expanded', 'false');
 
       fireEvent.keyDown(input, {key: 'ArrowDown'});
-      expect(search).toHaveBeenLastCalledWith('al');
+      expect(search).toHaveBeenLastCalledWith('al', expect.anything());
       await answer('al', ['Alpine']);
       expect(input).toHaveAttribute('aria-expanded', 'true');
     } finally {
