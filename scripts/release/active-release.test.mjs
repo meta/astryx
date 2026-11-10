@@ -770,6 +770,8 @@ describe('active release branch authority', () => {
     const marker = buildMarker(plan);
     const {
       mainRepair,
+      largeMain,
+      mixedMain,
       mainRevert,
       releaseBase,
       releaseRepair,
@@ -780,6 +782,25 @@ describe('active release branch authority', () => {
         name: 'mainRepair',
         parent: cut,
         files: {[testFile]: after},
+      },
+      {
+        ref: 'refs/heads/main',
+        name: 'largeMain',
+        parent: 'mainRepair',
+        files: {
+          [testFile]: `${after}// later main context\n`,
+          'large-unrelated.txt': 'x'.repeat(2 * 1024 * 1024),
+        },
+      },
+      {
+        ref: 'refs/heads/mixed-main',
+        name: 'mixedMain',
+        parent: cut,
+        files: {
+          [testFile]: after,
+          'packages/core/src/Button/Button.tsx':
+            'export const productChange = true;\n',
+        },
       },
       {
         ref: `refs/heads/${BRANCH}`,
@@ -831,7 +852,7 @@ describe('active release branch authority', () => {
         {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
       );
 
-    expect(JSON.parse(run(releaseRepair, mainRepair))).toMatchObject({
+    expect(JSON.parse(run(releaseRepair, largeMain))).toMatchObject({
       kind: 'test-repair',
       sourceCommit: mainRepair,
       files: 1,
@@ -839,6 +860,7 @@ describe('active release branch authority', () => {
     for (const [head, mainRef] of [
       [whitespaceRepair, mainRepair],
       [releaseRepair, mainRevert],
+      [releaseRepair, mixedMain],
     ]) {
       try {
         run(head, mainRef);
@@ -857,6 +879,8 @@ describe('active release branch authority', () => {
     );
     roots.push(root);
     const validatorFile = 'scripts/release/active-release.mjs';
+    const activeTestFile = 'scripts/release/active-release.test.mjs';
+    const touchedTestFile = '.github/scripts/touched-components.test.mjs';
     const workflowFile = '.github/workflows/ci.yml';
     const manifestPath = 'scripts/release/policy-carry/v0.6.5.json';
     const patchPath = 'scripts/release/policy-carry/v0.6.5.diff';
@@ -869,6 +893,8 @@ describe('active release branch authority', () => {
         snapshot: true,
         files: {
           [validatorFile]: 'main generated only\n',
+          [activeTestFile]: 'main validator tests\n',
+          [touchedTestFile]: 'main workflow contract tests\n',
           [workflowFile]: 'main trusted base\n',
           'packages/core/src/Button/Button.tsx': 'export const Button = 1;\n',
         },
@@ -951,7 +977,7 @@ describe('active release branch authority', () => {
       },
     ]);
     const validator = path.join(import.meta.dirname, 'active-release.mjs');
-    const run = head =>
+    const run = (head, {base = releaseBase, source = mainPolicy} = {}) =>
       execFileSync(
         process.execPath,
         [
@@ -960,13 +986,13 @@ describe('active release branch authority', () => {
           '--root',
           root,
           '--base',
-          releaseBase,
+          base,
           '--head',
           head,
           '--source',
-          mainPolicy,
+          source,
           '--main-ref',
-          mainPolicy,
+          source,
           '--manifest',
           manifestPath,
           '--release-branch',
@@ -981,6 +1007,69 @@ describe('active release branch authority', () => {
       manifest: manifestPath,
       files: 2,
     });
+
+    const secondPolicyFiles = {
+      [validatorFile]: 'bounded validator output\n',
+      [activeTestFile]: 'validator regression tests\n',
+      [touchedTestFile]: 'fallback workflow contract tests\n',
+    };
+    const {secondCarry} = importCommits(root, [
+      {
+        ref: 'refs/heads/second-policy-carry',
+        name: 'secondCarry',
+        parent: policyCarry,
+        files: secondPolicyFiles,
+      },
+    ]);
+    const secondPatch = execFileSync(
+      'git',
+      ['diff', '--binary', policyCarry, secondCarry],
+      {cwd: root, encoding: 'utf8'},
+    );
+    const secondManifest = {
+      schemaVersion: 1,
+      releaseBranch: BRANCH,
+      base: policyCarry,
+      patch: patchPath,
+      patchSha256: digest(secondPatch),
+      targets: Object.fromEntries(
+        Object.keys(secondPolicyFiles)
+          .sort()
+          .map(file => [
+            file,
+            digest(
+              execFileSync('git', ['show', `${secondCarry}:${file}`], {
+                cwd: root,
+              }),
+            ),
+          ]),
+      ),
+    };
+    const {mainSecondPolicy} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainSecondPolicy',
+        parent: mainPolicy,
+        files: {
+          [manifestPath]: `${JSON.stringify(secondManifest)}\n`,
+          [patchPath]: secondPatch,
+        },
+      },
+    ]);
+    expect(
+      JSON.parse(
+        run(secondCarry, {
+          base: policyCarry,
+          source: mainSecondPolicy,
+        }),
+      ),
+    ).toMatchObject({
+      kind: 'policy-carry',
+      source: mainSecondPolicy,
+      manifest: manifestPath,
+      files: 3,
+    });
+
     try {
       run(wrongContent);
       throw new Error('expected validation to fail');
