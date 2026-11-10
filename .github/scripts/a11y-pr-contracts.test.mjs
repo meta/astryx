@@ -1274,7 +1274,6 @@ describe('repository specs', () => {
         title: '',
       }).length > 0;
     for (const changed of [
-      'packages/lab/src/reorderStyles.ts',
       'packages/lab/src/ListInput/ListInput.tsx',
       'packages/lab/src/TransferList/TransferList.tsx',
       'packages/core/src/List/listReorderEngine.tsx',

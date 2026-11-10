@@ -265,12 +265,23 @@ export function useTableWindow<T>({
 }: UseTableWindowOptions<T>): TableWindowResult {
   const [violation, setViolation] = useState<Violation | undefined>();
   const config = getTableVirtualizationConfig(capability);
+  // The engine plans its first window from the declared first-frame height.
+  const pitch = useMemo(
+    () =>
+      config === undefined
+        ? undefined
+        : {
+            rowHeight: config.rowHeight,
+            viewportHeight: config.initialViewportHeight,
+          },
+    [config],
+  );
   const hasValidConfig =
     config !== undefined &&
     calculateListWindow({
       rowCount: data.length,
       rowHeight: config.rowHeight,
-      viewportHeight: config.viewportHeight,
+      viewportHeight: config.initialViewportHeight,
       scrollTop: 0,
       startOffset: 0,
       isMeasured: false,
@@ -303,7 +314,7 @@ export function useTableWindow<T>({
     items: data,
     keys,
     rowCount: data.length,
-    pitch: config,
+    pitch,
     isEligible: hasValidConfig && isAdmitted,
     canWindow,
     geometry,

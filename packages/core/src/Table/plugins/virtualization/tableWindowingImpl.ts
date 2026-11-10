@@ -82,8 +82,8 @@ function useWindowedTable<T extends Record<string, unknown>>({
       config == null ||
       !Number.isFinite(config.rowHeight) ||
       config.rowHeight <= 0 ||
-      !Number.isFinite(config.viewportHeight) ||
-      config.viewportHeight <= 0
+      !Number.isFinite(config.initialViewportHeight) ||
+      config.initialViewportHeight <= 0
     ) {
       return 'row and viewport geometry must be positive finite CSS pixels';
     }
@@ -144,7 +144,9 @@ function useWindowedTable<T extends Record<string, unknown>>({
     segments: windowPlan.segments,
     isWindowed: windowPlan.isWindowed,
     rowHeight: windowPlan.isWindowed ? config?.rowHeight : undefined,
-    viewportHeight: windowPlan.isWindowed ? config?.viewportHeight : undefined,
+    viewportHeight: windowPlan.isWindowed
+      ? config?.initialViewportHeight
+      : undefined,
     columns: sizedColumns,
     extraStyle,
     onRowFocus: windowPlan.isWindowed ? windowPlan.onRowFocus : undefined,

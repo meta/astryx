@@ -545,7 +545,9 @@
   inset-inline-start: 0;
   width: 3px;
   border-radius: 2px;
-  background: var(--color-brand);
+  /* Astryx's accent: the sandbox defines no --color-brand, which left the
+     marker transparent. */
+  background: var(--color-accent);
 }
 
 .markerLayout {
