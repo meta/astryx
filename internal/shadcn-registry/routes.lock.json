@@ -3782,6 +3782,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -4139,6 +4144,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
