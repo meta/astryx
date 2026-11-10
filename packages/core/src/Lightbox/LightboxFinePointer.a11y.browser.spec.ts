@@ -885,6 +885,63 @@ test('a mouse click between a gallery photo and its caption band closes the view
   });
 });
 
+test('with zoom, a mouse double-click on a single photo’s caption zooms the photo, and the caption stays its description', async ({
+  page,
+}) => {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--zoom-with-caption&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open zoom with caption'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const img = dialog.getByRole('img', {name: 'Forest path'});
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(PHOTO.width);
+  await settled(page);
+  const fitted = await boxOf(img);
+  // The middle of the caption's first word.
+  const word = await dialog.evaluate(viewer => {
+    const caption = viewer.querySelector(
+      '[data-lightbox-caption] .astryx-text',
+    );
+    const walker = document.createTreeWalker(
+      caption ?? viewer,
+      NodeFilter.SHOW_TEXT,
+    );
+    let node = walker.nextNode() as Text | null;
+    while (node != null && node.data.trim() === '') {
+      node = walker.nextNode() as Text | null;
+    }
+    if (node == null) {
+      throw new Error('no caption text');
+    }
+    const start = node.data.search(/\S/);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 1);
+    const r = range.getBoundingClientRect();
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+  });
+  await page.mouse.dblclick(word.x, word.y);
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeGreaterThan(fitted.width * 1.5);
+  expect(await page.evaluate(() => String(window.getSelection()).trim())).toBe(
+    '',
+  );
+  // Screen readers still read the caption: it is the viewer's description.
+  await expect(dialog).toHaveAccessibleDescription(
+    'A winding path through the forest',
+  );
+});
+
 test('in a gallery with zoom, a mouse click beside a small photo closes past its caption’s width and stays open within it, as on main', async ({
   page,
 }) => {
