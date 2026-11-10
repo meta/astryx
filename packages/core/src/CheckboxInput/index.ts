@@ -10,7 +10,4 @@
  */
 
 export {CheckboxInput} from './CheckboxInput';
-export type {
-  CheckboxInputProps,
-  CheckboxInputSize,
-} from './CheckboxInput';
+export type {CheckboxInputProps, CheckboxInputSize} from './CheckboxInput';

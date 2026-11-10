@@ -8,14 +8,7 @@
  */
 
 export {Lightbox} from './Lightbox';
-export type {
-  LightboxProps,
-  LightboxMedia,
-  LightboxMediaType,
-} from './Lightbox';
+export type {LightboxProps, LightboxMedia, LightboxMediaType} from './Lightbox';
 
 export {useLightbox} from './useLightbox';
-export type {
-  UseLightboxOptions,
-  UseLightboxReturn,
-} from './useLightbox';
+export type {UseLightboxOptions, UseLightboxReturn} from './useLightbox';
