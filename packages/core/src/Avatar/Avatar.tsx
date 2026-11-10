@@ -202,17 +202,6 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
   },
-  // Generated content with empty alternative text draws the initials. They are
-  // part of the picture, not text of the control. On a link or button, visible
-  // text that the name does not contain fails Label in Name.
-  initials: {
-    '::before': {
-      content: stylex.firstThatWorks(
-        'attr(data-initials) / ""',
-        'attr(data-initials)',
-      ),
-    },
-  },
   // After `fallback` on a lone Avatar: in forced colors its initials and
   // default icon take the color around them, which the browser forces to
   // CanvasText, so a control that paints itself disabled (GrayText) or
@@ -256,6 +245,19 @@ const styles = stylex.create({
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
+  // Generated content draws the initials, so they are part of the picture and
+  // not text of the control: on a link or button, visible text that the name
+  // does not contain fails Label in Name. Engines that read alternative text
+  // for generated content get an empty one; older engines draw the plain
+  // string, and the control's aria-label still names it.
+  initials: (quoted: string) => ({
+    '::before': {
+      content: {
+        default: quoted,
+        '@supports (content: "a" / "")': `${quoted} / ""`,
+      },
+    },
+  }),
   size: (size: number) => ({
     width: size,
     height: size,
@@ -440,6 +442,11 @@ const INITIAL_CHARACTER = new RegExp(
 function initialCharacter(word: string): string {
   const index = word.search(INITIAL_CHARACTER);
   return index === -1 ? '' : firstCharacter(word.slice(index));
+}
+
+/** The text as a CSS string literal, with quotes and backslashes escaped. */
+function cssString(text: string): string {
+  return `"${text.replace(/[\\"]/g, char => `\\${char}`).replace(/\n/g, '\\a ')}"`;
 }
 
 /**
@@ -817,12 +824,11 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
-                styles.initials,
                 avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
+                dynamicStyles.initials(cssString(initials)),
               ),
             )}
-            data-initials={initials}
           />
         )}
         {showIcon && (
