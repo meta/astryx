@@ -39,7 +39,7 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
  *   `iconSets` is experimental: it may change or be removed in a patch
  *   release.
  *   `notes`: information beside the issues. A note fails nothing by default;
@@ -51,6 +51,11 @@
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names
  *   count as shown);
+ *   `template_icon_undeclared`, an icon a template imports but does not
+ *   declare in `icons`, in a package whose templates declare `icons` (next
+ *   minor; an import that matches an icon by its name only, a generic
+ *   renderer, and an import the template does not use as an icon are listed
+ *   in `templateIcons` as not checked instead);
  *   `cli_peer_version`, the running CLI outside the package's
  *   `@astryxdesign/cli` peer range; and
  *   the package layout findings added after the last minor release, each with

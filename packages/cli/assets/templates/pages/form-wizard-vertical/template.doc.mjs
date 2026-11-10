@@ -18,6 +18,7 @@ export const doc = {
     ExclamationTriangleIcon: 'warning',
     GlobeAltIcon: 'globe',
     LanguageIcon: 'language',
+    RectangleStackIcon: 'collection',
     TagIcon: 'tag',
     UserIcon: 'user',
   },

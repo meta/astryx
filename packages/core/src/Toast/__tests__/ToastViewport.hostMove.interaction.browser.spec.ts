@@ -42,6 +42,8 @@ interface Recording {
   frames: Frame[];
   /** The opacity transitions the card ran: one for each entrance. */
   entrances: number;
+  /** The opacity each entrance first seen on the page starts from. */
+  pageEntranceStarts: number[];
   /**
    * Each CSS transition or animation that started on the toast's row or card,
    * as `part property`: `card transform`.
@@ -52,6 +54,8 @@ interface Recording {
 interface Recorder {
   frames: Frame[];
   transitions: Set<Animation>;
+  /** Where each opacity transition starts, for those first seen on the page. */
+  pageEntranceStarts: number[];
   starts: string[];
   isRecording: boolean;
 }
@@ -62,6 +66,7 @@ async function startRecording(page: Page): Promise<void> {
     const recorder: Recorder = {
       frames: [],
       transitions: new Set(),
+      pageEntranceStarts: [],
       starts: [],
       isRecording: true,
     };
@@ -103,6 +108,15 @@ async function startRecording(page: Page): Promise<void> {
             animation instanceof CSSTransition &&
             animation.transitionProperty === 'opacity'
           ) {
+            if (
+              !recorder.transitions.has(animation) &&
+              card.closest('dialog') == null
+            ) {
+              const [from] =
+                (animation.effect as KeyframeEffect | null)?.getKeyframes() ??
+                [];
+              recorder.pageEntranceStarts.push(Number(from?.opacity));
+            }
             recorder.transitions.add(animation);
           }
         }
@@ -123,6 +137,7 @@ async function stopRecording(page: Page): Promise<Recording> {
     return {
       frames: recorder.frames,
       entrances: recorder.transitions.size,
+      pageEntranceStarts: recorder.pageEntranceStarts,
       starts: recorder.starts,
     };
   });
@@ -392,14 +407,15 @@ test.describe('a toast in a top-layer viewport', () => {
     await waitForRest(toastRow(page));
     // The recorder sees the row's start after the close.
     expect(await startsSoFar(page)).toContain('row grid-template-rows');
-    const {frames} = await stopRecording(page);
+    const {frames, pageEntranceStarts} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
     // What a person sees: the card fades in once on the page and stays at
-    // full opacity. The frame recorded in the Dialog reads before paint.
-    expect(
-      Math.min(...opacitiesOf(frames.filter(frame => !frame.isInDialog))),
-    ).toBeLessThan(0.5);
+    // full opacity. The frame recorded in the Dialog reads before paint. A
+    // loaded runner draws its first frame on the page late, after most of
+    // the fade. So the fade's start is read from the page's own entrance.
+    expect(pageEntranceStarts).toHaveLength(1);
+    expect(pageEntranceStarts[0]).toBeLessThan(0.5);
     expect(fadesBack(frames)).toBe(false);
     expect(frames.at(-1)?.opacity).toBeGreaterThan(0.99);
   });

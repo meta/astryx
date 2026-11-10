@@ -1139,6 +1139,10 @@
     "defaultMessage": "Search results",
     "description": "Screen-reader-only accessible name for the list of suggestions inside a Typeahead dropdown."
   },
+  "@astryx.typeahead.selectionCleared": {
+    "defaultMessage": "Cleared {label}",
+    "description": "Polite screen-reader announcement after Backspace or Delete on a Typeahead's selected token clears its value. Live-region text, never shown on screen; `{label}` is the cleared value's visible text."
+  },
   "@astryx.typeahead.clearSelection": {
     "defaultMessage": "Clear selection",
     "description": "\"Selection\" = the chosen value (not highlighted text). Screen-reader-only label on the X that clears the currently-selected value from a Typeahead."

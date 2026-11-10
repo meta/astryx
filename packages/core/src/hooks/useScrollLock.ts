@@ -23,6 +23,7 @@ import {claimRootScrollStyle, reportScrollLock} from './rootScrollStyles';
 import {holdPageScroll} from '../gestures/pageHold';
 import {isPageZoomedIn, isPanAbsorbedBeforePage} from './scrollLockTouchGuard';
 import {holdScrollbarGutter, type ScrollbarGutterHold} from './scrollbarGutter';
+import {sharedState} from '../utils/sharedRealm';
 
 interface ActiveLock {
   releaseRootStyle: () => void;
@@ -30,8 +31,12 @@ interface ActiveLock {
   gutter: ScrollbarGutterHold;
 }
 
-let lockCount = 0;
-let activeLock: ActiveLock | null = null;
+// Every copy of Core counts holders here, so the page stays locked until the
+// last holder in any copy releases.
+const lock = sharedState('hooks/use-scroll-lock/lock', 1, () => ({
+  count: 0,
+  active: null as ActiveLock | null,
+}));
 
 /**
  * Locks page scroll while `isLocked` is true.
@@ -57,7 +62,7 @@ export function useScrollLock(isLocked: boolean): void {
       return;
     }
 
-    if (lockCount === 0) {
+    if (lock.count === 0) {
       // The hold measures before the lock writes a style, so the lock forces no
       // layout of its own. `settle` writes the gutter with the styles below.
       const gutter = holdScrollbarGutter(document.documentElement);
@@ -78,25 +83,25 @@ export function useScrollLock(isLocked: boolean): void {
           !isPageZoomedIn(document) && !isPanAbsorbedBeforePage(origin, dx, dy),
       );
       gutter.settle();
-      activeLock = {releaseRootStyle, releasePageHold, gutter};
+      lock.active = {releaseRootStyle, releasePageHold, gutter};
     }
 
-    lockCount += 1;
+    lock.count += 1;
     reportScrollLock(1);
 
     return () => {
-      lockCount -= 1;
+      lock.count -= 1;
       reportScrollLock(-1);
 
-      if (lockCount !== 0 || activeLock == null) {
+      if (lock.count !== 0 || lock.active == null) {
         return;
       }
 
-      const lock = activeLock;
-      activeLock = null;
-      lock.releasePageHold();
-      lock.releaseRootStyle();
-      lock.gutter.release();
+      const active = lock.active;
+      lock.active = null;
+      active.releasePageHold();
+      active.releaseRootStyle();
+      active.gutter.release();
     };
   }, [isLocked]);
 }

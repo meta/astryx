@@ -315,6 +315,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   '--_list-corner-start-end',
   '--_list-corner-end-start',
   '--_list-corner-end-end',
+  // Table FR19 and the container-padding record's block-edge geometry: a
+  // windowed Table includes the parent padding that it bleeds across.
+  '--_table-bleed-block-start',
+  '--_table-bleed-block-end',
   // The container-padding record's corner geometry: a rounded Card, Dialog,
   // or BottomSheet hands its block-edge radius to the shared corner
   // publication beside container().
