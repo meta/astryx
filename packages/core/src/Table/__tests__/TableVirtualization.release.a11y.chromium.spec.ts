@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @a11y-isolated
 /**
  * @file TableVirtualization.release.a11y.chromium.spec.ts
  * @input Production row fixture, isolated Chromium and synthetic 1k/10k/100k corpora
@@ -45,6 +46,8 @@ function readPackageVersion(name: string): string {
   return 'unresolved';
 }
 const SAMPLES = 100;
+// Measure 30 seconds at 60 Hz; a 1% rate is unstable over only 100 intervals.
+const CADENCE_SAMPLES = 60 * 30;
 const SIZES = [1000, 10000, 100000];
 let fixture: Awaited<ReturnType<typeof startRowFixture>>;
 test.beforeAll(async () => {
@@ -165,7 +168,10 @@ test('records release timing, bounded work and controlled-GC lifetime without re
                 throw new Error('The Table viewport is missing');
               }
               const viewport: HTMLElement = found;
+              const startTop = viewport.scrollTop;
+              const endTop = startTop + 200 * 56;
               const intervals: number[] = [];
+              let direction = 1;
               let last = 0,
                 blankFrames = 0;
               function next(now: number) {
@@ -194,12 +200,18 @@ test('records release timing, bounded work and controlled-GC lifetime without re
                   resolve({intervals, blankFrames});
                   return;
                 }
-                viewport.scrollTop += 56;
+                // Reverse before the 1k corpus ends, so every interval includes a scroll.
+                if (viewport.scrollTop >= endTop) {
+                  direction = -1;
+                } else if (viewport.scrollTop <= startTop) {
+                  direction = 1;
+                }
+                viewport.scrollTop += direction * 56;
                 requestAnimationFrame(next);
               }
               requestAnimationFrame(next);
             }),
-          SAMPLES,
+          CADENCE_SAMPLES,
         );
         const missedFrames = cadence.intervals.reduce(
           (sum, interval) =>
@@ -254,8 +266,9 @@ test('records release timing, bounded work and controlled-GC lifetime without re
           noopCommitMs: distribution(noop),
           frameIntervalsMs: distribution(cadence.intervals),
           missedFrames,
-          observedFrames: SAMPLES,
-          missedFraction: missedFrames / (SAMPLES + missedFrames),
+          observedFrames: cadence.intervals.length,
+          missedFraction:
+            missedFrames / (cadence.intervals.length + missedFrames),
           blankFrames: cadence.blankFrames,
           callerHeap,
           mountedHeap,
@@ -315,6 +328,8 @@ test('records release timing, bounded work and controlled-GC lifetime without re
       },
     },
     limitations: [
+      'The timing proof owns its contract shard; other shards retain parallel workers.',
+      'Cadence records 1800 intervals over 200 row pitches in both directions; every scheduling gap enters the unchanged 1% missed-frame bound.',
       'Range-plus-commit spans run from the viewport scroll event to the end of the React commit that it causes, including layout effects; they exclude style, layout and paint after the commit.',
       'TaskDuration is an inclusive main-thread work bound for each scroll step and its frames, not a compositor/GPU measurement.',
       'Before the final heap sample, one click on the empty root releases the last event target that React DOM keeps; without it one scrolled viewport stays reachable through React DOM until the next event.',
