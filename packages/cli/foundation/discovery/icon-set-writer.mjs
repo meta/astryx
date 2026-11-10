@@ -48,6 +48,7 @@ import {
   exportValueKind,
   followedExportNames,
   moduleExportOrigin,
+  staticExportBindings,
 } from './module-exports.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -608,7 +609,7 @@ const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
  * set declares an adapter, also data exports, camelCase included: objects,
  * and plain strings only in a library whose candidates are all strings.
  * Left out: `default`, `Icon`, `…Provider` and `…Context` components, SCREAMING_CASE constants, number and boolean
- * exports, and `exclude`.
+ * exports, packs of other exports ({@link isIconPack}), and `exclude`.
  * @param {string} file
  * @param {{adapter?: boolean, exclude?: string[]}} [options] `exclude`: export
  *   names that are not icons
@@ -618,7 +619,9 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   const skipped = new Set(exclude);
   /** @type {Array<{name: string, adapt: boolean, scalar: string | null}>} */
   const out = [];
-  for (const name of followedExportNames(file)) {
+  const names = followedExportNames(file);
+  const exported = new Set(names);
+  for (const name of names) {
     if (name === 'default' || name === 'Icon' || skipped.has(name)) continue;
     // A context provider or context (`LucideProvider`) is a component that
     // draws nothing.
@@ -631,7 +634,8 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
     } else if (
       adapter &&
       kind === 'data' &&
-      /^[A-Za-z][A-Za-z0-9]*$/u.test(name)
+      /^[A-Za-z][A-Za-z0-9]*$/u.test(name) &&
+      !isIconPack(file, name, exported)
     ) {
       const scalar = exportScalarType(file, name);
       // A number or a boolean draws nothing; a string may be SVG markup.
@@ -644,6 +648,20 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   return out.some(each => each.scalar == null)
     ? out.filter(each => each.scalar == null)
     : out;
+}
+
+/**
+ * Whether a data export is a pack: an object whose keys are all other
+ * exports of the module, such as `fas` in a library that also exports
+ * `faXmark` and `faHouse`. A pack holds icons but draws nothing.
+ * @param {string} file
+ * @param {string} name
+ * @param {Set<string>} exported every export name of the module
+ */
+function isIconPack(file, name, exported) {
+  const bindings = staticExportBindings(file, name);
+  if (bindings == null || bindings.size < 2) return false;
+  return [...bindings.keys()].every(key => key !== name && exported.has(key));
 }
 
 /**
@@ -1868,10 +1886,11 @@ export function generatedNamesOf(packageDir, generated, from, source) {
  * differently; and a refresh changes only the icons its module supplies.
  * @param {string} packageDir
  * @param {string} generated
- * @returns {Map<string, {module: string, source: string}>}
+ * @returns {Map<string, {module: string, source: string, adapt: boolean}>}
+ *   `adapt`: the set's adapter turns the export into a component
  */
 export function generatedOrigins(packageDir, generated) {
-  /** @type {Map<string, {module: string, source: string}>} */
+  /** @type {Map<string, {module: string, source: string, adapt: boolean}>} */
   const origins = new Map();
   const file = path.join(packageDir, generated);
   if (!fs.existsSync(file)) return origins;
@@ -1898,6 +1917,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(reexport[2] ?? reexport[1], {
         module: fromRoot(reexport[3]),
         source: reexport[1],
+        adapt: false,
       });
       continue;
     }
@@ -1908,6 +1928,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adapted[2], {
         module: fromRoot(adapted[3]),
         source: adapted[1],
+        adapt: true,
       });
       continue;
     }
@@ -1918,6 +1939,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adaptedDefault[1], {
         module: fromRoot(adaptedDefault[2]),
         source: 'default',
+        adapt: true,
       });
     }
   }
