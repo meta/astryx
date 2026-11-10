@@ -15,6 +15,8 @@ verified_by:
     scripts/touch-support-bundle.test.mjs,
     scripts/lazy-sheet-bundle.test.mjs,
     scripts/core-single-bundle.test.mjs,
+    scripts/check-component-import-boundaries.mjs,
+    scripts/check-component-import-boundaries.test.mjs,
   ]
 deciding_specs: []
 ---
@@ -191,9 +193,11 @@ eager and 37.0 KB with every listed crossing removed.
   their description.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
-- INV9 gap: no check fails a new static import of a surface module or a
-  capability module from an entry; the size report prints sizes and fails on
-  none of them.
+- INV9 gap: the check does not measure INV7's wiring allowance. An entry's
+  wiring for a capability it does not import can exceed 0.3 KB gzip, and the
+  check does not fail.
+- INV9 gap: `createSwipe` is not a module, so the check holds no capability
+  boundary for it.
 
 ## Change coupling
 
