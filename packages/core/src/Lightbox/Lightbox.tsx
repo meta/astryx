@@ -950,6 +950,10 @@ export function Lightbox({
     captionTruncation.ref,
   );
   const [captionShownLines, setCaptionShownLines] = useState(0);
+  // Counts again when an open caption gets new text. The count of an opening
+  // is the text's own lines, and new text needs the same count.
+  const [captionRecount, setCaptionRecount] = useState(0);
+  const isCaptionOpenRef = useRef(false);
   // The current caption's lines, without its toggle's place.
   const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
   // The caption's width at its last measure, and the cancel of a smaller
@@ -1096,9 +1100,17 @@ export function Lightbox({
       };
       let stopResize = register();
       // New text in a box that keeps its size fires no resize. A new
-      // registration gets its own delivery after the next layout.
+      // registration gets its own delivery after the next layout. An open
+      // caption first counts its new text's lines, as an opening does.
       const stopContent = observeContent(element, () => {
         stopResize?.();
+        if (isCaptionOpenRef.current) {
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new count must lay out before the new registration's delivery reads the caption
+          flushSync(() => {
+            setCaptionShownLines(0);
+            setCaptionRecount(count => count + 1);
+          });
+        }
         stopResize = register();
       });
       return () => {
@@ -1131,6 +1143,7 @@ export function Lightbox({
   // line takes a line of its own, before the resize delivery reads the
   // caption.
   useIsomorphicLayoutEffect(() => {
+    isCaptionOpenRef.current = isCaptionOpen;
     const caption = bandCaptionRef.current;
     const flow = bandCaptionFlowRef.current;
     const toggle = captionToggleRef.current;
@@ -1150,7 +1163,7 @@ export function Lightbox({
         Math.round(flow.getBoundingClientRect().height / line),
       );
     }
-  }, [isCaptionOpen]);
+  }, [isCaptionOpen, captionRecount]);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
   // follows, so nothing reads the toggle there. A hidden toggle's size is
