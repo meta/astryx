@@ -524,8 +524,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
-/// `parseDiscoverCatalog(value, label, {iconSets})`. TEMP: zod's exact issue
-/// messages are matched only for the common shapes.
+/// `parseDiscoverCatalog(value, label, {iconSets})`.
 pub fn parse_discover_catalog(value: &Value, label: &str, icon_sets: bool) -> Result<ParsedCatalog, String> {
     let cleaned = drop_undefined(value);
     let value = &cleaned;
@@ -655,62 +654,9 @@ fn newest_first(a: &Version, b: &Version) -> f64 {
     super::util::ord_to_num(locale_compare_numeric(&b.version, &a.version))
 }
 
-/// TEMP: `Date.parse` for ISO 8601 date-time strings only.
+/// `Date.parse(text)`, NaN as `None`.
 fn parse_date(s: Option<&str>) -> Option<f64> {
-    let s = s?;
-    let b = s.as_bytes();
-    let num = |r: std::ops::Range<usize>| -> Option<i64> { s.get(r)?.parse().ok() };
-    if b.len() < 10 || b[4] != b'-' || b[7] != b'-' {
-        return None;
-    }
-    let y = num(0..4)?;
-    let m = num(5..7)?;
-    let d = num(8..10)?;
-    let (mut hh, mut mm, mut ss, mut ms) = (0, 0, 0, 0.0);
-    let mut offset_min = 0i64;
-    if b.len() > 10 {
-        if b[10] != b'T' {
-            return None;
-        }
-        hh = num(11..13)?;
-        mm = num(14..16)?;
-        let mut i = 16;
-        if b.get(16) == Some(&b':') {
-            ss = num(17..19)?;
-            i = 19;
-            if b.get(19) == Some(&b'.') {
-                let mut j = 20;
-                while j < b.len() && b[j].is_ascii_digit() {
-                    j += 1;
-                }
-                ms = format!("0.{}", &s[20..j]).parse::<f64>().ok()? * 1000.0;
-                i = j;
-            }
-        }
-        let rest = &s[i..];
-        if rest == "Z" {
-        } else if rest.is_empty() {
-            // local time; the suite runs in UTC.
-        } else if rest.len() == 6 && (rest.starts_with('+') || rest.starts_with('-')) {
-            let h: i64 = rest[1..3].parse().ok()?;
-            let mi: i64 = rest[4..6].parse().ok()?;
-            offset_min = (h * 60 + mi) * if rest.starts_with('-') { -1 } else { 1 };
-        } else {
-            return None;
-        }
-    }
-    let days = days_from_civil(y, m as u32, d as u32);
-    Some(((days * 86400 + hh * 3600 + mm * 60 + ss - offset_min * 60) as f64) * 1000.0 + ms.floor())
-}
-
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y.rem_euclid(400);
-    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
+    super::date::date_parse(s.unwrap_or(""))
 }
 
 /// Object properties holding `undefined` are absent, as zod sees them.

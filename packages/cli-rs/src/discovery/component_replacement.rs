@@ -59,7 +59,7 @@ pub fn component_replacements_enabled(pkg: &Value) -> bool {
 fn package_json_of(i: &LoadedIntegration) -> Value {
     i.package_dir
         .as_ref()
-        .and_then(|d| std::fs::read_to_string(d.join("package.json")).ok())
+        .and_then(|d| super::nodepath::read_text(&d.join("package.json").to_string_lossy()))
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or(Value::Object(Default::default()))
 }

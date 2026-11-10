@@ -1844,6 +1844,10 @@ impl SourceTextModule {
             envs,
             realm.clone(),
         );
+        // Linking can run while a native function called from script is on
+        // the stack (a host `require` of an ES module): restore the stack
+        // exactly, or the caller's pending call arguments shift.
+        let stack_len = context.vm.stack.v8_len();
         context
             .vm
             .push_frame_with_stack(call_frame, JsValue::undefined(), JsValue::null());
@@ -1924,6 +1928,7 @@ impl SourceTextModule {
             .vm
             .pop_frame()
             .js_expect("There should be a call frame")?;
+        context.vm.stack.v8_truncate(stack_len);
 
         let env = frame
             .environments
@@ -1988,6 +1993,10 @@ impl SourceTextModule {
         .with_flags(CallFrameFlags::EXIT_EARLY);
 
         // 8. Suspend the running execution context.
+        // A module can run while a native function called from script is
+        // on the stack (a host `require` of an ES module): restore the
+        // stack exactly, or the caller's pending call arguments shift.
+        let stack_len = context.vm.stack.v8_len();
         context
             .vm
             .push_frame_with_stack(callframe, JsValue::undefined(), JsValue::null());
@@ -2008,6 +2017,7 @@ impl SourceTextModule {
         let result = context.run();
 
         context.vm.pop_frame();
+        context.vm.stack.v8_truncate(stack_len);
 
         //     f. If result is an abrupt completion, then
         if let CompletionRecord::Throw(err) = result {

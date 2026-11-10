@@ -3,8 +3,8 @@
 //! of the docs tree, and answers with the `{type, package?, data, meta?}`
 //! response the JS API returns.
 //!
-//! TEMP: the catalog and tree are the CLI's own docs from the embedded model;
-//! integration docs need the discovery lane's doc compiler.
+//! The CLI's own docs come from the embedded model; a project whose
+//! integrations change the docs is built at run time (`runtime`).
 
 use super::model::Variant;
 use super::sections::{find_doc_section, section_title_key, ReaderSection};
@@ -203,6 +203,9 @@ pub struct Docs {
     not_loaded_suffix: String,
     /// Built at run time from a catalog the integrations changed.
     runtime: bool,
+    /// The error building the project's docs tree throws: every read fails
+    /// with it.
+    failed: Option<String>,
 }
 
 enum Owner<'a> {
@@ -215,7 +218,7 @@ impl Docs {
         let variant = Variant::get(pm);
         let tree = Tree::new(variant.nodes());
         let topics = variant.topics().into_iter().map(|v| Topic { v }).collect();
-        Docs { variant, tree, topics, extra_reads: HashMap::new(), issues: vec![], not_loaded_suffix: String::new(), runtime: false }
+        Docs { variant, tree, topics, extra_reads: HashMap::new(), issues: vec![], not_loaded_suffix: String::new(), runtime: false, failed: None }
     }
 
     /// The project's docs: the CLI's own, plus whatever its integrations
@@ -224,6 +227,7 @@ impl Docs {
         let Some(catalog) = super::runtime::discover(cwd) else { return Self::load(pm) };
         let variant = Variant::get(pm);
         let built = super::runtime::build(&variant, catalog, cwd);
+        let failed = built.tree.error.clone();
         Docs {
             tree: Tree::new(built.nodes),
             topics: built.topics.into_iter().map(|v| Topic { v }).collect(),
@@ -232,6 +236,7 @@ impl Docs {
             issues: built.issues,
             not_loaded_suffix: String::new(),
             runtime: true,
+            failed,
         }
     }
 
@@ -434,12 +439,22 @@ impl Docs {
     /// `docs(topic, section, options)`.
     pub fn docs(&self, topic: Option<&str>, section: Option<&str>, options: &DocsOptions, format_cmd: &dyn Fn(&str) -> String) -> Result<Value, DocsError> {
         let read = self.depth_read(options)?;
+        if let Some(e) = &self.failed {
+            return Err(DocsError { message: e.clone(), suggestions: vec![], code: "ERR_UNKNOWN" });
+        }
         let topic = match topic {
             Some(t) if !t.is_empty() => t,
             _ => return Ok(self.list(options.depth)),
         };
         match self.resolve_argument(topic) {
-            None => Err(self.unknown_topic_error(topic)),
+            // A name that names nothing still goes to the section read when a
+            // section is given, and that read checks the section name first.
+            None => match section.filter(|s| !s.is_empty()) {
+                Some(sec) if sec.trim_matches(crate::cli::format::js_ws).is_empty() => {
+                    Err(err("A section name is required".into(), vec![], "ERR_UNKNOWN_SECTION"))
+                }
+                _ => Err(self.unknown_topic_error(topic)),
+            },
             Some(Owner::Node(node)) => {
                 if let Some(section) = section.filter(|s| !s.is_empty()) {
                     if node.kind() == "namespace" {
@@ -759,7 +774,7 @@ impl Docs {
     }
 
     fn section(&self, entry: &Entry, topic: &str, section: &str, lang: &str) -> Result<Value, DocsError> {
-        if section.trim().is_empty() {
+        if section.trim_matches(crate::cli::format::js_ws).is_empty() {
             return Err(err("A section name is required".into(), vec![], "ERR_UNKNOWN_SECTION"));
         }
         let read = self.read(&entry.key(lang)).ok_or_else(|| self.unknown_topic_error(topic))?;
@@ -815,7 +830,7 @@ impl Docs {
     }
 
     fn namespace_section(&self, namespace: &Node, section: &str, options: &DocsOptions) -> Result<Value, DocsError> {
-        if section.trim().is_empty() {
+        if section.trim_matches(crate::cli::format::js_ws).is_empty() {
             return Err(err("A section name is required".into(), vec![], "ERR_UNKNOWN_SECTION"));
         }
         let lang = options.effective_lang();

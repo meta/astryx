@@ -1,0 +1,16 @@
+{
+ "id": "sweep_theme_dynamic_text",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Theme entry \"dynTheme.ts\" from @sweep/dynamic references local module \"./missing\" that must resolve to a file inside the theme directory.\n",
+ "exit": 1,
+ "files": []
+}

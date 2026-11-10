@@ -5,7 +5,8 @@ import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 const [cliRoot, out] = process.argv.slice(2);
 const {Project} = await import(pathToFileURL(path.join(cliRoot, 'foundation/config/project.mjs')).href);
-const FIX = '/tmp/astryx-conformance/fixtures';
+const {fixtureDirs} = await import(new URL('./_fixtures.mjs', import.meta.url).href);
+const FIXDIRS = await fixtureDirs();
 // An icon-set project with its own definitions, opted in.
 const fx = await import(pathToFileURL(path.join(cliRoot, 'test-utils/icon-set-fixture.mjs')).href);
 const ICONS = '/tmp/astryx-icon-docs-fixture';
@@ -16,7 +17,7 @@ const iconProject = fx.writeIconSetProject(ICONS, {
   packages: [{definitions: {rotate: fx.definitionSource('rotate')}, data: {...fx.glyphsData(), module: '@acme/glyphs', map: {...fx.glyphsData().map, rotate: 'x'}}}],
 });
 const cases = [];
-const dirs = [...fs.readdirSync(FIX).sort().filter(n => !n.startsWith('.')).map(n => path.join(FIX, n)), iconProject];
+const dirs = [...FIXDIRS.map(f => f.dir), iconProject];
 for (const dir of dirs) {
   process.chdir(dir);
   const p = await Project.load(dir, {fresh: true});

@@ -1,0 +1,14 @@
+{
+ "id": "w3_verify_theme_renamed_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/renamed\",\n    \"version\": \"1.0.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"acme-renamed-1.0.0.tgz\",\n      \"fileCount\": 7,\n      \"size\": 750,\n      \"unpackedSize\": 1068\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 4,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 5,\n      \"packedFiles\": 5\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_module_stale\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" module is themes/ocean/ocean.js, but oceanTheme.ts calls defineTheme with name: 'sea', so `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` writes themes/ocean/sea.js instead and rebuilding never updates ocean.js. Fix: point the package export that serves it at themes/ocean/sea.js after building, or set name: 'ocean' in oceanTheme.ts and rebuild.\"\n      },\n      {\n        \"code\": \"theme_stylesheet_stale\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" stylesheet is themes/ocean/ocean.css, but oceanTheme.ts calls defineTheme with name: 'sea', so `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` writes themes/ocean/sea.css instead and rebuilding never updates ocean.css. Fix: point the package export that serves it at themes/ocean/sea.css after building, or set name: 'ocean' in oceanTheme.ts and rebuild.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

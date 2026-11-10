@@ -537,8 +537,24 @@ pub fn is_computer_level(argv: &[String]) -> bool {
     }
 }
 
-/// `runChoice(cwd)` for this process's argv.
+static RECORDED: std::sync::OnceLock<(String, ReleaseChoice)> = std::sync::OnceLock::new();
+
+/// `recordRunChoice(choice)`: the bin's choice for this process's cwd, made
+/// once at start, so a run that writes the project still answers as it began.
+pub fn record_run_choice() {
+    let cwd = np::cwd();
+    let choice = run_choice(&cwd);
+    let _ = RECORDED.set((np::resolve1(&cwd), choice));
+}
+
+/// `runChoice(cwd)` for this process's argv: the recorded choice for the
+/// process cwd, else one made now.
 pub fn run_choice(cwd: &str) -> ReleaseChoice {
+    if let Some((at, choice)) = RECORDED.get() {
+        if *at == np::resolve1(cwd) {
+            return choice.clone();
+        }
+    }
     let argv: Vec<String> = std::env::args().skip(1).collect();
     choose_release(cwd, is_computer_level(&argv))
 }

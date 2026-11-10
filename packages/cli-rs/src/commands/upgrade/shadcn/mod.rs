@@ -4,6 +4,7 @@
 pub mod diff3;
 pub mod receipt;
 pub mod source_variants;
+pub mod ts_enum;
 pub mod ts_strip;
 
 #[cfg(test)]

@@ -285,10 +285,11 @@ pub fn rename_menu_divider_data_types(source: &str, path: &str, _o: &Value) -> T
                 continue;
             }
             let i = imported_name(&j, s).unwrap_or_default();
-            let renamed = match DIVIDER_RENAMES.iter().find(|e| e.0 == i) {
-                Some(e) => e.1,
+            let renamed = match crate::commands::upgrade::transforms::jsproto::lookup(DIVIDER_RENAMES, &i) {
+                Some(h) => h.string(),
                 None => continue,
             };
+            let renamed = renamed.as_str();
             let local = local_name(&j, s).unwrap_or(i.clone());
             let aliased = local != i;
             let type_only = decl_type || j.ast.str_of(s, "importKind") == Some("type");

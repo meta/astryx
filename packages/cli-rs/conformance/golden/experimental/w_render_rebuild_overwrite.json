@@ -10,7 +10,7 @@
   "--overwrite"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "Rebuilt basic.tsx\n\ninput:      stripped.html\nmode:       rebuilt\nexact:      false\noutput:     basic.tsx\nfiles:      basic.tsx\ncomponents: none\nelements:   0\nunknown:    badge, button, card, divider, field, field-label, heading, link, stack, text, text-input\n\nThe file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

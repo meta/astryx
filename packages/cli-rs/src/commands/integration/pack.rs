@@ -1,6 +1,7 @@
 //! What `npm pack` does for `integration verify`: the file list
 //! (npm-packlist and ignore-walk rules), the tarball (node-tar, portable
-//! headers) and its gzip size (zlib-ng level 9, as Node compresses).
+//! headers) and its gzip size: level 9 through the system zlib, the library
+//! Node itself links, so the compressed size matches byte for byte.
 
 use crate::json::Value;
 use std::cmp::Ordering;
@@ -439,8 +440,30 @@ pub struct PackResult {
 
 /// `npm pack --json`, without running lifecycle scripts.
 pub fn npm_pack(dir: &Path, pkg: &Value) -> Result<PackResult, String> {
+    // npm's own manifest checks, with the summary its `--json` error carries.
+    let truthy = |v: Option<&Value>| match v {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Number(n)) => n.as_f64().map(|f| f != 0.0 && !f.is_nan()).unwrap_or(true),
+        _ => true,
+    };
+    let failed = |summary: &str| Err(format!("npm pack failed (exit 1): {summary}."));
+    if !pkg.is_object() && !pkg.is_array() {
+        let shown = match pkg {
+            Value::String(t) => t.clone(),
+            other => crate::cli::format::js_string(other),
+        };
+        return failed(&format!("Cannot use 'in' operator to search for 'bundleDependencies' in {shown}"));
+    }
+    if !truthy(pkg.get("name")) || !truthy(pkg.get("version")) {
+        return failed("Invalid package, must have name and version");
+    }
+    if !pkg.get("name").map(|n| n.is_string()).unwrap_or(false) {
+        return failed("manifest.name.replace is not a function");
+    }
     let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let version = pkg.get("version").and_then(|v| v.as_str()).unwrap_or("");
+    let version = pkg.get("version").map(crate::cli::format::js_string).unwrap_or_default();
+    let version = version.as_str();
     let files = packlist(dir, pkg);
     let mut tar: Vec<u8> = Vec::new();
     let mut unpacked = 0u64;

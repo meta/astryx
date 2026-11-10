@@ -205,6 +205,7 @@ fn describe_installed(env: &Env) -> (Vec<InstalledPackage>, bool) {
             name: i.name.clone(),
             category: i.name.clone(),
             version: i.version.clone(),
+            version_raw: i.version_raw.clone(),
             description: None,
             display_name: None,
             docs_dir,
@@ -624,16 +625,23 @@ fn detail(
         ));
     }
     let mut known: Vec<String> = catalog.map(|c| c.versions.iter().map(|v| v.version.clone()).collect()).unwrap_or_default();
-    if let Some(v) = pkg.and_then(|p| p.version.clone()).filter(|v| !v.is_empty()) {
-        if !known.contains(&v) {
-            known.push(v);
+    // A version that is not a string never equals the one asked for, but
+    // still names a suggestion.
+    let mut known_names = known.clone();
+    if let Some(v) = pkg.and_then(|p| p.version_if_truthy()) {
+        let as_str = crate::cli::format::js_string(&v);
+        if v.is_string() && !known.contains(&as_str) {
+            known.push(as_str.clone());
+        }
+        if !known_names.contains(&as_str) {
+            known_names.push(as_str);
         }
     }
     if let Some(v) = version {
         if !known.iter().any(|k| k == v) {
             let releases: Vec<String> =
                 catalog.map(|c| c.versions.iter().filter(|v| !v.prerelease).map(|v| v.version.clone()).collect()).unwrap_or_default();
-            let pool = if !releases.is_empty() { releases } else { known.clone() };
+            let pool = if !releases.is_empty() { releases } else { known_names.clone() };
             return Err(DiscoverError::new(
                 format!("Version \"{v}\" of {name} not found"),
                 pool.into_iter().take(5).map(|x| (format!("{name}@{x}"), "published version".into())).collect(),
@@ -651,8 +659,8 @@ fn detail(
         let v = version.map(String::from).or_else(|| default_version(c));
         let mut d = catalog_entry(c, v.as_deref(), true);
         d.insert("installed".into(), pkg.is_some().into());
-        if let Some(iv) = pkg.and_then(|p| p.version.clone()).filter(|v| !v.is_empty()) {
-            d.insert("installedVersion".into(), iv.into());
+        if let Some(iv) = pkg.and_then(|p| p.version_if_truthy()) {
+            d.insert("installedVersion".into(), iv);
         }
         d
     };
@@ -708,8 +716,8 @@ fn item(
                 }
                 let mut d = Map::new();
                 d.insert("package".into(), package_name.into());
-                if let Some(v) = p.version.clone().filter(|v| !v.is_empty()) {
-                    d.insert("version".into(), v.into());
+                if let Some(v) = p.version_if_truthy() {
+                    d.insert("version".into(), v);
                 }
                 d.insert("kind".into(), (*kind).into());
                 d.insert("name".into(), item_name.into());

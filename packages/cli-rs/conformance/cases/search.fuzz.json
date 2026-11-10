@@ -22,5 +22,14 @@
       "token"
     ],
     "fixture": "docsint"
+  },
+  {
+    "id": "fuzz_search_sarch@integration-packjson_5d4e3a",
+    "args": [
+      "search",
+      "sarch"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
   }
 ]

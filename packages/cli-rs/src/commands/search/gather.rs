@@ -148,12 +148,12 @@ fn core_layout(core_dir: &Path) -> std::sync::Arc<CoreLayout> {
         par_map(&names, |c| (find_component_readme(core_dir, c), resolve_import_path(core_dir, c)));
     let (readmes, imports) = per.into_iter().unzip();
     let src = core_dir.join("src");
-    let family_docs = if src.exists() {
+    let family_docs = if crate::discovery::nodepath::exists(&src.to_string_lossy()) {
         list_dir(&src)
             .into_iter()
             .filter(|dir| !names.contains(dir))
             .map(|dir| src.join(&dir).join(format!("{dir}.doc.mjs")))
-            .filter(|doc| doc.exists())
+            .filter(|doc| crate::discovery::nodepath::exists(&doc.to_string_lossy()))
             .collect()
     } else {
         Vec::new()
@@ -526,10 +526,11 @@ pub fn gather_components(core_dir: &Path, cwd: &Path) -> Result<Vec<Value>, Stri
 
 /// The error Node's `readdirSync` throws for a folder it cannot list.
 pub fn scandir_check(dir: &Path) -> Result<(), String> {
-    match std::fs::metadata(dir) {
-        Ok(m) if m.is_dir() => Ok(()),
-        Ok(_) => Err(format!("ENOTDIR: not a directory, scandir '{}'", dir.display())),
-        Err(_) => Err(format!("ENOENT: no such file or directory, scandir '{}'", dir.display())),
+    let d = dir.to_string_lossy();
+    match (crate::discovery::nodepath::exists(&d), crate::discovery::nodepath::is_dir(&d)) {
+        (_, true) => Ok(()),
+        (true, false) => Err(format!("ENOTDIR: not a directory, scandir '{}'", dir.display())),
+        (false, _) => Err(format!("ENOENT: no such file or directory, scandir '{}'", dir.display())),
     }
 }
 
@@ -590,7 +591,7 @@ fn template_candidate(t: &crate::commands::template::discovery::Template) -> Val
     let mut weak: Vec<Value> = Vec::new();
     if t.kind == "page" {
         if !t.file_path.is_empty() {
-            if let Ok(source) = std::fs::read_to_string(&t.file_path) {
+            if let Some(source) = crate::discovery::nodepath::read_text(&t.file_path) {
                 weak = crate::commands::template::source::components_in_source(&source)
                     .into_iter()
                     .map(Value::String)

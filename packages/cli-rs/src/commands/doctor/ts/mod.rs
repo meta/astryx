@@ -108,6 +108,8 @@ pub fn with_typescript<R>(dirs: &[&str], f: impl FnOnce(&mut Ts, &str) -> R) -> 
         Some(Found::Unusable(v)) => return Err(Some(v)),
         Some(Found::Module { file }) => file,
     };
+    let timing = cfg!(feature = "ts-timing");
+    let started = std::time::Instant::now();
     crate::js::live::with_live(|live| {
         let ns = match live.import(Path::new(&file), &Default::default()) {
             Ok(ns) => ns,
@@ -122,8 +124,15 @@ pub fn with_typescript<R>(dirs: &[&str], f: impl FnOnce(&mut Ts, &str) -> R) -> 
         }
         let version = live.get(&ts, "version");
         let version = live.string(&version);
+        if timing {
+            eprintln!("[ts] load {:?}", started.elapsed());
+        }
         let mut t = Ts { ctx: live.ctx(), ts };
-        Ok(f(&mut t, &version))
+        let r = f(&mut t, &version);
+        if timing {
+            eprintln!("[ts] done {:?}", started.elapsed());
+        }
+        Ok(r)
     })
 }
 

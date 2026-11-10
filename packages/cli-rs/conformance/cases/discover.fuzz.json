@@ -16,5 +16,13 @@
     ],
     "fixture": "doctor-author2",
     "cwd": "doctor-author2/kit"
+  },
+  {
+    "id": "fuzz_discover@integration-packjson_645552",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
   }
 ]

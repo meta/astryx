@@ -5,6 +5,7 @@
 pub mod app;
 pub mod descriptor;
 pub mod discovery;
+pub mod graph;
 pub mod imports;
 pub mod recorded;
 pub mod state;

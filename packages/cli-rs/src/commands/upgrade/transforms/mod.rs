@@ -35,6 +35,7 @@ pub mod v0_1_x;
 pub mod v0_1_3;
 pub mod v0_1_7;
 pub mod common;
+pub mod jsproto;
 pub mod later;
 
 pub fn get(name: &str) -> Option<TransformFn> {

@@ -365,6 +365,16 @@ pub fn run_cmd(inv: &Invocation, out: &mut Out) -> CmdResult {
     let result = match result {
         Ok(r) => r,
         Err(e) => {
+            if e.code == "CRASH" {
+                // An uncaught error: the JS CLI reports it as ERR_UNKNOWN under
+                // --json, else prints it (with a Node stack trace); exit 1.
+                if json {
+                    return Err(out.json_error(&e.message, &[], "ERR_UNKNOWN", None));
+                }
+                out.println(&format!("Error: {}", e.message));
+                out.exit_code = 1;
+                return Ok(());
+            }
             if json {
                 return Err(out.json_error(&e.message, &[], &e.code, e.receipt.as_ref()));
             }

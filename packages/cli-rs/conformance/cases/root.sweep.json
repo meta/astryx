@@ -1,0 +1,38 @@
+[
+  {
+    "id": "sweep_nudge_badutf",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "sweep-nudge",
+    "cwd": "sweep-nudge/badutf"
+  },
+  {
+    "id": "sweep_nudge_feff",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "sweep-nudge",
+    "cwd": "sweep-nudge/feff"
+  },
+  {
+    "id": "sweep_nudge_ref",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "sweep-nudge",
+    "cwd": "sweep-nudge/ref"
+  },
+  {
+    "id": "sweep_nudge_nel",
+    "args": [
+      "component",
+      "--list"
+    ],
+    "fixture": "sweep-nudge",
+    "cwd": "sweep-nudge/nel"
+  }
+]

@@ -70,6 +70,11 @@ pub struct Plan {
     pub fn_texts: Vec<(String, Vec<String>)>,
     /// Per module, the stylesheets, JSON and images it imports.
     pub side_files: Vec<(String, Vec<String>)>,
+    /// Modules whose StyleX calls were compiled, with their new text.
+    pub overrides: Vec<(PathBuf, String)>,
+    /// Whether a module of the page imports a recharts chart.
+    pub has_charts: bool,
+    pub stylex_rules: Vec<super::stylex::Rule>,
 }
 
 fn push_side(p: &mut Plan, owner: &str, f: String) {
@@ -119,6 +124,9 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
         texts: vec![],
         fn_texts: vec![],
         side_files: vec![],
+        overrides: vec![],
+        has_charts: false,
+        stylex_rules: vec![],
     };
     let paths = super::ts_paths::read_paths_in(root).unwrap_or_default();
     let stubs = stub_dir();
@@ -155,8 +163,26 @@ pub fn plan(entry: &str, root: &str, served: Option<&Served>) -> Result<Plan, Re
                 });
             }
         };
-        if file != entry || true {
-            super::texts::collect(&source, &file, &mut p.texts, &mut p.fn_texts);
+        super::texts::collect(&source, &file, &mut p.texts, &mut p.fn_texts);
+        let charted = super::charts::set_charts_aside(&source, &file);
+        if charted.is_some() {
+            p.has_charts = true;
+        }
+        let module_source = charted.clone().unwrap_or_else(|| source.clone());
+        match super::stylex::compile::compile_module(&module_source, &file, root) {
+            Ok(Some(c)) => {
+                p.overrides.push((PathBuf::from(&file), c.source));
+                p.stylex_rules.extend(c.rules);
+            }
+            Ok(None) => {
+                if let Some(text) = charted {
+                    p.overrides.push((PathBuf::from(&file), text));
+                }
+            }
+            Err(e) => match e.0.strip_prefix("compile:") {
+                Some(reason) => return Err(rerr("ERR_RENDER_COMPILE", format!("The page does not compile: {reason}"))),
+                None => return Err(rerr("ERR_RENDER_FAILED", format!("The page threw while rendering: {}", e.0))),
+            },
         }
         let dir = np::dirname(&file);
         let mut children: Vec<String> = vec![];
@@ -346,12 +372,47 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
     let plan = plan(entry, root, served)?;
     let paths = super::ts_paths::read_paths_in(root).unwrap_or_default();
     let stubs = stub_dir();
-    let glue = stubs.join("glue.mjs");
-    std::fs::write(&glue, GLUE).map_err(|e| rerr("ERR_RENDER_FAILED", format!("The page could not be rendered: {e}")))?;
+    let glue = stubs.join(if plan.has_charts { "glue.ts" } else { "glue.mjs" });
+    // Source overrides apply to the graph a call loads, not to a later
+    // dynamic import: a page with compiled StyleX is imported statically.
+    let glue_text = if plan.overrides.is_empty() {
+        GLUE.to_string()
+    } else {
+        let q = |p: &str| {
+            let mut o = String::new();
+            crate::json::quote(&mut o, p);
+            o
+        };
+        let react = plan.aliases.iter().find(|(s, _)| s == "react").map(|(_, f)| f.to_string_lossy().to_string()).or_else(|| resolve_file("react", entry)).unwrap_or_else(|| "react".into());
+        let server = plan.aliases.iter().find(|(s, _)| s == "react-dom/server.browser").map(|(_, f)| f.to_string_lossy().to_string()).or_else(|| resolve_file("react-dom/server.browser", entry)).unwrap_or_else(|| "react-dom/server.browser".into());
+        if plan.has_charts {
+            let setup = stubs.join("chart-setup.mjs");
+            std::fs::write(&setup, super::charts::CHART_SETUP).map_err(|e| rerr("ERR_RENDER_FAILED", format!("The page could not be rendered: {e}")))?;
+            let spec = |name: &str| plan.aliases.iter().find(|(s, _)| s == name).map(|(_, f)| f.to_string_lossy().to_string()).or_else(|| resolve_file(name, entry)).unwrap_or_else(|| name.to_string());
+            format!(
+                "import {};\nimport * as mod from {};\nimport * as r from {};\nimport * as s from {};\nimport {{flushSync as chartFlushSync}} from {};\nconst logs = [];\nconst msg = e => String(e && e.message !== undefined ? e.message : e);\n{}\nexport async function run() {{\n  const Page = mod && mod.default !== undefined ? mod.default : undefined;\n  if (typeof Page !== 'function' && typeof (Page && Page.$$typeof) !== 'symbol') return {{noDefault: true, logs}};\n  const React = r.default || r; const server = s.default || s;\n  const st = globalThis.__astryxChartState; st.React = React; st.InChart = React.createContext(false);\n  let markup, chartsFailed = 0, chartsAlone = false;\n  try {{\n    markup = server.renderToStaticMarkup(React.createElement(Page));\n    if (st.charts.length > 0) {{\n      const c = globalThis.console; const keys = ['log', 'info', 'warn', 'error', 'debug', 'trace', 'dir', 'table']; const saved = keys.map(k => c[k]);\n      for (const k of keys) c[k] = () => {{}};\n      try {{ ({{markup, failed: chartsFailed, alone: chartsAlone}} = await drawCharts(markup, Page, {{client: {}, flushSync: chartFlushSync}})); }}\n      finally {{ keys.forEach((k, i) => {{ c[k] = saved[i]; }}); }}\n    }}\n  }} catch (e) {{ return {{stage: 'render', error: msg(e), name: e && e.name, code: e && e.code, logs}}; }}\n  return {{markup, logs, chartsFailed, chartsAlone}};\n}}\n",
+                q(&setup.to_string_lossy()),
+                q(entry),
+                q(&react),
+                q(&server),
+                q(&spec("react-dom")),
+                super::charts::CHART_DRAW,
+                q(&spec("react-dom/client")),
+            )
+        } else {
+        format!(
+            "import * as mod from {};\nimport * as r from {};\nimport * as s from {};\nconst logs = [];\nconst msg = e => String(e && e.message !== undefined ? e.message : e);\nexport async function run() {{\n  const Page = mod && mod.default !== undefined ? mod.default : undefined;\n  if (typeof Page !== 'function' && typeof (Page && Page.$$typeof) !== 'symbol') return {{noDefault: true, logs}};\n  const React = r.default || r; const server = s.default || s;\n  try {{ return {{markup: server.renderToStaticMarkup(React.createElement(Page)), logs}}; }}\n  catch (e) {{ return {{stage: 'render', error: msg(e), name: e && e.name, code: e && e.code, logs}}; }}\n}}\n",
+            q(entry),
+            q(&react),
+            q(&server)
+        )
+        }
+    };
+    std::fs::write(&glue, glue_text).map_err(|e| rerr("ERR_RENDER_FAILED", format!("The page could not be rendered: {e}")))?;
     let opts = crate::js::CallOptions {
         timeout_ms: Some(timeout_ms),
         capture_output: true,
-        jiti: crate::js::JitiOptions { force: true, aliases: plan.aliases.clone(), jsx_automatic: true, ..Default::default() },
+        jiti: crate::js::JitiOptions { force: true, aliases: plan.aliases.clone(), jsx_automatic: true, source_overrides: plan.overrides.clone(), ..Default::default() },
         ..Default::default()
     };
     let target_of = |spec: &str| -> String {
@@ -367,15 +428,15 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
         crate::json::Value::String(target_of("react")),
         crate::json::Value::String(target_of("react-dom/server.browser")),
     ];
+    if plan.has_charts {
+        super::dom::install_hooks();
+    }
     crate::js::capture_console(true);
     crate::js::record_loads(true);
     let r = crate::js::call_export(&glue, &["run"], &args, &opts);
     let loads = crate::js::record_loads(false);
     let console = crate::js::capture_console(false);
     let _ = std::fs::remove_dir_all(&stubs);
-    if std::env::var("ASTRYX_RS_RENDER_DEBUG").is_ok() {
-        eprintln!("render debug: {r:?}");
-    }
     let v = match r {
         Ok(r) => r.value,
         Err(crate::js::CallError::Timeout { .. }) => {
@@ -442,14 +503,14 @@ pub fn run_worker(entry: &str, root: &str, served: Option<&Served>, timeout_ms: 
     }
     Ok(WorkerOut {
         markup: v.get("markup").and_then(|m| m.as_str()).unwrap_or("").to_string(),
-        css: String::new(),
+        css: super::stylex::process_rules(&plan.stylex_rules),
         imported_css: plan.imported_css,
         packages: plan.packages,
         package_css: plan.package_css,
         skipped_css: plan.skipped_css,
         from_set,
-        charts_failed: 0,
-        charts_alone: None,
+        charts_failed: v.get("chartsFailed").and_then(|x| x.as_u64()).unwrap_or(0) as usize,
+        charts_alone: v.get("chartsAlone").and_then(|x| x.as_str()).map(String::from),
         assets: plan.assets,
         files,
         texts: plan.texts,

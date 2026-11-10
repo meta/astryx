@@ -8,7 +8,7 @@
   "../escape.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The output /tmp/astryx-conformance/work/escape.html is outside the current folder; nothing was written. Write inside the folder you run the command from.\n",
  "exit": 1,

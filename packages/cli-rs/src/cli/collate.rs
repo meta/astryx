@@ -1,31 +1,17 @@
-//! `String#localeCompare` for the short ASCII names the shell sorts
-//! (command names, flags). TEMP: an ICU-root approximation for ASCII:
-//! punctuation, then digits, then letters case-insensitively; lowercase
-//! first on a tie.
+//! `String#localeCompare` for the names the shell sorts (command names,
+//! flags): the shared ICU root collation.
 
-use std::cmp::Ordering;
+pub use crate::text::collate::locale_compare;
 
-fn primary(c: char) -> (u8, u32) {
-    if c.is_ascii_digit() {
-        (1, c as u32)
-    } else if c.is_ascii_alphabetic() {
-        (2, c.to_ascii_lowercase() as u32)
-    } else if c.is_ascii() {
-        (0, c as u32)
-    } else {
-        (3, c as u32)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cmp::Ordering;
+    #[test]
+    fn icu_root_order() {
+        // ICU root puts `_` before `-`, unlike code-unit order.
+        assert_eq!(locale_compare("a_b", "a-b"), Ordering::Less);
+        assert_eq!(locale_compare("aB", "Ab"), Ordering::Less);
+        assert_eq!(locale_compare("é", "f"), Ordering::Less);
     }
-}
-
-pub fn locale_compare(a: &str, b: &str) -> Ordering {
-    let pa: Vec<(u8, u32)> = a.chars().map(primary).collect();
-    let pb: Vec<(u8, u32)> = b.chars().map(primary).collect();
-    match pa.cmp(&pb) {
-        Ordering::Equal => {}
-        o => return o,
-    }
-    // Tertiary: lowercase before uppercase.
-    let ta: Vec<bool> = a.chars().map(|c| c.is_ascii_uppercase()).collect();
-    let tb: Vec<bool> = b.chars().map(|c| c.is_ascii_uppercase()).collect();
-    ta.cmp(&tb)
 }

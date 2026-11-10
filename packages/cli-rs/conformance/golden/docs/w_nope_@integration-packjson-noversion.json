@@ -1,0 +1,13 @@
+{
+ "id": "w_nope_@integration-packjson-noversion",
+ "args": [
+  "docs",
+  "nope"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Unknown topic \"nope\"\n\n  authoring  (docs namespace)\n  calendars  (docs namespace)\n  cli  (docs namespace)\n  foundations  (docs namespace)\n  global  (docs namespace)\n  guides  (docs namespace)\n  internationalization  (docs namespace)\n  layout  (docs namespace)\n  migration  (docs namespace)\n  styling  (docs namespace)\n  styling-libraries  (docs namespace)\n  tokens  (docs namespace)\n  typography  (docs namespace)\n  author-a-theme  (available topic)\n  browser-support  (available topic)\n  color  (available topic)\n  elevation  (available topic)\n  getting-started  (available topic)\n  icons  (available topic)\n  illustrations  (available topic)\n  is-my-code-good  (available topic)\n  motion  (available topic)\n  principles  (available topic)\n  shape  (available topic)\n  spacing  (available topic)\n  styling-overview  (available topic)\n  theme  (available topic)\n  use-a-theme  (available topic)\n  use-integrations  (available topic)\n  working-with-ai  (available topic)\n  guide  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

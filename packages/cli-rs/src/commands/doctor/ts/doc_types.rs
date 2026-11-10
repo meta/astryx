@@ -916,7 +916,11 @@ pub fn check_doc_types(files: &[(String, String)], package_dir: &str, resolve_fr
                     return po.get(k, ctx);
                 }
                 let f = orig.as_object().unwrap();
+                let t0 = std::time::Instant::now();
                 let v = f.call(host, args, ctx)?;
+                if cfg!(feature = "ts-timing") {
+                    eprintln!("[ts] sf {name_s} {:?}", t0.elapsed());
+                }
                 po.set(k, v.clone(), true, ctx)?;
                 Ok(v)
             },
@@ -952,7 +956,11 @@ pub fn check_doc_types(files: &[(String, String)], package_dir: &str, resolve_fr
                 break;
             }
             let args = t.obj(vec![("rootNames", root_names.clone()), ("options", options.clone()), ("host", host.clone()), ("oldProgram", program.clone())]);
+            let t0 = std::time::Instant::now();
             program = t.f("createProgram", &[args]);
+            if cfg!(feature = "ts-timing") {
+                eprintln!("[ts] pass {pass} createProgram {:?}", t0.elapsed());
+            }
             let mut again: Vec<usize> = Vec::new();
             for &i in &pending {
                 let path_js = t.str(&entries[i].path);
@@ -980,7 +988,11 @@ pub fn check_doc_types(files: &[(String, String)], package_dir: &str, resolve_fr
                     continue;
                 }
                 let mut changed = false;
+                let t1 = std::time::Instant::now();
                 let sem = t.m(&program, "getSemanticDiagnostics", std::slice::from_ref(&vsf));
+                if cfg!(feature = "ts-timing") {
+                    eprintln!("[ts] pass {pass} semantic {} {:?}", entries[i].path, t1.elapsed());
+                }
                 for d in t.items(&sem) {
                     let code = t.get(&d, "code");
                     let code = t.n(&code);

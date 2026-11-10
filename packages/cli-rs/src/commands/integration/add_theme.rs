@@ -98,7 +98,10 @@ pub fn add_theme(name: &str, o: &AddOptions) -> R<Value> {
         Err(RootError::Conflict(m)) => return Err(AddError::new(m, "ERR_INTEGRATION_ROOT_CONFLICT")),
         Err(RootError::Other(e)) => return Err(theme_invalid(e)),
     };
-    let _ = &owner;
+    if root.exists() {
+        crate::commands::theme::discovery::discover_directory(&root.to_string_lossy(), &owner, false)
+            .map_err(|m| AddError::new(m, "ERR_THEME_INVALID"))?;
+    }
     let theme_dir = within(&identity.slug, &root, "theme directory")?;
     if let Some(from) = &o.from {
         if from == name {
@@ -193,7 +196,11 @@ pub fn add_theme(name: &str, o: &AddOptions) -> R<Value> {
     let manifest_path = relative(&package_dir, &manifest_file);
     if !dry {
         let rb = apply_writes(&plans).map_err(|e| if e.code.is_some() { e } else { AddError::new(format!("Failed to write theme contribution: {}", e.message), "ERR_WRITE_FAILED") })?;
-        match patch_integration_root(&package_dir, "themes", &root_path, false, true) {
+        let label = format!("Integration manifest {}", basename(&manifest_file));
+        let verify = || {
+            super::add::verify_contribution(&package_dir, &manifest_file, &owner, &label, "themes", "The themes root was not visible after writing.", "theme", &identity.slug, None)
+        };
+        match super::add::patch_integration_root_verified(&package_dir, "themes", &root_path, false, true, Some(&verify)) {
             Ok(r) => root_receipt = r,
             Err(e) => {
                 rb.run();
@@ -217,72 +224,12 @@ pub fn add_theme(name: &str, o: &AddOptions) -> R<Value> {
 
 // ── --from: resolve and fork a base theme ───────────────────────────
 
-/// TEMP: replace with the discovery lane's theme discovery.
-pub struct BaseTheme {
-    pub slug: String,
-    pub source_dir: std::path::PathBuf,
-    pub files: Vec<String>,
-    pub bundled: bool,
-    pub package: String,
-}
-
-fn list_files(dir: &std::path::Path, prefix: &str, out: &mut Vec<String>) {
-    let Ok(rd) = fs::read_dir(dir) else { return };
-    for e in rd.flatten() {
-        let name = e.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || name == "node_modules" {
-            continue;
-        }
-        let rel = if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
-        let ft = e.file_type();
-        if ft.as_ref().map(|t| t.is_dir()).unwrap_or(false) {
-            list_files(&e.path(), &rel, out);
-        } else if ft.map(|t| t.is_file()).unwrap_or(false) {
-            out.push(rel);
-        }
-    }
-}
-
-fn discover_dir(root: &std::path::Path, owner: &str, bundled: bool) -> Vec<BaseTheme> {
-    let mut out = Vec::new();
-    let Ok(rd) = fs::read_dir(root) else { return out };
-    let mut dirs: Vec<_> = rd.flatten().filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).collect();
-    dirs.sort_by_key(|e| e.file_name());
-    for d in dirs {
-        let slug = d.file_name().to_string_lossy().to_string();
-        let Ok(id) = theme_identity(&slug) else { continue };
-        let mut files = Vec::new();
-        list_files(&d.path(), "", &mut files);
-        files.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-        let entry = ["ts", "tsx", "js", "mjs"].iter().map(|x| format!("{}Theme.{x}", id.identifier)).find(|f| files.contains(f));
-        let Some(entry) = entry else { continue };
-        let descriptor = id.descriptor.clone();
-        let rest: Vec<String> = files.iter().filter(|f| **f != entry && **f != descriptor).cloned().collect();
-        let mut ordered = vec![entry.clone(), descriptor.clone()];
-        if bundled {
-            let order = [
-                "icons.tsx".to_string(),
-                format!("{}Palettes.ts", id.identifier),
-                format!("{}Palettes.generated.ts", id.identifier),
-                format!("{}PaletteRefs.generated.ts", id.identifier),
-                format!("{}Palettes.generated.receipt.json", id.identifier),
-                "palette.config.json".to_string(),
-            ];
-            ordered.extend(order.iter().filter(|f| rest.contains(f)).cloned());
-            ordered.extend(rest.iter().filter(|f| !order.contains(f)).cloned());
-        } else {
-            ordered.extend(rest);
-        }
-        out.push(BaseTheme { slug, source_dir: d.path(), files: ordered, bundled, package: owner.to_string() });
-    }
-    out
-}
+use crate::commands::theme::discovery::Theme as BaseTheme;
 
 fn resolve_base_theme(slug: &str, owner: &str, themes_root: &std::path::Path) -> R<BaseTheme> {
-    let cli_root = crate::cli::env::cli_root();
-    let mut candidates = discover_dir(&cli_root.join("assets/templates/themes"), "@astryxdesign/core", true);
+    let mut candidates = crate::commands::theme::discovery::bundled(&crate::cli::env::cli_root());
     if themes_root.exists() {
-        candidates.extend(discover_dir(themes_root, owner, false));
+        candidates.extend(crate::commands::theme::discovery::discover_directory(&themes_root.to_string_lossy(), owner, false).unwrap_or_default());
     }
     let lower = slug.to_lowercase();
     if let Some(i) = candidates.iter().position(|t| t.slug.to_lowercase() == lower) {
@@ -382,7 +329,7 @@ fn fork_theme_plans(base: &BaseTheme, id: &Identity, theme_dir: &std::path::Path
     for file in base.files.iter().filter(|f| f.rsplit('/').next() != Some(&format!("{}.doc.mjs", base_id.export_name))) {
         let new_name = rename_theme_file(file, &base_id.identifier, &id.identifier);
         let dest = within(&new_name, theme_dir, &format!("forked theme file \"{new_name}\""))?;
-        let bytes = fs::read(base.source_dir.join(file)).map_err(|e| AddError::plain(e.to_string()))?;
+        let bytes = fs::read(std::path::Path::new(&base.source_dir).join(file)).map_err(|e| AddError::plain(e.to_string()))?;
         let contents = match String::from_utf8(bytes.clone()) {
             Ok(text) => rewrite_theme_source(&strip_copyright_header(&text), &base.slug, &base_id.identifier, &id.slug, &id.identifier).into_bytes(),
             Err(_) => bytes,
@@ -463,7 +410,7 @@ fn fork_dependencies(base: &BaseTheme, pkg: &Value) -> Vec<(String, String)> {
         if !code || file.ends_with(".doc.mjs") {
             continue;
         }
-        let Some(specs) = file_imports(&base.source_dir.join(file)) else { continue };
+        let Some(specs) = file_imports(&std::path::Path::new(&base.source_dir).join(file)) else { continue };
         for s in specs {
             let Some(name) = package_of_specifier(&s) else { continue };
             if provided.contains(&name.as_str()) || declared.contains(&name) {

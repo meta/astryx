@@ -926,5 +926,61 @@
       "--json"
     ],
     "fixture": "upgrade-edge"
+  },
+  {
+    "id": "wide_protokeys_dry",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_protokeys_json",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--json"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_protokeys_apply_05",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.5.0",
+      "--apply"
+    ],
+    "fixture": "upgrade-protokeys"
+  },
+  {
+    "id": "wide_registry_enums",
+    "args": [
+      "upgrade",
+      "--registry"
+    ],
+    "fixture": "upgrade-registry-enums"
+  },
+  {
+    "id": "wide_registry_enums_json",
+    "args": [
+      "upgrade",
+      "--registry",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-enums"
+  },
+  {
+    "id": "wide_registry_enums_run",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.7.12",
+      "--json"
+    ],
+    "fixture": "upgrade-registry-enums"
   }
 ]

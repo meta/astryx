@@ -1,7 +1,6 @@
 //! What discover reads from the environment, gathered once per run.
-//! The shared loaders (Project.load, package manager, release choice) belong
-//! to the discovery and shell lanes; the pieces here marked TEMP are the
-//! smallest local versions until those land.
+//! The shared loaders (Project.load, package manager, release choice,
+//! findInstalledPackage) come from the discovery and shell lanes.
 
 use crate::json::Value;
 use std::path::{Path, PathBuf};
@@ -17,6 +16,7 @@ pub trait Source {
 pub struct Integration {
     pub name: String,
     pub version: Option<String>,
+    pub version_raw: Option<Value>,
     pub components_dir: Option<PathBuf>,
     pub load_error: Option<String>,
     pub discover: Option<Box<dyn Source>>,
@@ -69,7 +69,7 @@ impl Env {
 
 /// The version in a package directory's package.json, if it names one.
 pub fn package_version(dir: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
+    let text = crate::discovery::nodepath::read_text(&dir.join("package.json").to_string_lossy())?;
     let v: Value = serde_json::from_str(&text).ok()?;
     match v.get("version") {
         Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
@@ -77,18 +77,9 @@ pub fn package_version(dir: &Path) -> Option<String> {
     }
 }
 
-/// TEMP: replace with src/discovery findInstalledPackage. Walks up from
-/// `start` looking in each `node_modules/<name>/package.json`.
+/// `findInstalledPackage(start, name)`.
 pub fn find_installed_package(start: &Path, name: &str) -> Option<PathBuf> {
-    let mut dir = Some(start);
-    while let Some(d) = dir {
-        let cand = d.join("node_modules").join(name);
-        if cand.join("package.json").is_file() {
-            return Some(std::fs::canonicalize(&cand).unwrap_or(cand));
-        }
-        dir = d.parent();
-    }
-    None
+    crate::discovery::paths::find_installed_package(&start.to_string_lossy(), name, crate::discovery::paths::INSTALLED_REACH).map(PathBuf::from)
 }
 
 /// The nearest package.json at or above `start`, read.

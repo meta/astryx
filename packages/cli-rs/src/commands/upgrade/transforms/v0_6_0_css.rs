@@ -116,6 +116,10 @@ impl<'d> M<'d> {
 
     pub fn candidates_for(&self, target: &str, token: &str) -> Vec<Candidate> {
         let mut c: Vec<Candidate> = vec![];
+        if !self.d.targets.contains_key(target) && !self.d.dynamic.contains_key(target) && crate::commands::upgrade::transforms::jsproto::proto(target).is_some() {
+            PROTO_THREW.with(|f| f.set(true));
+            return c;
+        }
         if let Some(entry) = self.d.targets.get(target).and_then(|m| m.get(token)) {
             if let Some(arr) = entry.as_array() {
                 if arr.first().map(|f| f.is_string()).unwrap_or(false) {
@@ -190,7 +194,8 @@ impl<'d> M<'d> {
     }
 
     fn known_target(&self, t: &str) -> bool {
-        self.d.targets.contains_key(t) || self.d.dynamic.contains_key(t)
+        // `TARGETS[t] != null`: inherited Object.prototype members count.
+        self.d.targets.contains_key(t) || self.d.dynamic.contains_key(t) || crate::commands::upgrade::transforms::jsproto::proto(t).is_some()
     }
 
     fn completed_arms(&self, s: &Sel, pseudo: usize, target_names: &[String], conditional: &[String]) -> Vec<usize> {
@@ -445,7 +450,19 @@ impl<'d> M<'d> {
     }
 
     /// `migrateSelectorTextWithContext`
+    /// A selector whose target is an inherited `Object.prototype` member makes
+    /// the JS `for (const rule of DYNAMIC_AXES[target] ?? [])` throw; the
+    /// selector then counts as one the parser could not migrate.
     pub fn migrate_text_ctx(&self, text: &str, parent: &Ctx) -> Result<(String, Ctx), crate::commands::upgrade::css::ProcessError> {
+        PROTO_THREW.with(|f| f.set(false));
+        let r = self.migrate_text_ctx_inner(text, parent);
+        if PROTO_THREW.with(|f| f.get()) {
+            return Err(crate::commands::upgrade::css::ProcessError::Other("DYNAMIC_AXES[target] is not iterable".into()));
+        }
+        r
+    }
+
+    fn migrate_text_ctx_inner(&self, text: &str, parent: &Ctx) -> Result<(String, Ctx), crate::commands::upgrade::css::ProcessError> {
         let mut ctx = Ctx::default();
         let out = process_selector(text, &mut |s| {
             let mut branch_ctx: Vec<Ctx> = vec![];
@@ -537,6 +554,10 @@ pub fn map_scope_params<E>(params: &str, finish: &mut dyn FnMut(&str, usize) -> 
 }
 
 /// `migrateAstryxThemeSelectors(source, from, data)`.
+thread_local! {
+    static PROTO_THREW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub fn migrate_astryx_theme_selectors(source: &str, from: &str, data: &SelectorData) -> Result<String, CodemodError> {
     let mut root = postcss::parse(source, Some(from)).map_err(css_parse_error)?;
     let m = M { d: data };

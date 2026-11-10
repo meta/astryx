@@ -1,5 +1,5 @@
-//! TEMP adapters for pieces other lanes own. Each one names its owner path;
-//! swap the body for the owner's function when it lands.
+//! Typed adapters over the shared readers the component views call (doc
+//! views, integrations, Project issues) and the theme reader (resolveTheme).
 
 use crate::json::Value;
 use std::path::{Path, PathBuf};

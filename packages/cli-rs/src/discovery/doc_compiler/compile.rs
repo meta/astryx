@@ -3,7 +3,8 @@
 //! it (lenses.mjs, docs-section-key.mjs `buildDocsIndexData`).
 //!
 //! Owner: the docs lane (agreed with discovery).
-//! TEMP: extensions (`extends`) are not merged yet.
+//! Extensions (`extends`) merge in order through `mergeTopic`; every caller
+//! drops a topic whose merge fails, so the error text is not shown.
 
 use crate::json::{Map, Value};
 use unicode_normalization::UnicodeNormalization;

@@ -759,6 +759,10 @@ fn source_root(opts_path: Option<&str>, cwd: &Path) -> Result<PathBuf, ApiError>
 pub fn reconcile_registry_compositions(apply: bool, path: Option<&str>, ctx: &Ctx) -> Result<Reconciled, ApiError> {
     let root = source_root(path, ctx.cwd)?;
     let display: PathBuf = ctx.origin.map(|o| o.to_path_buf()).unwrap_or_else(|| root.clone());
+    if root.exists() && !root.is_dir() {
+        // readdirSync on a file: an uncaught error in the JS CLI.
+        return Err(ApiError::new(format!("ENOTDIR: not a directory, scandir '{}'", root.display()), "CRASH"));
+    }
     let receipts = discover_registry_receipts(&root);
     let mut summary = empty_summary(apply);
     summary.insert("found".into(), n(receipts.len() as u64));

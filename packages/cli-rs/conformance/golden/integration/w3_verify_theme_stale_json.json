@@ -1,0 +1,14 @@
+{
+ "id": "w3_verify_theme_stale_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/stale\",\n    \"version\": \"1.0.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"acme-stale-1.0.0.tgz\",\n      \"fileCount\": 7,\n      \"size\": 761,\n      \"unpackedSize\": 1103\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 4,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 5,\n      \"packedFiles\": 5\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_module_stale\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" module does not match themes/ocean/oceanTheme.ts. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\"\n      },\n      {\n        \"code\": \"theme_stylesheet_stale\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" stylesheet does not match themes/ocean/oceanTheme.ts. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

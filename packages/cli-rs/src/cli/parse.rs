@@ -748,6 +748,7 @@ pub fn run(argv: Vec<String>, cwd: PathBuf) -> (Out, i32) {
 pub fn run_live(argv: Vec<String>, cwd: PathBuf, live: bool) -> (Out, i32) {
     let mut run = Run::new(argv.clone(), cwd);
     run.out.live = live;
+    run.out.raw_json = argv.iter().any(|a| a == "--json");
     if let Some(line) = crate::cli::release::start_notice(&run.cwd, &argv) {
         run.out.eprintln(&line);
     }

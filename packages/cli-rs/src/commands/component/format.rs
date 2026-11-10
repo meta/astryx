@@ -386,17 +386,53 @@ pub fn format_compact(docs: &Value, component_name: &str, import_hint: Option<&s
 const SIGNATURE_UNION_MAX_MEMBERS: usize = 8;
 
 /// `formatBrief(docs, componentName, importHint, {themeData})`.
+/// A JS exception a formatter throws: `(name, message)`.
+pub type Thrown = (String, String);
+
+fn type_error(message: &str) -> Thrown {
+    ("TypeError".into(), message.into())
+}
+
+/// `for (const x of <name>)` over a value: the items, or the TypeError JS
+/// throws for a value that is not iterable.
+fn iterate<'a>(v: Option<&'a Value>, name: &str) -> Result<&'a [Value], Thrown> {
+    match v {
+        Some(Value::Array(a)) => Ok(a.as_slice()),
+        _ => Err(type_error(&format!("{name} is not iterable"))),
+    }
+}
+
+/// `<what>.includes` on a prop's type.
+fn type_string(prop: &Value) -> Result<String, Thrown> {
+    match prop.get("type") {
+        Some(Value::String(t)) => Ok(t.clone()),
+        Some(Value::Array(a)) => Ok(crate::cli::format::js_string(&Value::Array(a.clone()))),
+        None => Err(type_error("Cannot read properties of undefined (reading 'includes')")),
+        Some(v) if super::jsv::is_undef(v) => Err(type_error("Cannot read properties of undefined (reading 'includes')")),
+        Some(Value::Null) => Err(type_error("Cannot read properties of null (reading 'includes')")),
+        Some(_) => Err(type_error("prop.type.includes is not a function")),
+    }
+}
+
+/// `formatBrief`, for callers that never see the JS exception: a doc that
+/// would throw renders as empty text.
 pub fn format_brief(docs: &Value, component_name: &str, import_hint: Option<&str>, theme: Option<&Value>) -> String {
+    try_format_brief(docs, component_name, import_hint, theme).unwrap_or_default()
+}
+
+/// `formatBrief(docs, componentName, importHint, {themeData})`, with the
+/// TypeError JS throws for props it cannot iterate.
+pub fn try_format_brief(docs: &Value, component_name: &str, import_hint: Option<&str>, theme: Option<&Value>) -> Result<String, Thrown> {
     let dn = display_name(component_name);
     let mut props: Vec<Value> = Vec::new();
     let mut description = or_str(&[at(docs, &["usage", "description"]), docs.get("description")]);
     let mut examples: Vec<Value> = arr(docs.get("examples")).to_vec();
     let mut examples_truthy = truthy(docs.get("examples"));
     if has_key(docs, "props") {
-        props = arr(docs.get("props")).to_vec();
+        props = iterate(docs.get("props"), "props")?.to_vec();
     } else if has_key(docs, "components") {
         if let Some(entry) = arr(docs.get("components")).iter().find(|c| s(c.get("name")) == Some(dn)) {
-            props = arr(entry.get("props")).to_vec();
+            props = iterate(entry.get("props"), "props")?.to_vec();
             description = str_or_empty(entry.get("description"));
             if truthy(entry.get("examples")) {
                 examples = arr(entry.get("examples")).to_vec();
@@ -408,7 +444,7 @@ pub fn format_brief(docs: &Value, component_name: &str, import_hint: Option<&str
     let mut sig_props: Vec<String> = Vec::new();
     let mut other: Vec<String> = Vec::new();
     for prop in &props {
-        let ty = tpl(prop.get("type"));
+        let ty = type_string(prop)?;
         let name = tpl(prop.get("name"));
         let values = if ty.contains('|') && !ty.contains("ReactNode") { Some(split_union(&ty)) } else { None };
         match values {
@@ -516,7 +552,7 @@ pub fn format_brief(docs: &Value, component_name: &str, import_hint: Option<&str
             .unwrap_or_else(|| code.split('\n').next().unwrap_or(""));
         output.push(format!("  {}", line.trim()));
     }
-    output.join("\n") + "\n"
+    Ok(output.join("\n") + "\n")
 }
 
 /// `formatProps(docs, componentName)`.

@@ -62,15 +62,15 @@ pub fn normalize(p: &Path) -> PathBuf {
 
 /// The real path of an existing file, as Node keys its module cache.
 pub fn real(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| normalize(p))
+    super::vfs::canonicalize(p).unwrap_or_else(|_| normalize(p))
 }
 
 fn is_file(p: &Path) -> bool {
-    std::fs::metadata(p).map(|m| m.is_file()).unwrap_or(false)
+    super::vfs::is_file(p)
 }
 
 fn is_dir(p: &Path) -> bool {
-    std::fs::metadata(p).map(|m| m.is_dir()).unwrap_or(false)
+    super::vfs::is_dir(p)
 }
 
 /// Percent-decode a file URL path.
@@ -122,7 +122,7 @@ pub fn path_to_file_url(p: &Path) -> String {
 }
 
 fn read_json(p: &Path) -> Option<Value> {
-    let text = std::fs::read_to_string(p).ok()?;
+    let text = super::vfs::read_to_string(p).ok()?;
     serde_json::from_str(&text).ok()
 }
 
@@ -783,6 +783,15 @@ pub fn pure_module_entry(spec: &str, from: &Path) -> Option<PathBuf> {
             if is_dir(&pkg_dir) {
                 let pj = read_json(&pkg_dir.join("package.json"))?;
                 if pj.get("exports").is_some() || pj.get("sideEffects") != Some(&Value::Bool(false)) {
+                    return None;
+                }
+                // Only when "main" is ES too: a CommonJS "main" can load a
+                // different graph (other dependency builds), so its output
+                // can differ from the "module" build.
+                let main = pj.get("main").and_then(Value::as_str).unwrap_or("index.js");
+                let main_is_esm = main.ends_with(".mjs")
+                    || (pj.get("type").and_then(Value::as_str) == Some("module") && !main.ends_with(".cjs"));
+                if !main_is_esm {
                     return None;
                 }
                 let module = pj.get("module")?.as_str()?;

@@ -1,0 +1,18 @@
+{
+ "id": "sweep_doc_parent_fresh",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "guide-x",
+  "--parent",
+  "fresh",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Failed to write doc contribution: broken.doc.mjs: broken.doc.mjs is invalid: title: Invalid input: expected string, received undefined; summary: Invalid input: expected string, received undefined\",\n  \"code\": \"ERR_WRITE_FAILED\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

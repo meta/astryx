@@ -132,13 +132,16 @@ pub fn rename_form_tooltip_start_icon(source: &str, path: &str, _o: &Value) -> T
             _ => continue,
         }
         for a in j.ast.list(p.node, "attributes") {
-            let new = match j.jsx_attr_name(a).as_deref() {
-                Some("tooltip") => "labelTooltip",
-                Some("startIcon") => "labelIcon",
-                _ => continue,
+            let name = match j.jsx_attr_name(a) {
+                Some(n) => n,
+                None => continue,
+            };
+            let new = match super::jsproto::lookup(&[("tooltip", "labelTooltip"), ("startIcon", "labelIcon")], &name) {
+                Some(h) => h.string(),
+                None => continue,
             };
             let n = j.ast.child(a, "name").unwrap();
-            j.set_name(n, new);
+            j.set_name(n, &new);
             changed = true;
         }
     }
@@ -157,11 +160,12 @@ pub fn rename_import_specifiers(j: &mut J, map: &[(&str, &str)]) -> bool {
             continue;
         }
         let old = j.ast.name(imported).unwrap_or("").to_string();
-        if let Some((_, new)) = map.iter().find(|(o, _)| *o == old) {
-            j.set_name(imported, new);
+        if let Some(hit) = super::jsproto::lookup(map, &old) {
+            let new = hit.string();
+            j.set_name(imported, &new);
             if let Some(local) = j.ast.child(p.node, "local") {
                 if j.ast.name(local) == Some(old.as_str()) {
-                    j.set_name(local, new);
+                    j.set_name(local, &new);
                 }
             }
             changed = true;
@@ -220,9 +224,9 @@ pub fn rename_sidenav_header(source: &str, path: &str, _o: &Value) -> TResult {
         }
         for a in j.ast.list(p.node, "attributes") {
             if let Some(name) = j.jsx_attr_name(a) {
-                if let Some((_, new)) = renames.iter().find(|(o, _)| *o == name) {
+                if let Some(hit) = super::jsproto::lookup(&renames, &name) {
                     let n = j.ast.child(a, "name").unwrap();
-                    j.set_name(n, new);
+                    j.set_name(n, &hit.string());
                     changed = true;
                 }
             }
@@ -365,6 +369,9 @@ pub fn migrate_gap_to_numeric(source: &str, path: &str, _o: &Value) -> TResult {
                 None => continue,
             };
             if matches!(j.ast.ty(value), "Literal" | "StringLiteral") {
+                if let Some(p) = j.ast.str_of(value, "value").filter(|v| gap_token(v).is_none()).and_then(super::jsproto::proto) {
+                    return Err(p.builder_error("value", "string | boolean | null | number | RegExp | BigInt", "Literal"));
+                }
                 if let Some(n) = j.ast.str_of(value, "value").and_then(gap_token) {
                     let lit = j.literal_num(n);
                     let c = j.jsx_expression_container(lit);
@@ -376,6 +383,9 @@ pub fn migrate_gap_to_numeric(source: &str, path: &str, _o: &Value) -> TResult {
             if j.ast.is(value, "JSXExpressionContainer") {
                 let e = j.ast.child(value, "expression").unwrap();
                 if matches!(j.ast.ty(e), "Literal" | "StringLiteral") {
+                    if let Some(p) = j.ast.str_of(e, "value").filter(|v| gap_token(v).is_none()).and_then(super::jsproto::proto) {
+                        return Err(p.builder_error("value", "string | boolean | null | number | RegExp | BigInt", "Literal"));
+                    }
                     if let Some(n) = j.ast.str_of(e, "value").and_then(gap_token) {
                         let lit = j.literal_num(n);
                         j.ast.set_node(value, "expression", lit);

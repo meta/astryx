@@ -566,6 +566,7 @@ while (inputs.length < N) {
 
 const started = Date.now();
 const jsCrashes = [];
+const timeouts = [];
 const stats = {jsCrash: 0, tried: 0, same: 0, timeouts: 0, nondeterministic: 0, diffs: 0, newDiffs: 0, knownSig: 0, perCommand: {}};
 const found = [];
 const nondet = [];
@@ -575,6 +576,7 @@ await pool(inputs, jobs, async ({c, p}) => {
   stats.tried++;
   if (j.exit === 'timeout' || r.exit === 'timeout') {
     stats.timeouts++;
+    timeouts.push({...c, js: {exit: j.exit, ms: j.ms}, rs: {exit: r.exit, ms: r.ms}});
     return;
   }
   const d = compare(j, r);
@@ -584,9 +586,9 @@ await pool(inputs, jobs, async ({c, p}) => {
   }
   // A JS crash prints a stack trace with paths outside <cli> (node_modules): not a
   // target for the clone. Log it for the lead instead of saving a case.
-  if (/^\s+at .+:\d+:\d+\)?$/m.test(j.stderr)) {
+  if (/^\s+at .+:\d+:\d+\)?\r?$/m.test(j.stderr + j.stdout)) {
     stats.jsCrash++;
-    const msg = j.stderr.split('\n')[0];
+    const msg = (j.stderr || j.stdout).split('\n').find(l => /Error/.test(l)) ?? '';
     if (!jsCrashes.some(x => x.msg === msg)) jsCrashes.push({msg, args: c.args, fixture: c.fixture, cwd: c.cwd});
     return;
   }
@@ -674,10 +676,12 @@ const summary = {
   added,
   skippedExisting: found.filter(e => e.existing).map(e => ({sig: e.sig, case: e.existing})),
   jsCrashes,
+  timeoutInputs: timeouts,
   nondeterministicInputs: nondet.slice(0, 50),
 };
 if (summaryFile) fs.writeFileSync(summaryFile, `${JSON.stringify(summary, null, 1)}\n`);
 console.log(`fuzz: tried ${stats.tried}, same ${stats.same}, diffs ${stats.diffs} (known signature ${stats.knownSig}), nondeterministic ${stats.nondeterministic}, JS crashes ${stats.jsCrash}, timeouts ${stats.timeouts}, cases added ${added.length}, ${summary.secs}s`);
 for (const [cmd, s] of Object.entries(stats.perCommand).sort()) console.log(`  ${cmd}: diffs ${s.diffs}, new ${s.new}`);
+for (const t of timeouts) console.log(`  timeout: js ${t.js.exit} ${t.js.ms}ms, rs ${t.rs.exit} ${t.rs.ms}ms  <- ${JSON.stringify(t.args)} @${t.cwd ?? t.fixture}${t.pre ? ' pre ' + JSON.stringify(t.pre) : ''}${t.env ? ' env ' + JSON.stringify(t.env) : ''}`);
 for (const x of jsCrashes) console.log(`  JS crash: ${x.msg}  <- ${JSON.stringify(x.args)} @${x.cwd ?? x.fixture}`);
 for (const a of added) console.log(`  + ${a.file}/${a.id} [${a.parts}] ${a.first.part}:${a.first.line ?? ''}\n      js: ${clip(String(a.first.js))}\n      rs: ${clip(String(a.first.rs))}`);

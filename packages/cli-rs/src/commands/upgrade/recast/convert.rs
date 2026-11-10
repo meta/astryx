@@ -70,8 +70,9 @@ pub fn parse(ast: &mut Ast, source: &str, mode: Mode) -> Result<Parsed, ParseErr
     if ret.diagnostics.has_errors() && mode == Mode::Babel {
         // Babel's TSX parser falls back to a generic arrow (`<T>(x: T) => x`)
         // when JSX parsing fails; oxc does not, so retry as plain TypeScript.
+        // Angle-bracket assertions (`<T>x`) stay errors, as in Babel's TSX.
         let retry = run(oxc_span::SourceType::ts());
-        if !retry.diagnostics.has_errors() {
+        if !retry.diagnostics.has_errors() && !retry.program.to_estree_json(true, false).contains("\"TSTypeAssertion\"") {
             ret = retry;
         }
     }
@@ -916,7 +917,57 @@ fn _unused(ctx: &Ctx) -> usize {
 }
 
 /// Babel's wording for the parse errors oxc reports differently.
+const RESERVED: &[&str] = &["break", "case", "catch", "continue", "debugger", "default", "do", "else", "finally", "for", "function", "if", "return", "switch", "throw", "try", "var", "const", "while", "with", "new", "this", "super", "class", "extends", "export", "import", "null", "true", "false", "in", "instanceof", "typeof", "void", "delete"];
+
+/// Whether `off` sits inside an unclosed JSX opening tag on its line.
+fn in_jsx_tag(src: &[u16], off: usize) -> bool {
+    let at = |i: usize| src.get(i).copied().unwrap_or(0);
+    let mut k = off;
+    while k > 0 {
+        let c = at(k - 1);
+        if c == b'\n' as u16 || c == b'>' as u16 {
+            return false;
+        }
+        if c == b'<' as u16 {
+            let n = at(k);
+            return n < 128 && ((n as u8).is_ascii_alphabetic() || n == b'_' as u16 || n == b'$' as u16);
+        }
+        k -= 1;
+    }
+    false
+}
+
 fn babel_message(msg: &str, src: &[u16], off: usize, line: usize, col: usize) -> (String, usize, usize) {
+    let at = |i: usize| src.get(i).copied().unwrap_or(0);
+    if let Some(rest) = msg.strip_prefix("Identifier expected. '") {
+        if let Some(kw) = rest.strip_suffix("' is a reserved word that cannot be used here.") {
+            return (format!("Unexpected keyword '{}'.", kw), line, col);
+        }
+    }
+    if msg == "Unexpected token" {
+        let mut k = off;
+        while k > 0 && (at(k - 1) == b' ' as u16 || at(k - 1) == b'\t' as u16) {
+            k -= 1;
+        }
+        if k > 0 && at(k - 1) == b'=' as u16 && in_jsx_tag(src, off) {
+            return ("JSX value should be either an expression or a quoted JSX text.".into(), line, col);
+        }
+    }
+    if msg.starts_with("Expected `:`") {
+        // `{keyword other}`: Babel reads the keyword as a shorthand property.
+        let mut k = off;
+        while k > 0 && (at(k - 1) == b' ' as u16 || at(k - 1) == b'\t' as u16) {
+            k -= 1;
+        }
+        let end = k;
+        while k > 0 && at(k - 1) < 128 && (at(k - 1) as u8).is_ascii_alphanumeric() {
+            k -= 1;
+        }
+        let word: String = src[k..end].iter().map(|&c| c as u8 as char).collect();
+        if RESERVED.contains(&word.as_str()) && off - k <= col {
+            return (format!("Unexpected keyword '{}'.", word), line, col - (off - k));
+        }
+    }
     let at = |i: usize| src.get(i).copied().unwrap_or(0);
     if msg == "Unexpected token" {
         let mut j = off;

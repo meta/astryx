@@ -31,9 +31,9 @@ w('docs/guide.doc.mjs', `export default {type: 'generic', name: 'guide', title: 
 w('docs/guid.doc.zh.mjs', 'export const docsZh = {};\n');
 w('docs/zzz.doc.dense.mjs', 'export const docsDense = {};\n');
 const cases = [{dir: pkg, name: '@x/pkg', integration: {components: path.join(pkg, 'components'), docs: path.join(pkg, 'docs')}, issues: await integrationDocConsistency({components: path.join(pkg, 'components'), docs: path.join(pkg, 'docs')}, pkg)}];
-const FIX = '/tmp/astryx-conformance/fixtures';
-for (const name of fs.readdirSync(FIX).sort().filter(n => !n.startsWith('.'))) {
-  const dir = path.join(FIX, name);
+const {fixtureDirs} = await import(new URL('./_fixtures.mjs', import.meta.url).href);
+const FIXDIRS = await fixtureDirs();
+for (const {name, dir} of FIXDIRS) {
   process.chdir(dir);
   const p = await Project.load(dir, {fresh: true});
   for (const r of p.loadedIntegrations) {

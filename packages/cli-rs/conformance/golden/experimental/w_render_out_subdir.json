@@ -8,7 +8,7 @@
   "build/x/page.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "Rendered basic.tsx\n\ninput:       basic.tsx\noutput:      build/x/page.html\nbytes:       33.5 KB\ncssBytes:    31.6 KB\nclasses:     104\nimages:      0\nfiles:       basic.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse build/x/page.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

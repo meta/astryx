@@ -46,6 +46,15 @@ pub fn node_err(e: &std::io::Error, syscall: &str, path: &str) -> String {
         Some(21) => ("EISDIR", "illegal operation on a directory"),
         Some(30) => ("EROFS", "read-only file system"),
         Some(28) => ("ENOSPC", "no space left on device"),
+        Some(11) => ("EAGAIN", "resource temporarily unavailable"),
+        Some(16) => ("EBUSY", "resource busy or locked"),
+        Some(18) => ("EXDEV", "cross-device link not permitted"),
+        Some(22) => ("EINVAL", "invalid argument"),
+        Some(24) => ("EMFILE", "too many open files"),
+        Some(27) => ("EFBIG", "file too large"),
+        Some(36) => ("ENAMETOOLONG", "name too long"),
+        Some(39) => ("ENOTEMPTY", "directory not empty"),
+        Some(40) => ("ELOOP", "too many symbolic links encountered"),
         _ => ("EIO", "i/o error"),
     };
     format!("{code}: {desc}, {syscall} '{path}'")

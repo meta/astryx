@@ -51,6 +51,11 @@ Patches (all marked by a reference to `crate::v8_messages` or `v8_names`):
   path lines; BigInt serialization.
 - `builtins/regexp/mod.rs`: "Invalid regular expression: /p/f: reason" and
   invalid flags.
+- `module/source.rs` (bug fix): module linking and execution restore the
+  VM value stack to its length before the module frame. A host function
+  (`require` of an ES module) can link and run a module while script has a
+  call pending; the leftover module frame values shifted that call's
+  arguments ("h is not a function" in `h(require('./x.mjs'))`).
 - `builtins/bigint`, `builtins/number`, `builtins/string`, `builtins/uri`,
   `builtins/object`, `builtins/function`, `builtins/weak_map`,
   `builtins/weak_set`, `object/operations.rs`: assorted V8 wordings

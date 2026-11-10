@@ -1,0 +1,13 @@
+{
+ "id": "w3_verify_theme_stale",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/stale@1.0.0\n\n7 packed files; 5/5 required files present.\n\n- [fail] Theme \"ocean\" module does not match themes/ocean/oceanTheme.ts. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\n- [fail] Theme \"ocean\" stylesheet does not match themes/ocean/oceanTheme.ts. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

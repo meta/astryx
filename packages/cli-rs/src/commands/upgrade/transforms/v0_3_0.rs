@@ -436,8 +436,9 @@ const DOCTYPE_SOURCES: &[&str] = &[
 ];
 const JSDOC_SOURCE: &str = "@astryxdesign/(?:cli/(?:authoring|doc|template|integration|codemod)|core(?:/authoring)?)";
 
-fn doctype_rename(n: &str) -> Option<&'static str> {
-    DOCTYPE_RENAMES.iter().find(|e| e.0 == n).map(|e| e.1)
+/// `RENAMES[name]` (a plain object: inherited members count).
+fn doctype_rename(n: &str) -> Option<String> {
+    crate::commands::upgrade::transforms::jsproto::lookup(DOCTYPE_RENAMES, n).map(|h| h.string())
 }
 
 pub fn rename_authoring_doctypes(source: &str, path: &str, _o: &Value) -> TResult {
@@ -468,10 +469,10 @@ pub fn rename_authoring_doctypes(source: &str, path: &str, _o: &Value) -> TResul
                         None => continue,
                     };
                     let imp = j.ast.child(s, "imported").unwrap();
-                    j.set_name(imp, next);
+                    j.set_name(imp, &next);
                     if let Some(l) = j.ast.child(s, "local") {
                         if j.ast.name(l) == Some(old.as_str()) {
-                            j.set_name(l, next);
+                            j.set_name(l, &next);
                             if let Some(e) = renamed.iter_mut().find(|e| e.0 == old) {
                                 e.1 = next.to_string();
                             } else {
@@ -494,10 +495,10 @@ pub fn rename_authoring_doctypes(source: &str, path: &str, _o: &Value) -> TResul
                         Some(n) => n,
                         None => continue,
                     };
-                    j.set_name(l, next);
+                    j.set_name(l, &next);
                     if let Some(e) = j.ast.child(s, "exported") {
                         if j.ast.name(e) == Some(old.as_str()) {
-                            j.set_name(e, next);
+                            j.set_name(e, &next);
                         }
                     }
                     changed = true;

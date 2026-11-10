@@ -1,0 +1,24 @@
+{
+ "id": "fuzz_integration_verify@monorepo_pre_c962b2",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "monorepo",
+ "fixtureHash": "92b369c1759b654f+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] mono\n\n- [fail] npm pack failed (exit 1): Invalid package, must have name and version.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "monorepo/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "monorepo/docs/guide.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'guide',\n  title: 'Guide',\n  description: 'Guide documentation.',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Guide documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

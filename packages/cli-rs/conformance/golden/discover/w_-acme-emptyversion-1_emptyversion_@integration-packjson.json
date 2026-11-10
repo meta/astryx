@@ -1,0 +1,13 @@
+{
+ "id": "w_-acme-emptyversion-1_emptyversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/emptyversion@1"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Version \"1\" of @acme/emptyversion not found\n",
+ "exit": 1,
+ "files": []
+}

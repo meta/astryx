@@ -7,6 +7,7 @@
 //
 // Usage: node setup.mjs [--force]
 
+import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -38,6 +39,8 @@ export function copyPackage(srcDir, dest) {
     fs.cpSync(from, path.join(dest, entry), {
       recursive: true,
       dereference: true,
+      // Share blocks with the source where the filesystem can (btrfs, xfs).
+      mode: fs.constants.COPYFILE_FICLONE,
       filter: src => !TEST_FILE.test(path.relative(srcDir, src)),
     });
   }
@@ -96,7 +99,7 @@ export function installDeps(fromDir, nodeModules, names) {
     if (fs.existsSync(dest)) continue;
     const src = findDep(fromDir, name);
     if (!src) throw new Error(`fixture dependency ${name} not found from ${fromDir}`);
-    fs.cpSync(src, dest, {recursive: true, dereference: true, filter: f => !/(^|\/)node_modules(\/|$)/.test(path.relative(src, f))});
+    fs.cpSync(src, dest, {recursive: true, dereference: true, mode: fs.constants.COPYFILE_FICLONE, filter: f => !/(^|\/)node_modules(\/|$)/.test(path.relative(src, f))});
     const pkg = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
     const optionalPeers = new Set(Object.entries(pkg.peerDependenciesMeta ?? {}).filter(([, m]) => m.optional).map(([k]) => k));
     const next = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {}).filter(k => !optionalPeers.has(k))];
@@ -316,6 +319,41 @@ function fixtureContentHashes(root) {
   return out;
 }
 
+/**
+ * A hash of each fixture's file listing (path, size, mtime): cheap to recheck,
+ * and any write into the shared folder (a run with its cwd there, say) changes it.
+ */
+export function fixtureStatHashes(root) {
+  const out = {};
+  for (const name of fs.readdirSync(root).sort()) {
+    if (name.startsWith('.')) continue;
+    const h = createHash('sha256');
+    const walk = rel => {
+      const dir = path.join(root, name, rel);
+      const st = fs.lstatSync(dir, {bigint: true});
+      h.update(`d ${rel} ${st.mtimeNs}\0`);
+      for (const e of fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) walk(r);
+        else {
+          const fst = fs.lstatSync(path.join(root, name, r), {bigint: true});
+          h.update(`f ${r} ${fst.size} ${fst.mtimeNs}\0`);
+        }
+      }
+    };
+    walk('');
+    out[name] = h.digest('hex').slice(0, 16);
+  }
+  return out;
+}
+
+/** Fixtures whose files changed after the build (names), or [] when intact. */
+export function verifyFixtures() {
+  const want = JSON.parse(fs.readFileSync(path.join(FIXTURES, '.stats.json'), 'utf8'));
+  const got = fixtureStatHashes(FIXTURES);
+  return Object.keys({...want, ...got}).filter(k => want[k] !== got[k]).sort();
+}
+
 /** Content hash of each fixture, from the built fixtures folder. */
 export function fixtureHashes() {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, '.hashes.json'), 'utf8'));
@@ -327,8 +365,78 @@ export function caseFixtureHash(c, hashes = fixtureHashes()) {
   return names.map(n => hashes[n] ?? 'missing').join('+');
 }
 
+/** Mark the current fixtures folder as in use (old unused folders get removed). */
+export function touchFixtures() {
+  try {
+    fs.writeFileSync(path.join(FIXTURES, '.last-used'), '');
+  } catch {}
+}
+
+const HOUR = 3600 * 1000;
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remove fixture folders nobody uses: builds that died, folders replaced over an
+ * hour ago, and folders of other versions unused for 3 hours. Each lane's
+ * fixture change builds a new folder, so without this the disk fills.
+ */
+function pruneOldFixtures() {
+  const trash = path.join(ROOT, 'trash');
+  const now = Date.now();
+  for (const name of fs.readdirSync(ROOT)) {
+    if (!/^fixtures(-[0-9a-f]{12})?(\..*)?$/.test(name)) continue;
+    const full = path.join(ROOT, name);
+    if (full === FIXTURES) continue;
+    let old = false;
+    const tmp = name.match(/\.tmp-(\d+)$/);
+    if (tmp) old = !pidAlive(Number(tmp[1]));
+    else if (/\.(replaced|old)-/.test(name)) old = now - fs.statSync(full).mtimeMs > HOUR;
+    else {
+      let used = fs.statSync(full).mtimeMs;
+      try {
+        used = Math.max(used, fs.statSync(path.join(full, '.last-used')).mtimeMs);
+      } catch {}
+      old = now - used > 3 * HOUR;
+    }
+    if (!old) continue;
+    fs.mkdirSync(trash, {recursive: true});
+    const dest = path.join(trash, `${name}-${process.pid}-${now}`);
+    try {
+      fs.renameSync(full, dest);
+    } catch {
+      continue;
+    }
+  }
+  if (fs.existsSync(trash) && fs.readdirSync(trash).length) {
+    // Deleting hundreds of thousands of files takes a while: do it detached.
+    spawn('rm', ['-rf', trash], {detached: true, stdio: 'ignore'}).unref();
+  }
+}
+
 export async function setup({force = false} = {}) {
-  if (!force && fs.existsSync(path.join(FIXTURES, '.complete'))) return false;
+  try {
+    pruneOldFixtures();
+  } catch {}
+  if (force && fs.existsSync(FIXTURES)) {
+    // Move the old folder aside rather than delete it: runs may still read it.
+    fs.renameSync(FIXTURES, `${FIXTURES}.replaced-${Date.now()}-${process.pid}`);
+  }
+  if (fs.existsSync(path.join(FIXTURES, '.complete')) && !fs.existsSync(path.join(FIXTURES, '.stats.json'))) {
+    // Built before listings were kept: add one now.
+    writeJson(path.join(FIXTURES, '.stats.json'), fixtureStatHashes(FIXTURES));
+  }
+  if (fs.existsSync(path.join(FIXTURES, '.complete'))) {
+    touchFixtures();
+    return false;
+  }
   // Build beside the final folder, then rename it in: lanes share the box.
   const tmp = `${FIXTURES}.tmp-${process.pid}`;
   fs.rmSync(tmp, {recursive: true, force: true});
@@ -353,9 +461,11 @@ export async function setup({force = false} = {}) {
   writeFile(path.join(inputs, 'not-json.json'), 'nope{');
   writeFile(path.join(inputs, 'page.tsx'), "import {Button} from '@astryxdesign/core';\n\nexport default function Page() {\n  return <Button label=\"Go\" />;\n}\n");
   writeJson(path.join(tmp, '.hashes.json'), fixtureContentHashes(tmp));
+  writeJson(path.join(tmp, '.stats.json'), fixtureStatHashes(tmp));
   writeFile(path.join(tmp, '.complete'), '');
   try {
     fs.renameSync(tmp, FIXTURES);
+    touchFixtures();
   } catch (e) {
     // Another lane finished the same build first.
     fs.rmSync(tmp, {recursive: true, force: true});
@@ -365,6 +475,13 @@ export async function setup({force = false} = {}) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  if (process.argv.includes('--verify')) {
+    await setup();
+    const bad = verifyFixtures();
+    if (process.argv.includes('--json')) console.log(JSON.stringify(bad));
+    else console.log(bad.length ? `CHANGED since build: ${bad.join(', ')} (rebuild: node setup.mjs --force)` : `fixtures intact at ${FIXTURES}`);
+    process.exit(bad.length ? 1 : 0);
+  }
   const made = await setup({force: process.argv.includes('--force')});
   console.log(made ? `fixtures written to ${FIXTURES}` : `fixtures up to date at ${FIXTURES}`);
 }

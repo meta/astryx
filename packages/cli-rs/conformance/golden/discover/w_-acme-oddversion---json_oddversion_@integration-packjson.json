@@ -1,0 +1,14 @@
+{
+ "id": "w_-acme-oddversion---json_oddversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/oddversion",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@acme/oddversion\",\n  \"data\": {\n    \"name\": \"@acme/oddversion\",\n    \"package\": \"@acme/oddversion\",\n    \"category\": \"@acme/oddversion\",\n    \"components\": [],\n    \"version\": \"v2\",\n    \"docs\": [\n      \"guide\"\n    ],\n    \"installed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

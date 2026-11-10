@@ -401,8 +401,10 @@ fn call_probe() {
     let p = std::env::var("JS_CALL").unwrap();
     let t = std::time::Instant::now();
     let ex = std::env::var("JS_EXPORT").unwrap_or_else(|_| "go".into());
-    let r = call_export(Path::new(&p), &[ex.as_str()], &[], &CallOptions::default());
-    eprintln!("call {:?}: {}", t.elapsed(), match r { Ok(r) => crate::json::stringify(&r.value, 0).chars().take(300).collect::<String>(), Err(e) => format!("{e:?}") });
+    let mut opts = CallOptions::default();
+    opts.jiti.force = std::env::var_os("JS_JITI").is_some();
+    let r = call_export(Path::new(&p), &[ex.as_str()], &[], &opts);
+    eprintln!("call {:?}: {}", t.elapsed(), match r { Ok(r) => crate::json::stringify(&r.value, 0).chars().take(30000).collect::<String>(), Err(e) => format!("{e:?}") });
 }
 
 #[test]
@@ -802,4 +804,117 @@ fn source_overrides_replace_file_text() {
     assert_eq!(ns["got"], serde_json::json!(42));
     let ns = import_module(&d.join("root.ts"), &ImportOptions::default()).unwrap();
     assert_eq!(ns["got"], serde_json::json!(1));
+}
+
+#[test]
+fn call_scope_keeps_overrides_for_dynamic_imports() {
+    let d = tmp("override-dyn");
+    fs::write(d.join("dep.ts"), "export const v: number = 1;\n").unwrap();
+    let dep = d.join("dep.ts").display().to_string();
+    fs::write(
+        d.join("root.ts"),
+        format!(
+            "import * as a from './dep';\n\
+             export async function run() {{\n\
+               await new Promise(r => setTimeout(r, 0));\n\
+               const b = await import('./dep.ts');\n\
+               const c = await new Promise(r => setTimeout(() => r(import({dep:?})), 0));\n\
+               return [a === b, b === c, c.v];\n\
+             }}\n"
+        ),
+    )
+    .unwrap();
+    let opts = CallOptions {
+        jiti: JitiOptions { source_overrides: vec![(d.join("dep.ts"), "export const v: number = 42;\n".into())], ..Default::default() },
+        ..Default::default()
+    };
+    let r = call_export(&d.join("root.ts"), &["run"], &[], &opts).unwrap();
+    assert_eq!(r.value, serde_json::json!([true, true, 42]));
+}
+
+#[test]
+fn require_of_esm_inside_call_arguments() {
+    // Linking an ES module from a host `require` must leave the caller's
+    // pending call arguments in place.
+    let d = tmp("require-esm-args");
+    fs::write(d.join("e.mjs"), "export const q = 1;\n").unwrap();
+    fs::write(d.join("c.cjs"), "'use strict';\nvar g = h(require('./e.mjs'));\nfunction h(e) { return e; }\nexports.t = g.q;\n").unwrap();
+    fs::write(d.join("root.mjs"), "import c from './c.cjs';\nexport const t = c.t;\n").unwrap();
+    let ns = import_module(&d.join("root.mjs"), &ImportOptions::default()).unwrap();
+    assert_eq!(ns["t"], serde_json::json!(1));
+}
+
+#[test]
+#[ignore]
+fn esm_dump_probe() {
+    // JS_DUMP=<file>: print the plain ESM namespace JSON (compare with Node).
+    let f = std::env::var("JS_DUMP").unwrap();
+    let r = import_module(Path::new(&f), &ImportOptions::default());
+    match r {
+        Ok(ns) => println!("DUMP {}", crate::json::stringify(&crate::json::Value::Object(ns), 0)),
+        Err(e) => println!("DUMP-ERR {e:?}"),
+    }
+}
+
+/// A zip archive of stored entries (what the PnP reader needs; no CRCs).
+fn stored_zip(files: &[(&str, &str)]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    for (name, body) in files {
+        let off = out.len() as u32;
+        let le16 = |v: u16| v.to_le_bytes();
+        let le32 = |v: u32| v.to_le_bytes();
+        out.extend(le32(0x0403_4b50));
+        out.extend(le16(20)); out.extend(le16(0)); out.extend(le16(0)); out.extend(le16(0)); out.extend(le16(0));
+        out.extend(le32(0)); out.extend(le32(body.len() as u32)); out.extend(le32(body.len() as u32));
+        out.extend(le16(name.len() as u16)); out.extend(le16(0));
+        out.extend(name.as_bytes()); out.extend(body.as_bytes());
+        central.extend(le32(0x0201_4b50));
+        central.extend(le16(20)); central.extend(le16(20)); central.extend(le16(0)); central.extend(le16(0));
+        central.extend(le16(0)); central.extend(le16(0));
+        central.extend(le32(0)); central.extend(le32(body.len() as u32)); central.extend(le32(body.len() as u32));
+        central.extend(le16(name.len() as u16)); central.extend(le16(0)); central.extend(le16(0));
+        central.extend(le16(0)); central.extend(le16(0)); central.extend(le32(0)); central.extend(le32(off));
+        central.extend(name.as_bytes());
+    }
+    let cd_off = out.len() as u32;
+    let cd_len = central.len() as u32;
+    out.extend(central);
+    out.extend(0x0605_4b50u32.to_le_bytes());
+    out.extend([0u8; 4]);
+    out.extend((files.len() as u16).to_le_bytes());
+    out.extend((files.len() as u16).to_le_bytes());
+    out.extend(cd_len.to_le_bytes());
+    out.extend(cd_off.to_le_bytes());
+    out.extend([0u8; 2]);
+    out
+}
+
+#[test]
+fn modules_load_from_zipped_and_virtual_pnp_paths() {
+    let d = tmp("pnpzip");
+    let cache = d.join(".yarn/cache");
+    fs::create_dir_all(&cache).unwrap();
+    fs::write(
+        cache.join("pkg-npm-1.0.0-abc.zip"),
+        stored_zip(&[
+            ("node_modules/pkg/package.json", "{\"name\":\"pkg\",\"type\":\"module\",\"main\":\"index.js\"}"),
+            ("node_modules/pkg/index.js", "import {v} from './lib/v.js';\nimport meta from './meta.json' with {type: 'json'};\nexport const got = [v, meta.n, import.meta.url];\n"),
+            ("node_modules/pkg/lib/v.js", "export const v = 7;\n"),
+            ("node_modules/pkg/meta.json", "{\"n\": 3}"),
+            ("node_modules/pkg/bad.js", "import './missing.js';\n"),
+        ]),
+    )
+    .unwrap();
+    let zip = cache.join("pkg-npm-1.0.0-abc.zip");
+    let inner = zip.join("node_modules/pkg/index.js");
+    let ns = import_module(&inner, &ImportOptions::default()).unwrap();
+    assert_eq!(ns["got"], serde_json::json!([7, 3, format!("file://{}", inner.display())]));
+    // A virtual path stands for the zipped one and stays as written.
+    let virt = d.join(".yarn/__virtual__/pkg-virtual-0123abcd/0/cache/pkg-npm-1.0.0-abc.zip/node_modules/pkg/index.js");
+    let ns = import_module(&virt, &ImportOptions::default()).unwrap();
+    assert_eq!(ns["got"][2], serde_json::json!(format!("file://{}", virt.display())));
+    let err = import_module(&zip.join("node_modules/pkg/bad.js"), &ImportOptions::default()).unwrap_err();
+    assert_eq!(err.code.as_deref(), Some("ERR_MODULE_NOT_FOUND"));
+    assert!(err.message.contains(&zip.join("node_modules/pkg/missing.js").display().to_string()), "{}", err.message);
 }

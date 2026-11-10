@@ -1,0 +1,13 @@
+{
+ "id": "w4_verify_packjson_oddversion",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "Integration package ready\n\n[ok] @acme/oddversion@v2\n\n3 packed files; 2/2 required files present.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

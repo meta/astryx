@@ -40,6 +40,24 @@ fn norm_repo(v: &Value, repo: &str) -> Value {
     norm_cli(v, &format!("{repo}/packages/cli"))
 }
 
+/// Whether an oracle recorded cases in conformance fixtures that are gone
+/// (the harness names its fixtures folder by a hash, so a rebuilt one moves):
+/// such a test is skipped with a note to rerun its oracle script.
+fn stale(cases: &[Value], test: &str) -> bool {
+    for c in cases {
+        for k in ["dir", "file", "path"] {
+            if let Some(p) = c.get(k).and_then(|v| v.as_str()) {
+                let root = ["/tmp/astryx-conformance/", "/tmp/pnpz2/", "/tmp/pnp-fx/"].into_iter().find(|r| p.starts_with(r));
+                if root.is_some_and(|r| !np::exists(r.trim_end_matches('/'))) {
+                    eprintln!("{test}: skipped, its oracle points at {p}, which no longer exists; rerun the oracle script (scripts/*-oracle.mjs)");
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn js_cli_root() -> String {
     format!("{}/rustcli/astryx/packages/cli", np::homedir())
 }
@@ -182,6 +200,9 @@ fn matches_js_project_load() {
         eprintln!("project oracle {file} missing: skipped");
         return;
     };
+    if stale(&cases, "matches_js_project_load") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let dir = c["dir"].as_str().unwrap();
@@ -221,6 +242,9 @@ fn matches_js_read_doc_view() {
         eprintln!("read oracle {file} missing: skipped");
         return;
     };
+    if stale(&cases, "matches_js_read_doc_view") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let f = c["file"].as_str().unwrap();
@@ -271,6 +295,9 @@ fn matches_js_docs_catalog() {
     use_js_cli_root();
     let file = std::env::var("DOCS_ORACLE").unwrap_or_else(|_| "/tmp/docs-oracle.json".into());
     let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases, "matches_js_docs_catalog") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let dir = c["dir"].as_str().unwrap();
@@ -306,6 +333,9 @@ fn matches_js_collect_identities() {
     use_js_cli_root();
     let file = std::env::var("IDENTITY_ORACLE").unwrap_or_else(|_| "/tmp/identity-oracle.json".into());
     let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases, "matches_js_collect_identities") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let dir = c["dir"].as_str().unwrap();
@@ -390,6 +420,9 @@ fn matches_js_doc_consistency() {
     use_js_cli_root();
     let file = std::env::var("CONSISTENCY_ORACLE").unwrap_or_else(|_| "/tmp/consistency-oracle.json".into());
     let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases, "matches_js_doc_consistency") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let mut r = crate::json::Map::new();
@@ -445,6 +478,9 @@ fn matches_js_integration_doc_files() {
     use_js_cli_root();
     let file = std::env::var("DOCFILES_ORACLE").unwrap_or_else(|_| "/tmp/docfiles-oracle.json".into());
     let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases, "matches_js_integration_doc_files") {
+        return;
+    }
     let mut failures = Vec::new();
     for c in &cases {
         let p = super::project::Project::load(c["dir"].as_str().unwrap()).unwrap();
@@ -742,6 +778,63 @@ fn matches_js_global_folder_of() {
         let g = pm::global_folder_of_in(root, home, &env).map(|(m, f)| serde_json::json!([m, f])).unwrap_or(Value::Null);
         if g != c["global"] {
             failures.push(format!("{} {root}: rust {g} js {}", c["env"], c["global"]));
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn matches_js_pnp_lookups() {
+    let file = std::env::var("PNP_ORACLE").unwrap_or_else(|_| "/tmp/pnp-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases.iter().flat_map(|c| c["results"].as_array().cloned().unwrap_or_default()).collect::<Vec<_>>(), "matches_js_pnp_lookups") {
+        return;
+    }
+    let mut failures = Vec::new();
+    for c in &cases {
+        super::pnp::with_node_options(c["nodeOptions"].as_str(), || {
+            for r in c["results"].as_array().unwrap() {
+                let dir = r["dir"].as_str().unwrap();
+                let got = serde_json::json!({
+                    "dir": dir,
+                    "installed": paths::find_installed_package(dir, "@astryxdesign/core", paths::INSTALLED_REACH),
+                    "installedFar": paths::find_installed_package(dir, "@astryxdesign/core", usize::MAX),
+                    "missing": paths::find_installed_package(dir, "left-pad", paths::INSTALLED_REACH),
+                    "core": paths::find_core_dir(dir),
+                    "projectCore": paths::find_project_core_dir(dir),
+                    "projectOf": paths::find_project_package_of(dir, &["@astryxdesign/cli", "@astryxdesign/core"]).map(|(n, p)| serde_json::json!({"name": n, "packageDir": p})),
+                });
+                let both = |v: &Value| norm_cli(&norm_cli(v, paths::cli_root()), &js_cli_root());
+                let (got, want) = (both(&got), both(r));
+                if got != want {
+                    failures.push(format!("{} {dir}:\n rust {got}\n js   {want}", c["runtime"]));
+                }
+            }
+        });
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn matches_pnp_fs_view_of_zipped_packages() {
+    let file = std::env::var("ZIPFS_ORACLE").unwrap_or_else(|_| "/tmp/zipfs-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    if stale(&cases, "matches_pnp_fs_view_of_zipped_packages") {
+        return;
+    }
+    let mut failures = Vec::new();
+    for c in &cases {
+        let p = c["path"].as_str().unwrap();
+        let kind = if np::is_dir(p) { Some("dir") } else if np::is_file(p) { Some("file") } else { None };
+        let text = if kind == Some("file") { np::read_text(p) } else { None };
+        let list = if kind == Some("dir") {
+            np::read_dir(p).map(|v| v.into_iter().map(|d| serde_json::json!([d.name, d.is_dir])).collect::<Vec<_>>())
+        } else {
+            None
+        };
+        let got = serde_json::json!({"path": p, "exists": np::exists(p), "kind": kind, "text": text, "list": list});
+        if &got != c {
+            failures.push(format!("{p}:\n rust {}\n js   {}", crate::json::stringify(&got, 0).chars().take(400).collect::<String>(), crate::json::stringify(c, 0).chars().take(400).collect::<String>()));
         }
     }
     assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));

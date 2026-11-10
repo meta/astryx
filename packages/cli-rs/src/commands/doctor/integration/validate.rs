@@ -516,7 +516,7 @@ fn prop_drift_report(cwd: &str, integration: &Value) -> Value {
     let rec = integration.as_object().cloned().unwrap_or_default();
     let pd = rec.get("__packageDir").and_then(|v| v.as_str()).map(String::from);
     let li = crate::discovery::validate_contributions::loaded_integration(&rec);
-    let mut components: Vec<Component> = cd::discover_valid_integration_components(&li, false)
+    let mut components: Vec<Component> = cd::discover_valid_integration_components(&li, true)
         .components
         .into_iter()
         .map(|r| Component { name: r.name.clone(), doc_path: r.doc_path.to_string_lossy().into_owned(), source_path: r.source_path.map(|p| p.to_string_lossy().into_owned()) })
@@ -960,7 +960,7 @@ pub fn component_conflicts(pkg: Option<&str>, cwd: &str) -> Value {
     }
     let intentional: Vec<String> = reps.active.iter().filter(|a| a.package == name && a.name == a.target).map(|a| a.name.clone()).collect();
     let run = crate::discovery::package_manager::get_cli_invocation(Some(cwd));
-    let mut conflicts: Vec<(String, Value)> = crate::discovery::component_discovery::discover_integration_components(&li, false)
+    let mut conflicts: Vec<(String, Value)> = crate::discovery::component_discovery::discover_integration_components(&li, true)
         .into_iter()
         .filter(|c| core_names.contains(&c.name) && !intentional.contains(&c.name))
         .map(|c| {
@@ -996,7 +996,7 @@ fn stray_components(integ: &Map<String, Value>) -> Vec<(String, String)> {
         return out;
     }
     let li = crate::discovery::validate_contributions::loaded_integration(integ);
-    for r in crate::discovery::component_discovery::discover_valid_integration_components(&li, false).components {
+    for r in crate::discovery::component_discovery::discover_valid_integration_components(&li, true).components {
         let f = r.doc_path.to_string_lossy().into_owned();
         if out.iter().any(|(_, x)| *x == f) {
             continue;

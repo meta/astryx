@@ -28,7 +28,7 @@ fn fields_of(v: &Value, keys: &[&str]) -> Fields {
 }
 
 /// `componentDetailBlocks(result, requestedName, detail, themeData)`.
-fn detail_blocks(result: &Value, requested_name: &str, detail: &str, theme: Option<&Value>, run: &str) -> Vec<Block> {
+fn detail_blocks(result: &Value, requested_name: &str, detail: &str, theme: Option<&Value>, run: &str) -> Result<Vec<Block>, Thrown> {
     let last = requested_name.rsplit('/').next().unwrap_or(requested_name);
     let requested = last.strip_prefix("XDS").unwrap_or(last).to_string();
     let kind = s(result.get("type")).unwrap_or("");
@@ -47,18 +47,18 @@ fn detail_blocks(result: &Value, requested_name: &str, detail: &str, theme: Opti
             }
             let import = s(data.get("import"));
             out.push(code(&match detail {
-                "brief" => format_brief(&data, &resolved, import, theme),
+                "brief" => try_format_brief(&data, &resolved, import, theme)?,
                 "compact" => format_compact(&data, &resolved, import, run),
                 _ => format_full(&data, theme, import, run),
             }));
-            out
+            Ok(out)
         }
         "component.detail.props" => {
             let mut m = crate::json::Map::new();
             m.insert("props".into(), data.clone());
-            vec![pkg_record(&package), code(&format_props(&Value::Object(m), &resolved))]
+            Ok(vec![pkg_record(&package), code(&format_props(&Value::Object(m), &resolved))])
         }
-        "component.detail.source" | "component.detail.showcase" => vec![code(&tpl(data.get("source")))],
+        "component.detail.source" | "component.detail.showcase" => Ok(vec![code(&tpl(data.get("source")))]),
         "component.detail.blocks" => {
             let owned = |b: &Value, label: String| -> String {
                 if tpl(b.get("package")) == package { label } else { format!("{label} ({})", tpl(b.get("package"))) }
@@ -93,14 +93,14 @@ fn detail_blocks(result: &Value, requested_name: &str, detail: &str, theme: Opti
             if showcase.is_none() && examples.is_empty() && related.is_empty() {
                 out.push(text(&format!("No blocks found for {}", tpl(data.get("component")))));
             }
-            out
+            Ok(out)
         }
-        _ => Vec::new(),
+        _ => Ok(Vec::new()),
     }
 }
 
 /// `formatBriefAll(coreDir, {zh, lang, themeData, replacements, categories})`.
-fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option<&Value>, replacements: &HashMap<String, Value>, categories: &[String]) -> String {
+fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option<&Value>, replacements: &HashMap<String, Value>, categories: &[String]) -> Result<String, Thrown> {
     let shown: HashSet<&String> = categories.iter().collect();
     let mut output: Vec<String> = Vec::new();
     for (key, comps) in discover_components(core_dir) {
@@ -112,7 +112,7 @@ fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option
         }
         for comp in &comps {
             if let Some(rep) = replacements.get(comp) {
-                let text = format_brief(rep, &tpl(rep.get("name")), s(rep.get("import")), theme);
+                let text = try_format_brief(rep, &tpl(rep.get("name")), s(rep.get("import")), theme)?;
                 let mut lines: Vec<String> = text.split('\n').map(String::from).collect();
                 lines[0] = format!("{}  [{}]", lines[0], tpl(rep.get("package")));
                 output.push(lines.join("\n"));
@@ -120,16 +120,15 @@ fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option
             }
             match find_component_readme(core_dir, comp).filter(|p| p.to_string_lossy().ends_with(".doc.mjs")) {
                 Some(p) => {
-                    // A doc that fails to load throws here in JS, failing the
-                    // whole command; keep the text as close as we can.
-                    let docs = api::load_docs(&p, zh, lang).unwrap_or(Value::Null);
-                    output.push(format_brief(&docs, comp, Some(&resolve_import_path(core_dir, comp)), theme));
+                    // A doc that fails to load throws here, failing the command.
+                    let docs = api::load_docs(&p, zh, lang).map_err(|m| ("Error".to_string(), m))?;
+                    output.push(try_format_brief(&docs, comp, Some(&resolve_import_path(core_dir, comp)), theme)?);
                 }
                 None => output.push(format!("{comp}\n  (no docs)\n")),
             }
         }
     }
-    output.join("\n")
+    Ok(output.join("\n"))
 }
 
 /// The `component` command handler.
@@ -216,7 +215,11 @@ fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
                         }
                     }
                     let cats: Vec<String> = groups.keys().cloned().collect();
-                    out.emit(&[code(&format_brief_all(&core_dir, g.zh, g.lang.as_deref(), theme, &reps, &cats))]);
+                    let all = match format_brief_all(&core_dir, g.zh, g.lang.as_deref(), theme, &reps, &cats) {
+                        Ok(t) => t,
+                        Err((n, m)) => return Err(out.fatal(&n, &m, None)),
+                    };
+                    out.emit(&[code(&all)]);
                 }
                 "compact" => {
                     let entries: Vec<(&String, &Value)> = groups.iter().collect();
@@ -293,7 +296,10 @@ fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
                     if rk == "component.detail.source" || rk == "component.detail.showcase" {
                         blocks.push(pkg_record(&tpl(r.get("package"))));
                     }
-                    blocks.extend(detail_blocks(&r, &selector, &detail, theme, &run));
+                    match detail_blocks(&r, &selector, &detail, theme, &run) {
+                        Ok(b) => blocks.extend(b),
+                        Err((n, m)) => return Err(out.fatal(&n, &m, None)),
+                    }
                     continue;
                 }
                 blocks.push(record(&fields_of(row, &["selector", "status", "code", "error"])));
@@ -314,7 +320,10 @@ fn run_uncached(inv: &Invocation, out: &mut Out) -> CmdResult {
                 out.eprintln(&format!("package: {}", result.package.clone().unwrap_or_else(|| "undefined".into())));
             }
             let rv = result.to_json();
-            let blocks = detail_blocks(&rv, name.as_deref().unwrap_or(""), &detail, theme, &run);
+            let blocks = match detail_blocks(&rv, name.as_deref().unwrap_or(""), &detail, theme, &run) {
+                Ok(b) => b,
+                Err((n, m)) => return Err(out.fatal(&n, &m, None)),
+            };
             out.emit(&blocks);
         }
         _ => {}

@@ -1,0 +1,21 @@
+{
+ "id": "w_tpl_name_cdn_empty",
+ "args": [
+  "template",
+  "login",
+  "--cdn",
+  ""
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState, type CSSProperties} from 'react';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Text, Heading} from '@astryxdesign/core/Text';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {CubeIcon} from '@heroicons/react/24/outline';\n\n// Standalone auth page paints its own body background (no host shell).\nconst pageStyle: CSSProperties = {\n  minHeight: '100%',\n  backgroundColor: 'var(--color-background-body)',\n};\n// Cap the column at 400px but let it shrink to fit narrow screens (Stack\n// has no maxWidth prop, so it's set here).\nconst contentStyle: CSSProperties = {\n  width: '100%',\n  maxWidth: 400,\n};\n\nexport default function LoginPage() {\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n  const [isLoading, setIsLoading] = useState(false);\n  const [error, setError] = useState('');\n\n  const handleSignIn = () => {\n    setError('');\n    if (!email || !password) {\n      setError('Please enter both email and password.');\n      return;\n    }\n    setIsLoading(true);\n    setTimeout(() => setIsLoading(false), 2000);\n  };\n\n  return (\n    <Center axis=\"both\" padding={6} style={pageStyle}>\n      <VStack gap={4} hAlign=\"center\" style={contentStyle}>\n        {/* Logo */}\n        <VStack gap={2} hAlign=\"center\">\n          <Icon icon={CubeIcon} size=\"lg\" />\n          <Text type=\"body\" weight=\"bold\" size=\"lg\">\n            Product Inc.\n          </Text>\n        </VStack>\n\n        {/* Card */}\n        <Card padding={8} width=\"100%\">\n          <VStack gap={4} hAlign=\"stretch\">\n            <VStack gap={1} hAlign=\"center\">\n              <Heading level={2}>Sign in</Heading>\n              <Text type=\"body\" color=\"secondary\" size=\"sm\">\n                Enter your credentials to continue\n              </Text>\n            </VStack>\n\n            {error && <Banner status=\"error\" title={error} container=\"card\" />}\n\n            <TextInput\n              label=\"Email\"\n              value={email}\n              onChange={setEmail}\n              placeholder=\"you@example.com\"\n              type=\"email\"\n              size=\"lg\"\n            />\n\n            <TextInput\n              label=\"Password\"\n              value={password}\n              onChange={setPassword}\n              placeholder=\"Enter your password\"\n              type=\"password\"\n              size=\"lg\"\n            />\n\n            <Button\n              label=\"Sign in\"\n              variant=\"primary\"\n              size=\"lg\"\n              isLoading={isLoading}\n              onClick={handleSignIn}\n            />\n          </VStack>\n        </Card>\n      </VStack>\n    </Center>\n  );\n}\n\n",
+ "stderr": "package: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

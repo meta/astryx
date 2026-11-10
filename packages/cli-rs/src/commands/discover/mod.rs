@@ -1,6 +1,7 @@
 //! `astryx discover`: browse the integrations a project has and could add.
 //! Port of `clients/cli/commands/discover.mjs` and `api/discover/`.
 
+pub mod date;
 pub mod api;
 pub mod doc;
 pub mod env;

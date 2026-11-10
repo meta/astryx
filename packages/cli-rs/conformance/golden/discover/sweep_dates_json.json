@@ -1,0 +1,20 @@
+{
+ "id": "sweep_dates_json",
+ "args": [
+  "discover",
+  "@test/dates",
+  "--json"
+ ],
+ "fixture": "sweep-discover",
+ "fixtureHash": "9305ee9bdf0456eb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@test/dates\",\n  \"data\": {\n    \"name\": \"@test/dates\",\n    \"package\": \"@test/dates\",\n    \"category\": \"@test/dates\",\n    \"components\": [\n      \"Dated\"\n    ],\n    \"version\": \"1.5.0\",\n    \"installed\": false,\n    \"latest\": \"1.5.0\",\n    \"source\": \"Sweep catalog\",\n    \"install\": \"npm install @test/dates\",\n    \"versions\": [\n      {\n        \"version\": \"1.7.0\",\n        \"publishedAt\": \"2026-07-01T00:00:00.000Z\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.6.0\",\n        \"publishedAt\": \"5 June 2026 3:15 pm PST\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.5.0\",\n        \"publishedAt\": \"2026-05-05T10:00:00+0200\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.3.0\",\n        \"publishedAt\": \"2026/04/04\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.2.0\",\n        \"publishedAt\": \"Tue, 03 Mar 2026 10:00:00 GMT\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.1.0\",\n        \"publishedAt\": \"2026-02-01 10:00:00\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.0.0\",\n        \"publishedAt\": \"Jan 5, 2026\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"1.4.0\",\n        \"publishedAt\": \"garbage\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/9da870dda97b235c5150c98170936c52.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Sweep catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/dates\",\"integration\":\"test-dates\",\"aliases\":[],\"latest\":\"1.5.0\",\"versions\":[{\"version\":\"1.7.0\",\"publishedAt\":\"2026-07-01T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.6.0\",\"publishedAt\":\"5 June 2026 3:15 pm PST\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.5.0\",\"publishedAt\":\"2026-05-05T10:00:00+0200\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.3.0\",\"publishedAt\":\"2026/04/04\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.2.0\",\"publishedAt\":\"Tue, 03 Mar 2026 10:00:00 GMT\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.1.0\",\"publishedAt\":\"2026-02-01 10:00:00\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.0.0\",\"publishedAt\":\"Jan 5, 2026\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"1.4.0\",\"publishedAt\":\"garbage\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Dated\"}]}]}}"
+  }
+ ]
+}

@@ -479,7 +479,7 @@ pub fn component_examples_check(integration: &Value) -> ExampleReport {
         return ExampleReport { notes, unchecked };
     }
     let li = vc::loaded_integration(rec);
-    let records = cd::discover_integration_components(&li, false);
+    let records = cd::discover_integration_components(&li, true);
     let templates_dir = match &root {
         Some(r) => {
             let x = rel(r);

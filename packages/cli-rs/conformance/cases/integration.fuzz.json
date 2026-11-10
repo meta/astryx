@@ -132,5 +132,65 @@
         "my-page"
       ]
     ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check_pre_97e038",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_verify@monorepo_pre_c962b2",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "monorepo",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_pack_--check_--json@themes_pre_fb48ff",
+    "args": [
+      "integration",
+      "pack",
+      "--check",
+      "--json"
+    ],
+    "fixture": "themes",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "fuzz_integration_check@sweep-int_d211e4",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "sweep-int",
+    "cwd": "sweep-int/documented"
   }
 ]

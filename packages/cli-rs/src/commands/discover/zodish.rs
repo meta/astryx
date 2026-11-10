@@ -52,16 +52,20 @@ fn opt_string(path: &[String], v: Option<&Value>, max: usize) -> Result<(), Issu
     string(path, v, 0, max)
 }
 
-fn array<'a>(path: &[String], v: Option<&'a Value>, max: usize) -> Result<&'a Vec<Value>, Issue> {
+/// The array's type. Its length check runs after its items, as zod runs a
+/// schema's checks after its parse: an item's issue comes first.
+fn array<'a>(path: &[String], v: Option<&'a Value>) -> Result<&'a Vec<Value>, Issue> {
     match v {
-        Some(Value::Array(a)) => {
-            if a.len() > max {
-                return Err((path.to_vec(), format!("Too big: expected array to have <={max} items")));
-            }
-            Ok(a)
-        }
+        Some(Value::Array(a)) => Ok(a),
         other => Err((path.to_vec(), format!("Invalid input: expected array, received {}", received(other)))),
     }
+}
+
+fn max_items(path: &[String], a: &[Value], max: usize) -> Result<(), Issue> {
+    if a.len() > max {
+        return err(path, format!("Too big: expected array to have <={max} items"));
+    }
+    Ok(())
 }
 
 fn object<'a>(path: &[String], v: Option<&'a Value>) -> Result<&'a crate::json::Map<String, Value>, Issue> {
@@ -78,11 +82,11 @@ fn child(path: &[String], k: impl ToString) -> Vec<String> {
 }
 
 fn string_array(path: &[String], v: Option<&Value>, item_max: usize, max: usize, item_min: usize) -> Result<(), Issue> {
-    let a = array(path, v, max)?;
+    let a = array(path, v)?;
     for (i, x) in a.iter().enumerate() {
         string(&child(path, i), Some(x), item_min, item_max)?;
     }
-    Ok(())
+    max_items(path, a, max)
 }
 
 /// Check `value` against the catalog schema. `icon_sets` keeps the icon-set
@@ -103,7 +107,7 @@ pub fn check_catalog(value: &Value, icon_sets: bool) -> Result<(), Issue> {
         other => expected(&child(&sp, "complete"), "boolean", other)?,
     }
     let pp = child(&root, "packages");
-    let pkgs = array(&pp, o.get("packages"), 20_000)?;
+    let pkgs = array(&pp, o.get("packages"))?;
     for (i, p) in pkgs.iter().enumerate() {
         let path = child(&pp, i);
         let p = object(&path, Some(p))?;
@@ -116,7 +120,8 @@ pub fn check_catalog(value: &Value, icon_sets: bool) -> Result<(), Issue> {
             other => string(&child(&path, "latest"), other, 1, 256)?,
         }
         let vp = child(&path, "versions");
-        for (j, v) in array(&vp, p.get("versions"), 50_000)?.iter().enumerate() {
+        let versions = array(&vp, p.get("versions"))?;
+        for (j, v) in versions.iter().enumerate() {
             let vpath = child(&vp, j);
             let v = object(&vpath, Some(v))?;
             string(&child(&vpath, "version"), v.get("version"), 1, 256)?;
@@ -130,8 +135,10 @@ pub fn check_catalog(value: &Value, icon_sets: bool) -> Result<(), Issue> {
             }
             string(&child(&vpath, "status"), v.get("status"), 1, 64)?;
         }
+        max_items(&vp, versions, 50_000)?;
         let cp = child(&path, "contributions");
-        for (j, c) in array(&cp, p.get("contributions"), 50_000)?.iter().enumerate() {
+        let contributions = array(&cp, p.get("contributions"))?;
+        for (j, c) in contributions.iter().enumerate() {
             let cpath = child(&cp, j);
             let c = object(&cpath, Some(c))?;
             string(&child(&cpath, "kind"), c.get("kind"), 1, 32)?;
@@ -162,6 +169,8 @@ pub fn check_catalog(value: &Value, icon_sets: bool) -> Result<(), Issue> {
                 }
             }
         }
+        max_items(&cp, contributions, 50_000)?;
     }
+    max_items(&pp, pkgs, 20_000)?;
     Ok(())
 }

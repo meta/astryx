@@ -260,6 +260,7 @@ pub fn rename_table_renderprops_styles(source: &str, path: &str, _o: &Value) -> 
 }
 
 pub fn migrate_dialog_position(source: &str, path: &str, _o: &Value) -> TResult {
+    let mut print_throws = false;
     let mut j = parse_file(source, path)?;
     let locals = locals_importing(&j, &["@astryxdesign/core", "@astryxdesign/core/Dialog", "@xds/core", "@xds/core/Dialog"], "Dialog");
     if locals.is_empty() {
@@ -301,25 +302,45 @@ pub fn migrate_dialog_position(source: &str, path: &str, _o: &Value) -> TResult 
                     Some(k) if !k.is_empty() => k,
                     _ => continue,
                 };
-                let logical = match phys.as_str() {
-                    "left" => "start",
-                    "right" => "end",
-                    _ => continue,
+                let logical = match super::jsproto::lookup(&[("left", "start"), ("right", "end")], &phys) {
+                    Some(h) => h,
+                    None => continue,
                 };
-                if present.iter().any(|k| k == logical) {
-                    continue;
-                }
                 let key = j.ast.child(pr, "key").unwrap();
-                if j.ast.is(key, "Identifier") {
-                    j.set_name(key, logical);
-                } else {
-                    j.ast.set(key, "value", V::s(logical));
+                match logical {
+                    super::jsproto::Hit::Own(logical) => {
+                        if present.iter().any(|k| k == logical) {
+                            continue;
+                        }
+                        if j.ast.is(key, "Identifier") {
+                            j.set_name(key, logical);
+                        } else {
+                            j.ast.set(key, "value", V::s(logical));
+                        }
+                        present.retain(|k| *k != phys);
+                        present.push(logical.to_string());
+                    }
+                    super::jsproto::Hit::Proto(p) => {
+                        // An inherited Object.prototype member: written as is.
+                        let text = p.string();
+                        if j.ast.is(key, "Identifier") {
+                            j.set_name(key, &text);
+                        } else if j.ast.is(key, "Literal") {
+                            j.ast.set(key, "value", V::s(&text));
+                            j.ast.set(key, "raw", V::s(&text));
+                        } else {
+                            print_throws = true;
+                        }
+                        present.retain(|k| *k != phys);
+                        present.push("\u{0}".to_string());
+                    }
                 }
-                present.retain(|k| *k != phys);
-                present.push(logical.to_string());
                 changed = true;
             }
         }
+    }
+    if changed && print_throws {
+        return Err(CodemodError::msg("undefined does not match type string".to_string()));
     }
     Ok(if changed { Some(j.to_source_single()) } else { None })
 }

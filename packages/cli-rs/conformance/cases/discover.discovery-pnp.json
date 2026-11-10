@@ -1,0 +1,56 @@
+[
+  {
+    "id": "pnp_discover_login_form",
+    "args": [
+      "discover",
+      "login form"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_discover_login_form_--json",
+    "args": [
+      "discover",
+      "login form",
+      "--json"
+    ],
+    "fixture": "yarnpnp",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnp/.pnp.cjs"
+    }
+  },
+  {
+    "id": "pnp_discover_no_pnp_process",
+    "args": [
+      "discover",
+      "login form"
+    ],
+    "fixture": "yarnpnp"
+  },
+  {
+    "id": "pnpzip_discover_login_form",
+    "args": [
+      "discover",
+      "login form"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  },
+  {
+    "id": "pnpzip_discover_login_form_--json",
+    "args": [
+      "discover",
+      "login form",
+      "--json"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  }
+]

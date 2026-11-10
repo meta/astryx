@@ -10,7 +10,7 @@
   "proj/rebuilt/page.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.reverse\",\n  \"data\": {\n    \"input\": \"proj/stripped.html\",\n    \"mode\": \"rebuilt\",\n    \"output\": \"proj/rebuilt/page.tsx\",\n    \"files\": [\n      \"proj/rebuilt/page.tsx\"\n    ],\n    \"exact\": false,\n    \"components\": [\n      \"Badge\",\n      \"Button\",\n      \"Card\",\n      \"Divider\",\n      \"Field\",\n      \"FieldLabel\",\n      \"HStack\",\n      \"Heading\",\n      \"Link\",\n      \"Text\",\n      \"TextInput\",\n      \"VStack\"\n    ],\n    \"elements\": 14,\n    \"unknown\": [],\n    \"omitted\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

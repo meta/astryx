@@ -79,5 +79,24 @@
       ""
     ],
     "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_template_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_7a84f8",
+    "args": [
+      "theme",
+      "template",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "fuzz_theme_build_..-inputs-not-json.json_--json@fuzzodd_f84b20",
+    "args": [
+      "theme",
+      "build",
+      "../inputs/not-json.json",
+      "--json"
+    ],
+    "fixture": "fuzzodd"
   }
 ]

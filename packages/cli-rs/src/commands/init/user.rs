@@ -65,9 +65,22 @@ fn skill_install_step_of(content: &str) -> Option<String> {
     re.find(content).map(|m| content[m.group(1).unwrap()].to_string())
 }
 
-/// `computerInstallStep`. TEMP: a global copy's own step is not read yet.
-fn install_step(home: &str) -> String {
-    p::read_to_string(&skill_file(home)).and_then(|c| skill_install_step_of(&c)).unwrap_or_else(|| COMPUTER_INSTALL_STEP.into())
+/// `ownInstallStep(cliRoot)`: a global copy's own reinstall command.
+fn own_install_step() -> Option<String> {
+    let root = crate::cli::env::cli_root();
+    let root = root.to_string_lossy();
+    if !crate::discovery::package_manager::is_global_copy(&root) {
+        return None;
+    }
+    Some(crate::commands::doctor::env::global_upgrade_command(&root).replace("@astryxdesign/cli@latest", "@astryxdesign/cli"))
+}
+
+/// `computerInstallStep({home, for})`: `judge` prefers the step the skill
+/// file records, `write` this copy's own; npm's when neither names one.
+fn install_step(home: &str, judge: bool) -> String {
+    let recorded = || p::read_to_string(&skill_file(home)).and_then(|c| skill_install_step_of(&c));
+    let found = if judge { recorded().or_else(own_install_step) } else { own_install_step().or_else(recorded) };
+    found.unwrap_or_else(|| COMPUTER_INSTALL_STEP.into())
 }
 
 fn body_lines(run: &str, install: &str) -> Vec<String> {
@@ -275,12 +288,12 @@ fn write_copy(at: &str, expected: &str) -> Row {
 }
 
 fn write_text(home: &str, command: &str) -> (Vec<Row>, Vec<String>) {
-    let judged = render(command, &install_step(home));
+    let judged = render(command, &install_step(home, true));
     let file = skill_file(home);
     let folder = p::dirname(&file);
     let mut rows = Vec::new();
     let state = state_of(&file, &judged);
-    let expected = if state == "current" { judged.clone() } else { render(command, &install_step(home)) };
+    let expected = if state == "current" { judged.clone() } else { render(command, &install_step(home, false)) };
     if state == "foreign" || state == "edited" {
         rows.push(kept(&file, kept_reason(state)));
     } else if state == "current" {
@@ -403,18 +416,8 @@ fn record_settings(install: bool, links: &[String]) {
     write_json_atomic(&file, &s);
 }
 
-/// TEMP: replace with shell's global-state `recordAgentTextWritten`.
 fn record_agent_text_written(version: &str) {
-    if Regex::new(r"^\d+\.\d+\.\d+$").unwrap().find(version).is_none() {
-        return;
-    }
-    let dir = config_dir();
-    let file = p::join2(&dir, "state.json");
-    let mut s = read_obj(&file);
-    let mut a = Map::new();
-    a.insert("writtenBy".into(), Value::String(version.into()));
-    s.insert("agentText".into(), Value::Object(a));
-    write_json_atomic(&file, &s);
+    crate::cli::nudge::record_agent_text_written(version, std::path::Path::new(&config_dir()));
 }
 
 fn astryx_on_search_path() -> bool {

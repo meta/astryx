@@ -1,0 +1,39 @@
+{
+ "id": "sweep_theme_good_from",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "copy",
+  "--from",
+  "good",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"theme\",\n    \"name\": \"copy\",\n    \"root\": {\n      \"path\": \"./themes\",\n      \"created\": false\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"themes/copy/copyTheme.ts\",\n      \"themes/copy/tokens.ts\",\n      \"themes/copy/copyTheme.doc.mjs\",\n      \"package.json\"\n    ],\n    \"written\": true,\n    \"dryRun\": false,\n    \"from\": \"good\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "sweep-int/good/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@sweep/good\",\n  \"version\": \"0.1.0\",\n  \"exports\": {\n    \"./themes/copy\": \"./themes/copy/copy.js\",\n    \"./themes/copy.css\": \"./themes/copy/copy.css\"\n  },\n  \"peerDependencies\": {\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "sweep-int/good/themes/copy/copyTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'copy',\n  displayName: 'Copy',\n  description: 'Copy theme.',\n  maintained: true,\n};\n"
+  },
+  {
+   "path": "sweep-int/good/themes/copy/copyTheme.ts",
+   "status": "created",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\nimport {tokens} from './tokens';\n\nexport const copyTheme = defineTheme({name: 'copy', ...tokens});\n"
+  },
+  {
+   "path": "sweep-int/good/themes/copy/tokens.ts",
+   "status": "created",
+   "text": "export const tokens = {};\n"
+  }
+ ]
+}

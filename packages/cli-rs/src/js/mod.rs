@@ -22,6 +22,7 @@ mod prune;
 pub mod syntax;
 pub mod resolve;
 mod transform;
+pub mod vfs;
 
 use crate::json::Value;
 use std::path::{Path, PathBuf};

@@ -1,0 +1,16 @@
+{
+ "id": "w_render_stylex_random",
+ "args": [
+  "experimental",
+  "render",
+  "stylex/random.tsx",
+  "--out",
+  "stylex/random.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page does not compile: Unsupported expression: CallExpression\n",
+ "exit": 1,
+ "files": []
+}

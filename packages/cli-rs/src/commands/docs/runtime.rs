@@ -1,11 +1,7 @@
 //! The docs read for a project whose integrations ship docs: the CLI's tree
 //! inputs from the model plus the integrations' own, built again at run time,
 //! and each integration topic lowered and linked as the JS doc compiler does.
-//!
-//! TEMP pieces until discovery's docs_discovery lands: the minimal
-//! `discoverIntegrationDocs` below; `extends` and `replaces` of another topic;
-//! links to authoring, component and template docs; typed-doc inclusion in
-//! reference blocks; an integration namespace's own `blocks`.
+//! The catalog comes from discovery's `Project.docs()`.
 
 use super::model::{cli_tree_inputs, Variant};
 use crate::discovery::doc_compiler::compile::{index_view, lower_topic, section_view, Lowered, RefTarget, TopicSource};
@@ -1449,6 +1445,9 @@ pub fn doctor_tree_report(cwd: &str) -> Result<(Vec<String>, (usize, usize, usiz
     let variant = Variant::get(&pm);
     let catalog = discover(cwd).unwrap_or_else(DocsCatalog::from_builtins);
     let built = build(&variant, catalog.clone(), cwd);
+    if let Some(e) = &built.tree.error {
+        return Err(e.clone());
+    }
     let mut problems: Vec<String> = built
         .tree
         .diagnostics

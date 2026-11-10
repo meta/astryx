@@ -16,7 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {REPO, caseFixtureHash, fixtureHashes} from './setup.mjs';
+import {REPO, caseFixtureHash, fixtureHashes, verifyFixtures} from './setup.mjs';
 import {comparable, ensureDirs, GOLDEN_DIR, goldenPath, jsBin, loadCases, pool, runCase, sameResult} from './lib.mjs';
 import {setup} from './setup.mjs';
 
@@ -37,6 +37,14 @@ const all = loadCases({command: opt('command'), caseId: opt('case')});
 // Node segfault): there is no behavior to match, so they get no golden.
 const crashFile = path.join(GOLDEN_DIR, 'JS_CRASHES.json');
 const crashes = new Set(fs.existsSync(crashFile) ? JSON.parse(fs.readFileSync(crashFile, 'utf8')) : []);
+// Never record goldens from fixtures that something wrote into after the build.
+{
+  const bad = verifyFixtures();
+  if (bad.length) {
+    console.error(`fixtures changed since they were built: ${bad.join(', ')}. Rebuild with: node setup.mjs --force`);
+    process.exit(1);
+  }
+}
 const hashes = fixtureHashes();
 const staleOnly = argv.includes('--stale');
 /** Whether a case's golden was recorded on fixtures that have changed since. */
@@ -55,7 +63,7 @@ for (const [command, cases] of Object.entries(all)) {
   }
 }
 // A generous timeout: the box is shared, and a timeout is never a golden.
-const bin = {...jsBin(), timeoutMs: 120000};
+const bin = {...jsBin(), timeoutMs: 120000, stacks: false};
 async function runOk(c) {
   let r;
   for (let i = 0; i < 3; i++) {

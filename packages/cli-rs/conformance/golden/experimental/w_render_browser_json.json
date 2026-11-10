@@ -7,7 +7,7 @@
   "browser.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"The page uses `window` while rendering, and a rendered page has no browser yet. Read it inside useEffect, or guard it with typeof window !== 'undefined'.\",\n  \"code\": \"ERR_RENDER_BROWSER_API\"\n}\n",
  "stderr": "",
  "exit": 1,

@@ -308,94 +308,19 @@ pub fn tokenize_query(term: &str) -> Vec<String> {
         .collect()
 }
 
-/// `unlinkText(text)` for search's word reading: inline `{@link …}` targets
-/// outside code spans become their names. Doc command tokens (`{@command}`,
-/// `{@pm}`) stay as written. TEMP: replace with the discovery lane's doc
-/// compiler `unlink_text` when it lands.
+/// `unlinkText(text)`: doc tokens rendered, inline `{@link …}` targets
+/// outside code spans read as their names.
 pub fn unlink_text(text: &str) -> String {
-    if !text.contains("{@link") {
-        return text.to_string();
-    }
-    // Split on code spans: (`[^`]*`)
-    let mut out = String::new();
-    let mut rest = text;
-    loop {
-        match rest.find('`') {
-            Some(a) => match rest[a + 1..].find('`') {
-                Some(b) => {
-                    out.push_str(&unlink_part(&rest[..a]));
-                    out.push_str(&rest[a..a + 1 + b + 1]);
-                    rest = &rest[a + 1 + b + 1..];
-                }
-                None => {
-                    out.push_str(&unlink_part(rest));
-                    break;
-                }
-            },
-            None => {
-                out.push_str(&unlink_part(rest));
-                break;
-            }
-        }
-    }
-    out
+    crate::discovery::doc_compiler::links::unlink_text(text)
 }
 
-const LINK_KINDS: [&str; 9] =
-    ["generic", "command", "function", "schema", "enum", "namespace", "component", "page", "block"];
-
-fn link_name(target: &str) -> Option<String> {
-    let t = js_trim(target);
-    if t.is_empty() {
-        return None;
-    }
-    let parts: Vec<&str> = t.split(':').collect();
-    if parts.len() < 2 || parts.len() > 3 || parts.iter().any(|p| js_trim(p).is_empty()) {
-        return None;
-    }
-    let kind = js_trim(parts[parts.len() - 2]);
-    if !LINK_KINDS.contains(&kind) {
-        return None;
-    }
-    Some(js_trim(parts[parts.len() - 1]).to_string())
-}
-
-/// `part.replace(/\{@link\s+([^{}]+?)\s*\}/g, …)`.
-fn unlink_part(part: &str) -> String {
-    let mut out = String::new();
-    let mut i = 0;
-    let b = part.as_bytes();
-    while i < b.len() {
-        if part[i..].starts_with("{@link") {
-            let after = i + 6;
-            // \s+ then lazy [^{}]+? then \s* then }
-            let rest = &part[after..];
-            let ws: usize = rest.chars().take_while(|c| js_space(*c)).map(|c| c.len_utf8()).sum();
-            if ws > 0 {
-                let body_start = after + ws;
-                if let Some(close) = part[body_start..].find(['{', '}']) {
-                    if part.as_bytes()[body_start + close] == b'}' && close > 0 {
-                        let inner = &part[body_start..body_start + close];
-                        let target = inner.trim_end_matches(js_space);
-                        if !target.is_empty() {
-                            out.push_str(&link_name(target).unwrap_or_else(|| target.to_string()));
-                            i = body_start + close + 1;
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-        let ch = part[i..].chars().next().unwrap();
-        out.push(ch);
-        i += ch.len_utf8();
-    }
-    out
-}
-
-/// `phraseWords(text)`.
+/// `phraseWords(text)`: `unlinkText` renders doc tokens in the reader's
+/// package manager and reads each inline link as its name.
 pub fn phrase_words(text: &str) -> Vec<String> {
-    alnum_runs(&lower(&unlink_text(text)))
+    if text.contains("{@") {
+        return alnum_runs(&lower(&crate::discovery::doc_compiler::links::unlink_text(text)));
+    }
+    alnum_runs(&lower(text))
 }
 
 /// `samePhraseWord(a, b)`.
@@ -607,6 +532,5 @@ mod tests {
         assert_eq!(fold("boxes"), "box");
         assert!(same_word("tables", "table"));
         assert!(same_word("dragging", "drag"));
-        assert_eq!(unlink_text("see {@link component:Button} now"), "see Button now");
     }
 }

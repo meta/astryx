@@ -41,8 +41,14 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
         Some(OptValue::Str(x)) => Some(x.clone()),
         _ => None,
     };
-    let uses_name = cdn.is_none() && !list;
-    let uses_path = if cdn.is_some() { cdn_str.is_none() } else { !list && !skeleton };
+    // JS truthiness: `--cdn ""` is falsy, as is an absent option.
+    let cdn_truthy = match &cdn {
+        Some(OptValue::Str(x)) => !x.is_empty(),
+        Some(OptValue::Bool(b)) => *b,
+        _ => false,
+    };
+    let uses_name = !cdn_truthy && !list;
+    let uses_path = if cdn_truthy { cdn_str.is_none() } else { !list && !skeleton };
     if uses_name {
         reject_empty(out, "name", name.as_deref())?;
     }
@@ -57,11 +63,6 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
     let target_given = target.as_deref().map_or(false, |n| !n.is_empty());
     let type_given = type_.as_deref().map_or(false, |n| !n.is_empty());
     let pkg_given = package.as_deref().map_or(false, |n| !n.is_empty());
-    let cdn_truthy = match &cdn {
-        Some(OptValue::Str(x)) => !x.is_empty(),
-        Some(OptValue::Bool(b)) => *b,
-        _ => false,
-    };
     if cdn_truthy {
         let ignored: Vec<&str> = [
             (name_given, "<name>"),

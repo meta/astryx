@@ -20,8 +20,7 @@ const SKIP_DIRS: &[&str] = &["hooks", "utils", "__tests__", "node_modules"];
 pub const INTEGRATION_DOC_SUFFIXES: &[&str] = &[".doc.ts", ".doc.mjs", ".doc.js"];
 
 // ── File system helpers ─────────────────────────────────────────────────
-// TEMP: replace with src/discovery fs (listing-cache, existsCaseExact) when
-// the discovery lane publishes them.
+// Path-typed views over the shared listing cache and `paths::exists_case_exact`.
 
 /// One directory entry, as `fs.Dirent` reports it (no symlink following).
 #[derive(Debug, Clone)]
@@ -34,15 +33,9 @@ pub struct DirEntry {
 /// `fs.readdirSync(dir, {withFileTypes: true})`, in byte order of the names.
 /// Empty when the folder cannot be read.
 pub fn list_dir_entries(dir: &Path) -> Vec<DirEntry> {
-    let Some(rd) = crate::discovery::listing_cache::read_dir(dir) else { return Vec::new() };
-    let mut out: Vec<DirEntry> = rd
-        .iter()
-        .map(|e| DirEntry {
-            name: e.name.clone(),
-            is_dir: e.kind.is_some_and(|k| k.is_dir),
-            is_symlink: e.kind.is_some_and(|k| k.is_symlink),
-        })
-        .collect();
+    let Some(rd) = super::nodepath::read_dir(&dir.to_string_lossy()) else { return Vec::new() };
+    let mut out: Vec<DirEntry> =
+        rd.into_iter().map(|e| DirEntry { name: e.name, is_dir: e.is_dir, is_symlink: e.is_symlink }).collect();
     out.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
     out
 }
@@ -54,44 +47,17 @@ pub fn list_dir(dir: &Path) -> Vec<String> {
 
 /// `fs.existsSync`: follows symbolic links.
 pub fn path_exists(p: &Path) -> bool {
-    crate::discovery::listing_cache::exists(p)
+    super::nodepath::exists(&p.to_string_lossy())
 }
 
 /// `existsCaseExact(target, root)`: the path exists and every segment below
 /// `root` is spelled exactly as listed.
 pub fn exists_case_exact(target: &Path, root: &Path) -> bool {
-    let Ok(rel) = target.strip_prefix(root) else { return false };
-    if rel.as_os_str().is_empty() {
-        return path_exists(target);
-    }
-    if crate::discovery::listing_cache::active() {
-        // Inside an operation the folders' listings answer, so a name that a
-        // listing lacks costs no probe of the disk. A link still needs its
-        // target.
-        return match crate::discovery::listing_cache::find_entry_path(root, rel) {
-            None => false,
-            Some(kind) => !kind.is_some_and(|k| k.is_symlink) || path_exists(target),
-        };
-    }
-    if !path_exists(target) {
-        return false;
-    }
-    let mut dir = root.to_path_buf();
-    for seg in rel.components() {
-        let seg = seg.as_os_str().to_string_lossy();
-        if seg == ".." {
-            return false;
-        }
-        if !list_dir(&dir).iter().any(|n| *n == seg) {
-            return false;
-        }
-        dir.push(seg.as_ref());
-    }
-    true
+    super::paths::exists_case_exact(&target.to_string_lossy(), &root.to_string_lossy())
 }
 
 fn read_text(p: &Path) -> Option<String> {
-    std::fs::read_to_string(p).ok()
+    super::nodepath::read_text(&p.to_string_lossy())
 }
 
 // ── Doc text scans ──────────────────────────────────────────────────────
@@ -507,7 +473,12 @@ pub fn discover_components(core_dir: &Path) -> ComponentGroups {
 /// when Core has no `src` folder.
 pub fn try_discover_components(core_dir: &Path) -> Result<ComponentGroups, String> {
     let src = core_dir.join("src");
-    if let Err(e) = std::fs::read_dir(&src) {
+    if super::zipfs::is_special(&src.to_string_lossy()) {
+        if !super::nodepath::is_dir(&src.to_string_lossy()) {
+            let what = if super::nodepath::exists(&src.to_string_lossy()) { "ENOTDIR: not a directory" } else { "ENOENT: no such file or directory" };
+            return Err(format!("{what}, scandir '{}'", src.display()));
+        }
+    } else if let Err(e) = std::fs::read_dir(&src) {
         let what = match e.kind() {
             std::io::ErrorKind::NotFound => "ENOENT: no such file or directory",
             std::io::ErrorKind::PermissionDenied => "EACCES: permission denied",
@@ -1247,7 +1218,7 @@ pub fn integration_member_entry<'a>(doc: &'a Value, name: &str, doc_path: &Path)
 }
 
 fn is_folder(p: &Path) -> bool {
-    p.is_dir()
+    super::nodepath::is_dir(&p.to_string_lossy())
 }
 
 fn doc_suffix_rank(name: &str) -> (String, i32) {

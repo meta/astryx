@@ -81,6 +81,7 @@ pub mod package_exports;
 pub mod package_manager;
 pub mod path_safety;
 pub mod paths;
+pub mod pnp;
 pub mod project;
 pub mod release;
 pub mod runner_commands;
@@ -90,6 +91,7 @@ pub mod stray_pointers;
 pub mod theme_unread;
 pub mod theming_targets;
 pub mod validate_contributions;
+pub mod zipfs;
 pub mod zod;
 
 #[cfg(test)]

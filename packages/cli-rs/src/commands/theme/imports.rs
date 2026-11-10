@@ -176,7 +176,7 @@ pub fn resolve(theme: &Theme, cwd: &str, owner_count: usize) -> Result<Entry, St
         font_stylesheet: if selected.2.exported && selected.2.target.is_some() { Some(selected.2.specifier.clone()) } else { None },
         source: if theme.source == "bundled" || theme.bundled { "bundled".into() } else { "package".into() },
         module_file: selected.0.target.clone(),
-        stylesheet_file: None,
+        stylesheet_file: selected.1.target.clone(),
         font_stylesheet_file: selected.2.target.clone(),
     })
 }

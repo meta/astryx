@@ -65,6 +65,22 @@ impl From<AddError> for RootError {
 /// `patchIntegrationRoot(packageDir, kind, rootPath, {dryRun, createIfMissing})`.
 /// Verification after the write is the caller's job.
 pub fn patch_integration_root(package_dir: &Path, kind: &str, root_path: &str, dry_run: bool, create_if_missing: bool) -> Result<(String, bool), RootError> {
+    patch_integration_root_verified(package_dir, kind, root_path, dry_run, create_if_missing, None)
+}
+
+/// A manifest whose default export reads back after writing, as `verify`
+/// sees it: the contribution under `kind` is visible.
+pub type Verify<'v> = &'v dyn Fn() -> Result<(), String>;
+
+/// `patchIntegrationRoot(packageDir, kind, rootPath, {dryRun, createIfMissing, verify})`.
+pub fn patch_integration_root_verified(
+    package_dir: &Path,
+    kind: &str,
+    root_path: &str,
+    dry_run: bool,
+    create_if_missing: bool,
+    verify: Option<Verify>,
+) -> Result<(String, bool), RootError> {
     let keys: Vec<&str> = kind.split('.').collect();
     let ident_ok = |k: &str| {
         let mut ch = k.chars();
@@ -100,6 +116,11 @@ pub fn patch_integration_root(package_dir: &Path, kind: &str, root_path: &str, d
                 "Integration manifest already declares {kind}: \"{shown}\"; refusing to replace it with \"{root_path}\"."
             )));
         }
+        if !dry_run {
+            if let Some(v) = verify {
+                v().map_err(AddError::plain)?;
+            }
+        }
         return Ok((root_path.to_string(), false));
     }
     let source = if manifest_exists {
@@ -118,6 +139,18 @@ pub fn patch_integration_root(package_dir: &Path, kind: &str, root_path: &str, d
             })
         };
         res.map_err(|e| AddError::plain(e.to_string()))?;
+        if let Some(v) = verify {
+            if let Err(m) = v() {
+                if manifest_exists {
+                    if fs::read_to_string(&writable).ok().as_deref() == Some(next.as_str()) {
+                        let _ = fs::write(&writable, &source);
+                    }
+                } else if fs::read_to_string(&manifest_file).ok().as_deref() == Some(next.as_str()) {
+                    let _ = fs::remove_file(&manifest_file);
+                }
+                return Err(AddError::plain(format!("Post-write verification failed: {m}")).into());
+            }
+        }
     }
     Ok((root_path.to_string(), true))
 }
@@ -148,7 +181,21 @@ fn push_pkg_update(plans: &mut Vec<WritePlan>, file: &Path, upd: Option<PackageJ
 
 /// The shared tail of every root-based kind: write, declare the root, and
 /// build the receipt.
-fn finish(kind: &str, name: &str, pkg: &Package, plans: Vec<WritePlan>, root_key: &str, root_path: &str, root_created: bool, dry_run: bool) -> R<Value> {
+/// The `verify` step of a root-based kind: the manifest reads back with the
+/// root declared and the contribution is visible under it.
+pub fn verify_contribution(pkg_dir: &Path, manifest_file: &Path, owner: &str, label: &str, root_key: &str, missing: &str, kind: &str, name: &str, version: Option<&str>) -> Result<(), String> {
+    let m = super::manifest_load::load_manifest_labeled(manifest_file, label).map_err(|e| e.message)?;
+    let declared = m.get(root_key).filter(|v| crate::discovery::paths::js_truthy(Some(v))).map(crate::cli::format::js_string);
+    let Some(declared): Option<String> = declared else { return Err(missing.to_string()) };
+    let abs = assert_within(&declared, pkg_dir, &format!("{root_key} root"), false).map_err(|e| e.message)?;
+    let mut record = crate::discovery::integrations::Record::new();
+    record.insert("name".into(), Value::String(owner.to_string()));
+    record.insert(root_key.into(), Value::String(path_str(&abs)));
+    crate::discovery::contribution_inventory::assert_contribution_visible(&record, kind, name, version)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish(kind: &str, name: &str, pkg: &Package, plans: Vec<WritePlan>, root_key: &str, root_path: &str, root_created: bool, dry_run: bool, version: Option<&str>) -> R<Value> {
     let mut files: Vec<String> = plans.iter().map(|p| relative(&pkg.dir, &p.path)).collect();
     let manifest_path = relative(&pkg.dir, &pkg.manifest_file);
     let mut receipt_root = (root_path.to_string(), root_created);
@@ -160,7 +207,9 @@ fn finish(kind: &str, name: &str, pkg: &Package, plans: Vec<WritePlan>, root_key
                 AddError::new(format!("Failed to write {kind} contribution: {}", e.message), "ERR_WRITE_FAILED")
             }
         })?;
-        match patch_integration_root(&pkg.dir, root_key, root_path, false, true) {
+        let missing = format!("{root_key} root not visible after writing.");
+        let verify = || verify_contribution(&pkg.dir, &pkg.manifest_file, &pkg.owner, "verify", root_key, &missing, kind, name, version);
+        match patch_integration_root_verified(&pkg.dir, root_key, root_path, false, true, Some(&verify)) {
             Ok(r) => receipt_root = r,
             Err(e) => {
                 rb.run();
@@ -187,28 +236,15 @@ fn topic_ok(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// TEMP: replace with the component lane's `findIntegrationComponentDoc`.
-fn find_same_stem_doc(dir: &Path, name: &str) -> Option<PathBuf> {
-    for suffix in [".doc.ts", ".doc.mjs", ".doc.js"] {
-        let c = dir.join(format!("{name}{suffix}"));
-        if c.exists() {
-            return Some(c);
-        }
-    }
-    let mut entries: Vec<_> = fs::read_dir(dir).ok()?.filter_map(|e| e.ok()).collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in entries {
-        let n = e.file_name().to_string_lossy().to_string();
-        if n == "node_modules" || n == "__tests__" {
-            continue;
-        }
-        if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            if let Some(f) = find_same_stem_doc(&e.path(), name) {
-                return Some(f);
-            }
-        }
-    }
-    None
+/// `findIntegrationComponentDoc({name: owner, components: root, __packageDir}, name)`.
+fn find_component_doc(pkg_owner: &str, pkg_dir: &Path, root: &Path, name: &str) -> Option<PathBuf> {
+    let integration = crate::discovery::component_discovery::LoadedIntegration {
+        name: pkg_owner.to_string(),
+        components: Some(root.to_path_buf()),
+        package_dir: Some(pkg_dir.to_path_buf()),
+        ..Default::default()
+    };
+    crate::discovery::component_discovery::find_integration_component_doc(&integration, name)
 }
 
 fn add_component(name: &str, o: &AddOptions) -> R<Value> {
@@ -230,8 +266,8 @@ fn add_component(name: &str, o: &AddOptions) -> R<Value> {
     let source_file = within(&format!("{name}.tsx"), &root, "component source")?;
     refuse_existing(&pkg.dir, &doc_file)?;
     refuse_existing(&pkg.dir, &source_file)?;
-    if root.is_dir() {
-        if let Some(existing) = find_same_stem_doc(&root, name) {
+    {
+        if let Some(existing) = find_component_doc(&pkg.owner, &pkg.dir, &root, name) {
             return Err(AddError::new(
                 format!("Refusing to add component \"{name}\": {} already defines it.", relative(&pkg.dir, &existing)),
                 "ERR_FILE_EXISTS",
@@ -250,7 +286,7 @@ fn add_component(name: &str, o: &AddOptions) -> R<Value> {
     let mut plans = vec![WritePlan::create(doc_file, doc), WritePlan::create(source_file, src)];
     let upd = package_json_update(&pkg.file, &root_path, &basename(&pkg.manifest_file), &[ExportEntry { subpath: extless.clone(), target: source_path.clone() }], false, &[])?;
     push_pkg_update(&mut plans, &pkg.file, upd);
-    finish("component", name, &pkg, plans, "components", &root_path, declared.is_none(), dry)
+    finish("component", name, &pkg, plans, "components", &root_path, declared.is_none(), dry, None)
 }
 
 fn strip_ts_ext(p: &str) -> String {
@@ -307,9 +343,8 @@ fn add_doc(name: &str, o: &AddOptions) -> R<Value> {
     let mut parent_slot = "guides".to_string();
     let mut write_namespace = false;
     if let (Some(parent), Some(nsf)) = (&o.parent, &namespace_file) {
-        // TEMP: replace with the discovery lane's discoverIntegrationDocs.
-        match find_namespace(&root, parent) {
-            Some((source, slots)) => {
+        match find_namespace(&pkg.owner, &root, parent) {
+            Some((src, slots)) => {
                 let takes: Vec<String> = slots;
                 let slot = if takes.iter().any(|s| s == "guides") {
                     Some("guides".to_string())
@@ -321,7 +356,6 @@ fn add_doc(name: &str, o: &AddOptions) -> R<Value> {
                 match slot {
                     Some(s) => parent_slot = s,
                     None => {
-                        let src = relative(&pkg.dir, &source);
                         return Err(bad(if takes.is_empty() {
                             format!("Namespace \"{parent}\" ({src}) has no slot that takes a guide. Add one, such as guides: {{title: 'Guides', accepts: {{kinds: ['generic']}}}}.")
                         } else {
@@ -388,42 +422,27 @@ fn add_doc(name: &str, o: &AddOptions) -> R<Value> {
         }
     }
     push_pkg_update(&mut plans, &pkg.file, upd);
-    finish("doc", name, &pkg, plans, "docs", &root_path, declared.is_none(), dry)
+    finish("doc", name, &pkg, plans, "docs", &root_path, declared.is_none(), dry, None)
 }
 
-/// TEMP: find a namespace doc by name under a docs root, and the slots that
-/// take a guide (accept kind `generic`). Reads static `.doc.mjs` files.
-fn find_namespace(root: &Path, name: &str) -> Option<(PathBuf, Vec<String>)> {
-    let mut stack = vec![root.to_path_buf()];
-    let mut files = Vec::new();
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = fs::read_dir(&d) else { continue };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.to_string_lossy().ends_with(".doc.mjs") || p.to_string_lossy().ends_with(".doc.ts") || p.to_string_lossy().ends_with(".doc.js") {
-                files.push(p);
+/// The namespace `name` among `discoverIntegrationDocs({name: owner, docs: root})`:
+/// its source, and the slots that take a guide (accept kind `generic`).
+fn find_namespace(owner: &str, root: &Path, name: &str) -> Option<(String, Vec<String>)> {
+    let mut integration = crate::discovery::integrations::Record::new();
+    integration.insert("name".into(), Value::String(owner.to_string()));
+    integration.insert("docs".into(), Value::String(root.to_string_lossy().into_owned()));
+    let docs = crate::discovery::docs_discovery::discover_integration_docs(&integration);
+    let ns = docs.namespaces.into_iter().find(|ns| ns.get("doc").and_then(|d| d.get("name")).and_then(|n| n.as_str()) == Some(name))?;
+    let mut slots = Vec::new();
+    if let Some(Value::Object(m)) = ns.get("doc").and_then(|d| d.get("slots")) {
+        for (k, s) in m {
+            let kinds = s.get("accepts").and_then(|a| a.get("kinds")).and_then(|k| k.as_array());
+            if kinds.map(|k| k.iter().any(|x| x.as_str() == Some("generic"))).unwrap_or(false) {
+                slots.push(k.clone());
             }
         }
     }
-    files.sort();
-    for f in files {
-        let Some(v) = super::manifest_load::load_default(&f) else { continue };
-        if v.get("type").and_then(|t| t.as_str()) == Some("namespace") && v.get("name").and_then(|t| t.as_str()) == Some(name) {
-            let mut slots = Vec::new();
-            if let Some(Value::Object(m)) = v.get("slots") {
-                for (k, s) in m {
-                    let kinds = s.get("accepts").and_then(|a| a.get("kinds")).and_then(|k| k.as_array());
-                    if kinds.map(|k| k.iter().any(|x| x.as_str() == Some("generic"))).unwrap_or(false) {
-                        slots.push(k.clone());
-                    }
-                }
-            }
-            return Some((f, slots));
-        }
-    }
-    None
+    Some((ns.get("source").and_then(|v| v.as_str()).unwrap_or("").to_string(), slots))
 }
 
 fn kebab_to_pascal(slug: &str) -> String {
@@ -481,7 +500,7 @@ fn add_template(name: &str, o: &AddOptions) -> R<Value> {
     let mut plans = vec![WritePlan::create(spec_file, spec), WritePlan::create(source_file, src)];
     let upd = package_json_update(&pkg.file, &root_path, &basename(&pkg.manifest_file), &[ExportEntry { subpath: extless, target: source_path }], false, &[])?;
     push_pkg_update(&mut plans, &pkg.file, upd);
-    finish("template", name, &pkg, plans, "templates", &root_path, declared.is_none(), dry)
+    finish("template", name, &pkg, plans, "templates", &root_path, declared.is_none(), dry, None)
 }
 
 /// `isValidSemver`: an exact MAJOR.MINOR.PATCH with optional prerelease and
@@ -518,7 +537,7 @@ fn add_codemod(name: &str, o: &AddOptions) -> R<Value> {
     let mut plans = vec![WritePlan::create(file, contents)];
     let upd = package_json_update(&pkg.file, &root_path, &basename(&pkg.manifest_file), &[], false, &[])?;
     push_pkg_update(&mut plans, &pkg.file, upd);
-    finish("codemod", name, &pkg, plans, "codemods", &root_path, declared.is_none(), dry)
+    finish("codemod", name, &pkg, plans, "codemods", &root_path, declared.is_none(), dry, Some(&to))
 }
 
 fn add_agent_doc(line: &str, o: &AddOptions) -> R<Value> {

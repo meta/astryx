@@ -26,8 +26,6 @@ enum Artifact {
 
 /// `importThemeArtifact(specifier, cwd)`. Err = an unexpected load failure
 /// (the JS rethrows it).
-// TEMP: stylesheet imports inside the artifact graph are not stubbed (the JS
-// loader maps them to empty virtual modules); built theme packages import none.
 fn import_artifact(specifier: &str, cwd: &str) -> Result<Option<Namespace>, JsError> {
     let target = if specifier.starts_with('.') || specifier.starts_with('/') {
         fsutil::resolve(cwd, specifier)
@@ -52,12 +50,92 @@ fn import_artifact(specifier: &str, cwd: &str) -> Result<Option<Namespace>, JsEr
     if !Path::new(&target).exists() {
         return Ok(None);
     }
+    let stubs = stylesheet_stubs(Path::new(&target));
     let jiti = crate::js::JitiOptions {
         force: true,
         extensions: Some([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts"].iter().map(|e| e.to_string()).collect()),
+        aliases: stubs.iter().map(|(spec, stub)| (spec.clone(), stub.clone())).collect(),
+        source_overrides: stubs.into_iter().map(|(_, stub)| (stub, String::new())).collect(),
         ..Default::default()
     };
     crate::js::import_module_jiti(Path::new(&target), &ImportOptions { jsx: true, fresh: true }, &jiti).map(Some)
+}
+
+/// `themeArtifactStylesheets(themeModule)`: Node cannot load a stylesheet, so
+/// an import in the artifact's graph that ends in `.css` and resolves from the
+/// theme module to an existing `.css` file loads as an empty module. jiti
+/// keys these by the import text alone, so each such specifier maps to an
+/// empty stand-in module for the whole graph. Returns (specifier, stand-in).
+fn stylesheet_stubs(theme_module: &Path) -> Vec<(String, std::path::PathBuf)> {
+    use crate::js::resolve::{resolve, Mode, Resolved};
+    let mut stubs: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut queue = vec![theme_module.to_path_buf()];
+    while let Some(file) = queue.pop() {
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&file) else { continue };
+        for spec in graph_specifiers(&text) {
+            if spec.ends_with(".css") {
+                if stubs.iter().any(|(s, _)| *s == spec) {
+                    continue;
+                }
+                if let Ok(Resolved::File(css)) = resolve(&spec, theme_module, Mode::Cjs) {
+                    if css.to_string_lossy().ends_with(".css") && css.is_file() {
+                        stubs.push((spec, std::path::PathBuf::from(format!("{}#stylesheet.mjs", css.display()))));
+                    }
+                }
+                continue;
+            }
+            if let Ok(Resolved::File(next)) = resolve(&spec, &file, Mode::Jiti) {
+                let n = next.to_string_lossy();
+                if [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts"].iter().any(|e| n.ends_with(e)) {
+                    queue.push(next);
+                }
+            }
+        }
+    }
+    stubs
+}
+
+/// Every module a source imports, re-exports, imports dynamically or
+/// requires, as written.
+fn graph_specifiers(text: &str) -> Vec<String> {
+    use oxc::ast::ast::*;
+    use oxc_ast_visit::{walk, Visit};
+    let alloc = oxc::allocator::Allocator::default();
+    let ret = oxc::parser::Parser::new(&alloc, text, oxc::span::SourceType::tsx()).parse();
+    #[derive(Default)]
+    struct V(Vec<String>);
+    impl<'a> Visit<'a> for V {
+        fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+            self.0.push(it.source.value.display().to_string());
+        }
+        fn visit_export_from_declaration(&mut self, it: &ExportFromDeclaration<'a>) {
+            self.0.push(it.source.value.display().to_string());
+        }
+        fn visit_export_all_declaration(&mut self, it: &ExportAllDeclaration<'a>) {
+            self.0.push(it.source.value.display().to_string());
+        }
+        fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+            if let Expression::StringLiteral(s) = &it.source {
+                self.0.push(s.value.display().to_string());
+            }
+            walk::walk_import_expression(self, it);
+        }
+        fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+            if matches!(&it.callee, Expression::Identifier(id) if id.name == "require") {
+                if let Some(Argument::StringLiteral(s)) = it.arguments.first() {
+                    self.0.push(s.value.display().to_string());
+                }
+            }
+            walk::walk_call_expression(self, it);
+        }
+    }
+    let mut v = V::default();
+    v.visit_program(&ret.program);
+    v.0
 }
 
 fn try_artifact(specifier: &str, cwd: &str) -> Result<Artifact, JsError> {

@@ -13,8 +13,6 @@ fn transform_matches_recorded_cases() {
         match (c.get("out").and_then(|v| v.as_str()), got) {
             (Some(want), Ok(got)) if want == got => {}
             (None, Err(_)) => {}
-            // Known gap: Babel compiles enums and namespaces; the port refuses them.
-            (Some(_), Err(e)) if e.contains("enums are not supported") || e.contains("namespaces are not supported") => {}
             (want, got) => bad.push(format!("#{i} {src:?}\n  want {want:?}\n  got  {got:?}")),
         }
     }

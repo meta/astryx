@@ -1,6 +1,6 @@
-//! TEMP: replace with src/discovery (module-exports, package-exports,
-//! exports-subpaths, fs/paths) when the discovery lane lands them. Only the
-//! parts swizzle reads are here.
+//! What swizzle reads about modules and packages. Package exports, subpaths
+//! and folder lookups come from src/discovery; `OriginsMemo` is the port of
+//! module-exports.mjs `moduleExportOrigins`, which only swizzle reads.
 
 use super::jspath as p;
 use super::module_info::{read_module, DefaultKind, ImpKind, ModuleInfo};
@@ -333,103 +333,25 @@ pub fn source_export_target(pkg: &Value, package_dir: &str, subpath: &str) -> Op
         .map(|t| t.to_string_lossy().into_owned())
 }
 
-/// UTF-16 length, as JS `.length`.
-fn jlen(s: &str) -> usize {
-    s.encode_utf16().count()
-}
-
 // ---- exports-subpaths ----
 
-pub fn all_targets(v: &Value, out: &mut Vec<String>) {
-    match v {
-        Value::String(s) => out.push(s.clone()),
-        Value::Array(a) => a.iter().for_each(|x| all_targets(x, out)),
-        Value::Object(m) => m.values().for_each(|x| all_targets(x, out)),
-        _ => {}
-    }
-}
-
-fn importable(v: &Value) -> bool {
-    match v {
-        Value::String(_) => true,
-        Value::Array(a) => a.iter().any(importable),
-        Value::Object(m) => m.iter().any(|(c, t)| c != "require" && c != "types" && importable(t)),
-        _ => false,
-    }
-}
+pub use crate::discovery::exports_subpaths::all_targets;
 
 /// Whether `subpathDeclaration(...).state === 'declared'`.
 pub fn subpath_declared(exports: Option<&Value>, subpath: &str) -> bool {
-    let Some(ex) = exports.filter(|e| !e.is_null()) else { return false };
-    let is_map = matches!(ex, Value::Object(m) if m.keys().all(|k| k.starts_with('.')));
-    if !is_map {
-        return subpath == "." && importable(ex);
-    }
-    let map = ex.as_object().unwrap();
-    let hit = if let Some(v) = map.get(subpath) {
-        Some(v)
-    } else {
-        let mut pats: Vec<&String> = map.keys().filter(|k| k.split('*').count() == 2).collect();
-        pats.sort_by(|a, b| {
-            let (sa, sb) = (jlen(&a[..a.find('*').unwrap()]), jlen(&b[..b.find('*').unwrap()]));
-            sb.cmp(&sa).then(jlen(b).cmp(&jlen(a)))
-        });
-        pats.into_iter()
-            .find(|pat| {
-                let star = pat.find('*').unwrap();
-                let (pre, suf) = (&pat[..star], &pat[star + 1..]);
-                subpath.len() >= pre.len() + suf.len() && subpath.starts_with(pre) && subpath.ends_with(suf)
-            })
-            .map(|k| &map[k.as_str()])
-    };
-    match hit {
-        None => false,
-        Some(v) if v.is_null() => false,
-        Some(v) => importable(v),
-    }
+    crate::discovery::exports_subpaths::subpath_declaration(exports, subpath).state == "declared"
 }
 
 // ---- fs/paths ----
 
-fn installed_in(dir: &str, name: &str) -> Option<String> {
-    let mut parts = vec![dir, "node_modules"];
-    parts.extend(name.split('/'));
-    let cand = p::join(&parts);
-    if p::exists(&p::join2(&cand, "package.json")) {
-        Some(cand)
-    } else {
-        None
-    }
-}
-
-pub fn folders_up(start: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut dir = p::resolve1(start);
-    loop {
-        out.push(dir.clone());
-        let parent = p::dirname(&dir);
-        if parent == dir {
-            break;
-        }
-        dir = parent;
-    }
-    out
-}
-
 /// `findNodeModulesPackage`: (packageDir, hostDir).
 pub fn find_node_modules_package(start: &str, name: &str) -> Option<(String, String)> {
-    for dir in folders_up(start) {
-        if let Some(pd) = installed_in(&dir, name) {
-            return Some((pd, dir));
-        }
-    }
-    None
+    crate::discovery::paths::find_node_modules_package(start, name)
 }
 
 pub fn find_package_root(start: &str) -> Option<String> {
-    folders_up(start).into_iter().find(|d| p::exists(&p::join2(d, "package.json")))
+    crate::discovery::paths::find_package_root(start)
 }
-
 
 /// `findProjectCoreDir`.
 pub fn find_project_core_dir(start: &str) -> Option<String> {
@@ -438,16 +360,7 @@ pub fn find_project_core_dir(start: &str) -> Option<String> {
 
 /// `listComponents(coreDir)`.
 pub fn list_components(core_dir: &str) -> Vec<String> {
-    let src = p::join2(core_dir, "src");
-    let Ok(rd) = std::fs::read_dir(&src) else { return Vec::new() };
-    let mut v: Vec<String> = rd
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false))
-        .collect();
-    v.sort();
-    v
+    crate::discovery::paths::list_components(core_dir)
 }
 
 // ---- served-packages / node:module ----

@@ -1,0 +1,17 @@
+{
+ "id": "sweep_theme_twosources",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Theme \\\"sea\\\" for @sweep/twosources must contain exactly one same-stem source for seaTheme.doc.mjs; found 3: \\\"seaTheme.mjs\\\", \\\"seaTheme.ts\\\", \\\"seaTheme.jsx\\\". Fix: keep one of them; the theme's source is a single module.\",\n  \"code\": \"ERR_THEME_INVALID\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

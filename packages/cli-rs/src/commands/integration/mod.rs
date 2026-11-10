@@ -13,6 +13,7 @@ pub mod manifest_load;
 pub mod manifest_writer;
 pub mod pack;
 pub mod semver;
+pub mod theme_fresh;
 pub mod verify;
 
 #[cfg(test)]
@@ -304,5 +305,22 @@ mod pack_tests {
         let pkg = super::jsjson::parse(&std::fs::read_to_string(dir.join("package.json")).unwrap()).unwrap();
         let r = super::pack::npm_pack(dir, &pkg).unwrap();
         eprintln!("files={:?} size={} unpacked={} name={}", r.files, r.size, r.unpacked_size, r.filename);
+    }
+
+    /// Deflates every `*.bin` in INTEGRATION_GZIP_DIR at level 9 and writes
+    /// `<name>.rs` beside it, for comparison with Node's zlib.gzipSync.
+    #[test]
+    fn gzip_corpus() {
+        use std::io::Write;
+        let Ok(dir) = std::env::var("INTEGRATION_GZIP_DIR") else { return };
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().map(|x| x == "bin").unwrap_or(false) {
+                let data = std::fs::read(&p).unwrap();
+                let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::new(9));
+                enc.write_all(&data).unwrap();
+                std::fs::write(p.with_extension("rs"), enc.finish().unwrap()).unwrap();
+            }
+        }
     }
 }

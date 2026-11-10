@@ -6,22 +6,15 @@ use std::path::{Path, PathBuf};
 
 /// `fs.readdirSync(dir, {withFileTypes: true})`: libuv sorts by bytes.
 fn read_dir_sorted(dir: &Path) -> Option<Vec<(String, bool)>> {
-    let rd = std::fs::read_dir(dir).ok()?;
-    let mut v: Vec<(String, bool)> = rd
-        .filter_map(|e| e.ok())
-        .map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            // Dirent.isDirectory() does not follow symlinks.
-            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            (name, is_dir)
-        })
-        .collect();
+    // Dirent.isDirectory() does not follow symlinks.
+    let mut v: Vec<(String, bool)> =
+        crate::discovery::nodepath::read_dir(&dir.to_string_lossy())?.into_iter().map(|e| (e.name, e.is_dir)).collect();
     v.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     Some(v)
 }
 
 pub fn discover_doc_components(docs_dir: &Path) -> Vec<String> {
-    if !docs_dir.exists() {
+    if !crate::discovery::nodepath::exists(&docs_dir.to_string_lossy()) {
         return vec![];
     }
     let mut out = vec![];

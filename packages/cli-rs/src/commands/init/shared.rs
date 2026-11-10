@@ -1,10 +1,6 @@
-//! TEMP: stand-ins for pieces other lanes own. Replace each with the owner's
-//! version when it lands:
-//! - component_count: component lane's discoverComponents
-//! - fallback_topics / load_project: discovery's Project.load + docs catalog
-//! - find_core_dir: discovery's findCoreDir
-//! - ignored_here: discovery's file-protection resolver
-//! - is_outside_project: shell's runChoice(cwd).inProject
+//! The pieces init reads from other owners, as init calls them: component
+//! discovery, Project.load and its docs catalog, findCoreDir, the file
+//! protection resolver, and the release choice.
 
 use crate::commands::init::agent_docs::IntegrationDocs;
 use crate::commands::swizzle::jspath as p;
@@ -87,7 +83,22 @@ pub fn load_project(target: &str) -> Result<ProjectInfo, String> {
         }
         agent_docs.push(IntegrationDocs { package: label(r)?, append });
     }
-    Ok(ProjectInfo { topics: fallback_topics(), agent_docs })
+    // Every name `astryx docs <name>` opens: the flat topics, and each root
+    // namespace of the docs tree.
+    let catalog = project.docs();
+    let mut topics = catalog.names();
+    topics.extend(cli_root_namespace_names());
+    for inputs in &catalog.tree_inputs {
+        for ns in &inputs.namespaces {
+            let doc = ns.get("doc");
+            let parent = doc.and_then(|d| d.get("placement")).and_then(|p| p.get("parent"));
+            if crate::discovery::paths::js_truthy(parent) {
+                continue;
+            }
+            topics.push(crate::discovery::paths::js_string(doc.and_then(|d| d.get("name"))));
+        }
+    }
+    Ok(ProjectInfo { topics, agent_docs })
 }
 
 /// `validateIntegrationLabel`.

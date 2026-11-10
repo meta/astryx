@@ -1,0 +1,16 @@
+{
+ "id": "sweep_theme_builtpair_text",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Theme \"ocean\" for @sweep/builtpair must contain exactly one same-stem source for ocean.doc.mjs; found 2: \"ocean.js\", \"ocean.ts\". Fix: \"ocean.js\" is the module `npx @astryxdesign/cli@0.7.12 theme build` writes, which takes the theme's name; rename ocean.ts to oceanTheme.ts and ocean.doc.mjs to oceanTheme.doc.mjs, export `oceanTheme` from it, and build again.\n",
+ "exit": 1,
+ "files": []
+}

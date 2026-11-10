@@ -354,11 +354,11 @@ fn fmt_cmd(cmd: &str, dir: &str) -> String {
     crate::cli::env::format_cli_command_at(Path::new(dir), cmd)
 }
 
-/// `validatePackedThemeExports`. TEMP: the comparison with a fresh rebuild
-/// (stale built output) needs theme build's write-root option and is not
-/// done; every other finding is.
+/// `validatePackedThemeExports`.
 fn packed_theme_exports(local_int: &crate::discovery::integrations::Record, packed_int: &crate::discovery::integrations::Record, scratch: &Path) -> Vec<Value> {
+    use super::theme_fresh as tf;
     use crate::commands::theme::{discovery as td, imports};
+    use std::path::PathBuf;
     let mut issues = Vec::new();
     let local_themes = match td::discover_integration_themes(local_int) {
         Ok(t) => t,
@@ -430,16 +430,70 @@ fn packed_theme_exports(local_int: &crate::discovery::integrations::Record, pack
                     declared.iter().map(|o| o.2.specifier.clone()).collect::<Vec<_>>().join(", ")
                 ),
             ));
+            let mut unresolved = false;
+            let mut outputs = Vec::new();
             for (kind, sp, info) in &declared {
                 let packed = imports::inspect_export(&packed_pkg, &packed_dir, sp);
                 if info.target.is_none() || !packed.exported || packed.target.is_none() {
+                    unresolved = true;
                     issues.push(issue(
                         "theme_import_unresolvable",
                         "error",
                         format!("Theme \"{}\" declares {}, but that {kind} does not resolve from both the source package and packed tarball.", lt.slug, info.specifier),
                     ));
+                } else {
+                    outputs.push((*kind, PathBuf::from(info.target.clone().unwrap()), PathBuf::from(packed.target.clone().unwrap())));
                 }
             }
+            if unresolved {
+                continue;
+            }
+            let expected_dir = scratch.join(format!(".astryx-theme-{}", lt.slug));
+            let built = if outputs.iter().any(|o| o.0 != "font stylesheet") {
+                tf::scratch_build(&source, Path::new(&pkg_dir), &expected_dir, &lt.slug)
+            } else {
+                Ok(Some((expected_dir.join(format!("{}.js", lt.slug)), expected_dir.join(format!("{}.css", lt.slug)))))
+            };
+            match built {
+                Err(e) => issues.push(issue(
+                    "theme_build_failed",
+                    "error",
+                    format!("Theme \"{}\" could not be rebuilt from {src_rel}: {e} Run `{}` before packing.", lt.slug, fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir)),
+                )),
+                Ok(None) => issues.push(issue(
+                    "theme_build_failed",
+                    "error",
+                    format!("Theme \"{}\" could not be rebuilt from {src_rel}: the theme build produced no complete receipt Run `{}` before packing.", lt.slug, fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir)),
+                )),
+                Ok(Some((exp_module, exp_css))) => {
+                    for (kind, local_file, packed_file) in &outputs {
+                        if *kind == "font stylesheet" {
+                            if std::fs::read(local_file).ok() != std::fs::read(packed_file).ok() {
+                                issues.push(issue("packed_theme_font_stylesheet_changed", "error", format!("Theme \"{}\" font stylesheet changed during packing. Keep its export and bytes unchanged in the tarball.", lt.slug)));
+                            }
+                            continue;
+                        }
+                        let expected = tf::read_normalized(if *kind == "module" { &exp_module } else { &exp_css });
+                        let local = tf::read_normalized(local_file);
+                        let packed = tf::read_normalized(packed_file);
+                        if expected != local {
+                            issues.push(issue(
+                                if *kind == "module" { "theme_module_stale" } else { "theme_stylesheet_stale" },
+                                "warning",
+                                format!("Theme \"{}\" {kind} does not match {src_rel}. This incomplete export remains packable, but run `{}` before adding its matching export.", lt.slug, fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir)),
+                            ));
+                        }
+                        if local != packed {
+                            issues.push(issue(
+                                if *kind == "module" { "packed_theme_module_changed" } else { "packed_theme_stylesheet_changed" },
+                                "error",
+                                format!("Theme \"{}\" {kind} changed during packing. Keep the built output unchanged in the tarball.", lt.slug),
+                            ));
+                        }
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&expected_dir);
             continue;
         }
         let local_imports = imports::resolve(lt, &pkg_dir, local_themes.len());
@@ -452,16 +506,78 @@ fn packed_theme_exports(local_int: &crate::discovery::integrations::Record, pack
             (Ok(l), Some(Ok(p))) => (l, p),
             _ => continue,
         };
-        for (kind, l, p, code) in [
-            ("module", li.module_file.clone(), pi.module_file.clone(), "packed_theme_module_changed"),
-            ("stylesheet", li.stylesheet_file.clone(), pi.stylesheet_file.clone(), "packed_theme_stylesheet_changed"),
-        ] {
-            let lb = l.and_then(|f| std::fs::read(f).ok());
-            let pb = p.and_then(|f| std::fs::read(f).ok());
-            if lb != pb {
-                issues.push(issue(code, "error", format!("Theme \"{}\" {kind} changed during packing. Keep the built output unchanged in the tarball.", lt.slug)));
+        let expected_dir = scratch.join(format!(".astryx-theme-{}", lt.slug));
+        let built_name = tf::literal_theme_name(&source, &lt.export_name);
+        match tf::scratch_build(&source, Path::new(&pkg_dir), &expected_dir, &lt.slug) {
+            Ok(None) => {
+                issues.push(issue(
+                    "theme_build_failed",
+                    "error",
+                    format!("Theme \"{}\" did not produce a complete build. Run `{}` before packing.", lt.slug, fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir)),
+                ));
+                let _ = std::fs::remove_dir_all(&expected_dir);
+                continue;
+            }
+            Err(e) => {
+                issues.push(issue(
+                    "theme_build_failed",
+                    "error",
+                    format!("Theme \"{}\" could not be rebuilt from {src_rel}: {e} Run `{}` before packing.", lt.slug, fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir)),
+                ));
+                let _ = std::fs::remove_dir_all(&expected_dir);
+                continue;
+            }
+            Ok(Some((exp_module, exp_css))) => {
+                let pf = |f: &Option<String>| f.as_ref().map(PathBuf::from);
+                let local_theme = tf::WrapperTheme {
+                    export_name: &lt.export_name,
+                    stylesheet_file: pf(&li.stylesheet_file),
+                    font_stylesheet_file: pf(&li.font_stylesheet_file),
+                    pkg: &local_pkg,
+                    package_dir: Path::new(&pkg_dir),
+                };
+                let packed_theme = tf::WrapperTheme {
+                    export_name: &pt.export_name,
+                    stylesheet_file: pf(&pi.stylesheet_file),
+                    font_stylesheet_file: pf(&pi.font_stylesheet_file),
+                    pkg: &packed_pkg,
+                    package_dir: Path::new(&packed_dir),
+                };
+                for (kind, exp, l, p, stale_code, packed_code) in [
+                    ("module", exp_module.clone(), pf(&li.module_file), pf(&pi.module_file), "theme_module_stale", "packed_theme_module_changed"),
+                    ("stylesheet", exp_css.clone(), pf(&li.stylesheet_file), pf(&pi.stylesheet_file), "theme_stylesheet_stale", "packed_theme_stylesheet_changed"),
+                ] {
+                    let (Some(l), Some(p)) = (l, p) else { continue };
+                    let expected = tf::read_normalized(&exp);
+                    let local = tf::read_normalized(&l);
+                    let packed = tf::read_normalized(&p);
+                    let local_wrapper = if kind == "module" && expected != local { tf::own_styles_entry(&l, &expected, &local_theme) } else { None };
+                    let packed_wrapper = if kind == "module" && expected != packed { tf::own_styles_entry(&p, &expected, &packed_theme) } else { None };
+                    let local_matches = expected == local || matches!(local_wrapper, Some(tf::Wrapper::Ok));
+                    let packed_matches = expected == packed || matches!(packed_wrapper, Some(tf::Wrapper::Ok));
+                    if !local_matches {
+                        let cmd = fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir);
+                        let message = match &local_wrapper {
+                            Some(tf::Wrapper::Reject { reason, rebuild: false }) => format!(
+                                "Theme \"{}\" module is not the module `{cmd}` writes and does not only wrap it: {reason}. A module that wraps the built module may only import the theme's own stylesheet and font stylesheet for their side effects and re-export from the built module either everything or only its theme, as {}.",
+                                lt.slug, lt.export_name
+                            ),
+                            Some(tf::Wrapper::Reject { reason, rebuild: true }) => format!(
+                                "Theme \"{}\" module re-exports {reason}, which does not match {src_rel}. Run `{cmd}` before packing.",
+                                lt.slug
+                            ),
+                            _ => tf::renamed_output_message(&lt.slug, kind, &l, &source, built_name.as_deref(), Path::new(&pkg_dir))
+                                .unwrap_or_else(|| format!("Theme \"{}\" {kind} does not match {src_rel}. Run `{cmd}` before packing.", lt.slug)),
+                        };
+                        issues.push(issue(stale_code, "error", message));
+                    }
+                    if local != packed || (local_matches && !packed_matches) {
+                        issues.push(issue(packed_code, "error", format!("Theme \"{}\" {kind} changed during packing. Keep the built output unchanged in the tarball.", lt.slug)));
+                    }
+                }
             }
         }
+        let _ = std::fs::remove_dir_all(&expected_dir);
         let fonts_differ = li.font_stylesheet != pi.font_stylesheet
             || match (&li.font_stylesheet_file, &pi.font_stylesheet_file) {
                 (Some(a), Some(b)) => std::fs::read(a).ok() != std::fs::read(b).ok(),

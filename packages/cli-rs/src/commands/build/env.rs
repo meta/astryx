@@ -1,10 +1,7 @@
 //! Build's environment access (`api/build/_adapter.mjs`): templates,
 //! components, search, setup notes, and the checked-in weights.
-//!
-//! TEMP: search, template discovery, component keywords and setup notes are
-//! owned by other lanes (search: src/commands/search/, discovery:
-//! src/discovery/). Until they land, the real environment reports them as
-//! unavailable, and `FixtureEnv` replays what the JS CLI recorded.
+//! `RealEnv` reads them from their owners (search, template discovery and
+//! needs); `FixtureEnv` replays recorded environments in tests.
 
 use super::blocks::BlockPickerWeights;
 use super::signals::{BuildEnv, BuildError, Scored, SearchCore};

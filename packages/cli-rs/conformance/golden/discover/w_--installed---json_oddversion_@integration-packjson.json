@@ -1,0 +1,14 @@
+{
+ "id": "w_--installed---json_oddversion_@integration-packjson",
+ "args": [
+  "discover",
+  "--installed",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.list\",\n  \"data\": [\n    {\n      \"name\": \"@acme/oddversion\",\n      \"package\": \"@acme/oddversion\",\n      \"category\": \"@acme/oddversion\",\n      \"components\": [],\n      \"version\": \"v2\",\n      \"docs\": [\n        \"guide\"\n      ]\n    }\n  ],\n  \"meta\": {\n    \"available\": [],\n    \"sources\": [\n      {\n        \"name\": \"Astryx\",\n        \"from\": \"@astryxdesign/cli\",\n        \"status\": \"fresh\",\n        \"complete\": true\n      }\n    ],\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

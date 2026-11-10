@@ -26,11 +26,13 @@ pub const REPOSITORY_MARKERS: [&str; 3] = [".git", ".hg", ".sl"];
 ///
 /// Found from the running binary (`<crate>/target/<profile>/astryx`, walking
 /// up to a folder whose sibling `cli` holds the CLI package), else from the
-/// crate folder at build time. `ASTRYX_RS_CLI_ROOT` overrides both (tests).
+/// crate folder at build time. In unit tests only, `ASTRYX_RS_CLI_ROOT`
+/// overrides both; the binary reads no environment variable for it.
 /// Resolved through symbolic links, as Node resolves `import.meta.url`.
 pub fn cli_root() -> &'static str {
     static ROOT: OnceLock<String> = OnceLock::new();
     ROOT.get_or_init(|| {
+        #[cfg(test)]
         if let Ok(v) = std::env::var("ASTRYX_RS_CLI_ROOT") {
             if !v.is_empty() {
                 return np::real_or_resolve(&v);
@@ -414,8 +416,7 @@ fn find_nearby_core_dir(start: &str) -> Option<String> {
             return Some(i);
         }
     }
-    // Yarn Plug'n'Play: only inside a PnP process, which this never is.
-    None
+    super::pnp::find_pnp_package(start, CORE_PACKAGE)
 }
 
 /// `findProjectCoreDir`: the project's own Core, never a carried one.
@@ -518,7 +519,7 @@ pub fn find_installed_package(start: &str, name: &str, max_depth: usize) -> Opti
             return Some(p);
         }
     }
-    None
+    super::pnp::find_pnp_package(start, name)
 }
 
 /// `findProjectPackageOf`: `(name, packageDir)`.
@@ -546,6 +547,11 @@ pub fn find_project_package_of(start: &str, names: &[&str]) -> Option<(String, S
         }
         if dir == top {
             break;
+        }
+    }
+    for n in names {
+        if let Some(p) = super::pnp::find_pnp_package(&project, n) {
+            return Some((n.to_string(), p));
         }
     }
     None
@@ -703,7 +709,7 @@ pub fn exists_case_exact(target: &str, root: &str) -> bool {
     if np::is_absolute(&rel) || rel == ".." || rel.starts_with("../") {
         return false;
     }
-    if super::listing_cache::active() {
+    if super::listing_cache::active() && !super::zipfs::is_special(root) {
         // Inside an operation the folders' listings answer (see
         // component_discovery::exists_case_exact).
         return match super::listing_cache::find_entry_path(std::path::Path::new(root), std::path::Path::new(&rel)) {

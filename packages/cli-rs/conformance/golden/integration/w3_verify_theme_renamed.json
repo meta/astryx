@@ -1,0 +1,13 @@
+{
+ "id": "w3_verify_theme_renamed",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-themes",
+ "fixtureHash": "ec5a79a502ea8371+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/renamed@1.0.0\n\n7 packed files; 5/5 required files present.\n\n- [fail] Theme \"ocean\" module is themes/ocean/ocean.js, but oceanTheme.ts calls defineTheme with name: 'sea', so `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` writes themes/ocean/sea.js instead and rebuilding never updates ocean.js. Fix: point the package export that serves it at themes/ocean/sea.js after building, or set name: 'ocean' in oceanTheme.ts and rebuild.\n- [fail] Theme \"ocean\" stylesheet is themes/ocean/ocean.css, but oceanTheme.ts calls defineTheme with name: 'sea', so `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` writes themes/ocean/sea.css instead and rebuilding never updates ocean.css. Fix: point the package export that serves it at themes/ocean/sea.css after building, or set name: 'ocean' in oceanTheme.ts and rebuild.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

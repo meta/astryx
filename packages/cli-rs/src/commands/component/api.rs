@@ -285,7 +285,7 @@ fn component_detail_source(dir_name: &str, source_path: Option<&Path>, name: &st
         let suffix = not_found_in.map(|p| format!(" in package \"{p}\"")).unwrap_or_default();
         return Err(ApiError::new(format!("Source for \"{name}\" not found{suffix}"), None, "ERR_NO_SOURCE"));
     };
-    let source = std::fs::read_to_string(p).unwrap_or_default();
+    let source = crate::discovery::nodepath::read_text(&p.to_string_lossy()).unwrap_or_default();
     let mut m = Map::new();
     m.insert("component".into(), Value::String(dir_name.into()));
     m.insert("source".into(), Value::String(source));
@@ -298,7 +298,7 @@ fn component_detail_showcase(dir_name: &str, cwd: &Path, name: &str, package_sco
         let suffix = package_scope.map(|p| format!(" in package \"{p}\"")).unwrap_or_default();
         return Err(ApiError::new(format!("No showcase found for \"{name}\"{suffix}"), None, "ERR_NO_SHOWCASE"));
     };
-    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    let text = crate::discovery::nodepath::read_text(&file.to_string_lossy()).unwrap_or_default();
     let mut m = Map::new();
     m.insert("component".into(), Value::String(dir_name.into()));
     m.insert("aspectRatio".into(), aspect);
@@ -512,8 +512,7 @@ fn parse_component_selector(value: &str, scope: Option<&str>) -> Result<Target, 
 
 fn installed_version(core_dir: &Path, integrations: &[LoadedIntegration], package: &str) -> Option<String> {
     if package == CORE_PACKAGE {
-        return std::fs::read_to_string(core_dir.join("package.json"))
-            .ok()
+        return crate::discovery::nodepath::read_text(&core_dir.join("package.json").to_string_lossy())
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .and_then(|v| v.get("version").and_then(|x| x.as_str()).map(String::from));
     }

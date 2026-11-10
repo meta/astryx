@@ -102,5 +102,17 @@
       "DropdownMenuSubMenu"
     ],
     "fixture": "brokencore"
+  },
+  {
+    "id": "fuzz_--zh_component_--list_--_--json_Link_0c57ce",
+    "args": [
+      "--zh",
+      "component",
+      "--list",
+      "--",
+      "--json",
+      "Link"
+    ],
+    "fixture": "app"
   }
 ]

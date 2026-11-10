@@ -93,6 +93,10 @@ fn profile_parse() {
 fn profile_call() {
     let p = std::env::var("JS_CALL").unwrap();
     let ex = std::env::var("JS_EXPORT").unwrap_or_else(|_| "run".into());
+    if std::env::var_os("JS_WARM").is_some() {
+        let r = super::call_export(std::path::Path::new(&p), &[ex.as_str()], &[], &super::CallOptions::default());
+        eprintln!("warm: {:?}", r.map(|r| r.value.to_string().chars().take(200).collect::<String>()));
+    }
     let r = profile(|| super::call_export(std::path::Path::new(&p), &[ex.as_str()], &[], &super::CallOptions::default()));
     eprintln!("{:?}", r.map(|r| r.value.to_string().chars().take(200).collect::<String>()));
 }

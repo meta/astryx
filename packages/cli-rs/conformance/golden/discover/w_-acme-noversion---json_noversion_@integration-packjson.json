@@ -1,0 +1,14 @@
+{
+ "id": "w_-acme-noversion---json_noversion_@integration-packjson",
+ "args": [
+  "discover",
+  "@acme/noversion",
+  "--json"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@acme/noversion\",\n  \"data\": {\n    \"name\": \"@acme/noversion\",\n    \"package\": \"@acme/noversion\",\n    \"category\": \"@acme/noversion\",\n    \"components\": [],\n    \"docs\": [\n      \"guide\"\n    ],\n    \"installed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

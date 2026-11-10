@@ -142,13 +142,14 @@ fn finish_selector_migration(s: &mut Sel, selector: usize) {
             return;
         }
         let old = s.val(class)["astryx-".len()..].to_string();
-        let new = match deprecated(&old) {
-            Some(n) => n,
+        // Plain-object lookups: inherited Object.prototype members count.
+        let new = match crate::commands::upgrade::transforms::jsproto::lookup(DEPRECATED_THEME_TARGETS, &old) {
+            Some(n) => n.string(),
             None => return,
         };
         s.set_class_value(class, &format!("astryx-{}", new));
-        if let Some(owner) = owner_of(&old) {
-            let sc = owner_scope(s, owner);
+        if let Some(owner) = crate::commands::upgrade::transforms::jsproto::lookup(SCOPED_CLEAR_ICON_OWNERS, &old).map(|h| h.string()) {
+            let sc = owner_scope(s, &owner);
             let parent = s.n[class].parent.unwrap();
             s.insert_after(parent, class, sc);
         }
@@ -650,6 +651,9 @@ fn migrate_static_theme_keys(source: &str, path: &str) -> TResult {
                 Some(o) if !o.is_empty() => o,
                 _ => continue,
             };
+            if let Some(crate::commands::upgrade::transforms::jsproto::Hit::Proto(pr)) = crate::commands::upgrade::transforms::jsproto::lookup(DEPRECATED_THEME_TARGETS, &old) {
+                return Err(pr.builder_error("value", "string", "StringLiteral"));
+            }
             let new = match deprecated(&old) {
                 Some(n) => n,
                 None => continue,

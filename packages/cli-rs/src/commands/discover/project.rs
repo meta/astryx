@@ -32,6 +32,7 @@ fn integration_of(r: &crate::json::Map<String, Value>, icon_project: Option<&str
     let dir = |k: &str| st(k).map(PathBuf::from);
     let mut it = Integration {
         version: st("version"),
+        version_raw: r.get("version").filter(|v| v.get("__js").is_none()).cloned(),
         components_dir: dir("components"),
         load_error: st("__loadError"),
         discover: handle(r.get("__discover"), &format!("the discover source from {name}")),

@@ -81,7 +81,7 @@ fn related_hooks_text(text: &str) -> Option<String> {
 }
 
 fn read_hook_category(doc_path: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(doc_path).ok()?;
+    let content = super::nodepath::read_text(&doc_path.to_string_lossy())?;
     let c = field_up_to_four(&content, "category")?;
     let mut chars = c.chars();
     let first = chars.next()?;
@@ -91,8 +91,7 @@ fn read_hook_category(doc_path: &Path) -> Option<String> {
 fn is_beside_own_hook(doc_path: &Path, hook_name: &str) -> bool {
     let Some(rest) = hook_name.strip_prefix("create") else { return false };
     let own = format!("'use{rest}'");
-    std::fs::read_to_string(doc_path)
-        .ok()
+    super::nodepath::read_text(&doc_path.to_string_lossy())
         .and_then(|t| related_hooks_text(&t))
         .is_some_and(|r| r.contains(&own))
 }

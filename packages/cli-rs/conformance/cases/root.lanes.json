@@ -58,5 +58,63 @@
     ],
     "fixture": "doctor-integrations",
     "cwd": "doctor-integrations/oneclicommand"
+  },
+  {
+    "id": "shell_statelock_unowned-old",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "statelock",
+    "cwd": "statelock/unowned-old",
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/statelock/unowned-old/xdg"
+    },
+    "timeoutMs": 4000
+  },
+  {
+    "id": "shell_statelock_unowned-fresh",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "statelock",
+    "cwd": "statelock/unowned-fresh",
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/statelock/unowned-fresh/xdg"
+    },
+    "timeoutMs": 4000
+  },
+  {
+    "id": "shell_statelock_live-local",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "statelock",
+    "cwd": "statelock/live-local",
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/statelock/live-local/xdg"
+    },
+    "timeoutMs": 4000
+  },
+  {
+    "id": "shell_statelock_lock-is-file",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "statelock",
+    "cwd": "statelock/lock-is-file",
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/statelock/lock-is-file/xdg"
+    }
+  },
+  {
+    "id": "shell_statelock_with-state",
+    "args": [
+      "manifest"
+    ],
+    "fixture": "statelock",
+    "cwd": "statelock/with-state",
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/astryx-conformance/work/statelock/with-state/xdg"
+    }
   }
 ]

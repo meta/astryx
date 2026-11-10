@@ -1,0 +1,21 @@
+{
+ "id": "wide_protokeys_apply_05",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.5.0",
+  "--apply"
+ ],
+ "fixture": "upgrade-protokeys",
+ "fixtureHash": "1244a1957d511fc5+4e418a0c2575d9ce",
+ "stdout": "\nUpgrade\nFrom version: 0.5.0\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-protokeys/src for source files...\nFound 5 source files\nApplying v0.6.0 codemods...\n  Migrate Astryx theme selectors to data attributes\n[ok]     [ok] src/theme.css\n  Updated 1 file\n  Move isImeKeyEvent imports to core utilities\n  Remove explicit RTL options from focus hooks\n  Rename useResizable pixel bounds\nApplying v0.6.4 codemods...\n  Give each integration theme a typed descriptor instead of the manifest.json catalog\n  Migrate nativePicker to presentation\nApplying v0.6.7 codemods...\n  Give copied app themes their local descriptors\nApplying v0.7.0 codemods...\n  Migrate removed component theme aliases and selectors\n!!     !! src/theme.css - detected corruption: [native code] injection (prototype pollution in identifier map) (2 new occurrences)\n  Validate data-token ownership\n  Migrate input root styling to container/control parts\n  Preserve BottomSheet content padding\n  Rename emptySearchResultsText to emptySearchText\nApplying v0.7.2 codemods...\n  Migrate List edgeCompensation to edge\nApplying v0.7.5 codemods...\n  Migrate CodeBlock tokenizer to a custom language\nApplying v0.7.8 codemods...\n  Move Tokenizer's removed experimental presentation to presentation\n\n!! 1 error during codemods:\n!!   core:migrate-deprecated-theme-surface -> src/theme.css: detected corruption: [native code] injection (prototype pollution in identifier map) (2 new occurrences)\n! 1 file was blocked by validation - no changes written to that file.\nThis means a codemod produced invalid output. Please report this as a bug.\n[ok] Done! Applied 1 change across 1 file.\n! Some files had errors - review them manually.\nRun your type checker and tests to verify the changes.\n15 codemods to run\nUpgrade failed\n\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "upgrade-protokeys/src/theme.css",
+   "status": "changed",
+   "text": ".astryx-button.constructor { color: red; }\n/* TODO(astryx upgrade): verify selector .astryx-constructor.primary; the CSS selector parser could not migrate it safely. */\n.astryx-constructor.primary { color: red; }\n.astryx-toString { color: red; }\n"
+  }
+ ]
+}

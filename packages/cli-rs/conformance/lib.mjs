@@ -254,16 +254,24 @@ export async function runCase(c, bin) {
   const res = await new Promise(resolve => {
     const child = spawn('/usr/bin/unshare', full, {env: caseEnv(c), stdio: ['pipe', outFd, errFd]});
     let timedOut = false;
+    let stacks;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      // Keep the stacks of everything still running, then kill the whole tree.
+      const tree = [child.pid, ...descendants(child.pid)];
+      if (bin.stacks !== false) stacks = stacksOf(tree);
+      for (const p of tree.reverse()) {
+        try {
+          process.kill(p, 'SIGKILL');
+        } catch {}
+      }
     }, c.timeoutMs ?? bin.timeoutMs ?? 30000);
     child.stdin.on('error', () => {});
     if (c.stdin != null) child.stdin.end(c.stdin);
     else child.stdin.end();
     child.on('close', (code, signal) => {
       clearTimeout(timer);
-      resolve({code, signal, timedOut});
+      resolve({code, signal, timedOut, stacks});
     });
   });
   fs.closeSync(outFd);
@@ -278,6 +286,7 @@ export async function runCase(c, bin) {
     files: diffUpper(upper, replace),
     ms: Date.now() - started,
   };
+  if (res.stacks) result.stacks = res.stacks;
   await rmrf(scratch);
   return result;
 }
@@ -299,6 +308,51 @@ function removeScratchSync(dir) {
   try {
     fs.rmSync(dir, {recursive: true, force: true});
   } catch {}
+}
+
+/** Every live descendant of pid, depth first. */
+function descendants(pid) {
+  const out = [];
+  const r = spawnSync('pgrep', ['-P', String(pid)], {encoding: 'utf8'});
+  for (const c of (r.stdout ?? '').split('\n').filter(Boolean)) out.push(Number(c), ...descendants(Number(c)));
+  return out;
+}
+
+/** Stacks (eu-stack) of the processes in a timed-out case, but the sandbox's own sh/unshare/script. */
+function stacksOf(pids) {
+  const parts = [];
+  for (const p of pids) {
+    let comm = '?';
+    let cmdline = '';
+    try {
+      comm = fs.readFileSync(`/proc/${p}/comm`, 'utf8').trim();
+      cmdline = fs.readFileSync(`/proc/${p}/cmdline`, 'utf8').split('\0').join(' ').trim();
+    } catch {
+      continue;
+    }
+    if (['sh', 'unshare', 'script'].includes(comm)) continue;
+    // Thread states and wait channels work without ptrace (R: running, S: sleeping
+    // on wchan, D: stuck in I/O); eu-stack adds user stacks where ptrace is allowed.
+    const threads = [];
+    try {
+      for (const t of fs.readdirSync(`/proc/${p}/task`)) {
+        const stat = fs.readFileSync(`/proc/${p}/task/${t}/stat`, 'utf8');
+        const state = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0];
+        let wchan = '';
+        try {
+          wchan = fs.readFileSync(`/proc/${p}/task/${t}/wchan`, 'utf8');
+        } catch {}
+        let name = '';
+        try {
+          name = fs.readFileSync(`/proc/${p}/task/${t}/comm`, 'utf8').trim();
+        } catch {}
+        threads.push(`  tid ${t} ${name} state=${state} wchan=${wchan || '-'}`);
+      }
+    } catch {}
+    const r = spawnSync('eu-stack', ['-p', String(p), '-n', '60'], {encoding: 'utf8', timeout: 20000});
+    parts.push(`--- pid ${p} (${comm}) ${cmdline}\n${threads.join('\n')}\n${(r.stdout || '').replace(/::h[0-9a-f]{16}/g, '')}${r.stderr ? `\n${r.stderr}` : ''}`);
+  }
+  return parts.join('\n');
 }
 
 function rmrf(dir) {

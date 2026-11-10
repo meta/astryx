@@ -1,0 +1,13 @@
+{
+ "id": "w4_verify_packjson_noname",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] (unnamed package)@1.0.0\n\n- [fail] package.json has no \"name\", so npm cannot pack or publish the package, and a project that installs it has no name to select it by. Fix: add \"name\": \"@your-scope/your-package\" to package.json.\n- [fail] npm pack failed (exit 1): Invalid package, must have name and version.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

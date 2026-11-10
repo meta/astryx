@@ -18,9 +18,26 @@ fn is_str_lit_ty(t: &str) -> bool {
     t == "StringLiteral" || t == "Literal"
 }
 
+thread_local! {
+    /// A Babel StringLiteral now holds an inherited `Object.prototype`
+    /// function: recast's printer throws on it.
+    static PRINT_THROWS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 fn rename_string_literal(j: &mut J, n: usize) -> bool {
     if !is_str_lit_ty(j.ast.ty(n)) {
         return false;
+    }
+    if let Some(p) = j.ast.str_of(n, "value").filter(|v| icon_rename(v).is_none()).and_then(super::jsproto::proto) {
+        let text = p.string();
+        if j.ast.is(n, "Literal") {
+            // Printed as `value + ""` (the raw no longer matches the value).
+            j.ast.set(n, "value", V::s(&text));
+            j.ast.set(n, "raw", V::s(&text));
+        } else {
+            PRINT_THROWS.with(|c| c.set(true));
+        }
+        return true;
     }
     let new = match j.ast.str_of(n, "value").and_then(icon_rename) {
         Some(x) => x,
@@ -62,6 +79,7 @@ const ICON_PROPS: &[&str] = &["icon", "name", "selectedIcon"];
 
 pub fn icon_name_deprecations(source: &str, path: &str, _o: &Value) -> TResult {
     let mut j = parse_file(source, path)?;
+    PRINT_THROWS.with(|c| c.set(false));
     let mut changed = false;
     for p in j.find("JSXAttribute") {
         let name = j.name_of(j.ast.child(p.node, "name"));
@@ -93,6 +111,9 @@ pub fn icon_name_deprecations(source: &str, path: &str, _o: &Value) -> TResult {
                 "StringLiteral" | "Literal" => j.ast.str_of(key, "value").map(|s| s.to_string()),
                 _ => None,
             };
+            if let Some(p) = key_name.as_deref().filter(|v| icon_rename(v).is_none()).and_then(super::jsproto::proto) {
+                return Err(p.builder_error("name", "string", "Identifier"));
+            }
             if let Some(new) = key_name.as_deref().and_then(icon_rename) {
                 let id = j.identifier(new);
                 j.ast.set_node(p.node, "key", id);
@@ -108,6 +129,9 @@ pub fn icon_name_deprecations(source: &str, path: &str, _o: &Value) -> TResult {
         }
         if let Some(v) = j.ast.child(p.node, "value") {
             if is_str_lit_ty(j.ast.ty(v)) {
+                if let Some(p) = j.ast.str_of(v, "value").filter(|x| icon_rename(x).is_none()).and_then(super::jsproto::proto) {
+                    return Err(p.builder_error("value", "string", "StringLiteral"));
+                }
                 if let Some(new) = j.ast.str_of(v, "value").and_then(icon_rename) {
                     let s = j.string_literal(new);
                     j.ast.set_node(p.node, "value", s);
@@ -115,6 +139,9 @@ pub fn icon_name_deprecations(source: &str, path: &str, _o: &Value) -> TResult {
                 }
             }
         }
+    }
+    if changed && PRINT_THROWS.with(|c| c.get()) {
+        return Err(CodemodError::msg("undefined does not match type string".to_string()));
     }
     Ok(if changed { Some(j.to_source_single()) } else { None })
 }
@@ -126,6 +153,9 @@ pub fn rename_attachments_to_drawer(source: &str, path: &str, _o: &Value) -> TRe
     let mut changed = false;
     for p in j.find("ImportSpecifier") {
         let imported = j.name_of(j.ast.child(p.node, "imported")).unwrap_or_default();
+        if let Some(super::jsproto::Hit::Proto(pr)) = super::jsproto::lookup(ATTACH_RENAMES, &imported) {
+            return Err(pr.builder_error("name", "string", "Identifier"));
+        }
         let new = match ATTACH_RENAMES.iter().find(|(o, _)| *o == imported) {
             Some((_, n)) => *n,
             None => continue,
@@ -170,8 +200,8 @@ pub fn rename_attachments_to_drawer(source: &str, path: &str, _o: &Value) -> TRe
         let tn = j.ast.child(p.node, "typeName").unwrap();
         if j.ast.is(tn, "Identifier") {
             let n = j.ast.name(tn).unwrap_or("").to_string();
-            if let Some((_, new)) = ATTACH_RENAMES.iter().find(|(o, _)| *o == n) {
-                j.set_name(tn, new);
+            if let Some(hit) = super::jsproto::lookup(ATTACH_RENAMES, &n) {
+                j.set_name(tn, &hit.string());
                 changed = true;
             }
         }
@@ -245,6 +275,9 @@ pub fn toolbar_density_to_size(source: &str, path: &str, _o: &Value) -> TResult 
         let value = j.ast.child(attrs[idx], "value");
         if let Some(v) = value.filter(|v| is_str_lit_ty(j.ast.ty(*v))) {
             let dv = j.ast.get(v, "value").clone();
+            if let Some(p) = dv.as_str().filter(|x| density(x).is_none()).and_then(super::jsproto::proto) {
+                return Err(p.builder_error("value", "string", "StringLiteral"));
+            }
             let size = match dv.as_str().and_then(density) {
                 Some(s) => s,
                 None => continue,
@@ -286,6 +319,9 @@ pub fn toolbar_density_to_size(source: &str, path: &str, _o: &Value) -> TResult 
             }
             let value = j.ast.child(p.node, "value").unwrap();
             if is_str_lit_ty(j.ast.ty(value)) {
+                if let Some(p) = j.ast.str_of(value, "value").filter(|x| density(x).is_none()).and_then(super::jsproto::proto) {
+                    return Err(p.builder_error("value", "string", "StringLiteral"));
+                }
                 let size = match j.ast.str_of(value, "value").and_then(density) {
                     Some(s) => s,
                     None => continue,

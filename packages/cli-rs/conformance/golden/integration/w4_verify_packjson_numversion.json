@@ -1,0 +1,13 @@
+{
+ "id": "w4_verify_packjson_numversion",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "integration-packjson",
+ "fixtureHash": "efbbc6565cb0fab3+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/numversion\n\n3 packed files; 2/2 required files present.\n\n- [fail] package.json has no \"version\", so npm cannot pack or publish the package. Fix: add \"version\": \"0.1.0\" to package.json.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

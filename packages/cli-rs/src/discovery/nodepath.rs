@@ -177,37 +177,79 @@ pub fn is_absolute(p: &str) -> bool {
     p.starts_with('/')
 }
 
+/// A Yarn PnP virtual or zipped path's view (`zipfs`): `Some(kind)` when the
+/// path lies in an archive, `Some(None)` when it is there but missing, and
+/// None for an ordinary path (or a virtual one standing for an ordinary path,
+/// returned resolved in `real`).
+fn pnp_view(p: &str, real: &mut Option<String>) -> Option<Option<super::zipfs::Kind>> {
+    if !super::zipfs::is_special(p) {
+        return None;
+    }
+    let abs = resolve1(p);
+    if super::zipfs::split(&abs).is_some() {
+        return Some(super::zipfs::stat(&abs));
+    }
+    let r = super::zipfs::resolve_virtual(&abs);
+    if r != abs {
+        *real = Some(r);
+    }
+    None
+}
+
 /// `fs.existsSync` (follows symbolic links).
 pub fn exists(p: &str) -> bool {
-    super::listing_cache::exists(Path::new(p))
+    let mut real = None;
+    if let Some(k) = pnp_view(p, &mut real) {
+        return k.is_some();
+    }
+    super::listing_cache::exists(Path::new(real.as_deref().unwrap_or(p)))
 }
 
 /// A directory, following links (`statSync(p).isDirectory()`).
 pub fn is_dir(p: &str) -> bool {
-    std::fs::metadata(p).map(|m| m.is_dir()).unwrap_or(false)
+    let mut real = None;
+    if let Some(k) = pnp_view(p, &mut real) {
+        return k == Some(super::zipfs::Kind::Dir);
+    }
+    std::fs::metadata(real.as_deref().unwrap_or(p)).map(|m| m.is_dir()).unwrap_or(false)
 }
 
 /// A regular file, following links.
 pub fn is_file(p: &str) -> bool {
-    std::fs::metadata(p).map(|m| m.is_file()).unwrap_or(false)
+    let mut real = None;
+    if let Some(k) = pnp_view(p, &mut real) {
+        return k == Some(super::zipfs::Kind::File);
+    }
+    std::fs::metadata(real.as_deref().unwrap_or(p)).map(|m| m.is_file()).unwrap_or(false)
 }
 
 /// `fs.realpathSync(p)`, or `path.resolve(p)` when it fails.
 pub fn real_or_resolve(p: &str) -> String {
-    match std::fs::canonicalize(p) {
-        Ok(r) => r.to_string_lossy().into_owned(),
-        Err(_) => resolve1(p),
-    }
+    realpath(p).unwrap_or_else(|| resolve1(p))
 }
 
-/// `fs.realpathSync(p)`.
+/// `fs.realpathSync(p)`. Under PnP a virtual or zipped path is its own real
+/// path (archives hold no links).
 pub fn realpath(p: &str) -> Option<String> {
+    let mut real = None;
+    if let Some(k) = pnp_view(p, &mut real) {
+        return k.map(|_| normalize(&resolve1(p)));
+    }
     std::fs::canonicalize(p).ok().map(|r| r.to_string_lossy().into_owned())
+}
+
+/// `fs.readFileSync(p)` bytes, archives included.
+pub fn read_bytes(p: &str) -> Option<Vec<u8>> {
+    let mut real = None;
+    if let Some(k) = pnp_view(p, &mut real) {
+        return if k == Some(super::zipfs::Kind::File) { super::zipfs::read(&resolve1(p)) } else { None };
+    }
+    std::fs::read(real.as_deref().unwrap_or(p)).ok()
 }
 
 /// `fs.readFileSync(p, 'utf-8')`. Invalid UTF-8 becomes U+FFFD, as in Node.
 pub fn read_text(p: &str) -> Option<String> {
-    std::fs::read(p).ok().map(|b| match String::from_utf8(b) {
+    read_bytes(p).map(|b| match String::from_utf8(b) {
         Ok(s) => s,
         Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
     })
@@ -239,6 +281,20 @@ pub struct Dirent {
 /// `fs.readdirSync(dir, {withFileTypes: true})`, in the order Node returns
 /// it: libuv's scandir sorts by name bytes. None when the folder cannot be read.
 pub fn read_dir(dir: &str) -> Option<Vec<Dirent>> {
+    let mut real = None;
+    if let Some(k) = pnp_view(dir, &mut real) {
+        if k != Some(super::zipfs::Kind::Dir) {
+            return None;
+        }
+        let entries = super::zipfs::read_dir(&resolve1(dir))?;
+        let mut out: Vec<Dirent> = entries
+            .into_iter()
+            .map(|(name, kind)| Dirent { name, is_dir: kind == super::zipfs::Kind::Dir, is_file: kind == super::zipfs::Kind::File, is_symlink: false })
+            .collect();
+        out.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
+        return Some(out);
+    }
+    let dir = real.as_deref().unwrap_or(dir);
     let raw = super::listing_cache::read_dir(Path::new(dir))?;
     let mut out: Vec<Dirent> = raw
         .iter()

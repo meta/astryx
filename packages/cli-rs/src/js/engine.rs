@@ -23,6 +23,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+/// Load timing and engine start-up phases on stderr (`--features js-trace`).
+const TRACE: bool = cfg!(feature = "js-trace");
+
 thread_local! {
     // Never dropped: Boa's collector lives in its own thread-local, which may
     // be gone by the time this one is destroyed.
@@ -37,6 +40,9 @@ thread_local! {
     static GENERATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// Source text to use in place of a file's, for the load in progress.
     static OVERRIDES: RefCell<Vec<(PathBuf, String)>> = const { RefCell::new(Vec::new()) };
+    /// The flavor of the call in progress, for imports with no module
+    /// referrer (dynamic `import()` from a promise job).
+    static CALL_FLAVOR: std::cell::Cell<Option<Flavor>> = const { std::cell::Cell::new(None) };
     /// Whether the timer globals were installed (nothing to wait on before).
     static TIMERS_LOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Resolution failure message -> the specifier that failed.
@@ -333,7 +339,7 @@ impl Loader {
     fn info_of(&self, referrer: &Referrer) -> ModInfo {
         match referrer {
             Referrer::Module(m) => self.info.borrow().get(m).cloned(),
-            _ => None,
+            _ => CALL_FLAVOR.with(|c| c.get()).map(ModInfo::new),
         }
         .unwrap_or_else(|| ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false, gen: 0 }))
     }
@@ -557,7 +563,10 @@ impl Loader {
     /// `require(specifier)` from the file `from`.
     fn require(&self, spec: &str, from: &Path, jiti: bool, gen: u32, context: &mut Context) -> JsResult<JsValue> {
         let mode = if jiti { Mode::Jiti } else { Mode::Cjs };
-        let resolved = resolve::resolve(spec, from, mode).map_err(|e| {
+        // jiti's `require` is its synchronous path: package exports match
+        // the require conditions first.
+        let sync = resolve::Profile { sync: jiti, ..Default::default() };
+        let resolved = resolve::resolve_with(spec, from, mode, &sync).map_err(|e| {
             note_missing(&e.message, spec);
             coded_error("Error", e.code, &e.message, context)
         })?;
@@ -592,7 +601,8 @@ impl Loader {
                 };
                 if is_esm_source(&path, &text, context) {
                     // require(esm): the namespace, once evaluated.
-                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile: 0, jsx_auto: false, gen };
+                    let profile = self.profile_index(&sync);
+                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile, jsx_auto: false, gen };
                     let m = self.load_file(&path, flavor, false, true, context)?;
                     evaluate_now(&m, context)?;
                     let ns = m.namespace(context);
@@ -611,7 +621,9 @@ impl Loader {
 /// Link and evaluate a module synchronously (require of an ES module).
 fn evaluate_now(m: &Module, context: &mut Context) -> JsResult<()> {
     let p = m.load_link_evaluate(context);
-    let _ = context.run_jobs();
+    if matches!(p.state(), PromiseState::Pending) {
+        let _ = context.run_jobs();
+    }
     match p.state() {
         PromiseState::Fulfilled(_) => Ok(()),
         PromiseState::Rejected(e) => Err(boa_engine::JsError::from_opaque(e)),
@@ -696,6 +708,12 @@ fn cjs_namespace(exports: JsValue, jiti: bool, path: &Path, context: &mut Contex
                 }
             }
         }
+        // Node's export-name scan finds the (usually non-enumerable)
+        // `__esModule` marker too.
+        let marker = js_string!("__esModule");
+        if !names.contains(&marker) && obj.has_own_property(marker.clone(), context)? {
+            names.push(marker);
+        }
         if jiti && obj.get(js_string!("__esModule"), context)?.to_boolean() {
             default = obj.get(js_string!("default"), context)?;
         }
@@ -778,7 +796,7 @@ impl Loader {
             if ext == "js" && !resolve::package_type_is_module(path) {
                 return None;
             }
-            let text = std::fs::read_to_string(path).ok()?;
+            let text = super::vfs::read_to_string(path).ok()?;
             let info = prune::export_info(&text)?;
             let mut names = info.names.clone();
             let mut from_stars: HashMap<String, usize> = HashMap::new();
@@ -810,7 +828,7 @@ impl Loader {
 struct Trace<'a>(&'a Path, std::time::Instant);
 impl Drop for Trace<'_> {
     fn drop(&mut self) {
-        if std::env::var_os("ASTRYX_JS_TRACE").is_some() {
+        if TRACE {
             eprintln!("[js] {:>7.2}ms {}", self.1.elapsed().as_secs_f64() * 1000.0, self.0.display());
         }
     }
@@ -831,7 +849,7 @@ fn syntax_failure(
         return boa;
     }
     LAST_SYNTAX_FILE.with(|f| *f.borrow_mut() = Some(path.to_path_buf()));
-    if std::env::var_os("ASTRYX_JS_TRACE").is_some() {
+    if TRACE {
         eprintln!("[js] syntax error in {}: {}", path.display(), boa);
     }
     let dialect = match flavor.mode {
@@ -908,10 +926,10 @@ fn unknown_extension(ext: &str, path: &Path, context: &mut Context) -> boa_engin
 
 fn read_source(path: &Path, context: &mut Context) -> JsResult<String> {
     if let Some(text) = OVERRIDES.with(|o| o.borrow().iter().find(|(p, _)| p == path).map(|(_, t)| t.clone())) {
-        if std::env::var_os("ASTRYX_JS_TRACE").is_some() { eprintln!("[js] override {}", path.display()); }
+        if TRACE { eprintln!("[js] override {}", path.display()); }
         return Ok(text);
     }
-    std::fs::read_to_string(path).map_err(|e| {
+    super::vfs::read_to_string(path).map_err(|e| {
         coded_error("Error", "ENOENT", &format!("{e}: {}", path.display()), context)
     })
 }
@@ -1217,7 +1235,7 @@ impl Engine {
     fn new() -> Self {
         let t0 = std::time::Instant::now();
         let mark = |what: &str| {
-            if std::env::var_os("ASTRYX_JS_TRACE").is_some() {
+            if TRACE {
                 eprintln!("[js] engine {what}: {:.2}ms", t0.elapsed().as_secs_f64() * 1000.0);
             }
         };
@@ -1329,7 +1347,7 @@ impl Engine {
             code: code.map(String::from),
             file: abs.clone(),
         };
-        if !abs.is_file() {
+        if !super::vfs::is_file(&abs) {
             let code = match mode {
                 Mode::Esm => "ERR_MODULE_NOT_FOUND",
                 Mode::Jiti | Mode::Cjs => "MODULE_NOT_FOUND",
@@ -1511,7 +1529,28 @@ impl Engine {
         args: &[crate::json::Value],
         opts: &CallOptions,
     ) -> Result<CallResult, CallError> {
+        // The call's options stay in force until it settles: dynamic
+        // imports made later (from promise jobs too) see the same overrides
+        // and module instances as the static graph.
+        let overrides: Vec<(PathBuf, String)> =
+            opts.jiti.source_overrides.iter().map(|(p, t)| (resolve::real(p), t.clone())).collect();
+        let prev_overrides = OVERRIDES.with(|o| std::mem::replace(&mut *o.borrow_mut(), overrides));
+        let prev_scope = CALL_FLAVOR.with(|c| c.get());
+        let result = self.call_export_scoped(path, export, args, opts);
+        OVERRIDES.with(|o| *o.borrow_mut() = prev_overrides);
+        CALL_FLAVOR.with(|c| c.set(prev_scope));
+        result
+    }
+
+    fn call_export_scoped(
+        &mut self,
+        path: &Path,
+        export: &[&str],
+        args: &[crate::json::Value],
+        opts: &CallOptions,
+    ) -> Result<CallResult, CallError> {
         let (module, flavor, real) = self.load_with(path, &opts.import, &opts.jiti).map_err(CallError::Load)?;
+        CALL_FLAVOR.with(|c| c.set(Some(flavor)));
         let ns: JsValue = module.namespace(&mut self.ctx).into();
         let not_fn = || CallError::NotAFunction(export.join("."));
         let mut this = JsValue::undefined();
@@ -1739,7 +1778,7 @@ fn install_host(ctx: &mut Context) {
         .function(
             NativeFunction::from_fn_ptr(|_, args, ctx| {
                 let p = arg_string(args, 0, ctx)?;
-                Ok(match std::fs::read_to_string(&p) {
+                Ok(match super::vfs::read_to_string(Path::new(&p)) {
                     Ok(s) => JsString::from(s.as_str()).into(),
                     Err(e) => io_error_obj(&e, ctx),
                 })
@@ -1750,6 +1789,22 @@ fn install_host(ctx: &mut Context) {
         .function(
             NativeFunction::from_fn_ptr(|_, args, ctx| {
                 let p = arg_string(args, 0, ctx)?;
+                if crate::discovery::zipfs::is_special(&p) {
+                    return Ok(match super::vfs::kind(Path::new(&p)) {
+                        Some(k) => {
+                            let size = super::vfs::read(Path::new(&p)).map(|b| b.len()).unwrap_or(0);
+                            ObjectInitializer::new(ctx)
+                                .property(js_string!("file"), k == super::vfs::Kind::File, Attribute::all())
+                                .property(js_string!("dir"), k == super::vfs::Kind::Dir, Attribute::all())
+                                .property(js_string!("link"), false, Attribute::all())
+                                .property(js_string!("size"), size as f64, Attribute::all())
+                                .property(js_string!("mtimeMs"), 0.0, Attribute::all())
+                                .build()
+                                .into()
+                        }
+                        None => JsValue::null(),
+                    });
+                }
                 let link = std::fs::symlink_metadata(&p).map(|m| m.file_type().is_symlink()).unwrap_or(false);
                 Ok(match std::fs::metadata(&p) {
                     Ok(m) => stat_obj(&m, link, ctx),
@@ -1762,20 +1817,8 @@ fn install_host(ctx: &mut Context) {
         .function(
             NativeFunction::from_fn_ptr(|_, args, ctx| {
                 let p = arg_string(args, 0, ctx)?;
-                match std::fs::read_dir(&p) {
-                    Ok(rd) => {
-                        let mut entries: Vec<(String, bool, bool, bool)> = rd
-                            .filter_map(|e| e.ok())
-                            .map(|e| {
-                                let ft = e.file_type().ok();
-                                (
-                                    e.file_name().to_string_lossy().into_owned(),
-                                    ft.map(|f| f.is_file()).unwrap_or(false),
-                                    ft.map(|f| f.is_dir()).unwrap_or(false),
-                                    ft.map(|f| f.is_symlink()).unwrap_or(false),
-                                )
-                            })
-                            .collect();
+                match super::vfs::read_dir(Path::new(&p)) {
+                    Ok(mut entries) => {
                         // Node returns entries in byte order of the names.
                         entries.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
                         let arr = JsArray::new(ctx)?;
@@ -1799,7 +1842,7 @@ fn install_host(ctx: &mut Context) {
         .function(
             NativeFunction::from_fn_ptr(|_, args, ctx| {
                 let p = arg_string(args, 0, ctx)?;
-                Ok(match std::fs::canonicalize(&p) {
+                Ok(match super::vfs::canonicalize(Path::new(&p)) {
                     Ok(r) => JsString::from(r.to_string_lossy().as_ref()).into(),
                     Err(_) => JsValue::null(),
                 })

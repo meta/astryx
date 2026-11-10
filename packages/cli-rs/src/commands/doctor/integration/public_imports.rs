@@ -1025,7 +1025,7 @@ fn component_issues(ctx: &mut Ctx, integration: &Map<String, Value>) -> Vec<Valu
     if li.components.is_none() {
         return issues;
     }
-    let records = cd::discover_integration_components(&li, false);
+    let records = cd::discover_integration_components(&li, true);
     let mut by_doc: Vec<(std::path::PathBuf, Vec<&cd::IntegrationRecord>)> = Vec::new();
     for r in &records {
         match by_doc.iter_mut().find(|(d, _)| *d == r.doc_path) {

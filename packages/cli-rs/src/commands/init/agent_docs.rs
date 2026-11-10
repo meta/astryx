@@ -87,7 +87,7 @@ fn is_home_folder(dir: &str) -> bool {
     relative_to_home(dir).as_deref() == Some("")
 }
 
-fn is_home_or_settings_folder(dir: &str) -> bool {
+pub fn is_home_or_settings_folder(dir: &str) -> bool {
     let Some(rel) = relative_to_home(dir) else { return false };
     if rel.is_empty() {
         return true;
@@ -387,9 +387,9 @@ pub struct IndexOptions<'a> {
     pub built_check: bool,
 }
 
-/// TEMP: replace with the component lane's discoverComponents count.
+/// The number of components `discoverComponents(coreDir)` finds.
 fn component_count(core_dir: &str) -> Option<usize> {
-    crate::commands::init::temp::component_count(core_dir)
+    crate::commands::init::shared::component_count(core_dir)
 }
 
 pub fn generate_compressed_index(version: &str, o: &IndexOptions) -> Result<String, String> {
@@ -443,7 +443,7 @@ pub fn generate_compressed_index(version: &str, o: &IndexOptions) -> Result<Stri
     lines.push("  discover <words>   integrations you could add".into());
     let topics = match &o.topics {
         Some(t) => t.clone(),
-        None => crate::commands::init::temp::fallback_topics(),
+        None => crate::commands::init::shared::fallback_topics(),
     };
     if !topics.is_empty() {
         let key = ["getting-started", "principles", "tokens", "theme"];
@@ -484,9 +484,9 @@ pub fn get_xds_version(core_dir: Option<&str>, cli_root: &str) -> Result<String,
 
 /// `renderAgentDocsBlock(targetDir)`.
 pub fn render_agent_docs_block(target: &str, cli_root: &str) -> Result<String, String> {
-    let core_dir = crate::commands::init::temp::find_core_dir(target);
+    let core_dir = crate::commands::init::shared::find_core_dir(target);
     let version = get_xds_version(core_dir.as_deref(), cli_root)?;
-    let project = crate::commands::init::temp::load_project(target)?;
+    let project = crate::commands::init::shared::load_project(target)?;
     generate_compressed_index(
         &version,
         &IndexOptions {
@@ -629,7 +629,7 @@ fn untracked_ignored(root: &str, target: &str, rel: &str) -> Option<bool> {
 
 fn uncommitted_here(target: &str, rel: &str, unreadable: bool) -> bool {
     match repository_root_of(target) {
-        None => crate::commands::init::temp::ignored_here(target, rel).unwrap_or(unreadable),
+        None => crate::commands::init::shared::ignored_here(target, rel).unwrap_or(unreadable),
         Some(root) => untracked_ignored(&root, target, rel).unwrap_or(unreadable),
     }
 }
@@ -1136,4 +1136,35 @@ pub fn holds_astryx_block(content: &str) -> bool {
 
 pub fn is_astryx_initialized(dir: &str) -> bool {
     discover_agent_docs(dir).iter().any(|r| read(&p::join2(dir, r)).map(|c| holds_astryx_block(&c)).unwrap_or(false))
+}
+
+/// `isAstryxPromptInReach(startDir)`: an Astryx block in an agent doc at or
+/// above `start`, up to the repository root (`.git`); outside a repository,
+/// in `start` itself.
+pub fn is_astryx_prompt_in_reach(start: &str) -> bool {
+    let start = p::resolve1(start);
+    let mut root = None;
+    let mut d = start.clone();
+    loop {
+        if p::exists(&p::join2(&d, ".git")) {
+            root = Some(d);
+            break;
+        }
+        let parent = p::dirname(&d);
+        if parent == d {
+            break;
+        }
+        d = parent;
+    }
+    let Some(root) = root else { return is_astryx_initialized(&start) };
+    let mut dir = start;
+    loop {
+        if is_astryx_initialized(&dir) {
+            return true;
+        }
+        if dir == root {
+            return false;
+        }
+        dir = p::dirname(&dir);
+    }
 }

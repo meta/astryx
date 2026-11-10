@@ -1,0 +1,18 @@
+{
+ "id": "sweep_doc_parent_acme",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "guide-x",
+  "--parent",
+  "acme",
+  "--json"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Namespace \\\"acme\\\" (@sweep/namespaces/guides/acme.doc.mjs) has more than one slot that takes a guide (first, second). Write the guide yourself, and name its slot in its placement.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

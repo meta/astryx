@@ -1,0 +1,13 @@
+[
+  {
+    "id": "pnpzip_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "yarnpnpzip",
+    "env": {
+      "NODE_OPTIONS": "--require /tmp/astryx-conformance/work/yarnpnpzip/.pnp.cjs --experimental-loader /tmp/astryx-conformance/work/yarnpnpzip/.pnp.loader.mjs"
+    }
+  }
+]

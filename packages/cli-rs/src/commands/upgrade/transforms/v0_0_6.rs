@@ -215,6 +215,9 @@ pub fn migrate_skeleton_radius(source: &str, path: &str, _o: &Value) -> TResult 
             }
             if let Some(v) = j.ast.child(a, "value") {
                 if matches!(j.ast.ty(v), "StringLiteral" | "Literal") {
+                    if let Some(p) = j.ast.str_of(v, "value").filter(|x| map(x).is_none()).and_then(super::jsproto::proto) {
+                        return Err(p.builder_error("value", "number", "NumericLiteral"));
+                    }
                     if let Some(n) = j.ast.str_of(v, "value").and_then(map) {
                         let lit = j.numeric_literal(n);
                         let c = j.jsx_expression_container(lit);
@@ -227,6 +230,9 @@ pub fn migrate_skeleton_radius(source: &str, path: &str, _o: &Value) -> TResult 
                 if j.ast.is(v, "JSXExpressionContainer") {
                     let e = j.ast.child(v, "expression").unwrap();
                     if matches!(j.ast.ty(e), "StringLiteral" | "Literal") {
+                        if let Some(p) = j.ast.str_of(e, "value").filter(|x| map(x).is_none()).and_then(super::jsproto::proto) {
+                            return Err(p.builder_error("value", "number", "NumericLiteral"));
+                        }
                         if let Some(n) = j.ast.str_of(e, "value").and_then(map) {
                             let lit = j.numeric_literal(n);
                             let c = j.jsx_expression_container(lit);

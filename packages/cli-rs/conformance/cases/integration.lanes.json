@@ -634,5 +634,317 @@
         "Fancy"
       ]
     ]
+  },
+  {
+    "id": "w3_verify_theme_fresh",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/fresh"
+  },
+  {
+    "id": "w3_verify_theme_fresh_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/fresh"
+  },
+  {
+    "id": "w3_verify_theme_stale",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/stale"
+  },
+  {
+    "id": "w3_verify_theme_stale_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/stale"
+  },
+  {
+    "id": "w3_verify_theme_renamed",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/renamed"
+  },
+  {
+    "id": "w3_verify_theme_renamed_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/renamed"
+  },
+  {
+    "id": "w3_verify_theme_cssonly",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/cssonly"
+  },
+  {
+    "id": "w3_verify_theme_cssonly_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/cssonly"
+  },
+  {
+    "id": "w3_verify_theme_fresh_built",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ],
+    "cwd": "integration-themes/fresh"
+  },
+  {
+    "id": "w3_verify_theme_fresh_built_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ],
+    "cwd": "integration-themes/fresh"
+  },
+  {
+    "id": "w3_verify_theme_renamed_built",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ],
+    "cwd": "integration-themes/renamed"
+  },
+  {
+    "id": "w3_verify_theme_cssonly_built",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-themes",
+    "pre": [
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ],
+    "cwd": "integration-themes/cssonly"
+  },
+  {
+    "id": "w3_pack_check_theme_stale",
+    "args": [
+      "integration",
+      "pack",
+      "--check"
+    ],
+    "fixture": "integration-themes",
+    "cwd": "integration-themes/stale"
+  },
+  {
+    "id": "w3_verify_author_theme_built",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ],
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "w3_verify_app_theme_built_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ],
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "w3_verify_app_fork_built",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean",
+        "--from",
+        "neutral"
+      ],
+      [
+        "theme",
+        "build",
+        "themes/ocean/oceanTheme.ts"
+      ]
+    ]
+  },
+  {
+    "id": "w4_verify_packjson_noversion",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w4_verify_packjson_noversion_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w4_verify_packjson_noname",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w4_verify_packjson_noname_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w4_verify_packjson_emptyversion",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w4_verify_packjson_emptyversion_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w4_verify_packjson_numversion",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w4_verify_packjson_numversion_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w4_verify_packjson_oddversion",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w4_verify_packjson_oddversion_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
   }
 ]

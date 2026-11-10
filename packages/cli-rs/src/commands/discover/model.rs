@@ -137,6 +137,8 @@ pub struct InstalledPackage {
     pub name: String,
     pub category: String,
     pub version: Option<String>,
+    /// `version` as the package.json gave it (a number stays a number).
+    pub version_raw: Option<Value>,
     pub description: Option<String>,
     pub display_name: Option<String>,
     pub docs_dir: Option<std::path::PathBuf>,
@@ -165,7 +167,12 @@ pub fn to_entry(pkg: &InstalledPackage) -> Map<String, Value> {
     e.insert("package".into(), pkg.name.clone().into());
     e.insert("category".into(), pkg.category.clone().into());
     e.insert("components".into(), strs(&pkg.components));
-    opt(&mut e, "version", &pkg.version);
+    match &pkg.version_raw {
+        Some(v) => {
+            e.insert("version".into(), v.clone());
+        }
+        None => opt(&mut e, "version", &pkg.version),
+    }
     opt(&mut e, "description", &pkg.description);
     opt(&mut e, "displayName", &pkg.display_name);
     for (_, field) in KIND_FIELDS.iter().skip(1) {
@@ -208,3 +215,13 @@ impl DiscoverError {
 }
 
 pub type DResult<T> = Result<T, DiscoverError>;
+
+impl InstalledPackage {
+    /// `pkg.version` when truthy, as given.
+    pub fn version_if_truthy(&self) -> Option<Value> {
+        match &self.version_raw {
+            Some(v) => crate::discovery::paths::js_truthy(Some(v)).then(|| v.clone()),
+            None => self.version.clone().filter(|v| !v.is_empty()).map(Value::String),
+        }
+    }
+}

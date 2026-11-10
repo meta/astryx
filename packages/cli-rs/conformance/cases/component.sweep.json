@@ -1,0 +1,96 @@
+[
+  {
+    "id": "sweep_case_exact_0",
+    "args": [
+      "component",
+      "button",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_case_exact_1",
+    "args": [
+      "component",
+      "BUTTON"
+    ]
+  },
+  {
+    "id": "sweep_case_exact_2",
+    "args": [
+      "component",
+      "Text/../Button",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_case_exact_3",
+    "args": [
+      "component",
+      "./Button",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_case_exact_4",
+    "args": [
+      "component",
+      "Button/",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_case_exact_5",
+    "args": [
+      "swizzle",
+      "Button/../Text",
+      "--dry-run",
+      "--json"
+    ]
+  },
+  {
+    "id": "sweep_cssart_brand",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "sweep-cssart",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "brand"
+      ]
+    ]
+  },
+  {
+    "id": "sweep_cssart_brand_json",
+    "args": [
+      "component",
+      "Button",
+      "--json"
+    ],
+    "fixture": "sweep-cssart",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "brand"
+      ]
+    ]
+  },
+  {
+    "id": "sweep_cssart_mono",
+    "args": [
+      "component",
+      "Button"
+    ],
+    "fixture": "sweep-cssart",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "mono"
+      ]
+    ]
+  }
+]

@@ -233,6 +233,22 @@ pub fn project_docs(cwd: &str, pm: &str, force: bool) -> Option<Vec<Value>> {
         None => return None,
     };
     crate::discovery::doc_compiler::links::set_doc_pm(pm);
+    // A provider id that is not a package name stops the docs tree from
+    // building, and every topic's lowering with it: each topic is then
+    // indexed by its catalog name and title alone.
+    if catalog.entries().iter().any(|e| norm_opt(e.provider_id.as_deref().unwrap_or(&e.package)).is_none()) {
+        let none = |_: &str| None;
+        return Some(
+            catalog
+                .entries()
+                .iter()
+                .flat_map(|e| {
+                    let title = e.title.as_ref().filter(|t| super::cand::truthy(t)).map(js);
+                    topic_candidates(&e.name, None, title.as_deref(), "", None, None, Some(&e.package), &none)
+                })
+                .collect(),
+        );
+    }
     let variant = crate::commands::docs::model::Variant::get(pm);
     let built = runtime::build(&variant, catalog.clone(), cwd);
     let resolver = &built;

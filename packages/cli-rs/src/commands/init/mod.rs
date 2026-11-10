@@ -1,7 +1,7 @@
 //! `astryx init`: port of clients/cli/commands/init.mjs and api/init.
 
 pub mod agent_docs;
-pub mod temp;
+pub mod shared;
 pub mod user;
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, OptValue, Out};
@@ -326,8 +326,7 @@ fn apply_agents(cwd: &str, cli_root: &str, o: &Opts, invocation: &str, data: &mu
             lg.warn(&format!("Note: {m}"));
             data.docs_error = Some(("install-failed".into(), Some(m)));
         }
-        Err(DocsError::Other(_e)) => {
-            if std::env::var("ASTRYX_RS_DEBUG").is_ok() { eprintln!("debug: {_e}"); }
+        Err(DocsError::Other(_)) => {
             lg.warn(&format!("Could not install agent docs. Try again with `{invocation} init --features agents`."));
             data.docs_error = Some(("install-failed".into(), None));
         }
@@ -348,25 +347,9 @@ fn strip_copyright_header(s: &str) -> String {
     out
 }
 
-/// TEMP: replace with the template+theme lane's themeTemplate.
+/// `themeTemplate({cwd})`: (relative path, written).
 fn theme_template(cwd: &str, cli_root: &str) -> Result<(String, bool), ()> {
-    let target = "theme.template.ts";
-    let resolved = assert_within(target, cwd, false, "theme template path").map_err(|_| ())?;
-    let rel = {
-        let r = p::relative(cwd, &resolved);
-        if r.is_empty() {
-            target.to_string()
-        } else {
-            r
-        }
-    };
-    if p::exists(&resolved) {
-        return Ok((rel, false));
-    }
-    let src = std::fs::read_to_string(p::join(&[cli_root, "assets", "theme.template.ts"])).map_err(|_| ())?;
-    std::fs::create_dir_all(p::dirname(&resolved)).map_err(|_| ())?;
-    std::fs::write(&resolved, strip_copyright_header(&src)).map_err(|_| ())?;
-    Ok((rel, true))
+    crate::commands::theme::template::write(std::path::Path::new(cli_root), cwd, "theme.template.ts", false).map_err(|_| ())
 }
 
 fn apply_theme(cwd: &str, cli_root: &str, inv: &str, data: &mut RunData, lg: &mut Logger) {
@@ -382,7 +365,7 @@ fn apply_theme(cwd: &str, cli_root: &str, inv: &str, data: &mut RunData, lg: &mu
             lg.warn("Could not write the theme template.");
         }
     }
-    if temp::is_outside_project(cwd) {
+    if shared::is_outside_project(cwd) {
         lg.log(&format!("  Edit the blank template for a new theme, or run `{inv} theme eject <slug>` to start from the source of a built theme (`{inv} theme list` to browse)."));
     } else {
         lg.log(&format!("  Edit the blank template for a new theme, or run `{inv} theme add <slug>` to import an installed built theme (`{inv} theme list` to browse). Extend an imported theme for ordinary customization; use `{inv} theme eject <slug>` only to fork source."));
@@ -448,7 +431,7 @@ fn run_install(o: &Opts, cwd: &str, cli_root: &str, lg: &mut Logger) -> Result<V
         m.insert("data".into(), data.to_json());
         return Ok(Value::Object(m));
     }
-    let outside = temp::is_outside_project(cwd);
+    let outside = shared::is_outside_project(cwd);
     let mut data = RunData {
         mode: "default",
         features: vec!["agents".into()],

@@ -3819,5 +3819,400 @@
       "--json"
     ],
     "fixture": "author"
+  },
+  {
+    "id": "w_bare_numversion_@integration-packjson",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_--json_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_--installed---json_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion---json_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion-1_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion@1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion-1---json_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion@1",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion-v2_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion@v2"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion-9.9.9_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion@9.9.9"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_-acme-numversion-Nope_numversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/numversion/Nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/numversion"
+  },
+  {
+    "id": "w_bare_emptyversion_@integration-packjson",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_--json_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_--installed---json_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion---json_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion-1_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion@1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion-1---json_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion@1",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion-v2_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion@v2"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion-9.9.9_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion@9.9.9"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_-acme-emptyversion-Nope_emptyversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/emptyversion/Nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/emptyversion"
+  },
+  {
+    "id": "w_bare_noversion_@integration-packjson",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--json_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--installed---json_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion---json_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion-1_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion@1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion-1---json_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion@1",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion-v2_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion@v2"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion-9.9.9_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion@9.9.9"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_-acme-noversion-Nope_noversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/noversion/Nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_bare_oddversion_@integration-packjson",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_--json_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_--installed---json_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion---json_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion-1_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion@1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion-1---json_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion@1",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion-v2_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion@v2"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion-9.9.9_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion@9.9.9"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_-acme-oddversion-Nope_oddversion_@integration-packjson",
+    "args": [
+      "discover",
+      "@acme/oddversion/Nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/oddversion"
+  },
+  {
+    "id": "w_bare_noname_@integration-packjson",
+    "args": [
+      "discover"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--json_noname_@integration-packjson",
+    "args": [
+      "discover",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--installed---json_noname_@integration-packjson",
+    "args": [
+      "discover",
+      "--installed",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
   }
 ]

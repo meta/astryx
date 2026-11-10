@@ -7,7 +7,7 @@
   "local.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"local.tsx\",\n    \"output\": \"local.html\",\n    \"bytes\": 21287,\n    \"files\": [\n      \"local.tsx\",\n      \"data.json\",\n      \"components/Card.tsx\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 7,\n    \"cssBytes\": 19695,\n    \"images\": 0,\n    \"warnings\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

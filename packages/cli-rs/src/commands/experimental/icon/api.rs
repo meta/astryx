@@ -653,41 +653,6 @@ pub fn find_local_manifest(package_dir: &str) -> Result<Option<String>, IconErro
     }
 }
 
-/// `findLocalIconSet(cwd, selector)`, up to the sets root. TEMP: a package
-/// whose manifest declares a root is not read further yet.
-pub fn find_local_icon_set(cwd: &str, _selector: Option<&str>) -> Result<(), IconError> {
-    let package_dir = package_dir_of(cwd)?;
-    let pkg_file = np::join2(&package_dir, "package.json");
-    let text = std::fs::read_to_string(&pkg_file).map_err(|e| {
-        ierr(format!("Cannot read package.json: {e}"), vec![], "ERR_INVALID_ARGUMENT")
-    })?;
-    if np::parse_json(&text).is_none() {
-        return Err(ierr("Cannot read package.json: invalid JSON", vec![], "ERR_INVALID_ARGUMENT"));
-    }
-    let manifest = find_local_manifest(&package_dir)?;
-    let declared = match manifest {
-        None => None,
-        Some(file) => {
-            let ns = crate::js::import_module(np::p(&file), &crate::js::ImportOptions { jsx: false, fresh: true })
-                .map_err(|e| ierr(e.message.clone(), vec![], "ERR_UNKNOWN"))?;
-            ns.get("default")
-                .and_then(|d| d.get("experimental"))
-                .and_then(|e| e.get("iconSets"))
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .map(String::from)
-        }
-    };
-    if declared.is_none() {
-        return Err(ierr(
-            "This package ships no icon set. Add one first.",
-            vec![Suggestion::new("astryx experimental icon new-set <name>", "add an icon set")],
-            "ERR_NOT_FOUND",
-        ));
-    }
-    Err(ierr("icon-set authoring is not cloned yet", vec![], "ERR_UNKNOWN"))
-}
-
 /// Astryx's icon definitions.
 pub fn astryx_icon_definitions(_cli_root: &std::path::Path) -> Vec<Definition> {
     crate::discovery::icon_definition_discovery::astryx_icon_definitions().definitions.iter().map(definition_of).collect()

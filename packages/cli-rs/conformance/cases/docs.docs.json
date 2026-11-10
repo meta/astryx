@@ -1834,5 +1834,275 @@
       "part-170"
     ],
     "fixture": "docsint"
+  },
+  {
+    "id": "w_theem_tab",
+    "args": [
+      "docs",
+      "theem",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_space",
+    "args": [
+      "docs",
+      "theem",
+      " "
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_empty",
+    "args": [
+      "docs",
+      "theem",
+      ""
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_tab_--json",
+    "args": [
+      "docs",
+      "theem",
+      "\t",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_tab",
+    "args": [
+      "docs",
+      "theme",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli_tab",
+    "args": [
+      "docs",
+      "cli",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_layout_tab",
+    "args": [
+      "docs",
+      "layout",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_cli-api-functions-search_tab",
+    "args": [
+      "docs",
+      "cli/api/functions/search",
+      "\t"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_nbsp",
+    "args": [
+      "docs",
+      "theem",
+      "\u00a0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theme_nbsp",
+    "args": [
+      "docs",
+      "theme",
+      "\u00a0"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_theem_x",
+    "args": [
+      "docs",
+      "theem",
+      "x"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_EMPTY_@integration-packjson-noname",
+    "args": [
+      "docs"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--json_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_--json_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_guide_intro_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "guide",
+      "intro"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_theme_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_nope_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_--depth_x_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "--depth",
+      "x"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_cli_--depth_1_@integration-packjson-noname",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noname"
+  },
+  {
+    "id": "w_EMPTY_@integration-packjson-noversion",
+    "args": [
+      "docs"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--json_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_--json_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide",
+      "--json"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_guide_intro_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "guide",
+      "intro"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_theme_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_nope_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "nope"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_--depth_x_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "--depth",
+      "x"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
+  },
+  {
+    "id": "w_cli_--depth_1_@integration-packjson-noversion",
+    "args": [
+      "docs",
+      "cli",
+      "--depth",
+      "1"
+    ],
+    "fixture": "integration-packjson",
+    "cwd": "integration-packjson/noversion"
   }
 ]

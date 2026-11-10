@@ -206,6 +206,9 @@ pub struct Diagnostic {
 }
 
 pub struct DocsTree {
+    /// The error `buildDocsTree` throws, when a doc it places names a
+    /// provider that is not a bare npm package name (`createDocId`).
+    pub error: Option<String>,
     /// In route order.
     pub nodes: Vec<TreeNode>,
     by_route: HashMap<String, usize>,
@@ -295,6 +298,13 @@ fn check_placement(placement: &Value, kind: &str, provider: &str, declared: &[(S
 
 /// `buildDocsTree({namespaces, docs, topics})`.
 pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics: &[TopicInput]) -> DocsTree {
+    let first_error: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
+    let checked_id = |provider: &str, kind: &str, name: &str| -> String {
+        if let Err(e) = crate::discovery::integrations::normalize_provider_id(provider) {
+            first_error.borrow_mut().get_or_insert(e);
+        }
+        create_doc_id(provider, kind, name)
+    };
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut report = |code: &str, provider: &str, source: &str, message: String, field: Option<&str>| {
         diagnostics.push(Diagnostic { code: code.into(), provider: provider.into(), source: source.into(), message, field: field.map(String::from), severity: "error".into() });
@@ -494,7 +504,7 @@ pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics:
             .map(|o| o.iter().map(|(n, sl)| Slot { name: n.clone(), title: sl.get("title").cloned().unwrap_or(Value::Null), children: vec![] }).collect())
             .unwrap_or_default();
         let node = TreeNode {
-            id: Some(create_doc_id(&input.provider_id, "namespace", &s(&input.doc, "name"))),
+            id: Some(checked_id(&input.provider_id, "namespace", &s(&input.doc, "name"))),
             route,
             kind: "namespace".into(),
             provider: input.provider.clone(),
@@ -617,7 +627,7 @@ pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics:
             continue;
         }
         let node = TreeNode {
-            id: Some(create_doc_id(&doc.provider_id, &doc.kind, &doc.name)),
+            id: Some(checked_id(&doc.provider_id, &doc.kind, &doc.name)),
             route: format!("{parent_route}/{segment}"),
             kind: doc.kind.clone(),
             provider: doc.provider.clone(),
@@ -669,7 +679,7 @@ pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics:
         }
         for (i, t) in members.iter().enumerate() {
             let node = TreeNode {
-                id: Some(create_doc_id(&t.provider_id, "generic", &t.name)),
+                id: Some(checked_id(&t.provider_id, "generic", &t.name)),
                 route: t.name.clone(),
                 kind: "generic".into(),
                 provider: t.provider.clone(),
@@ -748,7 +758,7 @@ pub fn build_docs_tree(namespaces: &[NamespaceInput], docs: &[DocInput], topics:
     let by_folded: HashMap<String, usize> = folded_routes.into_iter().map(|(k, r)| (k, by_route[&r])).collect();
     drop(report);
     sort_diagnostics(&mut diagnostics);
-    DocsTree { nodes, by_route, by_folded, diagnostics }
+    DocsTree { error: first_error.into_inner(), nodes, by_route, by_folded, diagnostics }
 }
 
 fn by_route_has(nodes: &[TreeNode], route: &str) -> bool {

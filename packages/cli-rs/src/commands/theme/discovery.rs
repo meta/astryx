@@ -131,7 +131,7 @@ fn evidence(files: &[String], links: &[String]) -> Option<String> {
     })
 }
 
-const MODULE_EXTS: &[&str] = &[".ts", ".tsx", ".mts", ".js", ".jsx", ".mjs"];
+const MODULE_EXTS: &[&str] = super::graph::THEME_MODULE_EXTENSIONS;
 
 fn quoted(v: &[String]) -> String {
     v.iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(", ")
@@ -139,7 +139,6 @@ fn quoted(v: &[String]) -> String {
 
 /// `discoverThemeDirectory(themeRoot, owner, {allowUnmigrated})` for a
 /// non-bundled root.
-// TEMP: the module-graph check (validateThemeModuleGraph) is not ported.
 pub fn discover_directory(root: &str, owner: &str, allow_unmigrated: bool) -> Result<Vec<Theme>, String> {
     if !std::path::Path::new(root).is_dir() {
         return Err(format!("Declared themes root does not exist on disk: {root}"));
@@ -216,7 +215,8 @@ pub fn discover_directory(root: &str, owner: &str, allow_unmigrated: bool) -> Re
         let sources: Vec<String> = MODULE_EXTS.iter().map(|e| format!("{export_name}{e}")).filter(|f| files.contains(f)).collect();
         if sources.len() != 1 {
             let fix = if sources.len() > 1 {
-                "Fix: keep one of them; the theme's source is a single module.".to_string()
+                super::graph::built_theme_source_fix(&source_dir, &sources, &docs[0], &export_name)
+                    .unwrap_or_else(|| "Fix: keep one of them; the theme's source is a single module.".to_string())
             } else {
                 format!("Fix: add {export_name}.ts beside {}, exporting `{export_name}` from defineTheme.", docs[0])
             };
@@ -234,8 +234,22 @@ pub fn discover_directory(root: &str, owner: &str, allow_unmigrated: bool) -> Re
         }
         let entry = sources[0].clone();
         let entry_path = fsutil::join(&source_dir, &entry);
-        if !crate::discovery::module_exports::module_exports_name(std::path::Path::new(&entry_path), &export_name) {
-            return Err(format!("Theme \"{slug}\" for {owner} entry \"{entry}\" does not export \"{export_name}\"."));
+        let allowed: std::collections::HashSet<String> =
+            files.iter().map(|f| fsutil::join(&source_dir, f)).filter(|f| *f != doc_path).collect();
+        let graph = super::graph::Graph { theme_dir: &source_dir, allowed: &allowed };
+        let checked = graph
+            .validate(&entry_path, owner, &entry, &doc_path, &mut Default::default())
+            .and_then(|()| graph.exports_name(&entry_path, &export_name, &mut Default::default()));
+        match checked {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(super::graph::built_module_descriptor_message(&label, &source_dir, &entry, &export_name, &docs[0], &slug, &files)
+                    .unwrap_or_else(|| format!("Theme \"{slug}\" for {owner} entry \"{entry}\" does not export \"{export_name}\".")))
+            }
+            Err(super::graph::GraphError::Reference(m) | super::graph::GraphError::Export(m)) => return Err(m),
+            Err(super::graph::GraphError::Parse(m)) => {
+                return Err(format!("Theme \"{slug}\" for {owner} entry \"{entry}\" could not be parsed: {m}"))
+            }
         }
         let rest: Vec<String> = files.iter().filter(|f| **f != entry && **f != docs[0]).cloned().collect();
         let mut copied = vec![entry.clone(), docs[0].clone()];

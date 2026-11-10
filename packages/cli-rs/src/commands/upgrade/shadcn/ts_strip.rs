@@ -16,6 +16,8 @@ enum Act {
     Keep,
     Remove,
     Replace(NodeId),
+    /// `replaceWithMultiple` (array slots only).
+    ReplaceMany(Vec<NodeId>),
 }
 
 struct State {
@@ -30,6 +32,10 @@ struct State {
     /// were read or changed (comment indexes).
     babel_comments: HashMap<NodeId, (Option<Vec<usize>>, Option<Vec<usize>>)>,
     lines_id: usize,
+    /// Enum data, `parentPath` data and generated names.
+    en: super::ts_enum::EnumState,
+    /// Program-level `const` initializers (`path.resolve()` for enum values).
+    consts: HashMap<String, NodeId>,
 }
 
 impl State {
@@ -261,7 +267,19 @@ pub fn strip(ast: &mut Ast, file: NodeId, source: &str) -> Result<(), String> {
     let program = ast.child(file, "program").ok_or("ShadCN JavaScript transform produced no AST")?;
     let usage = import_usage(source)?;
     let lines_id = ast.node(program).loc.as_ref().map(|l| l.lines_id).unwrap_or(0);
-    let mut st = State { esm: None, global_types: HashSet::new(), bindings: HashSet::new(), remove_parent: false, babel_comments: HashMap::new(), lines_id };
+    let mut st = State { esm: None, global_types: HashSet::new(), bindings: HashSet::new(), remove_parent: false, babel_comments: HashMap::new(), lines_id, en: Default::default(), consts: HashMap::new() };
+    collect_names(ast, program, &mut st.en.used);
+    for stmt in ast.list(program, "body") {
+        if ast.is(stmt, "VariableDeclaration") && ast.str_of(stmt, "kind") == Some("const") {
+            for d in ast.list(stmt, "declarations") {
+                if let (Some(i), Some(init)) = (ast.child(d, "id"), ast.child(d, "init")) {
+                    if let Some(n) = ast.name(i) {
+                        st.consts.insert(n.to_string(), init);
+                    }
+                }
+            }
+        }
+    }
     program_enter(ast, program, &usage, &mut st)?;
     for stmt in ast.list(program, "body") {
         let s = if ast.ty(stmt).starts_with("Export") { ast.child(stmt, "declaration") } else { Some(stmt) };
@@ -393,6 +411,7 @@ fn visit_children(ast: &mut Ast, id: NodeId, st: &mut State) -> Result<(), Strin
                             ast.set(id, k, V::Node(n));
                             cur = n;
                         }
+                        Act::ReplaceMany(_) => return Err("replaceWithMultiple in a single-node slot".into()),
                         Act::Remove => {
                             let parent_ty = ast.ty(id);
                             let removes_parent = (k == "declaration" && matches!(parent_ty, "ExportNamedDeclaration" | "ExportDefaultDeclaration"))
@@ -422,6 +441,12 @@ fn visit_children(ast: &mut Ast, id: NodeId, st: &mut State) -> Result<(), Strin
                             mark_replaced(ast, n);
                             if let V::Arr(mut a) = ast.get(id, k).clone() {
                                 a[i] = V::Node(n);
+                                ast.set(id, k, V::Arr(a));
+                            }
+                        }
+                        Act::ReplaceMany(ns) => {
+                            if let V::Arr(mut a) = ast.get(id, k).clone() {
+                                a.splice(i..i + 1, ns.into_iter().map(V::Node));
                                 ast.set(id, k, V::Arr(a));
                             }
                         }
@@ -470,8 +495,26 @@ fn visit(ast: &mut Ast, id: NodeId, parent: NodeId, _key: &str, st: &mut State) 
                 return Ok(Act::Remove);
             }
             if let Some(d) = ast.child(id, "declaration") {
-                if ast.is(d, "TSModuleDeclaration") && !truthy(ast, d, "declare") && ast.child(d, "id").map(|i| !ast.is(i, "StringLiteral")).unwrap_or(false) {
-                    return Err("TypeScript namespaces are not supported by this transform".into());
+                if ast.is(d, "TSModuleDeclaration") && ast.child(d, "id").map(|i| !ast.is(i, "StringLiteral")).unwrap_or(false) {
+                    let first = super::ts_enum::first_identifier(ast, ast.child(d, "id").unwrap());
+                    let name = ast.name(first).unwrap_or("").to_string();
+                    st.esm = Some(false);
+                    if has_own_binding(ast, parent, &name) {
+                        return Ok(Act::Replace(d));
+                    }
+                    let i = ast.new_node("Identifier", vec![("name", V::s(&name))]);
+                    let decl = ast.new_node("VariableDeclarator", vec![("id", V::Node(i)), ("init", V::Null)]);
+                    let var = ast.new_node("VariableDeclaration", vec![("kind", V::s("let")), ("declarations", V::Arr(vec![V::Node(decl)]))]);
+                    let exp = ast.new_node("ExportNamedDeclaration", vec![("declaration", V::Node(var)), ("specifiers", V::Arr(vec![])), ("source", V::Null)]);
+                    return Ok(Act::ReplaceMany(vec![exp, d]));
+                }
+                if ast.is(d, "TSEnumDeclaration") && !truthy(ast, d, "declare") {
+                    let new = super::ts_enum::transpile_enum(ast, &mut st.en, d, parent, false, &st.consts)?;
+                    if ast.is(new, "ExpressionStatement") {
+                        st.esm = Some(false);
+                        return Ok(Act::Replace(new));
+                    }
+                    ast.set(id, "declaration", V::Node(new));
                 }
             }
             st.esm = Some(false);
@@ -520,13 +563,32 @@ fn visit(ast: &mut Ast, id: NodeId, parent: NodeId, _key: &str, st: &mut State) 
             if truthy(ast, id, "declare") || string_id {
                 return Ok(Act::Remove);
             }
-            return Err("TypeScript namespaces are not supported by this transform".into());
+            let first = super::ts_enum::first_identifier(ast, ast.child(id, "id").unwrap());
+            let name = ast.name(first).unwrap_or("").to_string();
+            return Ok(match super::ts_enum::handle_nested(ast, &mut st.en, id, None)? {
+                None => {
+                    st.global_types.insert(name);
+                    Act::Remove
+                }
+                Some(value) => {
+                    if has_own_binding(ast, parent, &name) {
+                        Act::Replace(value)
+                    } else {
+                        let i = ast.new_node("Identifier", vec![("name", V::s(&name))]);
+                        let decl = ast.new_node("VariableDeclarator", vec![("id", V::Node(i)), ("init", V::Null)]);
+                        let var = ast.new_node("VariableDeclaration", vec![("kind", V::s("let")), ("declarations", V::Arr(vec![V::Node(decl)]))]);
+                        Act::ReplaceMany(vec![var, value])
+                    }
+                }
+            });
         }
         "TSEnumDeclaration" => {
             if truthy(ast, id, "declare") {
                 return Ok(Act::Remove);
             }
-            return Err("TypeScript enums are not supported by this transform".into());
+            let is_global = ast.is(parent, "Program");
+            let new = super::ts_enum::transpile_enum(ast, &mut st.en, id, parent, is_global, &st.consts)?;
+            return Ok(Act::Replace(new));
         }
         "TSImportEqualsDeclaration" | "TSExportAssignment" => {
             return Err("`import = require()` and `export =` are only supported when compiling modules to CommonJS.".into());
@@ -745,4 +807,40 @@ fn import_usage(source: &str) -> Result<Vec<Vec<bool>>, String> {
         out.push(row);
     }
     Ok(out)
+}
+
+/// `scope.hasOwnBinding(name)` for the Program or block `container`
+/// (namespaces declare no binding; the `let` Babel adds for one does).
+fn has_own_binding(ast: &Ast, container: NodeId, name: &str) -> bool {
+    for stmt in ast.list(container, "body") {
+        let s = if ast.ty(stmt).starts_with("Export") { ast.child(stmt, "declaration") } else { Some(stmt) };
+        if ast.is(stmt, "ImportDeclaration") {
+            for sp in ast.list(stmt, "specifiers") {
+                if ast.child(sp, "local").and_then(|l| ast.name(l)) == Some(name) {
+                    return true;
+                }
+            }
+            continue;
+        }
+        let Some(s) = s else { continue };
+        if ast.is(s, "TSModuleDeclaration") {
+            continue;
+        }
+        if declared_names(ast, s).iter().any(|n| n == name) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Every identifier name in the tree (what `generateUid` must avoid).
+fn collect_names(ast: &Ast, id: NodeId, out: &mut HashSet<String>) {
+    if ast.is(id, "Identifier") || ast.is(id, "JSXIdentifier") {
+        if let Some(n) = ast.name(id) {
+            out.insert(n.to_string());
+        }
+    }
+    for c in ast.children(id) {
+        collect_names(ast, c, out);
+    }
 }

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "sweep_docsdup_0",
+    "args": [
+      "docs",
+      "theme"
+    ],
+    "fixture": "sweep-docsdup"
+  },
+  {
+    "id": "sweep_docsdup_1",
+    "args": [
+      "docs",
+      "theme",
+      "--json"
+    ],
+    "fixture": "sweep-docsdup"
+  },
+  {
+    "id": "sweep_docsdup_2",
+    "args": [
+      "docs",
+      "theme",
+      "--index"
+    ],
+    "fixture": "sweep-docsdup"
+  },
+  {
+    "id": "sweep_docsdup_3",
+    "args": [
+      "docs"
+    ],
+    "fixture": "sweep-docsdup"
+  },
+  {
+    "id": "sweep_docsdup_4",
+    "args": [
+      "search",
+      "theme",
+      "--json"
+    ],
+    "fixture": "sweep-docsdup"
+  }
+]

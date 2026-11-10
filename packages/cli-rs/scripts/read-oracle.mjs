@@ -21,7 +21,8 @@ function toJson(value, seen = new Set()) {
 }
 const files = [];
 const walk = d => { if (!fs.existsSync(d)) return; for (const e of fs.readdirSync(d, {withFileTypes: true})) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.doc\.(mjs|ts)$/.test(e.name)) files.push(f); } };
-for (const fx of ['app', 'large', 'integration', 'author']) walk(`/tmp/astryx-conformance/fixtures/${fx}`);
+const {fixtureDirs} = await import(new URL('./_fixtures.mjs', import.meta.url).href);
+for (const {name, dir} of await fixtureDirs()) if (['app', 'large', 'integration', 'author'].includes(name)) walk(dir);
 const cases = [];
 for (const f of files.sort()) {
   const root = /\/use[A-Z]|hooks?\//.test(f) ? 'hooks' : 'components';

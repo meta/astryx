@@ -9,7 +9,7 @@
   "recv/new/page.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
+ "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
  "stdout": "Restored recv/new/page.tsx\n\ninput:  aliased.html\nmode:   embedded\nexact:  true\noutput: recv/new/page.tsx\nfiles:  recv/new/page.tsx, recv/new/src/components/Card.tsx, recv/new/src/data/info.json, recv/new/local.tsx\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

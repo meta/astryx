@@ -1,0 +1,16 @@
+{
+ "id": "sweep_theme_good_text",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "theme contribution plan\n\n[plan] fresh\n\nUse theme root ./themes in astryx.integration.mjs.\n\n- themes/fresh/freshTheme.ts\n- themes/fresh/freshTheme.doc.mjs\n- package.json\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

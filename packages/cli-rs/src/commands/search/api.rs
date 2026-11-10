@@ -37,6 +37,9 @@ type Raw = (Vec<Value>, bool, bool, Option<String>, Option<String>, Vec<(String,
 
 fn gather_raw(cwd: &Path, type_: Option<&str>) -> Result<Raw, SearchError> {
     let cwd_s = cwd.to_string_lossy().to_string();
+    // Doc tokens render in the project's package manager
+    // (`runWithDocPackageManager`).
+    crate::discovery::doc_compiler::links::set_doc_pm(&crate::discovery::package_manager::doc_package_manager(Some(&cwd_s)));
     let needs_core = type_.is_none_or(|t| !CORELESS_DOMAINS.contains(&t));
     let mut core_dir = None;
     let mut core_skipped = None;

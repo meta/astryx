@@ -1,12 +1,15 @@
 //! `astryx experimental render`: port of `clients/cli/commands/experimental/
-//! render.mjs` and `api/render/render.mjs` (argument checks, reading the
-//! input, the output's confinement). Rendering itself is not cloned yet.
+//! render.mjs`, `api/render/render.mjs` and `foundation/render/`: the page
+//! runs in-process (StyleX compiled natively, charts drawn in a native DOM),
+//! and `--reverse` restores or rebuilds the source.
 
 pub mod charts;
 pub mod css;
+pub mod dom;
 pub mod page;
 pub mod rebuild;
 pub mod reverse;
+pub mod stylex;
 pub mod texts;
 pub mod ts_paths;
 pub mod worker;

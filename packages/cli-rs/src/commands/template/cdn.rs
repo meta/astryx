@@ -31,7 +31,13 @@ pub fn write(cli_root: &std::path::Path, cwd: &std::path::Path, target: Option<&
     }
     let src = std::fs::read_to_string(cli_root.join("assets").join("cdn.template.html")).unwrap_or_default();
     let contents = fsutil::strip_copyright_header(&src).replace("__ASTRYX_VERSION__", &version);
-    let _ = std::fs::create_dir_all(fsutil::dirname(&resolved));
-    let _ = std::fs::write(&resolved, contents);
+    // The JS writes without a guard, so a failure reaches the command's catch
+    // as the bare Node error.
+    if let Err((_, m)) = super::mkdir_p(&fsutil::dirname(&resolved)) {
+        return Err(ApiError::new(&m, ""));
+    }
+    if let Err(e) = std::fs::write(&resolved, contents) {
+        return Err(ApiError::new(&super::node_err(&e, "open", &resolved), ""));
+    }
     Ok(CdnResult { path: rel, version, written: true })
 }

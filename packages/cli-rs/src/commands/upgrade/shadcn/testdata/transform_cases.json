@@ -274,5 +274,140 @@
  {
   "src": "function k() {\n  // keep\n  return foo<T>(1,2);\n}\n",
   "out": "function k() {\n  // keep\n  return foo(1, 2);\n}\n"
+ },
+ {
+  "src": "enum E { A, B = 2, C }\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  E[E[\"B\"] = 2] = \"B\";\n  E[E[\"C\"] = 3] = \"C\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "export enum Color { Red = 'red', Green = 'green' }\n",
+  "out": "export let Color = ((function(Color) {\n  Color[\"Red\"] = \"red\";\n  Color[\"Green\"] = \"green\";\n  return Color;\n})({}));\n"
+ },
+ {
+  "src": "const enum Size { Small, Large }\nexport const s = Size.Small;\n",
+  "out": "var Size = ((function(Size) {\n  Size[Size[\"Small\"] = 0] = \"Small\";\n  Size[Size[\"Large\"] = 1] = \"Large\";\n  return Size;\n})(Size || {}));\n\nexport const s = Size.Small;\n"
+ },
+ {
+  "src": "declare enum D { X }\nexport const y = 1;\n",
+  "out": "export const y = 1;\n"
+ },
+ {
+  "src": "enum Mixed { A = 1, B = A * 2, C = 'c'.length, D }\n",
+  "out": "var Mixed = ((function(Mixed) {\n  Mixed[Mixed[\"A\"] = 1] = \"A\";\n  Mixed[Mixed[\"B\"] = 2] = \"B\";\n  Mixed[Mixed[\"C\"] = 'c'.length] = \"C\";\n  Mixed[Mixed[\"D\"] = 1 + Mixed[\"C\"]] = \"D\";\n  return Mixed;\n})(Mixed || {}));\n"
+ },
+ {
+  "src": "export default function App() {\n  return <div>{Dir.Up}</div>;\n}\nenum Dir {\n  Up = 1,\n  Down,\n}\n",
+  "out": "export default function App() {\n  return <div>{Dir.Up}</div>;\n}\n\nvar Dir = ((function(Dir) {\n  Dir[Dir[\"Up\"] = 1] = \"Up\";\n  Dir[Dir[\"Down\"] = 2] = \"Down\";\n  return Dir;\n})(Dir || {}));\n"
+ },
+ {
+  "src": "namespace N {\n  export const x = 1;\n  const y = 2;\n  export function f() { return y; }\n}\n",
+  "out": "let N;\n\n(function(_N) {\n  const x = _N.x = 1;\n  const y = 2;\n  function f() { return y; }\n  _N.f = f;\n})(N || (N = {}));\n"
+ },
+ {
+  "src": "export namespace Outer {\n  export namespace Inner {\n    export const v = 'v';\n  }\n}\n",
+  "out": "export let Outer;\n\n(function(_Outer) {\n  let Inner;\n\n  (function(_Inner) {\n    const v = _Inner.v = 'v';\n  })(Inner || (Inner = (_Outer.Inner || (_Outer.Inner = {}))));\n})(Outer || (Outer = {}));\n"
+ },
+ {
+  "src": "declare namespace Ambient { const z: number; }\nexport const q = 2;\n",
+  "out": "export const q = 2;\n"
+ },
+ {
+  "src": "namespace Types { export type T = string; export interface I { a: T } }\nexport const t = 1;\n",
+  "out": "export const t = 1;\n"
+ },
+ {
+  "src": "enum E { A }\nenum E { B = 1 }\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  return E;\n})(E || {}));\n\nE = ((function(E) {\n  E[E[\"B\"] = 1] = \"B\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "enum Str { A = `a`, B = 'b' + 'c' }\n",
+  "out": "var Str = ((function(Str) {\n  Str[\"A\"] = \"a\";\n  Str[\"B\"] = \"bc\";\n  return Str;\n})(Str || {}));\n"
+ },
+ {
+  "src": "enum E {\n  // first\n  A, /* b */ B,\n  C = 5, // five\n}\n",
+  "out": "var E = ((function(E) {\n  E[E[\"A\"] = 0] = \"A\";\n  E[E[\"B\"] = 1] = \"B\";\n  E[E[\"C\"] = 5] = \"C\";\n  return E;\n})(E || {}));\n"
+ },
+ {
+  "src": "enum N { A = -1, B, C = 1.5, D = Infinity, E = -Infinity, F = NaN, G = 1 << 3, H = ~0, I = 7 % 4, J = 2 ** 3, K = 10 / 4 }\n",
+  "out": "var N = ((function(N) {\n  N[N[\"A\"] = -1] = \"A\";\n  N[N[\"B\"] = 0] = \"B\";\n  N[N[\"C\"] = 1.5] = \"C\";\n  N[N[\"D\"] = Infinity] = \"D\";\n  N[N[\"E\"] = -Infinity] = \"E\";\n  N[N[\"F\"] = NaN] = \"F\";\n  N[N[\"G\"] = 8] = \"G\";\n  N[N[\"H\"] = -1] = \"H\";\n  N[N[\"I\"] = 3] = \"I\";\n  N[N[\"J\"] = 8] = \"J\";\n  N[N[\"K\"] = 2.5] = \"K\";\n  return N;\n})(N || {}));\n"
+ },
+ {
+  "src": "enum S { A = 'a', B = `${A}-b`, C = A + 'c' }\n",
+  "out": "var S = ((function(S) {\n  S[\"A\"] = \"a\";\n  S[\"B\"] = \"a-b\";\n  S[\"C\"] = \"ac\";\n  return S;\n})(S || {}));\n"
+ },
+ {
+  "src": "enum O { X = 1 }\nenum P { Y = O.X + 1, Z = O['X'] }\n",
+  "out": "var O = ((function(O) {\n  O[O[\"X\"] = 1] = \"X\";\n  return O;\n})(O || {}));\n\nvar P = ((function(P) {\n  P[P[\"Y\"] = 2] = \"Y\";\n  P[P[\"Z\"] = O['X']] = \"Z\";\n  return P;\n})(P || {}));\n"
+ },
+ {
+  "src": "const BASE = 10;\nenum Q { A = BASE, B }\n",
+  "out": "const BASE = 10;\n\nvar Q = ((function(Q) {\n  Q[Q[\"A\"] = 10] = \"A\";\n  Q[Q[\"B\"] = 11] = \"B\";\n  return Q;\n})(Q || {}));\n"
+ },
+ {
+  "src": "declare function f(x: number): number;\nenum R { A = 1, B = f(A), C }\n",
+  "out": "var R = ((function(R) {\n  R[R[\"A\"] = 1] = \"A\";\n  R[R[\"B\"] = f(R.A)] = \"B\";\n  R[R[\"C\"] = 1 + R[\"B\"]] = \"C\";\n  return R;\n})(R || {}));\n"
+ },
+ {
+  "src": "enum T { 'a-b' = 1, 'c d', }\n",
+  "out": "var T = ((function(T) {\n  T[T[\"a-b\"] = 1] = \"a-b\";\n  T[T[\"c d\"] = 2] = \"c d\";\n  return T;\n})(T || {}));\n"
+ },
+ {
+  "src": "enum Empty {}\n",
+  "out": "var Empty = ((function(Empty) {\n  return Empty;\n})(Empty || {}));\n"
+ },
+ {
+  "src": "function g() {\n  enum Local { A, B }\n  return Local.B;\n}\n",
+  "out": "function g() {\n  let Local = ((function(Local) {\n    Local[Local[\"A\"] = 0] = \"A\";\n    Local[Local[\"B\"] = 1] = \"B\";\n    return Local;\n  })({}));\n\n  return Local.B;\n}\n"
+ },
+ {
+  "src": "export const enum CE { A = 'a' }\n",
+  "out": "export let CE = ((function(CE) {\n  CE[\"A\"] = \"a\";\n  return CE;\n})({}));\n"
+ },
+ {
+  "src": "namespace M { export enum Inner { A, B } }\n",
+  "out": "let M;\n\n(function(_M) {\n  let Inner = ((function(Inner) {\n    Inner[Inner[\"A\"] = 0] = \"A\";\n    Inner[Inner[\"B\"] = 1] = \"B\";\n    return Inner;\n  })({}));\n\n  _M.Inner = Inner;\n})(M || (M = {}));\n"
+ },
+ {
+  "src": "namespace M { export class K {} }\nnamespace M { export const z = 1; }\n",
+  "out": "let M;\n\n(function(_M) {\n  class K {}\n  _M.K = K;\n})(M || (M = {}));\n\n(function(_M2) {\n  const z = _M2.z = 1;\n})(M || (M = {}));\n"
+ },
+ {
+  "src": "function H() {}\nnamespace H { export const prop = 1; }\n",
+  "out": "function H() {}\n\n(function(_H) {\n  const prop = _H.prop = 1;\n})(H || (H = {}));\n"
+ },
+ {
+  "src": "const _N = 0;\nnamespace N { export const a = _N; }\n",
+  "out": "const _N = 0;\nlet N;\n\n(function(_N2) {\n  const a = _N2.a = _N;\n})(N || (N = {}));\n"
+ },
+ {
+  "src": "namespace A.B.C { export const deep = 1; }\n",
+  "out": "let A;\n\n(function(_A) {\n  let B;\n\n  (function(_B) {\n    let C;\n\n    (function(_C) {\n      const deep = _C.deep = 1;\n    })(C || (C = (_B.C || (_B.C = {}))));\n  })(B || (B = (_A.B || (_A.B = {}))));\n})(A || (A = {}));\n"
+ },
+ {
+  "src": "namespace D { export const {a, b: [c]} = obj; }\n",
+  "out": "let D;\n\n(function(_D) {\n  const {a, b: [c]} = obj;\n  _D.a = a, _D.c = c;\n})(D || (D = {}));\n"
+ },
+ {
+  "src": "namespace L { export let bad = 1; }\n"
+ },
+ {
+  "src": "namespace Ty { export type X = 1; declare const y: number; }\nexport const u = 1;\n",
+  "out": "let Ty;\n(function(_Ty) {})(Ty || (Ty = {}));\nexport const u = 1;\n"
+ },
+ {
+  "src": "namespace EmptyNs {}\nexport const w = 1;\n",
+  "out": "export const w = 1;\n"
+ },
+ {
+  "src": "export namespace Ex { export function f() {} export namespace Sub { export const s = 1 } }\n",
+  "out": "export let Ex;\n\n(function(_Ex) {\n  function f() {}\n  _Ex.f = f;\n  let Sub;\n\n  (function(_Sub) {\n    const s = _Sub.s = 1;\n  })(Sub || (Sub = (_Ex.Sub || (_Ex.Sub = {}))));\n})(Ex || (Ex = {}));\n"
+ },
+ {
+  "src": "namespace V {\n  // leading comment\n  export const x = 1; // trailing\n}\n",
+  "out": "let V;\n\n(function(_V) {\n  const x = _V.x = 1;\n})(V || (V = {}));\n"
+ },
+ {
+  "src": "export enum Tone {\n  Neutral,\n  Accent = 4,\n  Strong,\n}\n\nconst enum Size { Small = 'sm', Large = 'lg' }\n\nexport namespace Layout {\n  export const gap = 8;\n  export function pad(n: number): number { return n * gap; }\n  export namespace Grid {\n    export const columns = 12;\n  }\n}\n\nexport default function Example() {\n  return <div data-size={Size.Small}>{Tone.Accent + Layout.pad(1) + Layout.Grid.columns}</div>;\n}\n",
+  "out": "export let Tone = ((function(Tone) {\n  Tone[Tone[\"Neutral\"] = 0] = \"Neutral\";\n  Tone[Tone[\"Accent\"] = 4] = \"Accent\";\n  Tone[Tone[\"Strong\"] = 5] = \"Strong\";\n  return Tone;\n})({}));\n\nvar Size = ((function(Size) {\n  Size[\"Small\"] = \"sm\";\n  Size[\"Large\"] = \"lg\";\n  return Size;\n})(Size || {}));\n\nexport let Layout;\n\n(function(_Layout) {\n  const gap = _Layout.gap = 8;\n  function pad(n) { return n * gap; }\n  _Layout.pad = pad;\n  let Grid;\n\n  (function(_Grid) {\n    const columns = _Grid.columns = 12;\n  })(Grid || (Grid = (_Layout.Grid || (_Layout.Grid = {}))));\n})(Layout || (Layout = {}));\n\nexport default function Example() {\n  return <div data-size={Size.Small}>{Tone.Accent + Layout.pad(1) + Layout.Grid.columns}</div>;\n}\n"
  }
 ]

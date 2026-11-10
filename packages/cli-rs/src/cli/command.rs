@@ -294,6 +294,9 @@ pub struct Out {
     /// `None`).
     pub answered_by: Option<Value>,
     pub cwd: PathBuf,
+    /// `--json` appears anywhere in the raw arguments (even after `--`): the
+    /// JS CLI's fatal-error boundary and parse-error shim read argv this way.
+    pub raw_json: bool,
     /// Write each chunk to the real streams as it is produced, so stdout and
     /// stderr interleave as the JS CLI's do (set by the binary).
     pub live: bool,
@@ -447,6 +450,31 @@ impl Out {
             self.exit_code = opts.exit_code;
             Ok(())
         }
+    }
+
+    /// The JS CLI's top-level error boundary for an uncaught throw
+    /// (`handleFatal` in run.mjs). Use it where the JS command crashes with
+    /// a runtime error (`TypeError: props is not iterable`) rather than
+    /// reporting through cliError. In JSON mode, or with `--json` anywhere in
+    /// argv, it prints the error envelope (`ERR_UNKNOWN`, or `code` when it is
+    /// a known error code) unless one was already printed; otherwise it
+    /// prints `<name>: <message>` on stderr (the first line of Node's stack;
+    /// the frames are not cloned). Returns the exit to stop with (1).
+    pub fn fatal(&mut self, name: &str, message: &str, code: Option<&str>) -> Exit {
+        if self.json_mode || self.raw_json {
+            if !self.json_handled {
+                self.json_handled = true;
+                let env = error_envelope(message, &[], code.unwrap_or("ERR_UNKNOWN"), None);
+                self.print_json(&env);
+            }
+            return Exit(1);
+        }
+        if name.is_empty() {
+            self.eprintln(message);
+        } else {
+            self.eprintln(&format!("{name}: {message}"));
+        }
+        Exit(1)
     }
 
     /// `jsonError(message, suggestions, code, receipt)`: print the error

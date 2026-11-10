@@ -436,7 +436,7 @@ pub fn component_doc_names_check(integration: &Map<String, Value>) -> (Value, Ve
         let li = vc::loaded_integration(integration);
         let base = integration.get("__packageDir").and_then(|v| v.as_str()).unwrap_or(root).to_string();
         let skip = case_mismatch(root);
-        for record in cd::discover_valid_integration_components(&li, false).components {
+        for record in cd::discover_valid_integration_components(&li, true).components {
             if cd::is_integration_member(&record.name, Some(&record.doc_path)) {
                 continue;
             }
@@ -841,7 +841,7 @@ pub fn block_components_check(integration: &Map<String, Value>) -> (Value, Vec<V
     if let Some(root) = root.as_ref().filter(|r| vc::root_problem(r).is_none()) {
         let (templates, _) = crate::commands::template::integration::for_one(integration);
         let li = vc::loaded_integration(integration);
-        let own: HashSet<String> = cd::discover_integration_components(&li, false).into_iter().map(|r| r.name).collect();
+        let own: HashSet<String> = cd::discover_integration_components(&li, true).into_iter().map(|r| r.name).collect();
         let core_dir = crate::discovery::paths::find_project_core_dir(integration.get("__packageDir").and_then(|v| v.as_str()).unwrap_or(root));
         let mut in_core: std::collections::HashMap<String, bool> = Default::default();
         for t in &templates {

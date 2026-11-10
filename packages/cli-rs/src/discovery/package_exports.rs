@@ -92,7 +92,7 @@ fn resolve_target(package_dir: &Path, target: &str) -> Option<PathBuf> {
     if !inside(&root, &resolved) {
         return None;
     }
-    resolved.is_file().then_some(resolved)
+    super::nodepath::is_file(&resolved.to_string_lossy()).then_some(resolved)
 }
 
 fn resolve_legacy(package_dir: &Path, subpath: &str) -> Option<PathBuf> {
@@ -109,7 +109,7 @@ fn resolve_legacy(package_dir: &Path, subpath: &str) -> Option<PathBuf> {
     for e in MODULE_EXTENSIONS {
         c.push(base.join(format!("index{e}")));
     }
-    c.into_iter().find(|p| p.is_file())
+    c.into_iter().find(|p| super::nodepath::is_file(&p.to_string_lossy()))
 }
 
 /// `sourceExportTarget(pkg, packageDir, subpath)`: the `source` condition's

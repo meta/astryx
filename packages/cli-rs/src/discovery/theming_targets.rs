@@ -60,12 +60,10 @@ fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-/// `loadComponentDoc(file)`: the doc's data, or `None` when it fails to load.
-// TEMP: replace with crate::discovery::doc_read::load_component_doc.
+/// `loadComponentDoc(file)`: the doc's data, or `None` when it fails to load
+/// or check.
 pub fn load_doc(file: &Path) -> Option<Value> {
-    let ns = crate::js::import_module(file, &crate::js::ImportOptions::default()).ok()?;
-    let doc = ns.get("docs").or_else(|| ns.get("doc")).or_else(|| ns.get("default"))?;
-    crate::js::to_json_data(doc)
+    super::component_discovery::load_component_doc_strict(file).ok()
 }
 
 pub fn collect_theming_targets(core_src: &Path) -> Vec<ThemingTarget> {

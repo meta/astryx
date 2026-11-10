@@ -1,9 +1,9 @@
 //! `theme targets [filter]`: every component theming target.
-//! Port of api/theme/targets and foundation/discovery/theming-targets.mjs.
+//! Port of api/theme/targets.
 
 use crate::cli::command::{CmdResult, Invocation, Out, Suggestion};
 use crate::cli::format::{self, section, text, Field, InlineOpts};
-use crate::commands::template::{discovery::read_dir_sorted, fsutil, ApiError};
+use crate::commands::template::{fsutil, ApiError};
 use crate::json::{Map, Value};
 
 #[derive(Debug, Clone)]
@@ -11,102 +11,16 @@ pub struct Target {
     pub key: String,
     pub class_name: String,
     pub component: String,
-    pub parent: Option<String>,
     pub props: Vec<String>,
     pub states: Vec<String>,
 }
 
-fn string_list(v: Option<&Value>) -> Vec<String> {
-    match v {
-        Some(Value::Array(a)) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// `loadComponentDoc` (strict reader).
-// TEMP: replace with src/discovery component_loader::load_component_doc when it lands.
-fn load_component_doc(file: &str) -> Option<Value> {
-    let ns = crate::discovery::docmod::import_doc_module(file).ok()?;
-    crate::discovery::docmod::first_export(&ns, &["default", "docs"]).cloned()
-}
-
+/// `collectThemingTargets(coreSrc)`.
 pub fn collect(core_src: &str) -> Vec<Target> {
-    let mut targets = Vec::new();
-    if !std::path::Path::new(core_src).exists() {
-        return targets;
-    }
-    fn scan(dir: &str, out: &mut Vec<Target>) {
-        // fs.readdirSync order.
-        for (name, is_dir) in read_dir_sorted(dir) {
-            let full = fsutil::join(dir, &name);
-            if is_dir {
-                if name == "node_modules" || name == "__tests__" {
-                    continue;
-                }
-                scan(&full, out);
-                continue;
-            }
-            if !name.ends_with(".doc.mjs") {
-                continue;
-            }
-            let Some(doc) = load_component_doc(&full) else { continue };
-            let component = match doc.get("name").and_then(|v| v.as_str()) {
-                Some(n) if !n.is_empty() => n.to_string(),
-                _ => fsutil::basename(&fsutil::dirname(&full)),
-            };
-            let parent = doc.get("subComponentOf").and_then(|v| v.as_str()).map(String::from);
-            let list = doc.get("theming").and_then(|t| t.get("targets")).and_then(|t| t.as_array()).cloned().unwrap_or_default();
-            for t in list {
-                let Some(cn) = t.get("className").and_then(|v| v.as_str()) else { continue };
-                let key = cn.strip_prefix("astryx-").unwrap_or(cn).to_string();
-                if key.is_empty() {
-                    continue;
-                }
-                out.push(Target {
-                    key,
-                    class_name: cn.to_string(),
-                    component: component.clone(),
-                    parent: parent.clone(),
-                    props: string_list(t.get("visualProps")),
-                    states: string_list(t.get("states")),
-                });
-            }
-        }
-    }
-    scan(core_src, &mut targets);
-    // canonicalizeParentTargets
-    let mut roots: std::collections::HashMap<(String, String), Vec<usize>> = Default::default();
-    for (i, t) in targets.iter().enumerate() {
-        if t.parent.is_none() {
-            roots.entry((t.component.clone(), t.class_name.clone())).or_default().push(i);
-        }
-    }
-    let mut dup = std::collections::HashSet::new();
-    for i in 0..targets.len() {
-        let Some(p) = targets[i].parent.clone() else { continue };
-        let r = roots.get(&(p, targets[i].class_name.clone())).cloned().unwrap_or_default();
-        if r.len() != 1 {
-            continue;
-        }
-        let c = r[0];
-        let (props, states) = (targets[i].props.clone(), targets[i].states.clone());
-        for x in props {
-            if !targets[c].props.contains(&x) {
-                targets[c].props.push(x);
-            }
-        }
-        for x in states {
-            if !targets[c].states.contains(&x) {
-                targets[c].states.push(x);
-            }
-        }
-        dup.insert(i);
-    }
-    let mut out: Vec<Target> = targets.into_iter().enumerate().filter(|(i, _)| !dup.contains(i)).map(|(_, t)| t).collect();
-    out.sort_by(|a, b| {
-        crate::text::locale_compare(&a.key, &b.key).then_with(|| crate::text::locale_compare(&a.component, &b.component))
-    });
-    out
+    crate::discovery::theming_targets::collect_theming_targets(std::path::Path::new(core_src))
+        .into_iter()
+        .map(|t| Target { key: t.key, class_name: t.class_name, component: t.component, props: t.props, states: t.states })
+        .collect()
 }
 
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {

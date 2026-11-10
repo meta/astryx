@@ -1,0 +1,16 @@
+{
+ "id": "sweep_theme_builtnone_text",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "fresh",
+  "--dry-run"
+ ],
+ "fixture": "sweep-int",
+ "fixtureHash": "5b309c049ef52d97+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Theme descriptor brand.doc.mjs for @sweep/builtnone shares its stem with the built module \"brand.mjs\", which does not export \"brand\": a descriptor must share its stem with the source that calls defineTheme. Fix: rename brand.doc.mjs to share its stem with the theme's source (the module that calls defineTheme, such as brandTheme.ts).\n",
+ "exit": 1,
+ "files": []
+}

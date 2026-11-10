@@ -18,7 +18,7 @@ path = "src/lib.rs"
 base64 = "0.22"
 boa_engine = { version = "0.22", features = ["annex-b", "intl_bundled"] }
 boa_gc = "0.22"
-flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+flate2 = { version = "1", default-features = false, features = ["zlib"] }
 icu_collator = "2"
 indexmap = "2"
 libc = "0.2"
@@ -49,6 +49,12 @@ codegen-units = 16
 boa_ast = { path = "vendor/boa_ast" }
 boa_engine = { path = "vendor/boa_engine" }
 boa_parser = { path = "vendor/boa_parser" }
+
+[features]
+# Load timing and engine start-up phases on stderr (development only).
+js-trace = []
+# Per-phase and per-file TypeScript timings on stderr, for profiling only.
+ts-timing = []
 
 [dev-dependencies]
 backtrace = "0.3.77"

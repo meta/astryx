@@ -103,3 +103,8 @@ at any depth (the JS CLI's transpile cache).
   stderr short when it exits with a write pending) is kept, marked
   `"nondeterministic": true` and listed in `golden/NONDETERMINISTIC.json`.
 - `run.mjs`: as above.
+- `bench.mjs --bin <astryx>`: times the JS CLI and the clone on a representative
+  set of cases in the same sandbox and writes `bench.md`.
+- `stress.mjs --bin <astryx> --command <file> [--case ids] [--runs 300] [--jobs 64]`:
+  runs cases many times in parallel to catch hangs and flaky output under load;
+  a run that times out gets the stacks of its live processes before it is killed.

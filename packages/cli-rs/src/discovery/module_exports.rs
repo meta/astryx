@@ -71,7 +71,7 @@ pub fn resolve_local_module(specifier: &str, from_file: &Path) -> Option<PathBuf
     for e in MODULE_EXTENSIONS {
         candidates.push(base.join(format!("index{e}")));
     }
-    candidates.into_iter().find(|c| c.is_file())
+    candidates.into_iter().find(|c| super::nodepath::is_file(&c.to_string_lossy()))
 }
 
 /// `path.resolve` without touching the disk.
@@ -159,10 +159,10 @@ fn export_source(file: &Path, export_name: &str, seen: &mut HashSet<(PathBuf, St
     if !seen.insert((file.to_path_buf(), export_name.to_string())) {
         return None;
     }
-    if !file.is_file() {
+    if !super::nodepath::is_file(&file.to_string_lossy()) {
         return None;
     }
-    let text = std::fs::read_to_string(file).ok()?;
+    let text = super::nodepath::read_text(&file.to_string_lossy())?;
     if export_name != "default" && !writes_word(&text, export_name) && !has_export_all(&text) {
         return None;
     }
@@ -368,7 +368,7 @@ impl<'p, 'a> Literal<'p, 'a> {
 /// `staticExportObject(file, exportNames)`: the first of `export_names` the
 /// module exports, as plain data, when it is an object literal.
 pub fn static_export_object(file: &Path, export_names: &[&str]) -> Option<Map<String, Value>> {
-    let text = std::fs::read_to_string(file).ok()?;
+    let text = super::nodepath::read_text(&file.to_string_lossy())?;
     with_program(&text, |program| {
         let body = &program.body;
         let mut lit = Literal { bindings: Vec::new() };

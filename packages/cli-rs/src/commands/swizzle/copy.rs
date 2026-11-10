@@ -60,7 +60,7 @@ pub fn to_loaded(r: &crate::discovery::integrations::Record) -> crate::discovery
         package_exports: r.get("__packageExports").cloned(),
         provider_id: s("providerId"),
         autolinked: r.get("__autolinked").and_then(|v| v.as_bool()).unwrap_or(false),
-        load_error: crate::commands::init::temp::present(r.get("__loadError")),
+        load_error: crate::commands::init::shared::present(r.get("__loadError")),
     }
 }
 

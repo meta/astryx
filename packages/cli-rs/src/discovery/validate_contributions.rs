@@ -2,9 +2,8 @@
 //! every loaded integration gets (`validateLoadedIntegration`), used by
 //! `Project.issues()`, the integration warnings and `doctor integration`.
 //! Owner: the `doctor` lane (registered as `project::VALIDATOR`).
-//! TEMP: template, codemod, doc and theme discovery belong to other lanes;
-//! each check runs once its reader lands. The `Fix:` texts that need the
-//! contribution-fix context (`contribution-fixes.mjs`) use their default.
+//! Template, codemod, doc and theme checks use their owners' discovery
+//! readers; `Fix:` texts come from `contribution_fixes`.
 
 use super::component_discovery as cd;
 use super::integrations::{self as integ, Record};
@@ -458,7 +457,7 @@ fn check_components(r: &Record, out: &mut Vec<Finding>) {
     let Some(root) = usable_root(r, "components") else { return };
     let (case, dups) = component_doc_files(root);
     let li = loaded_integration(r);
-    let valid = cd::discover_valid_integration_components(&li, false);
+    let valid = cd::discover_valid_integration_components(&li, true);
     let package_dir = s(r, "__packageDir");
     let mut context: Option<cf::FixContext> = None;
     for (name, message) in &valid.errors {

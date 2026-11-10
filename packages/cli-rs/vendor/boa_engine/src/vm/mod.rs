@@ -143,6 +143,16 @@ impl Stack {
         self.stack[frame.rp as usize + index] = value;
     }
 
+    /// The stack's length (to restore it after a nested run).
+    pub(crate) fn v8_len(&self) -> usize {
+        self.stack.len()
+    }
+
+    /// Truncate the stack to a length taken with [`Self::v8_len`].
+    pub(crate) fn v8_truncate(&mut self, len: usize) {
+        self.stack.truncate(len);
+    }
+
     /// Truncate the stack to the given frame.
     pub(crate) fn truncate_to_frame(&mut self, frame: &CallFrame) {
         self.stack.truncate(frame.frame_pointer());

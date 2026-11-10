@@ -6,6 +6,7 @@
 //
 // --failed reruns only the cases that failed in the last report.
 
+import {spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -77,6 +78,19 @@ const staleTotal = Object.values(stale).reduce((a, b) => a + b, 0);
 if (staleTotal) {
   console.error(`WARNING: ${staleTotal} goldens were recorded on fixtures that changed since (${Object.entries(stale).map(([k, v]) => `${k}: ${v}`).join(', ')}). Re-record them: node record.mjs --stale`);
 }
+// Check in the background that nothing wrote into the shared fixtures.
+const verify = new Promise(resolve => {
+  const p = spawn(process.execPath, [path.join(path.dirname(new URL(import.meta.url).pathname), 'setup.mjs'), '--verify', '--json'], {stdio: ['ignore', 'pipe', 'ignore']});
+  let out = '';
+  p.stdout.on('data', d => (out += d));
+  p.on('close', () => {
+    try {
+      resolve(JSON.parse(out));
+    } catch {
+      resolve([]);
+    }
+  });
+});
 const bin = {cmd: [binPath], cliRoot: findCliRoot(binPath), timeoutMs: Number(opt('timeout') ?? 20000)};
 const started = Date.now();
 const stats = {};
@@ -119,6 +133,8 @@ for (const k of cmds) {
 rows.push(['TOTAL', String(pass), String(total), total ? ((100 * pass) / total).toFixed(1) : '0']);
 const w = rows[0].map((_, i) => Math.max(...rows.map(r => r[i].length)));
 for (const r of rows) console.log(r.map((v, i) => (i ? v.padStart(w[i]) : v.padEnd(w[i]))).join('  '));
+const corrupted = await verify;
+if (corrupted.length) console.log(`WARNING: fixtures changed since they were built (something wrote into the shared folder): ${corrupted.join(', ')}. Results on them are not trustworthy; rebuild with: node setup.mjs --force`);
 if (crashed) console.log(`(${crashed} cases skipped: the JS CLI itself crashed there; golden/JS_CRASHES.json)`);
 if (missing) console.log(`(${missing} cases have no golden yet; run record.mjs --missing)`);
 
@@ -127,7 +143,7 @@ for (const f of failures.slice(0, maxDiffs)) {
   console.log(`\n--- FAIL ${f.command}/${f.id} [${f.parts.join(',')}]${f.nondeterministic ? ' (golden is nondeterministic)' : ''}`);
   console.log(`    astryx ${f.args.map(a => (/[\s'"]/.test(a) || a === '' ? JSON.stringify(a) : a)).join(' ')}   (fixture: ${f.fixture})`);
   for (const part of f.parts) {
-    if (part === 'exit') console.log(`    exit: want ${f.golden.exit}, got ${f.got.exit}`);
+    if (part === 'exit') console.log(`    exit: want ${f.golden.exit}, got ${f.got.exit}${f.got.stacks ? ' (stacks of the hung processes are in report.json)' : ''}`);
     else if (part === 'files') console.log(diffText(fileSummary(f.golden.files), fileSummary(f.got.files), 'files'));
     else console.log(diffText(f.golden[part], f.got[part], part));
   }
@@ -142,7 +158,7 @@ fs.writeFileSync(
       pass,
       total,
       commands: stats,
-      failures: failures.map(({golden, got, ...f}) => ({...f, want: golden, got: {stdout: got.stdout, stderr: got.stderr, exit: got.exit, files: got.files}})),
+      failures: failures.map(({golden, got, ...f}) => ({...f, want: golden, got: {stdout: got.stdout, stderr: got.stderr, exit: got.exit, files: got.files, ...(got.stacks ? {stacks: got.stacks} : {})}})),
     },
     null,
     1,

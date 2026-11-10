@@ -18,6 +18,11 @@ fn action_rename(s: &str) -> Option<&'static str> {
     }
 }
 
+/// `PROP_RENAMES[name]`, with the plain-object prototype lookup.
+fn action_rename_js(s: &str) -> Option<String> {
+    action_rename(s).map(|x| x.to_string()).or_else(|| super::jsproto::proto(s).map(|p| p.string()))
+}
+
 pub fn rename_action_props(source: &str, path: &str, _o: &Value) -> TResult {
     let mut j = parse_file(source, path)?;
     let mut changed = false;
@@ -26,8 +31,8 @@ pub fn rename_action_props(source: &str, path: &str, _o: &Value) -> TResult {
         if !j.ast.is(n, "JSXIdentifier") {
             continue;
         }
-        if let Some(new) = j.ast.name(n).and_then(action_rename) {
-            j.set_name(n, new);
+        if let Some(new) = j.ast.name(n).and_then(action_rename_js) {
+            j.set_name(n, &new);
             changed = true;
         }
     }
@@ -49,10 +54,11 @@ pub fn rename_action_props(source: &str, path: &str, _o: &Value) -> TResult {
                 continue;
             }
             let kname = j.ast.name(key).unwrap_or("").to_string();
-            let new = match action_rename(&kname) {
+            let new = match action_rename_js(&kname) {
                 Some(n) => n,
                 None => continue,
             };
+            let new = new.as_str();
             let value = j.ast.child(prop, "value").unwrap();
             let v_is_same = j.ast.is(value, "Identifier") && j.ast.name(value) == Some(kname.as_str());
             if v_is_same {
@@ -71,12 +77,12 @@ pub fn rename_action_props(source: &str, path: &str, _o: &Value) -> TResult {
         }
         let key = j.ast.child(p.node, "key").unwrap();
         if j.ast.is(key, "Identifier") {
-            if let Some(new) = j.ast.name(key).and_then(action_rename) {
-                j.set_name(key, new);
+            if let Some(new) = j.ast.name(key).and_then(action_rename_js) {
+                j.set_name(key, &new);
                 if j.ast.flag(p.node, "shorthand") {
                     let v = j.ast.child(p.node, "value").unwrap();
-                    if j.ast.is(v, "Identifier") && j.ast.name(v) != Some(new) {
-                        j.set_name(v, new);
+                    if j.ast.is(v, "Identifier") && j.ast.name(v) != Some(new.as_str()) {
+                        j.set_name(v, &new);
                     }
                 }
                 changed = true;
@@ -86,8 +92,8 @@ pub fn rename_action_props(source: &str, path: &str, _o: &Value) -> TResult {
     for p in j.find("TSPropertySignature") {
         let key = j.ast.child(p.node, "key").unwrap();
         if j.ast.is(key, "Identifier") {
-            if let Some(new) = j.ast.name(key).and_then(action_rename) {
-                j.set_name(key, new);
+            if let Some(new) = j.ast.name(key).and_then(action_rename_js) {
+                j.set_name(key, &new);
                 changed = true;
             }
         }
