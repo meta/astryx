@@ -113,11 +113,18 @@ const SURFACE_SEARCH_LIMIT = 64;
 /**
  * Whether the trigger shows a surface of its own. That is a near-opaque fill
  * or a picture that covers all it shows, such as a card or a thumbnail. An
- * icon beside a row's text covers part of it, so the row has none.
+ * icon beside a row's text covers part of it, so the row has none. `content`
+ * is the box that lays out the trigger's children, read through to them.
  */
-function showsOwnSurface(trigger: HTMLElement): boolean {
-  // Without line boxes to read, the trigger's own box stands in.
-  const shown = shownBox(trigger) ?? trigger.getBoundingClientRect();
+function showsOwnSurface(
+  trigger: HTMLElement,
+  content: HTMLElement = trigger,
+): boolean {
+  if (fillsItsBox(trigger)) {
+    return true;
+  }
+  // Without line boxes to read, the content's own box stands in.
+  const shown = shownBox(content) ?? content.getBoundingClientRect();
   const covers = (element: Element) => {
     const rect = element.getBoundingClientRect();
     return (
@@ -128,10 +135,10 @@ function showsOwnSurface(trigger: HTMLElement): boolean {
     );
   };
   // Only an element that covers all the trigger shows can be its surface.
-  const queue: Element[] = [trigger];
+  const queue: Element[] = [content];
   for (let read = 0; queue.length > 0 && read < SURFACE_SEARCH_LIMIT; read++) {
     const element = queue.shift() as Element;
-    if (covers(element)) {
+    if (element === content || covers(element)) {
       if (fillsItsBox(element)) {
         return true;
       }
@@ -209,6 +216,7 @@ export interface ContextMenuLift {
 
 export function useContextMenuLift(
   triggerRef: RefObject<HTMLElement | null>,
+  visualRef: RefObject<HTMLElement | null>,
   onBackdropTap: () => void,
 ): ContextMenuLift {
   const lift = useLiftFromTrigger();
@@ -225,7 +233,10 @@ export function useContextMenuLift(
           return null;
         }
         // Read before the lift writes.
-        const plate = showsOwnSurface(trigger) ? undefined : plateFor(trigger);
+        const content = visualRef.current ?? trigger;
+        const plate = showsOwnSurface(trigger, content)
+          ? undefined
+          : plateFor(trigger);
         const lifted = liftContextMenuTrigger(lift, trigger, {
           motion: MOTION,
           scale: {
@@ -248,6 +259,6 @@ export function useContextMenuLift(
         lift.drop();
       },
     }),
-    [lift, triggerRef],
+    [lift, triggerRef, visualRef],
   );
 }

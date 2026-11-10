@@ -634,7 +634,8 @@ test('a trigger that paints no box of its own lifts on the theme’s surface, ro
 }) => {
   await openStory(page, storybook(), 'core-contextmenu--default');
   const area = page.getByText('Right-click this area');
-  const trigger = area.locator('xpath=..');
+  // The trigger holds the area inside its visual.
+  const trigger = area.locator('xpath=../..');
   await expect(trigger).toHaveAttribute('data-astryx-pressable', '', {
     timeout: 10_000,
   });

@@ -625,7 +625,14 @@ async function shareRowCenter(
   }
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
-  // The trigger returns to its size before the next press.
+  // The trigger is back in the page, at its size, before the next press.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => document.querySelector('[data-astryx-context-menu-lift]') == null,
+      ),
+    )
+    .toBe(true);
   await expect
     .poll(async () => presentedScale(page.getByTestId('touch-context-menu')))
     .toBe(1);

@@ -147,7 +147,7 @@ export function ContextMenuTouchLayer({
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
   const hasPressOpenedRef = useRef(false);
-  const lift = useContextMenuLift(triggerRef, onBackdropTap);
+  const lift = useContextMenuLift(triggerRef, visualRef, onBackdropTap);
 
   // The gesture hook follows the element behind the ref, so a `triggerAs`
   // swap moves the recognizer to the new node.
@@ -231,10 +231,10 @@ export function ContextMenuTouchLayer({
         if (trigger == null) {
           return null;
         }
-        // The lift grows on from the rect the press feedback left. The
-        // feedback lets go once the lift has read the page, before it
-        // writes, so the page restyles once for both.
-        const pressed = trigger.getBoundingClientRect();
+        // The lift grows on from the rect the press feedback left on the
+        // trigger's visual. The feedback lets go once the lift has read the
+        // page, before it writes, so the page restyles once for both.
+        const pressed = (visualRef.current ?? trigger).getBoundingClientRect();
         const lifted = lift.lift(
           {
             x: pressed.left,
@@ -252,7 +252,7 @@ export function ContextMenuTouchLayer({
       enterMenu: menu => lift.enterMenu(menu),
       drop: () => lift.drop(),
     }),
-    [lift, recognizer, triggerRef],
+    [lift, recognizer, triggerRef, visualRef],
   );
 
   return null;
