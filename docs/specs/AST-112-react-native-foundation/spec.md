@@ -90,10 +90,12 @@ shared icon names under FR17.
     crosses capabilities goes through a registration hook in the core, never
     through an import between capabilities.
   - The library layer reaches an optional capability only through that
-    loader, which answers the capability's module when the app opted it in
-    (FR3) and `null` otherwise. On a binary that records no list of linked
-    capabilities, it answers the module; the module's probes answer false
-    and its calls resolve `no-module` where its native module is missing.
+    loader. The loader answers the capability's module whenever its
+    JavaScript loads, opted in or not, and `null` only when the module cannot
+    load. When the app did not opt the capability in, the module's probes
+    answer false and its calls resolve `not-linked` (FR3); on a binary that
+    records no list of linked capabilities, they resolve `no-module` where
+    the native module is missing.
   - The package depends on no other Astryx package at run time, other than
     the reads of `@astryxdesign/core` that `spec:AST-082/FR16` allows and
     `@astryxdesign/native` (FR10, OQ2, OQ3), which it uses at the version the
@@ -182,12 +184,14 @@ shared icon names under FR17.
 - **FR6 — One result vocabulary.** Every asynchronous call in the platform resolves `AstryxResult<T, R>`: `{ok: true, …}` with its data, or
   `{ok: false, reason, message?}`. It never rejects.
   - `reason` comes from a closed set per capability plus the common reasons
-    `no-module`, `not-linked`, `unsupported`, `unsupported-option`,
-    `cancelled`, and `error`. `not-linked` means the app did not opt the
-    capability's native code in (FR3); `unsupported` means the binary
-    predates the method;
-    `unsupported-option` means it predates an option of a method it has, or
-    the platform cannot honor that option.
+    `no-module`, `not-linked`, `unsupported`, `cancelled`, `not-allowed`, and
+    `error`. `no-module` means the platform's native side is absent;
+    `not-linked` means the app did not opt the capability's native code in
+    (FR3); `unsupported` means the binary predates the method or one of its
+    options; `not-allowed` means the Astryx app's policy refused the
+    capability for the project that called it. A capability may add reasons
+    of its own, such as `unsupported-option` where a platform cannot honor an
+    option.
   - `cancelled` is the one failure that is not an error: the person declined
     or dismissed something. A caller branches on it and shows no error.
   - `message` is platform text for logs. It never carries a URL's query, a
@@ -199,13 +203,15 @@ shared icon names under FR17.
     `is<View>Available()` probe. A capability the app did not opt in answers
     false, and its calls answer `not-linked`.
   - A path a platform or an older binary does not support answers
-    `unsupported` or `unsupported-option`. It is never a silent no-op and
+    `unsupported`, or the capability's own reason for an option the platform
+    cannot honor. It is never a silent no-op and
     never a quietly weaker behavior.
   - Permissions are explicit: `AstryxPermissions.get` and `request`, and a
     `use<Capability>Permission()` hook. Mounting a view never prompts.
   - Hooks own lifecycle: they cancel their work on unmount and return stable
-    callbacks. Root tags, module handles, and native versions never appear in
-    app-facing types.
+    callbacks. Module handles and native versions never appear in app-facing types. A
+    request that presents system UI (sign-in, the file picker) may take an
+    optional `rootTag` until a registered presenting surface replaces it.
   - Names follow React Native's own conventions: `source={{uri}}`, `ref`,
     `on<Event>(event)` with one object argument, `is` and `has` booleans, and
     string unions for closed sets. A call takes its subject first and one
