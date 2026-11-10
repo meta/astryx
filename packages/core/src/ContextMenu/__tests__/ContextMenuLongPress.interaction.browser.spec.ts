@@ -758,11 +758,11 @@ for (const input of ['finger', 'pen'] as const) {
   });
 }
 
-test('the trigger’s visual lays out its children as the trigger would: a block, a row and a grid trigger each match a plain box with the same style', async ({
+test('the trigger’s visual lays out its children as the trigger would: a block, a row, a grid and a set-height trigger each match a plain box with the same style', async ({
   page,
 }) => {
   await openStory(page, storybook(), 'core-contextmenu--touch-trigger-layouts');
-  for (const layout of ['block', 'row', 'grid']) {
+  for (const layout of ['block', 'row', 'grid', 'tall']) {
     const read = async (testId: string) =>
       page.getByTestId(testId).evaluate(root => {
         const origin = root.getBoundingClientRect();
@@ -787,7 +787,7 @@ test('the trigger’s visual lays out its children as the trigger would: a block
     const trigger = await read(`layout-${layout}`);
     const reference = await read(`layout-${layout}-reference`);
     const detail = JSON.stringify({layout, trigger, reference});
-    expect(trigger.children.length, detail).toBe(3);
+    expect(trigger.children.length, detail).toBe(layout === 'tall' ? 1 : 3);
     expect(trigger.children.length, detail).toBe(reference.children.length);
     expect(trigger.size.width, detail).toBeCloseTo(reference.size.width, 1);
     expect(trigger.size.height, detail).toBeCloseTo(reference.size.height, 1);
