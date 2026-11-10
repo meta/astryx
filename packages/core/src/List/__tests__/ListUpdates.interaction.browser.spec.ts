@@ -193,11 +193,15 @@ test('a removal: the removed row stays in place, inert and out of the accessibil
 }) => {
   await open(page);
   const gap = await rowGap(page);
-  // The exit lasts as long as the glides. The page holds it from its first
-  // frame, so the row is still there for each read below, however late a
-  // loaded runner sends it.
-  const hold = await armHold(page, page.locator('#storybook-root ul'), {
-    judges: {target: leaving(page), property: 'clip-path'},
+  // The exit and the glides last under half a second. The page holds them
+  // from their first frame, so every read below finds them, however late a
+  // loaded runner sends it. The hold takes the whole animated container: the
+  // text and the buttons after the list glide outside it.
+  const hold = await armHold(page, page.locator('#storybook-root > div'), {
+    judges: [
+      {target: leaving(page), property: 'clip-path'},
+      {target: page.getByTestId('after-list'), property: 'translate'},
+    ],
     newOnly: true,
   });
   await press(page, 'Remove the second row');
