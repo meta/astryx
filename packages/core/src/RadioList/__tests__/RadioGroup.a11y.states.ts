@@ -198,11 +198,11 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'radio-list-option-disabled',
     binding: 'RadioListItem',
-    summary: 'an individually disabled option kept in the tab sequence',
+    summary: 'an individually disabled option outside the tab sequence',
     facts: optionFacts({
       disabled: true,
       operable: false,
-      tabReachable: true,
+      tabReachable: false,
       pointerCancellation: false,
     }),
     subjectName: 'Express',
