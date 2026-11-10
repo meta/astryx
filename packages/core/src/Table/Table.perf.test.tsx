@@ -14,7 +14,15 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
-import {useMemo, useState} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  startTransition,
+  use,
+  useMemo,
+  useState,
+} from 'react';
+import type {ReactNode} from 'react';
 import {Table} from './Table';
 import {useTableRowStatus} from './plugins/rowStatus';
 import {useTableRowIndex} from './plugins/rowIndex';
@@ -590,6 +598,168 @@ describe('Table render performance', () => {
       expect(screen.getByText(`Updated ${updates}`)).toBeInTheDocument();
       expect(updateTime).toBeLessThan(100);
     });
+  });
+});
+
+// The column and plugin caches keep their committed arrays, so a render React
+// discards cannot make the next committed render re-render every row.
+describe('identity caches after a render React discards', () => {
+  const forever = new Promise<never>(() => {});
+  function Forever(): null {
+    use(forever);
+    return null;
+  }
+  function Discardable({
+    children,
+    isPending = false,
+  }: {
+    children: ReactNode;
+    isPending?: boolean;
+  }): ReactNode {
+    return (
+      <Suspense fallback={null}>
+        {children}
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+  }
+
+  it('keeps the committed columns, so rows skip a render after a discarded render with other columns', async () => {
+    const renders: string[] = [];
+    const nameColumn: TableColumn<TestRow> = {
+      key: 'name',
+      header: 'Name',
+      renderCell: row => {
+        renders.push(row.id);
+        return row.name;
+      },
+    };
+    const idColumn: TableColumn<TestRow> = {key: 'id', header: 'ID'};
+    const data = createTestData(3);
+    const table = (columns: TableColumn<TestRow>[], isPending = false) => (
+      <Discardable isPending={isPending}>
+        <Table data={data} columns={columns} idKey="id" />
+      </Discardable>
+    );
+    const {rerender} = render(table([idColumn, nameColumn]));
+    await act(async () => {
+      startTransition(() => {
+        rerender(table([nameColumn], true));
+      });
+    });
+    renders.length = 0;
+
+    // A new array holding the committed columns.
+    rerender(table([idColumn, nameColumn]));
+
+    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(renders).toEqual([]);
+  });
+
+  it('keeps the committed plugins, so rows skip a render after a discarded render with another plugin', async () => {
+    const renders: string[] = [];
+    const columns: TableColumn<TestRow>[] = [
+      {key: 'id', header: 'ID'},
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: row => {
+          renders.push(row.id);
+          return row.name;
+        },
+      },
+    ];
+    const data = createTestData(3);
+    const committedPlugin: TablePlugin<TestRow> = {
+      transformBodyRow: props => props,
+    };
+    const discardedPlugin: TablePlugin<TestRow> = {
+      transformBodyRow: props => props,
+    };
+    const table = (plugin: TablePlugin<TestRow>, isPending = false) => (
+      <Discardable isPending={isPending}>
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{custom: plugin}}
+        />
+      </Discardable>
+    );
+    const {rerender} = render(table(committedPlugin));
+    await act(async () => {
+      startTransition(() => {
+        rerender(table(discardedPlugin, true));
+      });
+    });
+    renders.length = 0;
+
+    // A new record holding the committed plugin.
+    rerender(table(committedPlugin));
+
+    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(renders).toEqual([]);
+  });
+
+  it('warns once about an invalid plugin under StrictMode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <StrictMode>
+          <Table
+            data={createTestData(2)}
+            columns={testColumns}
+            idKey="id"
+            plugins={{
+              typo: {transformBodyRows: () => []} as TablePlugin<TestRow>,
+            }}
+          />
+        </StrictMode>,
+      );
+
+      const unknownKey = warn.mock.calls.filter(args =>
+        String(args[0]).includes('unknown key "transformBodyRows"'),
+      );
+      expect(unknownKey).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('renders a custom plugin whose transformColumns returns a new column each call', () => {
+    const data = createTestData(2);
+    function Parent() {
+      const [count, setCount] = useState(0);
+      return (
+        <>
+          <button type="button" onClick={() => setCount(count + 1)}>
+            Bump {count}
+          </button>
+          <Table
+            data={data}
+            columns={testColumns}
+            idKey="id"
+            plugins={{
+              extra: {
+                transformColumns: (cols: TableColumn<TestRow>[]) => [
+                  {key: 'extra', header: 'Extra'},
+                  ...cols,
+                ],
+              },
+            }}
+          />
+        </>
+      );
+    }
+    render(<Parent />);
+    act(() => {
+      screen.getByRole('button', {name: 'Bump 0'}).click();
+    });
+
+    expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', {name: 'Extra'}),
+    ).toBeInTheDocument();
   });
 });
 

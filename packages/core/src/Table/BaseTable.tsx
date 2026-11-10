@@ -72,6 +72,7 @@ import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   readsRowCount,
   readsRowIndex,
@@ -608,11 +609,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // new array on every call, but if the contents haven't changed, we
   // reuse the previous reference. This prevents MemoizedTableRow from
   // re-rendering all rows when the column array is structurally identical.
+  // Only a committed render writes this cache. A render React discards cannot
+  // replace it.
   const resolvedColumnsRef = useRef(transformedColumns);
-  if (!areArraysShallowEqual(resolvedColumnsRef.current, transformedColumns)) {
-    resolvedColumnsRef.current = transformedColumns;
-  }
-  const resolvedColumns = resolvedColumnsRef.current;
+  const resolvedColumns = areArraysShallowEqual(
+    resolvedColumnsRef.current,
+    transformedColumns,
+  )
+    ? resolvedColumnsRef.current
+    : transformedColumns;
+  // Syncs the column identity cache with the committed columns.
+  useIsomorphicLayoutEffect(() => {
+    resolvedColumnsRef.current = resolvedColumns;
+  });
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
   const config = getTableVirtualizationConfig(virtualization);
   const windowFallbackReason = useMemo(() => {
