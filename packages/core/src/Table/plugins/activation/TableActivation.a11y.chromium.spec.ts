@@ -98,6 +98,28 @@ async function activeTagName(page: Page): Promise<string> {
   return page.evaluate(() => document.activeElement?.tagName ?? '');
 }
 
+/**
+ * Press Tab until focus lands on a table row again, returning its text.
+ * Focus leaves the story table past its last control (through the document)
+ * and Chromium wraps it back to the first row, so the next row stop is the
+ * wrap target: asserting it keeps the focus-order intent without racing the
+ * document stop. Returns null when no row stop lands within the cap.
+ */
+async function tabToNextRowStop(
+  page: Page,
+  cap: number,
+): Promise<string | null> {
+  for (let step = 0; step < cap; step += 1) {
+    await page.keyboard.press('Tab');
+    if ((await activeTagName(page)) === 'TR') {
+      return page.evaluate(
+        () => (document.activeElement as HTMLElement).innerText ?? '',
+      );
+    }
+  }
+  return null;
+}
+
 test('the active row is the single current-state owner', async ({page}) => {
   await page.goto(`${storybook.origin}/${STORY_URL}`, {waitUntil: 'load'});
   const table = storyTable(page);
@@ -202,8 +224,9 @@ test('eligible rows keep one sequential tab stop and the archived row keeps none
   await bodyRows.nth(0).focus();
 
   // Tab walks the three eligible rows in order, stepping over each row's
-  // own Open button; the archived Legacy importer row never takes focus,
-  // and focus leaves the rows afterwards.
+  // own Open button; the archived Legacy importer row never takes focus.
+  // Past the last control focus leaves the table and wraps to the first
+  // row, so the next row stop is the wrap target rather than a leak.
   const stops = await tabToRowStops(page, 3);
   expect(stops).toHaveLength(3);
   expect(stops[0]).toContain('API gateway');
@@ -212,10 +235,10 @@ test('eligible rows keep one sequential tab stop and the archived row keeps none
   for (const stop of stops) {
     expect(stop).not.toContain('Legacy importer');
   }
-  for (let step = 0; step < 8; step += 1) {
-    await page.keyboard.press('Tab');
-    expect(await activeTagName(page)).not.toBe('TR');
-  }
+  const wrapped = await tabToNextRowStop(page, 40);
+  expect(wrapped).not.toBeNull();
+  expect(wrapped).toContain('API gateway');
+  expect(wrapped).not.toContain('Legacy importer');
 });
 
 test('a large unvirtualized table keeps one sequential stop per eligible row', async ({
@@ -230,8 +253,9 @@ test('a large unvirtualized table keeps one sequential stop per eligible row', a
   await bodyRows.nth(0).focus();
 
   // Fifty-four eligible rows in row order (every tenth row is archived);
-  // each row's own Open button is stepped over, archived rows never stop,
-  // and focus leaves the rows at the end.
+  // each row's own Open button is stepped over and archived rows never stop.
+  // Past the last control focus leaves the table and wraps to the first
+  // row, so the next row stop is the wrap target rather than a leak.
   const stops = await tabToRowStops(page, 54);
   expect(stops).toHaveLength(54);
   const order = stops.map(stop => {
@@ -243,8 +267,7 @@ test('a large unvirtualized table keeps one sequential stop per eligible row', a
     index => index % 10 !== 9,
   );
   expect(order).toEqual(expected);
-  for (let step = 0; step < 8; step += 1) {
-    await page.keyboard.press('Tab');
-    expect(await activeTagName(page)).not.toBe('TR');
-  }
+  const wrapped = await tabToNextRowStop(page, 60);
+  expect(wrapped).not.toBeNull();
+  expect(wrapped).toContain('Service 0');
 });
