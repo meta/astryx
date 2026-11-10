@@ -28,6 +28,7 @@ import {
   frames,
   holdAnimations,
   markElement,
+  MARKER_RGB,
   openStory,
   releaseAnimations,
   sampleCurve,
@@ -38,7 +39,7 @@ import {
   type TouchDriver,
   type TouchScript,
   touchStoryboard,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
   withStorybook,
@@ -443,20 +444,23 @@ test('the cancel keeps moving every frame while the main thread is blocked', asy
   // compositor presented while the main thread spun, on this machine.
   await startBusyControl(page);
   const cast = await startScreencast(page);
-  // Pulled 300 px, so the return is long enough to judge on a loaded runner.
-  await v.driver.play(pullThenFlickUp(v.centre, 300, 60));
   // Blocked inside the page once the return runs on the compositor, 16 ms in,
-  // as the dismissal's proof is. A block started from the test lands later in
-  // the return, by a varying amount, and leaves less of it to judge.
-  const block = await blockMainThread(page, 600, {
+  // as the dismissal's proof is. The page already waits when the lift starts
+  // the return. A block asked for after the drag's script returns lands later
+  // in the return on a busy machine, and leaves less of it to judge.
+  const blocking = blockMainThread(page, 600, {
     during: v.photo,
     minProgressMs: 16,
   });
+  // Pulled 300 px, so the return is long enough to judge on a loaded runner.
+  await v.driver.play(pullThenFlickUp(v.centre, 300, 60));
+  const block = await blocking;
   // A few frames after the block, so the screencast holds its end.
   await frames(page, 6);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   // The spring slows hard at its end. Near the end each 60 Hz frame moves it
   // about 0.18 of what remains (2π / 0.5 s, critically damped). So within
   // about 5.6 cast steps of its end a frame moves less than one step, and

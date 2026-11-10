@@ -56,7 +56,7 @@ let feedback: ContextMenuPressFeedback | null = null;
 
 function Trigger() {
   const ref = useRef<HTMLDivElement>(null);
-  feedback = useContextMenuPressFeedback(ref, true);
+  feedback = useContextMenuPressFeedback(ref, ref, true);
   return <div ref={ref} data-testid="trigger" />;
 }
 
@@ -70,6 +70,7 @@ function TriggerWithRecognizer() {
     () => recognizer.isFollowing && recognizer.isFinger,
   );
   feedback = useContextMenuPressFeedback(
+    ref,
     ref,
     true,
     isFollowedRef,
@@ -85,7 +86,7 @@ function FeedbackLayer({
 }: {
   triggerRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  feedback = useContextMenuPressFeedback(triggerRef, true);
+  feedback = useContextMenuPressFeedback(triggerRef, triggerRef, true);
   return null;
 }
 
@@ -102,7 +103,7 @@ function TriggerWithLayer({hasLayer}: {hasLayer: boolean}) {
 /** A trigger whose content is a pressable control, as a Button is. */
 function TriggerWithControl() {
   const ref = useRef<HTMLDivElement>(null);
-  feedback = useContextMenuPressFeedback(ref, true);
+  feedback = useContextMenuPressFeedback(ref, ref, true);
   return (
     <div ref={ref} data-testid="trigger">
       <button type="button" data-testid="control">
@@ -121,8 +122,8 @@ const nested: {
 function NestedTriggers({isInnerShown = true}: {isInnerShown?: boolean}) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  nested.outer = useContextMenuPressFeedback(outerRef, true);
-  nested.inner = useContextMenuPressFeedback(innerRef, isInnerShown);
+  nested.outer = useContextMenuPressFeedback(outerRef, outerRef, true);
+  nested.inner = useContextMenuPressFeedback(innerRef, innerRef, isInnerShown);
   return (
     <div ref={outerRef} data-testid="outer">
       <button type="button" data-testid="outer-control">

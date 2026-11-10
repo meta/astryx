@@ -131,7 +131,23 @@ const tableStyles = stylex.create({
 });
 
 const scrollWrapperStyles = stylex.create({
-  viewport: (height: number) => ({height, maxHeight: height}),
+  // A windowed table scrolls inside the height its parent gives it. As its
+  // container's first or last child, the region bleeds over that block edge's
+  // padding (containerBleed), so its height adds that padding back and it
+  // ends at the same edge.
+  blockViewport: {
+    '--_table-bleed-block-start': {
+      default: '0px',
+      ':first-child': 'var(--container-padding-block-start, 0px)',
+    },
+    '--_table-bleed-block-end': {
+      default: '0px',
+      ':last-child': 'var(--container-padding-block-end, 0px)',
+    },
+    height:
+      'calc(100% + var(--_table-bleed-block-start) + var(--_table-bleed-block-end))',
+    minHeight: 0,
+  },
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -219,8 +235,7 @@ function TableScrollWrapper({
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
   const runtime = use(TableRuntimeContext);
-  const viewportHeight = runtime?.viewportHeight;
-  const hasBlockViewport = viewportHeight != null;
+  const hasBlockViewport = runtime?.viewportHeight != null;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
@@ -259,7 +274,7 @@ function TableScrollWrapper({
         // theme restyles through the focus-outline tokens.
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
-        hasBlockViewport && scrollWrapperStyles.viewport(viewportHeight),
+        hasBlockViewport && scrollWrapperStyles.blockViewport,
         ...(pluginStyles ?? []),
       ),
       pluginClassName,

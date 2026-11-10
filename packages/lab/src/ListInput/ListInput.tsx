@@ -590,10 +590,7 @@ export function ListInput<T>({
   // Each record row reveals its row actions (Remove and, when reorderable, the
   // reorder handle) on hover or keyboard focus; touch keeps them visible.
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
-  // Core List's reorder session, run by the owner's object. The records are
-  // the list's rows, each ending with its handle. Each move goes to the
-  // object's onReorder. A disabled or loading list keeps its handles,
-  // focusable but inert.
+  // A disabled or loading list keeps its handles focusable but inert.
   const reorderScope = useListReorderScope(
     reorderable,
     () => listRef.current,

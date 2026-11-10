@@ -58,6 +58,8 @@ export interface ContextMenuTouchHandle {
 
 export interface ContextMenuTouchLayerProps {
   triggerRef: RefObject<HTMLElement | null>;
+  /** The trigger's own visual, which the press feedback grows. */
+  visualRef: RefObject<HTMLElement | null>;
   /** False for an inline trigger, which does not grow. */
   isShown: boolean;
   /** Receives the layer's handle as it mounts, and null as it unmounts. */
@@ -108,12 +110,13 @@ function heldPointerOf(
  * A finger still down goes on into the menu. A lift before the commit, a
  * second finger or a scroll gets no menu. So does
  * a drift past the tolerance before the menu shows. The press feedback grows
- * the trigger from the onset, 150 ms after the finger lands, while the
- * recognizer follows the finger. It springs back when the recognizer ends the
+ * the trigger's visual from the onset, 150 ms after the finger lands, while
+ * the recognizer follows the finger. It springs back when the recognizer ends the
  * press with no menu, and it holds while that menu is up.
  */
 export function ContextMenuTouchLayer({
   triggerRef,
+  visualRef,
   isShown,
   ref,
   onOpen,
@@ -129,6 +132,7 @@ export function ContextMenuTouchLayer({
   const followsFingerRef = useRef<() => boolean>(() => false);
   const feedback = useContextMenuPressFeedback(
     triggerRef,
+    visualRef,
     isShown,
     isFollowedRef,
     landedAtRef,
@@ -173,9 +177,8 @@ export function ContextMenuTouchLayer({
     },
     press => {
       const open = (held: ContextMenuHeldPointer | null) => {
-        // The press feedback grew the trigger from its center, and the cursor
-        // anchor inside it moves with that scale. So stop the growth where it
-        // is. ContextMenu places the anchor under the finger.
+        // The growth holds where it is while the menu is up. ContextMenu
+        // places the menu's anchor under the finger, outside the growth.
         feedbackRef.current.hold();
         hasPressOpenedRef.current = true;
         // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the menu shows in the task that decides it, as UIKit shows it at its moment, not a scheduled task later

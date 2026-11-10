@@ -604,6 +604,12 @@ describe('neutral theme component overrides', () => {
       base: {padding: 'var(--spacing-1)'},
     });
     expect(neutralTheme.components?.['segmented-control-item']).toEqual({
+      base: {
+        '--color-text-secondary': lightDark(
+          neutralPalettes.neutral.light[30],
+          neutralPalettes.neutral.dark[80],
+        ),
+      },
       'size:sm': {height: 'calc(var(--size-element-sm) - 8px)'},
       'size:md': {height: 'calc(var(--size-element-md) - 8px)'},
       'size:lg': {height: 'calc(var(--size-element-lg) - 8px)'},
