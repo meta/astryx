@@ -2416,7 +2416,8 @@ test.describe('frame evidence', () => {
   }) => {
     await page.setContent('<!doctype html><body></body>');
     // A coarsened clock with jitter, as WebKit's: its second reading is one
-    // ms behind its first, then it runs on.
+    // ms behind its first, then it runs on. So is its time origin, which
+    // WebKit floors to the ms.
     await page.evaluate(() => {
       const real = performance.now.bind(performance);
       let reads = 0;
@@ -2425,6 +2426,15 @@ test.describe('frame evidence', () => {
         const t = Math.floor(real());
         return reads === 2 ? t - 1 : t;
       };
+      const origin = Math.floor(performance.timeOrigin);
+      let originReads = 0;
+      Object.defineProperty(performance, 'timeOrigin', {
+        configurable: true,
+        get: () => {
+          originReads += 1;
+          return originReads === 2 ? origin - 1 : origin;
+        },
+      });
     });
     const busy = await blockMainThread(page, 50);
     expect(busy.to - busy.from).toBeGreaterThan(50 - 0.01);

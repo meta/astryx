@@ -923,6 +923,9 @@ export async function blockMainThread(
             __harnessTimerGate?: {now?: () => number};
           }
         ).__harnessTimerGate?.now ?? (() => performance.now());
+      // One read of the time origin dates both ends. WebKit floors it to the
+      // ms, and two reads of it can differ by one.
+      const origin = performance.timeOrigin;
       const start = read();
       let now = start;
       let spins = 0;
@@ -931,8 +934,8 @@ export async function blockMainThread(
         spins += 1;
       }
       return {
-        from: performance.timeOrigin + start,
-        to: performance.timeOrigin + now,
+        from: origin + start,
+        to: origin + now,
         spanMs: now - start,
         spins,
       };
@@ -1425,8 +1428,10 @@ export async function blockMainThread(
               while (now - start < duration) {
                 now = read();
               }
-              const blockFrom = performance.timeOrigin + start;
-              const blockTo = performance.timeOrigin + now;
+              // One read of the time origin, as above.
+              const origin = performance.timeOrigin;
+              const blockFrom = origin + start;
+              const blockTo = origin + now;
               const controlStarts = (
                 window as unknown as {__harnessControlStarts?: number[]}
               ).__harnessControlStarts;
