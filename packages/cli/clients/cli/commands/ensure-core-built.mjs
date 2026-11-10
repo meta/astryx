@@ -237,11 +237,12 @@ function buildCore() {
   // On Windows, pnpm is a `pnpm.cmd` batch file. execFileSync cannot start a
   // batch file without a shell: `pnpm` gives ENOENT and `pnpm.cmd` gives
   // EINVAL. The arguments are literals, so cmd.exe gets them directly.
-  if (process.platform === 'win32') {
-    execFileSync('cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args], options);
-  } else {
-    execFileSync('pnpm', args, options);
-  }
+  /** @type {[string, string[]]} */
+  const [file, fileArgs] =
+    process.platform === 'win32'
+      ? ['cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args]]
+      : ['pnpm', args];
+  execFileSync(file, fileArgs, options);
 }
 
 /**
