@@ -333,10 +333,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Table/plugins/virtualization/useTableRowsVirtualization.ts:capabilityBrand": {
-      "status": "open",
-      "group": "F1 Table capability and plugins"
-    },
     "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
@@ -613,11 +609,23 @@
       "status": "open",
       "group": "F7 Motion frame"
     },
+    "packages/core/src/motion/animatedLayout.ts:settleRetimes": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:settling": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
     "packages/core/src/motion/animatedLayout.ts:slideTargets": {
       "status": "open",
       "group": "F7 Motion frame"
     },
     "packages/core/src/motion/animatedLayout.ts:stoppedShown": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animatedLayout.ts:transitionSettles": {
       "status": "open",
       "group": "F7 Motion frame"
     },
