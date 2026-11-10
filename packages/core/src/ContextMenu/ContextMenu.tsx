@@ -143,6 +143,33 @@ const styles = stylex.create({
     WebkitUserSelect: 'none',
     userSelect: 'none',
   },
+  // The trigger's own visual, which the press feedback grows. It lays its
+  // children out as the trigger would, and fills the trigger in a flex or
+  // grid layout. The cursor anchor stays outside it, so a layer never takes
+  // the press's scale.
+  triggerVisual: {
+    display: 'inherit',
+    flexDirection: 'inherit',
+    flexWrap: 'inherit',
+    alignItems: 'inherit',
+    alignContent: 'inherit',
+    justifyContent: 'inherit',
+    justifyItems: 'inherit',
+    rowGap: 'inherit',
+    columnGap: 'inherit',
+    gridTemplateColumns: 'inherit',
+    gridTemplateRows: 'inherit',
+    gridTemplateAreas: 'inherit',
+    gridAutoFlow: 'inherit',
+    gridAutoColumns: 'inherit',
+    gridAutoRows: 'inherit',
+    flexGrow: 1,
+    alignSelf: 'stretch',
+    gridColumn: '1 / -1',
+    gridRow: '1 / -1',
+    minWidth: 0,
+    borderRadius: 'inherit',
+  },
   // 1px anchor placed at the cursor point within the trigger. The menu is
   // anchored to this element, so it sits under the cursor yet is positioned
   // relative to the trigger's context — it follows the content on scroll and
@@ -214,13 +241,15 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   // The menu's own inset inside the sheet content box (menuBottomSheetStyles
-  // .content): the 16px / 4px the sheet keeps plus the menu's 4px padding.
+  // .content): the 4px at the sides the content box keeps plus the menu's
+  // 4px padding; above the first row, the menu's 4px below the band the sheet
+  // keeps under its grab bar.
   sheetMenuInset: {
-    paddingBlockStart: `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    paddingBlockStart: spacingVars['--spacing-1'],
     paddingBlockEnd: spacingVars['--spacing-1'],
     paddingInline: `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     // Bleeding rows read the padding this element applies.
-    '--container-padding-block-start': `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-block-start': spacingVars['--spacing-1'],
     '--container-padding-block-end': spacingVars['--spacing-1'],
     '--container-padding-inline-start': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     '--container-padding-inline-end': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
@@ -239,20 +268,6 @@ const styles = stylex.create({
     outline: 'none',
   },
 });
-
-/** An element's own computed `scale` on each axis; 1 where it has none. */
-function ownScale(element: HTMLElement): {x: number; y: number} {
-  const value =
-    element.ownerDocument.defaultView?.getComputedStyle(element).scale ?? '';
-  if (value === '' || value === 'none') {
-    return {x: 1, y: 1};
-  }
-  const [x, y = x] = value.trim().split(/\s+/).map(Number.parseFloat);
-  return {
-    x: Number.isFinite(x) && x > 0 ? x : 1,
-    y: Number.isFinite(y) && y > 0 ? y : 1,
-  };
-}
 
 /**
  * Keeps the 1px cursor anchor inside the trigger along one axis. A point in
@@ -420,6 +435,8 @@ export function ContextMenu({
   // — it scrolls with the content instead of sitting at a fixed viewport point.
   const positionRef = useRef({x: 0, y: 0});
   const cursorAnchorRef = useRef<HTMLSpanElement>(null);
+  // The trigger's own visual: what the press feedback grows.
+  const visualRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
   // Element focused before the menu opened, restored when it closes so focus
   // does not fall to <body> after Escape or outside-click dismissal.
@@ -653,16 +670,6 @@ export function ContextMenu({
     [listNavKeyDown, closeMenu, typeahead, ownsEvent],
   );
 
-  // How much the press feedback has grown a block trigger from its center:
-  // the trigger's own `scale`, not an ancestor's transform.
-  const triggerScale = useCallback((): {x: number; y: number} => {
-    const trigger = triggerRef.current;
-    if (trigger == null || triggerAs === 'span') {
-      return {x: 1, y: 1};
-    }
-    return ownScale(trigger);
-  }, [triggerAs]);
-
   // Place the 1px cursor anchor at a point in the trigger's local
   // coordinate space and open the menu. Positioning the anchor inside the
   // trigger (rather than storing viewport coordinates on the menu itself) is
@@ -679,29 +686,13 @@ export function ContextMenu({
       focusTarget: 'first' | 'menu' = 'first',
     ) => {
       const rect = triggerRef.current?.getBoundingClientRect();
-      const scale = rect ? triggerScale() : {x: 1, y: 1};
-      const x = rect ? keepAnchorInside(localX, rect.width / scale.x) : localX;
-      const y = rect ? keepAnchorInside(localY, rect.height / scale.y) : localY;
+      const x = rect ? keepAnchorInside(localX, rect.width) : localX;
+      const y = rect ? keepAnchorInside(localY, rect.height) : localY;
       positionRef.current = {x, y};
       const anchorEl = cursorAnchorRef.current;
       if (anchorEl) {
         anchorEl.style.left = `${x}px`;
         anchorEl.style.top = `${y}px`;
-        // A trigger the press feedback has grown (from its center) would
-        // carry the anchor with it, and engines differ on whether anchor
-        // positioning follows transforms. Cancel the scale at the anchor, so
-        // its box is the same either way: where the point is on screen.
-        if (rect != null && (scale.x !== 1 || scale.y !== 1)) {
-          const centerX = rect.width / scale.x / 2;
-          const centerY = rect.height / scale.y / 2;
-          anchorEl.style.transformOrigin = '0 0';
-          anchorEl.style.scale = `${1 / scale.x} ${1 / scale.y}`;
-          anchorEl.style.translate = `${(x - centerX) * (1 / scale.x - 1)}px ${(y - centerY) * (1 / scale.y - 1)}px`;
-        } else {
-          anchorEl.style.removeProperty('transform-origin');
-          anchorEl.style.removeProperty('scale');
-          anchorEl.style.removeProperty('translate');
-        }
       }
       // Remember the element focused before opening so we can restore it on
       // close (Escape or outside-click), instead of dropping focus to <body>.
@@ -719,7 +710,7 @@ export function ContextMenu({
         layer.show();
       }
     },
-    [layer, updateOpenState, usesBottomSheet, triggerScale],
+    [layer, updateOpenState, usesBottomSheet],
   );
 
   // The hold's commit: the menu shows at its moment or at the lift, so its
@@ -738,25 +729,20 @@ export function ContextMenu({
   );
 
   // A client point in the trigger's own coordinates, where the cursor anchor
-  // lives. It is the offset from the trigger's laid-out box, before the press
-  // feedback's scale, and it stays inside that box.
+  // lives. The press feedback grows only the trigger's visual, so the
+  // trigger's box is as laid out. The point stays inside that box.
   const toTriggerLocal = useCallback(
     (point: {x: number; y: number}): {x: number; y: number} => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (rect == null) {
         return point;
       }
-      const scale = triggerScale();
-      const width = rect.width / scale.x;
-      const height = rect.height / scale.y;
-      const left = rect.left + (rect.width - width) / 2;
-      const top = rect.top + (rect.height - height) / 2;
       return {
-        x: Math.min(Math.max(point.x - left, 0), width),
-        y: Math.min(Math.max(point.y - top, 0), height),
+        x: Math.min(Math.max(point.x - rect.left, 0), rect.width),
+        y: Math.min(Math.max(point.y - rect.top, 0), rect.height),
       };
     },
-    [triggerScale],
+    [],
   );
 
   const handleContextMenu = useCallback(
@@ -1039,7 +1025,13 @@ export function ContextMenu({
               : [triggerXstyle]
             : []),
         )}>
-        {children}
+        {triggerAs === 'div' ? (
+          <div ref={visualRef} {...stylex.props(styles.triggerVisual)}>
+            {children}
+          </div>
+        ) : (
+          children
+        )}
         <span
           ref={useMergedRefs(cursorAnchorRef, layer.ref)}
           aria-hidden="true"
@@ -1055,6 +1047,7 @@ export function ContextMenu({
         <ContextMenuTouchLayer
           ref={touchHandleRef}
           triggerRef={triggerRef}
+          visualRef={visualRef}
           isShown={triggerAs !== 'span' && !usesBottomSheet}
           onOpen={openFromFinger}
           onCommit={prepareMenu}

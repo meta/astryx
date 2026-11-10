@@ -4,8 +4,8 @@
  * @file ContextMenuTouchGrowth.test.tsx
  * @input ContextMenu under a finger in jsdom, with the compositor animator
  *   replaced
- * @output Checks that the trigger grows only while ContextMenu's recognizer
- *   follows a finger, and springs back when the recognizer fails
+ * @output Checks that the trigger's visual grows only while ContextMenu's
+ *   recognizer follows a finger, and springs back when the recognizer fails
  * @position Unit tests of the press feedback's start and end in
  *   packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx
  */
@@ -142,10 +142,13 @@ describe('ContextMenu’s growth under a finger', () => {
     return screen.getByTestId('ctx');
   }
 
+  // The press feedback grows the trigger's own visual, its first child.
+  const visualOf = (trigger: HTMLElement) => trigger.firstElementChild;
+
   const scaleBack = (trigger: HTMLElement) =>
     animator.animate.mock.calls.filter(
       ([element, to]) =>
-        element === trigger && (to as {scale?: number}).scale === 1,
+        element === visualOf(trigger) && (to as {scale?: number}).scale === 1,
     );
 
   it('springs a grown trigger back when the finger lifts before the commit', async () => {
@@ -163,7 +166,8 @@ describe('ContextMenu’s growth under a finger', () => {
   const growths = (trigger: HTMLElement) =>
     animator.animate.mock.calls.filter(
       ([element, to]) =>
-        element === trigger && ((to as {scale?: number}).scale ?? 1) > 1,
+        element === visualOf(trigger) &&
+        ((to as {scale?: number}).scale ?? 1) > 1,
     );
   const startOf = (call: unknown[]) => (call[3] as {at: number}).at;
   // One growth, started from rest in the first frame at or after the onset.
@@ -272,9 +276,9 @@ describe('ContextMenu’s growth under a finger', () => {
     const trigger = renderMenu();
     const contact = {id: 1, x: 20, y: 20};
     dispatchTouch('touchstart', trigger, [contact], [contact]);
-    expect(animator.elements).not.toContain(trigger);
+    expect(animator.elements).not.toContain(visualOf(trigger));
     advance(FRAME_MS);
-    expect(animator.elements).toContain(trigger);
+    expect(animator.elements).toContain(visualOf(trigger));
     expect(growths(trigger)).toHaveLength(0);
   });
 

@@ -714,6 +714,93 @@ function TouchLongPressDemo() {
   );
 }
 
+const layoutStyles = stylex.create({
+  page: {
+    display: 'grid',
+    gap: '24px',
+  },
+  pair: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+  },
+  block: {
+    padding: '12px',
+    borderRadius: '12px',
+    backgroundColor: '#f3f4f6',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '8px 16px',
+    backgroundColor: '#f3f4f6',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '40px 1fr',
+    gridTemplateRows: 'auto auto',
+    columnGap: '12px',
+    rowGap: '4px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  swatch: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    backgroundColor: '#9ca3af',
+    gridRow: '1 / 3',
+  },
+});
+
+const LAYOUTS = ['block', 'row', 'grid'] as const;
+
+function LayoutContent() {
+  return (
+    <>
+      <div {...stylex.props(layoutStyles.swatch)} />
+      <span>Quarterly report</span>
+      <span>Edited today</span>
+    </>
+  );
+}
+
+export const TouchTriggerLayouts: Story = {
+  name: 'Touch / trigger layouts',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The press grows only the trigger’s own visual, an inner box that lays the children out as the trigger would. Each trigger here sits beside a plain box with the same style, and both lay out the same.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(layoutStyles.page)}>
+      {LAYOUTS.map(layout => (
+        <div key={layout} {...stylex.props(layoutStyles.pair)}>
+          <ContextMenu
+            data-testid={`layout-${layout}`}
+            label="Report actions"
+            triggerXstyle={layoutStyles[layout]}
+            items={[
+              {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+              {label: 'Share', icon: ShareIcon, onClick: () => {}},
+            ]}>
+            <LayoutContent />
+          </ContextMenu>
+          <div
+            data-testid={`layout-${layout}-reference`}
+            {...stylex.props(layoutStyles[layout])}>
+            <LayoutContent />
+          </div>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 export const TouchLongPressPopover: Story = {
   name: 'Touch / long press, presentation="popover"',
   parameters: {

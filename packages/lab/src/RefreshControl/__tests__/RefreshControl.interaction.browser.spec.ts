@@ -28,8 +28,9 @@
 // test. The pan's hysteresis is 10 px, and 60 px follow one to one. Then
 // UIScrollView's rubber band applies to the excess (c = 0.55, d = the
 // scroller's height). The trigger is at max(73, 0.198 × d) px of overscroll.
-// The settle uses response 0.5 s and damping 1. UIKit's end takes 300 ms,
-// and the page's own tokens give the end's duration and easing.
+// The settle uses response 0.5 s and damping 1. UIKit's end takes 300 ms on
+// UIView.animate's easeInEaseOut. The page's duration token gives the end's
+// duration, and the curve stays UIKit's whatever the theme's easing.
 
 import {
   expect,
@@ -66,6 +67,7 @@ import {
   type TouchDriver,
   PEN_SKIP,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
 } from '@astryxdesign/interaction-harness';
 
 import {refreshControl} from '../refreshValues';
@@ -75,6 +77,9 @@ const storybook = withStorybook(test);
 /** UIKit's end, measured: `endRefreshing()` moves the content over 0.3 s. */
 const UIKIT_END_MS = 300;
 
+/** UIKit's end curve: UIView.animate's default, easeInEaseOut. */
+const UIKIT_END_CURVE = [0.42, 0, 0.58, 1] as const;
+
 /** A CSS time in ms, for the page's duration tokens. */
 function timeMs(value: string): number {
   const match = /^\s*(\d*\.?\d+)(ms|s)\s*$/.exec(value);
@@ -82,16 +87,6 @@ function timeMs(value: string): number {
     throw new Error(`timeMs: not a CSS time: "${value}"`);
   }
   return Number(match[1]) * (match[2] === 's' ? 1000 : 1);
-}
-
-/** The control points of a CSS cubic-bezier easing, for the page's tokens. */
-function bezierPoints(value: string): [number, number, number, number] {
-  const match = /^\s*cubic-bezier\(([^)]*)\)\s*$/.exec(value);
-  const points = match?.[1].split(',').map(Number) ?? [];
-  if (points.length !== 4 || points.some(n => !Number.isFinite(n))) {
-    throw new Error(`bezierPoints: not a cubic-bezier: "${value}"`);
-  }
-  return points as [number, number, number, number];
 }
 
 /** The theme tokens at the content, as the page computes them. */
@@ -431,14 +426,16 @@ test('the settle onto the inset follows the scroll view’s bounce spring', asyn
   expect(samples.at(-1)?.value).toBeCloseTo(HEIGHT, 0);
 });
 
-test('the end slides the content up on the theme’s duration and move easing tokens (spec:AST-094 FR45)', async ({
+test('the end slides the content up on UIKit’s curve over the theme’s duration token (spec:AST-094 FR45)', async ({
   page,
 }, testInfo) => {
   const {driver, content, start} = await openRefresh(page, undefined, {
     refreshMs: '-1',
   });
-  const tokens = await tokensAt(content, ['--duration-medium', '--ease-move']);
+  const tokens = await tokensAt(content, ['--duration-medium']);
   const ms = timeMs(tokens['--duration-medium']);
+  // The Storybook theme is neutral: its medium duration is UIKit's end.
+  expect(ms, JSON.stringify(tokens)).toBe(UIKIT_END_MS);
   await driver.play(slowPull(start, 300, 200));
   await waitForContentRest(content);
   expect(await shownPull(content)).toBeCloseTo(HEIGHT, 0);
@@ -446,7 +443,7 @@ test('the end slides the content up on the theme’s duration and move easing to
   await waitForSettle(content, {afterRefresh: true, hold: true});
   const samples = await sampleTranslate(content, timeline(ms));
   await releaseAnimations(page);
-  const ease = cubicBezier(...bezierPoints(tokens['--ease-move']));
+  const ease = cubicBezier(...UIKIT_END_CURVE);
   const oracle = (t: number) => HEIGHT * (1 - ease(Math.min(1, t / ms)));
   const result = compareCurve(samples, oracle, 0.75);
   await writeEvidence(
@@ -1031,6 +1028,56 @@ test('a theme’s duration token retimes the end, and a `--motion-…` variable 
   expect(Math.abs((slide?.movingMs ?? 0) - 600)).toBeLessThan(20);
 });
 
+for (const tempo of [0.75, 1.5]) {
+  test(`at a theme tempo of ${tempo}, the end plays UIKit’s curve over the duration token that tempo writes (spec:AST-094 FR45, spec:AST-108)`, async ({
+    page,
+  }, testInfo) => {
+    // A theme with a tempo writes each duration token as its value times
+    // the tempo, to the ms, and writes the tempo beside it. So the neutral
+    // 300 ms is 225 ms at the quickest bound and 450 ms at the slowest.
+    const ms = Math.round(UIKIT_END_MS * tempo);
+    const {driver, content, start} = await openRefresh(page, undefined, {
+      refreshMs: '-1',
+    });
+    await content.evaluate(
+      (element, values) => {
+        element.style.setProperty('--duration-medium', `${values.ms}ms`);
+        element.style.setProperty(
+          '--_astryx-motion-tempo',
+          String(values.tempo),
+        );
+      },
+      {ms, tempo},
+    );
+    await driver.play(slowPull(start, 300, 200));
+    await waitForContentRest(content);
+    expect(await shownPull(content)).toBeCloseTo(HEIGHT, 0);
+    await endRefresh(page);
+    await waitForSettle(content, {afterRefresh: true, hold: true});
+    const samples = await sampleTranslate(content, timeline(ms));
+    await releaseAnimations(page);
+    const ease = cubicBezier(...UIKIT_END_CURVE);
+    const oracle = (t: number) => HEIGHT * (1 - ease(Math.min(1, t / ms)));
+    const result = compareCurve(samples, oracle, 0.75);
+    await writeEvidence(
+      `curves/refresh-end-tempo-${tempo}`,
+      {
+        [`${testInfo.project.name}.json`]: JSON.stringify(
+          {ms, samples, result},
+          null,
+          1,
+        ),
+      },
+      testInfo,
+    );
+    expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
+      0.75,
+    );
+    await waitForContentRest(content);
+    expect(await shownPull(content)).toBeCloseTo(0, 1);
+  });
+}
+
 /** A desktop context: no touch screen, so CSS and script read a fine pointer. */
 async function desktopPage(
   browser: Browser,
@@ -1143,12 +1190,6 @@ async function listScrollRest(page: Page, timeout = 3000): Promise<number> {
   );
 }
 
-/**
- * The pause that ends a vertical trackpad scroll's gesture, ms. The page's
- * clock counts whole ms, so a gap of 1 ms less is the longest within one.
- */
-const TRACKPAD_SCROLL_END_MS = 180;
-
 /** Why the trackpad proofs run in WebKit only. */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel step as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas";
@@ -1182,7 +1223,7 @@ test('with a trackpad, a two-finger scroll at the top pulls and refreshes as a f
       x: 200,
       y: 300,
       steps: Array.from({length: 30}, () => ({dy: -10})),
-      maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+      maxGapMs: WHEEL_SCROLL_END_MS.vertical,
     });
     // The scroll's gesture ends after its last step. The pull's release
     // starts the settle, and the content comes to rest on the inset.

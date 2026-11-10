@@ -116,7 +116,7 @@ No component-local concept beyond the consumer props; row props are
 | ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | FR1 | ListItem renders `component:Item` as an `<li>` and passes `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, the deprecated `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), and `ref` to it unchanged, with other DOM and data props reaching the row.                                                                             | Current source and tests |
-| FR2 | Inside a List, the row takes the list's `density`, its `hasDividers` setting, which draws a divider between rows with no extra element and square corners, and its `edge` treatment.                                                                                                                                                                                                                                                                    | Current source and tests |
+| FR2 | Inside a List, the row takes the list's `density`, its `hasDividers` setting, which draws a divider between rows with no extra element and square corners (except that a `bleed` list's first or last row takes a rounded host's corner, `component:List` FR5), and its `edge` treatment.                                                                                                                                                               | Current source and tests |
 | FR3 | Outside a List, the row uses `balanced` density, no dividers, the `padded` treatment, and no marker, keeping Item's inline inset.                                                                                                                                                                                                                                                                                                                       | Current source and tests |
 | FR4 | In a List whose `listStyle` is `disc`, `circle`, or `decimal`, the row draws that marker before its content: a disc or circle shape, or a counter number. A task state set for the row draws a read-only, labelled checkbox in the marker's place. Each marker and the task checkbox sit on the label's first line. A List whose `listStyle` is `none` draws neither. Other markers, set internally for Markdown's nested lists, are uncontracted here. | Current source and tests |
 | FR5 | The row carries `component:List`'s `list-item` target, merged with the caller's `className` and `style`; `xstyle` applies after ListItem's own styles.                                                                                                                                                                                                                                                                                                  | Current source           |
@@ -128,14 +128,14 @@ No component-local concept beyond the consumer props; row props are
 
 ### Representative states
 
-| State                | Required invariant                               | Allowed variation |
-| -------------------- | ------------------------------------------------ | ----------------- |
-| Static row in a List | One `<li>`; no button or anchor.                 | Content.          |
-| Interactive row      | Item's invisible button or anchor; one tab stop. | Content.          |
-| Divided list         | A divider between rows; square corners.          | Density.          |
-| Numbered list        | A counter number before each row.                | Number style.     |
-| Task row             | A read-only checkbox in the marker's place.      | Checked state.    |
-| Row outside a List   | Item's inline inset; no marker.                  | Content.          |
+| State                | Required invariant                                                                                                 | Allowed variation |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| Static row in a List | One `<li>`; no button or anchor.                                                                                   | Content.          |
+| Interactive row      | Item's invisible button or anchor; one tab stop.                                                                   | Content.          |
+| Divided list         | A divider between rows; square corners, except a `bleed` list's end rows in a rounded host (`component:List` FR5). | Density.          |
+| Numbered list        | A counter number before each row.                                                                                  | Number style.     |
+| Task row             | A read-only checkbox in the marker's place.                                                                        | Checked state.    |
+| Row outside a List   | Item's inline inset; no marker.                                                                                    | Content.          |
 
 ### Transformation and precedence order
 
@@ -192,7 +192,7 @@ migration, so the map is deferred.
 Read from source, with no focused test yet:
 
 - FR1: `interactiveRef`, `rel`, and `ref` reaching the Item row.
-- FR2: the divider border and square corners.
+- FR2: the divider border and square corners. The `bleed` end-row corner exception is checked by `ContainerCorners.a11y.chromium.spec.ts` (`component:List` FR5).
 - FR4: each marker and the task checkbox sitting on the label's first line.
 - FR3: `balanced` density, no dividers, and no marker outside a List.
 - FR4: the shape of each bullet marker (the disc's fill, the circle's ring),

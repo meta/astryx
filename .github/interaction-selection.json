@@ -1,0 +1,5 @@
+{
+  "$comment": "The Chromium interaction lane's selection data (spec:AST-030 FR31). `shared`: path prefixes inside component folders that run the full suite, like any path in no component folder. `edges`: a change under `from` also runs `specs`; each logged escape adds the edge it missed, or a shared prefix.",
+  "shared": ["packages/core/src/Layer/"],
+  "edges": []
+}

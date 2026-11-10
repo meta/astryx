@@ -7,7 +7,8 @@
  * @output `traceRendering` — counts of the main thread's rendering work
  *   (Layout, Paint, UpdateLayoutTree, PrePaint, …) between two marks — and
  *   `installLongTaskLog` / `readLongTasks`. `longTasksOf` gives each long task
- *   its wall and thread time.
+ *   its wall and thread time. `layoutSources` names what ran each counted
+ *   Layout and what invalidated layout before it.
  * @position The "no Layout/Paint during a transform/opacity animation" proof.
  *   A compositor animation costs the main thread nothing per frame; one that
  *   animates a layout property, or writes styles from JavaScript each frame,
@@ -116,6 +117,17 @@ export interface RenderingTrace {
   readonly events: readonly RenderingEvent[];
   /** The window, epoch ms on the page's clock. */
   readonly window: {readonly from: number; readonly to: number};
+  /**
+   * Every main-thread trace event inside the window, in time order, when the
+   * trace keeps them (`keepEvents`). A proof reads them only to explain a
+   * failure.
+   */
+  readonly mainThread?: readonly TimedTraceEvent[];
+}
+
+/** A main-thread trace event with its epoch-ms time. */
+export interface TimedTraceEvent extends TraceEvent {
+  readonly t: number;
 }
 
 /** Counts rendering events by name inside `[from, to]` (epoch ms). */
@@ -131,6 +143,117 @@ export function countBetween(
     }
   }
   return counts;
+}
+
+/** What ran a counted Layout, and what invalidated layout before it. */
+export interface LayoutSource {
+  /** The Layout's time, epoch ms. */
+  readonly t: number;
+  /** The task that ran the Layout: its dispatches and calls, in order. */
+  readonly task: readonly string[];
+  /**
+   * Each layout or style invalidation since the previous Layout, with the
+   * task it ran in. The trace names the reason and the node only when it
+   * tracks invalidations.
+   */
+  readonly invalidations: ReadonlyArray<{
+    readonly t: number;
+    readonly what: string;
+    readonly task: readonly string[];
+  }>;
+}
+
+const TASK_STEPS = new Set([
+  ...PAGE_SCRIPT_EVENTS,
+  'BeginMainThreadFrame',
+  'EvaluateScript',
+  'HitTest',
+  'IntersectionObserverController::computeIntersections',
+  'ParseHTML',
+  'UpdateLayoutTree',
+  'Layout',
+]);
+
+const INVALIDATIONS = new Set([
+  'InvalidateLayout',
+  'ScheduleStyleRecalculation',
+  'LayoutInvalidationTracking',
+  'StyleRecalcInvalidationTracking',
+]);
+
+/** One trace event as text: its name and what its data says about it. */
+function describeEvent(e: TraceEvent): string {
+  const data = (e.args?.data ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : null;
+  const url = text(data.url);
+  const parts = [
+    text(data.type),
+    text(data.functionName),
+    url == null
+      ? null
+      : `${url.split('/').pop()}:${text(data.lineNumber) ?? '?'}:${text(data.columnNumber) ?? '?'}`,
+    text(data.reason),
+    text(data.nodeName),
+  ].filter(part => part != null && part !== '');
+  // Square brackets: a message line that ends in `:line:column` or
+  // `:line:column)` reads as a stack frame to Playwright, which then reports
+  // that line as the failure's location.
+  return parts.length === 0 ? e.name : `${e.name}[${parts.join(' ')}]`;
+}
+
+/**
+ * Names the source of each Layout in `[from, to]` (epoch ms) from a trace that
+ * kept its events (`traceRendering(page, body, {keepEvents: true})`). For a
+ * Layout it gives the steps of the task that ran it. It also gives every
+ * invalidation since the previous Layout, with the steps of its own task.
+ */
+export function layoutSources(
+  trace: RenderingTrace,
+  from: number,
+  to: number,
+): LayoutSource[] {
+  const main = trace.mainThread;
+  if (main == null) {
+    throw new Error(
+      'layoutSources: the trace kept no events; trace with {keepEvents: true}',
+    );
+  }
+  const tasks = main.filter(e => e.name === 'RunTask' && e.ph === 'X');
+  const stepsBefore = (e: TimedTraceEvent): string[] => {
+    const task = tasks.find(t => t.ts <= e.ts && t.ts + (t.dur ?? 0) >= e.ts);
+    if (task == null) {
+      return [];
+    }
+    return main
+      .filter(
+        x =>
+          x !== e && x.ts >= task.ts && x.ts <= e.ts && TASK_STEPS.has(x.name),
+      )
+      .map(describeEvent)
+      .slice(-8);
+  };
+  const layouts = main.filter(e => e.name === 'Layout');
+  return layouts
+    .filter(e => e.t >= from && e.t <= to)
+    .map(layout => {
+      const previous = layouts.filter(e => e.ts < layout.ts).at(-1);
+      return {
+        t: layout.t,
+        task: stepsBefore(layout),
+        invalidations: main
+          .filter(
+            e =>
+              INVALIDATIONS.has(e.name) &&
+              e.ts > (previous?.ts ?? -Infinity) &&
+              e.ts <= layout.ts,
+          )
+          .slice(-12)
+          .map(e => ({t: e.t, what: describeEvent(e), task: stepsBefore(e)})),
+      };
+    });
 }
 
 export interface TraceEvent {
@@ -162,6 +285,7 @@ export interface TraceEvent {
 export async function traceRendering(
   page: Page,
   body: () => Promise<unknown>,
+  {keepEvents = false}: {keepEvents?: boolean} = {},
 ): Promise<RenderingTrace> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -272,6 +396,14 @@ export async function traceRendering(
     devtoolsTasks,
     events: counted,
     window: {from: fromEpoch, to: toEpoch},
+    ...(keepEvents
+      ? {
+          mainThread: events
+            .filter(e => onMain(e) && e.ph !== 'E')
+            .sort((a, b) => a.ts - b.ts)
+            .map(e => ({...e, t: toEpochMs(e.ts)})),
+        }
+      : {}),
   };
 }
 

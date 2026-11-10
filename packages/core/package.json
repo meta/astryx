@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.12",
+  "version": "0.7.13",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -834,6 +834,11 @@
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
     },
+    "./internal/reorder": {
+      "source": "./src/internal/reorder.ts",
+      "types": "./dist/internal/reorder.d.ts",
+      "default": "./dist/internal/reorder.js"
+    },
     "./internal/touchHitArea.stylex": {
       "source": "./src/internal/touchHitArea.stylex.ts",
       "types": "./dist/internal/touchHitArea.stylex.d.ts",
@@ -868,6 +873,16 @@
       "source": "./src/internal/scroll-anchoring.ts",
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
+    },
+    "./internal/line-clamp": {
+      "source": "./src/internal/line-clamp.ts",
+      "types": "./dist/internal/line-clamp.d.ts",
+      "default": "./dist/internal/line-clamp.js"
+    },
+    "./internal/virtualization": {
+      "source": "./src/internal/virtualization.ts",
+      "types": "./dist/internal/virtualization.d.ts",
+      "default": "./dist/internal/virtualization.js"
     }
   },
   "files": [

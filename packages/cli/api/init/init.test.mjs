@@ -16,6 +16,7 @@ import {init, getNextSteps} from './init.mjs';
 import {logger} from '../logger.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const MARKER_START = '<!-- ASTRYX:START -->';
 
@@ -305,7 +306,7 @@ describe('init() — write-path safety', () => {
   });
 
   it('refuses a template write that a symlinked src would carry outside cwd (ERR_PATH_TRAVERSAL)', async () => {
-    const outside = fs.mkdtempSync(path.join(process.cwd(), '.astryx-init-outside-'));
+    const outside = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-init-outside-'));
     try {
       fs.symlinkSync(outside, path.join(tmpDir, 'src'), 'dir');
       await expect(

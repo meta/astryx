@@ -42,6 +42,8 @@ import {
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
+import {readerTextSizeEntries} from './dynamicType';
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
  * Theme @scope selectors.
@@ -127,6 +129,37 @@ function appendPseudoToSelectorList(selector: string, pseudo: string): string {
   const guarded = guardHoverPseudo(pseudo);
 
   return parts.map(part => `${part}${guarded}`).join(', ');
+}
+
+/**
+ * The touch press model (utils/interactionOverlay.stylex.ts, pressFeedback.ts).
+ * A mouse keeps `:active`. Under a coarse primary pointer, the press
+ * controller marks a press it believes. A finger then paints no press on the
+ * touch or through a scroll.
+ */
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
+const ACTIVE_PSEUDO = /:active(?![-\w])/g;
+
+/**
+ * The rules for one themed pseudo-class override. A themed `:active` follows
+ * the press model: the `:active` rule applies only off a coarse pointer, and
+ * under one the press attribute takes `:active`'s place.
+ */
+function pseudoRules(
+  baseSelector: string,
+  pseudo: string,
+  declarations: string,
+): string[] {
+  if (!new RegExp(ACTIVE_PSEUDO.source).test(pseudo)) {
+    return [
+      `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
+    ];
+  }
+  const pressed = pseudo.replace(ACTIVE_PSEUDO, PRESS_BELIEVED_SELECTOR);
+  return [
+    `  @media not all and ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }\n  }`,
+    `  @media ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pressed)} {\n${declarations}\n  }\n  }`,
+  ];
 }
 
 /** Insert the disabled guard into a `:hover` pseudo, keeping any pseudo-element last. */
@@ -983,7 +1016,13 @@ function tokenBlock(
   tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    joinDeclarations(tokenEntries, `${location}tokens`, sink),
+    // Font sizes follow the reader's text size where the root Theme sets the
+    // scales. Elsewhere each scale is 1.
+    joinDeclarations(
+      readerTextSizeEntries(tokenEntries),
+      `${location}tokens`,
+      sink,
+    ),
     joinDeclarations(
       Object.entries(source.localTokens ?? {}),
       `${location}localTokens`,
@@ -1436,9 +1475,7 @@ function generateComponentRules(
             sink,
             toKebabCase,
           );
-          parts.push(
-            `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
-          );
+          parts.push(...pseudoRules(baseSelector, pseudo, declarations));
         }
       }
     }
@@ -1696,8 +1733,10 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     if (tokenEntries.length > 0) {
+      // The surface re-declares font sizes the way a theme's root does, so they
+      // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        tokenEntries,
+        readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
         sink,
       );

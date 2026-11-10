@@ -39,6 +39,9 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
@@ -148,6 +151,43 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
     }
   }
   return files;
+}
+
+/**
+ * Each file in the project's own source that still uses the placeholder
+ * component the CLI writes for a missing icon: the file, the component's
+ * name, the meanings its uses name (null when none names one), and how many
+ * uses it has. A file reads only as a syntax tree, so a commented-out or
+ * quoted copy never counts. Read without executing app code.
+ * @param {string} projectDir
+ * @returns {Array<{file: string, local: string, meanings: string[] | null, uses: number}>}
+ */
+export function findIconPlaceholders(projectDir) {
+  /** @type {Array<{file: string, local: string, meanings: string[] | null, uses: number}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    // Only a file with the placeholder's dash pattern is parsed.
+    if (!source.includes('3 2.33')) continue;
+    const uses = placeholderUses(source);
+    if (!uses || uses.length === 0) continue;
+    const shown = path.relative(projectDir, file).split(path.sep).join('/');
+    const meanings = [
+      ...new Set(uses.flatMap(each => each.meanings ?? [])),
+    ].sort();
+    found.push({
+      file: shown,
+      local: uses[0].local,
+      meanings: meanings.length > 0 ? meanings : null,
+      uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => a.file.localeCompare(b.file));
 }
 
 /** @param {string} projectDir */
