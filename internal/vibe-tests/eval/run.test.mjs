@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {Budget, parseOptions, planJobs} from './run.mjs';
+import {agentErrorReason, Budget, modelMismatch, parseOptions, planJobs} from './run.mjs';
 
 describe('parseOptions', () => {
   it('requires a pinned model and a total cap for a run', () => {
@@ -58,5 +58,23 @@ describe('Budget', () => {
     expect(await budget.reserve()).toBe(true);
     budget.settle(2.5);
     expect(await budget.reserve()).toBe(false);
+  });
+});
+
+describe('agentErrorReason', () => {
+  it('separates agent failures from library failures', () => {
+    expect(agentErrorReason({spawnError: 'ENOENT'})).toMatch(/did not start/);
+    expect(agentErrorReason({result: null})).toMatch(/no result/);
+    expect(agentErrorReason({result: {isError: true, turns: 0, subtype: 'error_during_execution'}})).toMatch(/before its first turn/);
+    expect(agentErrorReason({result: {isError: true, turns: 6, subtype: 'error_max_budget_usd'}})).toBeNull();
+    expect(agentErrorReason({timedOut: true, result: null})).toBeNull();
+  });
+});
+
+describe('modelMismatch', () => {
+  it('requires the pinned model and allows a helper model', () => {
+    expect(modelMismatch({initModel: 'm-1', result: {models: ['m-1', 'helper']}}, 'm-1')).toBe(false);
+    expect(modelMismatch({initModel: 'm-2', result: {models: ['m-2']}}, 'm-1')).toBe(true);
+    expect(modelMismatch({initModel: null, result: {models: ['helper']}}, 'm-1')).toBe(true);
   });
 });

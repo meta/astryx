@@ -102,10 +102,14 @@ async function openContext(browser, options, origin) {
   return context;
 }
 
-function watchErrors(page, pageErrors, consoleErrors) {
+/** Records page errors and console errors, except for requests the grader blocked. */
+function watchErrors(page, origin, pageErrors, consoleErrors) {
   page.on('pageerror', error => pageErrors.push(String(error.message ?? error)));
   page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 500));
+    if (message.type() !== 'error') return;
+    const source = message.location().url ?? '';
+    if (message.text().startsWith('Failed to load resource') && source && !source.startsWith(origin)) return;
+    consoleErrors.push(message.text().slice(0, 500));
   });
 }
 
@@ -120,7 +124,7 @@ async function probeInBrowser({browser, url, task, outDir}) {
   const desktop = await openContext(browser, VIEWPORTS.desktop, url);
   try {
     const page = await desktop.newPage();
-    watchErrors(page, pageErrors, consoleErrors);
+    watchErrors(page, url, pageErrors, consoleErrors);
     await page.goto(url, {waitUntil: 'load'});
     await page.waitForTimeout(300);
     screenshots.desktopInitial = path.join(outDir, 'desktop-initial.png');
@@ -136,7 +140,7 @@ async function probeInBrowser({browser, url, task, outDir}) {
   const mobile = await openContext(browser, VIEWPORTS.mobile, url);
   try {
     const phone = await mobile.newPage();
-    watchErrors(phone, pageErrors, consoleErrors);
+    watchErrors(phone, url, pageErrors, consoleErrors);
     await phone.goto(url, {waitUntil: 'load'});
     await phone.waitForTimeout(300);
     screenshots.mobileInitial = path.join(outDir, 'mobile-initial.png');

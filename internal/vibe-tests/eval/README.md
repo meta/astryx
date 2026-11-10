@@ -42,8 +42,8 @@ If any control is wrong, the run stops.
 
 Each run copies the arm into a new folder outside the repository and starts one
 fresh agent there. The agent gets the same prompt in every arm. Only the library
-name changes. The agent never sees the probes, the reference solutions or other
-runs.
+name changes. The probes, the reference solutions and other runs are outside
+its folder. The agent is not sandboxed, so the runner audits it instead (below).
 
 - Harness: Claude Code in bare mode (`claude -p --bare`). It loads no user
   settings, plugins, hooks, MCP servers or memory files. Web tools and
@@ -56,8 +56,15 @@ runs.
 
 After the agent stops, the runner reads its transcript. A path that reaches the
 home folder, the repository or another run, or any use of a web tool or a
-sub-agent, is a violation, and the run fails as `integrity`. Other outside paths
-are warnings to review.
+sub-agent, is a violation, and the run fails as `integrity`. Paths in shell
+commands resolve from the folder the shell is in after each `cd`. Heredoc bodies
+are file content, so the audit skips them. Other outside paths are warnings to
+review. When the agent exits or times out, the runner kills its whole process
+group, so a server it started does not keep running.
+
+A run where the agent fails before its first turn, writes no result, or cannot
+start is an `agent-error`. It says nothing about the library, so the report
+lists it but leaves it out of the pass rates.
 
 ## Grading
 
@@ -79,13 +86,15 @@ evidence only and never change pass or fail.
 Each task runs `--reps` times per arm (default 3). The report gives each arm's
 pass rate with a 95% Wilson interval, the difference between the arms with a
 Newcombe interval, and passes per task. A difference whose interval contains 0
-is noise.
+is noise. The intervals treat every run as independent, but runs of one task are
+related, so with few tasks the true uncertainty is wider than the report shows.
 
-`--budget-usd` is a hard total. A run starts only if the money spent, plus the
+`--budget-usd` caps the total. A run starts only if the money spent, plus the
 per-run cap (`--run-budget-usd`) of every run in flight, plus its own cap, stays
 within the total. Otherwise it waits for a run in flight to finish, and it is
 recorded as `skipped-budget` only when it cannot fit with nothing in flight. The
-agent itself also stops at the per-run cap.
+agent stops at its per-run cap, but it checks the cap between turns, so one run
+can go over its cap by part of a turn.
 
 ## Tasks
 
@@ -110,14 +119,14 @@ the library name changes.
 # Free: check the controls, probes and references.
 node internal/vibe-tests/eval/run.mjs --self-test
 
-# 5 tasks × 2 arms × 3 reps = 30 agent runs.
+# 5 tasks × 2 arms × 3 reps = 30 agent runs. Pass a full model id, not an alias.
 node internal/vibe-tests/eval/run.mjs --model <model-id> --budget-usd 15
 
 # Rebuild the report from saved records.
 node internal/vibe-tests/eval/run.mjs --report-only <run directory>
 ```
 
-A run writes `meta.json` (inputs, versions, control results), one record per
+The run directory must be new or empty. A run writes `meta.json` (inputs, versions, control results), one record per
 agent run in `records/`, each run's transcript, final `App.tsx` and screenshots
 in `runs/`, and `summary.json`, `report.md` and `report.html`. Set
 `VIBE_EVAL_AGENT_BIN` to use another `claude` binary.

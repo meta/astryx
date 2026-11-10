@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
-import {runClaudeCode} from './lib/agent-claude-code.mjs';
+import {killAllAgents, runClaudeCode} from './lib/agent-claude-code.mjs';
 import {resolveArms} from './lib/arms.mjs';
 import {gradeWorkspace, launchBrowser} from './lib/grade.mjs';
 import {writeReport} from './lib/report.mjs';
@@ -87,7 +87,7 @@ export function parseOptions(argv) {
   };
   if (!options.help && !options.selfTest && !options.reportOnly) {
     if (!options.model) throw new Error('--model is required: pin one model for every arm');
-    if (options.budgetUsd === null) throw new Error('--budget-usd is required: the run stops before it would pass this cap');
+    if (options.budgetUsd === null) throw new Error('--budget-usd is required: no run starts unless its cap fits within this total');
     if (options.budgetUsd < options.runBudgetUsd) throw new Error('--budget-usd must cover at least one run');
   }
   return options;
@@ -205,11 +205,35 @@ async function selfTest(options) {
   } else log('self-test passed');
 }
 
+/** Agent failures that say nothing about the library: no result, or no turn taken. */
+export function agentErrorReason(agent) {
+  if (agent.spawnError) return `agent did not start: ${agent.spawnError}`;
+  if (agent.timedOut) return null;
+  if (!agent.result) return 'agent wrote no result';
+  if (agent.result.isError && !agent.result.turns) return `agent error before its first turn (${agent.result.subtype})`;
+  return null;
+}
+
+/** The pinned model must run the session; a small helper model may also appear. */
+export function modelMismatch(agent, model) {
+  if (agent.initModel && agent.initModel !== model) return true;
+  return Boolean(agent.result && !agent.result.models.includes(model));
+}
+
+/** A run directory must be new, so a report never mixes in older runs. */
+function freshRunDir(dir) {
+  const runDir = assertOutsideRepo(dir);
+  if (fs.existsSync(runDir) && fs.readdirSync(runDir).length > 0) {
+    throw new Error(`run directory is not empty: ${runDir}`);
+  }
+  fs.mkdirSync(path.join(runDir, 'records'), {recursive: true});
+  return fs.realpathSync(runDir);
+}
+
 async function evaluate(options) {
   const tasks = selectTasks(options);
   const arms = resolveArms(options.arms);
-  const runDir = assertOutsideRepo(options.out ?? defaultRunDir());
-  fs.mkdirSync(path.join(runDir, 'records'), {recursive: true});
+  const runDir = freshRunDir(options.out ?? defaultRunDir());
   const bases = await prepareBases(arms, runDir);
   const meta = {
     schemaVersion: 1,
@@ -231,78 +255,92 @@ async function evaluate(options) {
   };
   fs.writeFileSync(path.join(runDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
 
-  const sensitiveRoots = [runDir, REPO_ROOT, os.homedir()];
+  // Real paths, because agents see the workspace through its real path.
+  const sensitiveRoots = [runDir, REPO_ROOT, os.homedir()].map(root => fs.realpathSync(root));
   const budget = new Budget(options.budgetUsd, options.runBudgetUsd);
   const browser = await launchBrowser();
   const queue = planJobs(tasks, arms, options.reps);
   log(`${queue.length} runs planned, cap $${options.budgetUsd}`);
+  const stop = signal => {
+    log(`${signal}: stopping every agent`);
+    killAllAgents();
+    process.exit(130);
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
 
-  const work = async ({task, arm, rep}) => {
+  const work = async ({task, arm, rep}, record) => {
     const name = `${task.id}__${arm.id}__r${rep}`;
-    const recordPath = path.join(runDir, 'records', `${name}.json`);
-    const record = {task: task.id, arm: arm.id, rep, status: 'graded', passed: false, failure: null};
     if (!(await budget.reserve())) {
       record.status = 'skipped-budget';
-      fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
       log(`${name}: skipped, budget cap reached`);
       return;
     }
     const runRoot = path.join(runDir, 'runs', name);
-    const workspace = createWorkspace(bases[arm.id].base, path.join(runRoot, 'workspace'));
-    const prompt = renderPrompt(task, arm);
-    record.prompt = prompt;
-    log(`${name}: agent started`);
     let agent;
     try {
+      const workspace = createWorkspace(bases[arm.id].base, path.join(runRoot, 'workspace'));
+      record.prompt = renderPrompt(task, arm);
+      log(`${name}: agent started`);
       agent = await runClaudeCode({
         workspace,
-        prompt,
+        prompt: record.prompt,
         model: options.model,
         maxBudgetUsd: options.runBudgetUsd,
         timeoutMs: options.timeoutMs,
         transcriptPath: path.join(runRoot, 'transcript.jsonl'),
       });
+      record.agent = {
+        exitCode: agent.exitCode,
+        timedOut: agent.timedOut,
+        initModel: agent.initModel,
+        instructionsFile: agent.instructionsFile,
+        ...(agent.result ?? {}),
+      };
+      const agentError = agentErrorReason(agent);
+      if (agentError) {
+        record.status = 'agent-error';
+        record.error = agentError;
+        log(`${name}: ${agentError}`);
+        return;
+      }
+      record.audit = auditTranscript(agent.lines, workspace, sensitiveRoots);
+      record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir: path.join(runRoot, 'grade')});
+      if (modelMismatch(agent, options.model)) record.failure = 'model-mismatch';
+      else if (record.audit.violations.length > 0) record.failure = 'integrity';
+      else record.failure = record.grade.failure;
+      record.status = 'graded';
+      record.passed = record.failure === null;
+      const entry = path.join(workspace, arm.entry);
+      if (fs.existsSync(entry)) fs.copyFileSync(entry, path.join(runRoot, path.basename(arm.entry)));
+      fs.rmSync(path.join(workspace, 'node_modules'), {recursive: true, force: true});
+      log(`${name}: ${record.passed ? 'pass' : `fail (${record.failure})`} $${record.agent.costUsd?.toFixed(2) ?? '?'} · spent $${budget.spentUsd.toFixed(2)}`);
     } finally {
-      budget.settle(agent?.result?.costUsd);
+      // A run that never started an agent spent nothing.
+      budget.settle(agent ? agent.result?.costUsd : 0);
     }
-    record.agent = {
-      exitCode: agent.exitCode,
-      timedOut: agent.timedOut,
-      instructionsFile: agent.instructionsFile,
-      ...(agent.result ?? {}),
-    };
-    if (agent.result && agent.result.models.some(model => !model.startsWith(options.model))) {
-      record.agent.modelMismatch = true;
-    }
-    const lines = fs.readFileSync(agent.transcriptPath, 'utf8').split('\n').filter(Boolean);
-    record.audit = auditTranscript(lines, workspace, sensitiveRoots);
-    record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir: path.join(runRoot, 'grade')});
-    if (record.agent.modelMismatch) record.failure = 'model-mismatch';
-    else if (record.audit.violations.length > 0) record.failure = 'integrity';
-    else record.failure = record.grade.failure;
-    record.passed = record.failure === null;
-    const entry = path.join(workspace, arm.entry);
-    if (fs.existsSync(entry)) fs.copyFileSync(entry, path.join(runRoot, path.basename(arm.entry)));
-    fs.rmSync(path.join(workspace, 'node_modules'), {recursive: true, force: true});
-    fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
-    log(`${name}: ${record.passed ? 'pass' : `fail (${record.failure})`} $${record.agent.costUsd?.toFixed(2) ?? '?'} · spent $${budget.spentUsd.toFixed(2)}`);
   };
 
   try {
     const workers = Array.from({length: Math.min(options.concurrency, queue.length)}, async () => {
       for (let job = queue.shift(); job; job = queue.shift()) {
+        const record = {task: job.task.id, arm: job.arm.id, rep: job.rep, status: 'started', passed: false, failure: null};
         try {
-          await work(job);
+          await work(job, record);
         } catch (error) {
           log(`${job.task.id}/${job.arm.id}/r${job.rep}: harness error ${error}`);
-          const record = {task: job.task.id, arm: job.arm.id, rep: job.rep, status: 'harness-error', error: String(error)};
-          fs.writeFileSync(path.join(runDir, 'records', `${job.task.id}__${job.arm.id}__r${job.rep}.json`), `${JSON.stringify(record, null, 2)}\n`);
+          record.status = 'harness-error';
+          record.error = String(error);
         }
+        const recordPath = path.join(runDir, 'records', `${job.task.id}__${job.arm.id}__r${job.rep}.json`);
+        fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
       }
     });
     await Promise.all(workers);
   } finally {
     await browser.close();
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
   }
   meta.finishedAt = new Date().toISOString();
   meta.spentUsd = budget.spentUsd;

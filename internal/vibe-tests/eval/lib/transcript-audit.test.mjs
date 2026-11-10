@@ -65,3 +65,26 @@ describe('auditTranscript', () => {
     expect(auditTranscript(['not json', ''], WORKSPACE, SENSITIVE).toolCalls).toBe(0);
   });
 });
+
+describe('command paths', () => {
+  it('follows cd, bare parent folders and redirects', () => {
+    const lines = [
+      toolUse('Bash', {command: 'cd .. && cd .. && ls'}),
+      toolUse('Bash', {command: 'cat x >/repo/a'}),
+      toolUse('Glob', {pattern: '/repo/**'}),
+    ];
+    expect(auditTranscript(lines, WORKSPACE, SENSITIVE).violations).toHaveLength(4);
+  });
+
+  it('resolves parent paths from the folder the shell is in', () => {
+    const lines = [toolUse('Bash', {command: 'cd src && cat ../package.json'})];
+    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE);
+    expect(audit.violations).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+  });
+
+  it('skips heredoc bodies', () => {
+    const command = "cat > src/components/X.tsx <<'EOF'\nimport {cn} from '../../lib/utils';\nimport x from '/repo/secret';\nEOF\nnpx tsc -b";
+    expect(auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE).violations).toEqual([]);
+  });
+});

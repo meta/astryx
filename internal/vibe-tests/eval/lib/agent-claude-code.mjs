@@ -55,6 +55,19 @@ export function projectInstructions(workspace) {
   return null;
 }
 
+/** The model the session reports in its start event. */
+export function parseInitModel(lines) {
+  for (const line of lines) {
+    try {
+      const event = JSON.parse(line);
+      if (event.type === 'system' && event.subtype === 'init') return event.model ?? null;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 export function parseResult(lines) {
   for (let index = lines.length - 1; index >= 0; index--) {
     let event;
@@ -78,8 +91,27 @@ export function parseResult(lines) {
   return null;
 }
 
+/** Process groups of agents that are still running. */
+const liveGroups = new Set();
+
+function killGroup(child) {
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL');
+  }
+}
+
+/** Kills every running agent and the tools it started. */
+export function killAllAgents() {
+  for (const child of liveGroups) killGroup(child);
+  liveGroups.clear();
+}
+
 /**
- * @returns {Promise<{exitCode: number | null, timedOut: boolean, transcriptPath: string, result: ReturnType<typeof parseResult>, instructionsFile: string | null}>}
+ * The agent starts its own tools and can leave a server running, so the
+ * runner kills its whole process group when it exits or times out.
+ * @returns {Promise<{exitCode: number | null, timedOut: boolean, spawnError: string | null, lines: string[], initModel: string | null, result: ReturnType<typeof parseResult>, instructionsFile: string | null}>}
  */
 export function runClaudeCode({
   workspace,
@@ -93,13 +125,12 @@ export function runClaudeCode({
   const instructions = projectInstructions(workspace);
   const args = buildArgs({prompt, model, maxBudgetUsd, instructions: instructions?.text});
   fs.mkdirSync(path.dirname(transcriptPath), {recursive: true});
-  const transcript = fs.createWriteStream(transcriptPath);
   return new Promise(resolve => {
     const child = spawn(bin, args, {cwd: workspace, stdio: ['ignore', 'pipe', 'pipe'], detached: true});
+    liveGroups.add(child);
     let buffered = '';
     const lines = [];
     child.stdout.on('data', chunk => {
-      transcript.write(chunk);
       buffered += chunk;
       const parts = buffered.split('\n');
       buffered = parts.pop() ?? '';
@@ -110,27 +141,35 @@ export function runClaudeCode({
       stderr = (stderr + chunk).slice(-20_000);
     });
     let timedOut = false;
-    // The agent starts its own tools, so a timeout kills its whole process group.
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    }, timeoutMs);
-    child.on('close', exitCode => {
+    let spawnError = null;
+    let settled = false;
+    const finish = exitCode => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      killGroup(child);
+      liveGroups.delete(child);
       if (buffered) lines.push(buffered);
-      transcript.end();
+      fs.writeFileSync(transcriptPath, lines.map(line => `${line}\n`).join(''));
       fs.writeFileSync(`${transcriptPath}.stderr.txt`, stderr);
       resolve({
         exitCode,
         timedOut,
-        transcriptPath,
+        spawnError,
+        lines,
+        initModel: parseInitModel(lines),
         result: parseResult(lines),
         instructionsFile: instructions?.file ?? null,
       });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup(child);
+    }, timeoutMs);
+    child.on('error', error => {
+      spawnError = String(error);
+      finish(null);
     });
+    child.on('close', exitCode => finish(exitCode));
   });
 }

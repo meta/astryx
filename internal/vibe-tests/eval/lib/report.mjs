@@ -15,7 +15,7 @@ const percent = value => (value === null ? 'n/a' : `${(value * 100).toFixed(0)}%
 const interval = ({low, high}) => (low === null ? 'n/a' : `${percent(low)}–${percent(high)}`);
 const money = value => (value === null || value === undefined ? 'n/a' : `$${value.toFixed(2)}`);
 
-export function summarizeRecords(records, armIds, taskIds) {
+export function summarizeRecords(records, armIds, taskIds, spentUsd) {
   const graded = records.filter(record => record.status === 'graded');
   const arms = {};
   for (const armId of armIds) {
@@ -59,9 +59,12 @@ export function summarizeRecords(records, armIds, taskIds) {
           ...differenceInterval(arms[a].passes, arms[a].runs, arms[b].passes, arms[b].runs),
         }
       : null;
-  const skipped = records.filter(record => record.status !== 'graded').length;
-  const totalCostUsd = records.reduce((sum, record) => sum + (record.agent?.costUsd ?? 0), 0);
-  return {arms, tasks, difference, skipped, totalCostUsd};
+  const notGraded = {};
+  for (const record of records) {
+    if (record.status !== 'graded') notGraded[record.status] = (notGraded[record.status] ?? 0) + 1;
+  }
+  const recordCost = records.reduce((sum, record) => sum + (record.agent?.costUsd ?? 0), 0);
+  return {arms, tasks, difference, notGraded, totalCostUsd: spentUsd ?? recordCost};
 }
 
 export function renderMarkdown(meta, summary) {
@@ -89,7 +92,8 @@ export function renderMarkdown(meta, summary) {
   for (const [taskId, byArm] of Object.entries(summary.tasks)) {
     lines.push(`| ${taskId} | ` + armIds.map(armId => `${byArm[armId].passes}/${byArm[armId].runs}`).join(' | ') + ' |');
   }
-  if (summary.skipped > 0) lines.push('', `${summary.skipped} runs did not finish grading (budget, agent or setup failure); see records.`);
+  const notGraded = Object.entries(summary.notGraded).map(([status, count]) => `${status} ${count}`);
+  if (notGraded.length > 0) lines.push('', `Not graded and not in the pass rates: ${notGraded.join(', ')}. See records.`);
   return `${lines.join('\n')}\n`;
 }
 
@@ -124,7 +128,7 @@ pre{white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:8px}
 }
 
 export function writeReport(runDir, meta, records) {
-  const summary = summarizeRecords(records, meta.arms, meta.tasks);
+  const summary = summarizeRecords(records, meta.arms, meta.tasks, meta.spentUsd);
   fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify({meta, summary}, null, 2)}\n`);
   fs.writeFileSync(path.join(runDir, 'report.md'), renderMarkdown(meta, summary));
   fs.writeFileSync(path.join(runDir, 'report.html'), renderHtml(meta, summary, records, runDir));

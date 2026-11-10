@@ -1,7 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {buildArgs, parseResult} from './agent-claude-code.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {buildArgs, parseResult, runClaudeCode} from './agent-claude-code.mjs';
 
 describe('buildArgs', () => {
   it('pins the model, caps spend, and turns off settings, web tools and sub-agents', () => {
@@ -42,5 +45,22 @@ describe('parseResult', () => {
 
   it('returns null without a result event', () => {
     expect(parseResult(['{"type":"assistant"}'])).toBeNull();
+  });
+});
+
+describe('runClaudeCode', () => {
+  it('reports a missing binary instead of crashing', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vibe-agent-'));
+    const result = await runClaudeCode({
+      workspace: dir,
+      prompt: 'p',
+      model: 'm',
+      maxBudgetUsd: 1,
+      timeoutMs: 5000,
+      transcriptPath: path.join(dir, 'transcript.jsonl'),
+      bin: path.join(dir, 'missing-binary'),
+    });
+    expect(result.spawnError).toMatch(/ENOENT/);
+    expect(result.result).toBeNull();
   });
 });
