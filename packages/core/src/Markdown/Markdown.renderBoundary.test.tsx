@@ -41,12 +41,15 @@ afterEach(() => {
 });
 
 describe('Markdown render boundary — link destinations', () => {
-  it('renders an accepted pre-parsed destination as a link', () => {
-    parsed.blocks = linkParagraph('data:image/png;base64,iVBORw0KGgo=');
+  it.each([
+    'https://example.com/page',
+    '/page',
+    '#section',
+    'mailto:a@example.com',
+  ])('renders an accepted pre-parsed destination %s as a link', href => {
+    parsed.blocks = linkParagraph(href);
     const {container} = render(<Markdown>{'ignored'}</Markdown>);
-    expect(container.querySelector('a')?.getAttribute('href')).toBe(
-      'data:image/png;base64,iVBORw0KGgo=',
-    );
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(href);
   });
 
   it.each([
@@ -54,6 +57,11 @@ describe('Markdown render boundary — link destinations', () => {
     'vbscript:MsgBox(1)',
     'data:text/html,<script>alert(1)</script>',
     'java\nscript:alert(1)',
+    'data:image/png;base64,iVBORw0KGgo=',
+    'data:text/plain,hello',
+    'DATA:image/png;base64,iVBORw0KGgo=',
+    ' data:image/png;base64,iVBORw0KGgo=',
+    'da\tta:image/png;base64,iVBORw0KGgo=',
   ])('renders a blocked pre-parsed destination %s as text', href => {
     parsed.blocks = linkParagraph(href);
     const {container} = render(<Markdown>{'ignored'}</Markdown>);
@@ -61,12 +69,15 @@ describe('Markdown render boundary — link destinations', () => {
     expect(container.textContent).toContain('go');
   });
 
-  it('does not hand a blocked destination to a custom link renderer', () => {
-    parsed.blocks = linkParagraph('javascript:alert(1)');
-    const link = vi.fn(({children}: {href: string; children?: unknown}) => (
-      <a data-custom>{children as never}</a>
-    ));
-    render(<Markdown components={{link}}>{'ignored'}</Markdown>);
-    expect(link).not.toHaveBeenCalled();
-  });
+  it.each(['javascript:alert(1)', 'data:image/png;base64,iVBORw0KGgo='])(
+    'does not hand the blocked destination %s to a custom link renderer',
+    href => {
+      parsed.blocks = linkParagraph(href);
+      const link = vi.fn(({children}: {href: string; children?: unknown}) => (
+        <a data-custom>{children as never}</a>
+      ));
+      render(<Markdown components={{link}}>{'ignored'}</Markdown>);
+      expect(link).not.toHaveBeenCalled();
+    },
+  );
 });
