@@ -9,8 +9,8 @@
  * SYNC: When Link.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {afterEach, describe, it, expect, vi} from 'vitest';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import type {ReactNode} from 'react';
@@ -834,8 +834,154 @@ describe('Link names and native attributes', () => {
       </Link>,
     );
     const link = screen.getByRole('link', {name: 'Settings'});
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
-    expect(tooltip).toHaveTextContent('Configure settings');
-    expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(link).toHaveAccessibleDescription('Configure settings');
+    // No tooltip layer before the first interaction, and no wrapper.
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    expect(link.parentElement?.style.display).not.toBe('contents');
+  });
+});
+
+// The on-demand tooltip (shared by the description and mount cases below).
+const tooltipRestorers: (() => void)[] = [];
+afterEach(() => {
+  for (const restore of tooltipRestorers.splice(0)) {
+    restore();
+  }
+});
+
+function withPopover() {
+  const proto = window.HTMLElement.prototype;
+  const original = {
+    showPopover: proto.showPopover,
+    hidePopover: proto.hidePopover,
+  };
+  const showPopover = vi.fn();
+  proto.showPopover = showPopover;
+  proto.hidePopover = vi.fn();
+  tooltipRestorers.push(() => {
+    proto.showPopover = original.showPopover;
+    proto.hidePopover = original.hidePopover;
+  });
+  return showPopover;
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  });
+}
+
+function describedByIds(element: HTMLElement): string[] {
+  return (element.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+describe('Link tooltip description (FR12)', () => {
+  it('describes the link by its hidden copy before any interaction', async () => {
+    render(
+      <Link href="/save" tooltip="Save your changes">
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    expect(link).toHaveAccessibleDescription('Save your changes');
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    const [id] = describedByIds(link);
+    expect(document.getElementById(id)).toHaveAttribute('popover', 'manual');
+  });
+
+  it('keeps the hidden copy as the only target after the tooltip mounts', async () => {
+    withPopover();
+    render(
+      <Link href="/save" tooltip="Save your changes" aria-describedby="hint">
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    const before = describedByIds(link);
+    fireEvent.pointerEnter(link, {pointerType: 'mouse'});
+    await waitFor(
+      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
+      {timeout: 8000},
+    );
+    const after = describedByIds(link);
+    expect(after).toEqual(before);
+    expect(after).toHaveLength(2);
+    expect(after[0]).toBe('hint');
+    const tooltipLayer = document.querySelector('[role="tooltip"]');
+    expect(after).not.toContain(tooltipLayer?.id);
+  }, 15000);
+
+  it('follows a change of the tooltip text', async () => {
+    const {rerender} = render(
+      <Link href="/save" tooltip="First">
+        Save
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Save'});
+    expect(link).toHaveAccessibleDescription('First');
+    rerender(
+      <Link href="/save" tooltip="Second">
+        Save
+      </Link>,
+    );
+    expect(link).toHaveAccessibleDescription('Second');
+  });
+});
+
+describe('Link tooltip mount on the first interaction', () => {
+  it('the first hover mounts the tooltip and opens it after the delay', async () => {
+    const showPopover = withPopover();
+    render(
+      <Link href="/save" tooltip="Save your changes">
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    fireEvent.pointerEnter(link, {pointerType: 'mouse'});
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+  }, 15000);
+
+  it('keyboard focus mounts the tooltip', async () => {
+    withPopover();
+    render(
+      <Link href="/save" tooltip="Save your changes">
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    await userEvent.tab();
+    expect(document.activeElement).toBe(link);
+    // Whether focus opens it follows :focus-visible, which the browser
+    // specs check; jsdom does not model it.
+    await waitFor(
+      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
+      {timeout: 8000},
+    );
+  }, 15000);
+
+  it('a pointer that leaves before the tooltip mounts opens nothing', async () => {
+    const showPopover = withPopover();
+    render(
+      <Link href="/save" tooltip="Save your changes">
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    fireEvent.pointerEnter(link, {pointerType: 'mouse'});
+    fireEvent.pointerLeave(link, {pointerType: 'mouse'});
+    fireEvent.mouseLeave(link);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    });
+    expect(showPopover).not.toHaveBeenCalled();
   });
 });

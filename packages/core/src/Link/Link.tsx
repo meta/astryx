@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import {use, type ReactNode} from 'react';
+import {use, useId, useRef, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -29,7 +29,11 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
-import {Tooltip} from '../Tooltip';
+import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
+import {useDeferredTooltipInterest} from '../hooks/useDeferredTooltipInterest';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {attachedTooltipModule} from '../utils/attachedTooltipModule';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {Text} from '../Text';
 import {TextClampContext} from '../Text/textClampContext';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -391,6 +395,45 @@ export function Link({
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
+
+  // The tooltip attaches to the link element itself, with no wrapper. Its
+  // module loads on demand; the first hover, tap or focus mounts it. The
+  // description is the link's own hidden copy of the tooltip text, after any
+  // caller value, so a screen reader reads it once, before and after the
+  // tooltip loads.
+  const hasTooltip = tooltip != null && tooltip !== '';
+  const tooltipInterest = useDeferredTooltipInterest(
+    hasTooltip,
+    attachedTooltipModule,
+  );
+  const tooltipDescriptionId = useId();
+  const tooltipAnchorRef = useRef<HTMLElement | null>(null);
+  const linkRef = useMergedRefs<HTMLElement>(
+    ref as React.Ref<HTMLElement>,
+    hasTooltip ? tooltipAnchorRef : undefined,
+  );
+  const tooltipTriggerProps = hasTooltip
+    ? {
+        'aria-describedby':
+          [props['aria-describedby'], tooltipDescriptionId]
+            .filter(Boolean)
+            .join(' ') || undefined,
+        onPointerEnter: composeEventHandlers(
+          tooltipInterest.onPointerEnter,
+          props.onPointerEnter,
+        ),
+        onPointerLeave: composeEventHandlers(
+          tooltipInterest.onPointerLeave,
+          props.onPointerLeave,
+        ),
+        onPointerDown: composeEventHandlers(
+          tooltipInterest.onPointerDown,
+          props.onPointerDown,
+        ),
+        onFocus: composeEventHandlers(tooltipInterest.onFocus, props.onFocus),
+        onBlur: composeEventHandlers(tooltipInterest.onBlur, props.onBlur),
+      }
+    : null;
   // For a color the root paints, the label inherits it, so the label, the
   // underline, and the icon keep one color at rest and on hover, whatever a
   // theme sets on its text targets.
@@ -426,7 +469,7 @@ export function Link({
   if (renderAsButton) {
     linkElement = (
       <button
-        ref={ref as React.Ref<HTMLButtonElement>}
+        ref={linkRef as React.Ref<HTMLButtonElement>}
         type="button"
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
@@ -450,6 +493,7 @@ export function Link({
           style,
         )}
         {...props}
+        {...tooltipTriggerProps}
         {...reflectedAttributes}
         {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
         {sharedContent}
@@ -464,7 +508,7 @@ export function Link({
     // are omitted with the href.
     linkElement = (
       <a
-        ref={ref as React.Ref<HTMLAnchorElement>}
+        ref={linkRef as React.Ref<HTMLAnchorElement>}
         aria-label={label || undefined}
         tabIndex={0}
         {...mergeProps(
@@ -483,6 +527,7 @@ export function Link({
           style,
         )}
         {...props}
+        {...tooltipTriggerProps}
         {...reflectedAttributes}
         {...disabledAnchorProps(props.onKeyDown)}>
         {sharedContent}
@@ -491,7 +536,7 @@ export function Link({
   } else {
     linkElement = (
       <LinkComponent
-        ref={ref as React.Ref<HTMLAnchorElement>}
+        ref={linkRef as React.Ref<HTMLAnchorElement>}
         href={href}
         target={target}
         rel={rel}
@@ -517,18 +562,31 @@ export function Link({
           style,
         )}
         {...props}
+        {...tooltipTriggerProps}
         {...reflectedAttributes}>
         {sharedContent}
       </LinkComponent>
     );
   }
 
-  // Wrap with tooltip if provided
-  if (tooltip) {
+  if (hasTooltip) {
+    const AttachedTooltip = tooltipInterest.loadedModule?.AttachedTooltip;
     return (
-      <Tooltip content={tooltip} placement="above">
+      <>
         {linkElement}
-      </Tooltip>
+        <span id={tooltipDescriptionId} popover="manual">
+          {tooltip}
+        </span>
+        {tooltipInterest.isWanted && AttachedTooltip != null && (
+          <TooltipPresentInterestContext value={tooltipInterest.interestRef}>
+            <AttachedTooltip
+              anchorRef={tooltipAnchorRef}
+              content={tooltip}
+              placement="above"
+            />
+          </TooltipPresentInterestContext>
+        )}
+      </>
     );
   }
 
