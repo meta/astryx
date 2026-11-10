@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
   type FocusEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   type RefObject,
 } from 'react';
@@ -35,6 +36,8 @@ export interface DeferredTooltipInterest<T> {
   readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
+  readonly onMouseEnter: (event: ReactMouseEvent<HTMLElement>) => void;
+  readonly onMouseLeave: (event: ReactMouseEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
   readonly onBlur: (event: FocusEvent<HTMLElement>) => void;
 }
@@ -114,8 +117,12 @@ export function useDeferredTooltipInterest<T>(
       state.interest = null;
     }
   }, []);
+  // The pointer type of the latest pointer on the element. A tap also fires
+  // compatibility mouse events, which are no hover.
+  const lastPointerTypeRef = useRef<string | null>(null);
   const onPointerEnter = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      lastPointerTypeRef.current = event.pointerType;
       if (event.pointerType !== 'touch') {
         hold('hover');
       }
@@ -123,9 +130,18 @@ export function useDeferredTooltipInterest<T>(
     [hold],
   );
   const onPointerLeave = useCallback(() => drop('hover'), [drop]);
+  // A mounted tooltip listens for `mouseenter` too, so a mouse hover is held
+  // from either event.
+  const onMouseEnter = useCallback(() => {
+    if (lastPointerTypeRef.current !== 'touch') {
+      hold('hover');
+    }
+  }, [hold]);
+  const onMouseLeave = useCallback(() => drop('hover'), [drop]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       stopHoldingPressRef.current?.();
+      lastPointerTypeRef.current = event.pointerType;
       const state = interestRef.current;
       if (!isEnabled || state.isRead) {
         return;
@@ -184,6 +200,8 @@ export function useDeferredTooltipInterest<T>(
     onPointerEnter,
     onPointerLeave,
     onPointerDown,
+    onMouseEnter,
+    onMouseLeave,
     onFocus,
     onBlur,
   };

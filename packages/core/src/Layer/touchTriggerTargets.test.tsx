@@ -90,12 +90,20 @@ function tap(element: HTMLElement) {
   fireEvent.click(element);
 }
 
-/** The tooltip holding `text`. */
+/**
+ * The tooltip holding `text`. A control that loads its tooltip on demand also
+ * holds a hidden copy of the text as its description (Button FR12), so the
+ * tooltip layer wins over the copy.
+ */
 function layerOf(text: string): HTMLElement | null {
+  const holders = screen
+    .queryAllByText(text, {exact: false})
+    .map(element => element.closest<HTMLElement>('[popover]'))
+    .filter((element): element is HTMLElement => element != null);
   return (
-    screen
-      .queryByText(text, {exact: false})
-      ?.closest<HTMLElement>('[popover]') ?? null
+    holders.find(element => element.getAttribute('role') === 'tooltip') ??
+    holders[0] ??
+    null
   );
 }
 
@@ -109,15 +117,20 @@ function isOpen(text: string): boolean {
  * `aria-describedby` names the reason's tooltip, which is what a finger taps.
  */
 function controlDescribedBy(reason: string): HTMLElement {
-  const layer = layerOf(reason);
-  const id = layer?.id;
-  if (id == null || id === '') {
+  // The reason's tooltip, or the control's own hidden copy of it.
+  const ids = screen
+    .queryAllByText(reason, {exact: false})
+    .map(element => element.closest<HTMLElement>('[popover]')?.id)
+    .filter((id): id is string => id != null && id !== '');
+  if (ids.length === 0) {
     throw new Error(`no tooltip with an id holds "${reason}"`);
   }
   const control = Array.from(
     document.querySelectorAll<HTMLElement>('[aria-describedby]'),
   ).find(element =>
-    (element.getAttribute('aria-describedby') ?? '').split(/\s+/).includes(id),
+    (element.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .some(id => ids.includes(id)),
   );
   if (control == null) {
     throw new Error(`nothing is described by the tooltip holding "${reason}"`);
