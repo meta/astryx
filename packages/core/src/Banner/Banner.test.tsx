@@ -21,6 +21,7 @@ import {defineTheme, generateThemeCSS} from '../theme';
 import {registerIcons, resetIcons} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {hoverTooltipLayer} from '../__tests__/tooltipLayer';
 
 describe('Banner', () => {
   afterEach(() => {
@@ -190,7 +191,7 @@ describe('Banner', () => {
     ['error', 'var(--color-on-error-muted)'],
   ] as const)(
     'routes %s built-in controls to the matching on-muted role without recoloring tooltips',
-    (status, expectedRole) => {
+    async (status, expectedRole) => {
       render(
         <Banner
           status={status}
@@ -208,18 +209,14 @@ describe('Banner', () => {
         expect(
           getComputedStyle(button).getPropertyValue('--color-text-primary'),
         ).toBe(expectedRole);
-        // A tooltip that repeats the name does not describe the button
-        // (Button FR12), so find it by its text.
+        // The tooltip text is the button's description, or its name when the
+        // tooltip repeats it (Button FR12). The layer mounts on a hover.
         const describedBy = button.getAttribute('aria-describedby');
-        const tooltip =
+        const tooltipText =
           describedBy != null
-            ? document.getElementById(describedBy)
-            : (screen
-                .getAllByRole('tooltip', {hidden: true})
-                .find(
-                  el => el.textContent === button.getAttribute('aria-label'),
-                ) ?? null);
-        expect(tooltip).not.toBeNull();
+            ? (document.getElementById(describedBy)?.textContent ?? '')
+            : (button.getAttribute('aria-label') ?? '');
+        const tooltip = await hoverTooltipLayer(button, tooltipText);
         expect(
           getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
         ).not.toBe(expectedRole);
@@ -884,21 +881,17 @@ describe('Banner', () => {
       }
     });
 
-    it('keeps the bare name and tooltip for a rich title', () => {
+    it('keeps the bare name and tooltip for a rich title', async () => {
       render(
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
       // The tooltip repeats the name, so it shows but adds no description.
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Dismiss'),
-      ).toBe(true);
+      await hoverTooltipLayer(button, 'Dismiss');
     });
 
-    it('uses a translated dismissLabel for a rich title and its tooltip', () => {
+    it('uses a translated dismissLabel for a rich title and its tooltip', async () => {
       render(
         <Banner
           status="info"
@@ -911,11 +904,7 @@ describe('Banner', () => {
         name: 'Wartungshinweis schließen',
       });
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Wartungshinweis schließen'),
-      ).toBe(true);
+      await hoverTooltipLayer(button, 'Wartungshinweis schließen');
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {

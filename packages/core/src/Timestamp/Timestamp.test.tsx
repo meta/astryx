@@ -1440,9 +1440,15 @@ describe('Timestamp', () => {
         />,
       );
       const card = await openTimestampHoverCard();
-      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(
-        el => el.textContent ?? '',
-      );
+      // The value as it reads: the copy button's hidden tooltip copy (a
+      // closed popover, Button FR12) is not part of it.
+      const [rowValue] = Array.from(card.querySelectorAll('dd')).map(el => {
+        const value = el.cloneNode(true) as HTMLElement;
+        for (const hidden of value.querySelectorAll('[popover]')) {
+          hidden.remove();
+        }
+        return value.textContent ?? '';
+      });
       const copyButton = card.querySelectorAll('button')[0];
 
       fireEvent.click(copyButton);
