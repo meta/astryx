@@ -59,7 +59,11 @@ import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
 import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
-import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
+import {
+  FALLBACK_CLOSE_SELECTOR,
+  usePopoverInternal,
+  type PopoverOutsidePressEvent,
+} from './usePopover';
 import {resolvePopoverAnchor, type PopoverAnchor} from './popoverAnchor';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {usePresentationHold} from '../Layer/presentationHold';
@@ -253,6 +257,17 @@ export interface PopoverProps extends Pick<
    * @default 'hold'
    */
   anchorOutOfView?: 'hold' | 'hide';
+
+  /**
+   * Called for each press that starts and ends outside the open popover,
+   * before it closes for that press. `event.preventDefault()` keeps it open,
+   * for example when the press lands on a control that switches what the
+   * popover shows; the press itself still reaches the page. A press on a
+   * separate `anchor` is an outside press; a press on the trigger is not.
+   * Not called when `hasLightDismiss` is false, nor in a sheet
+   * (`presentation`), which always light-dismisses.
+   */
+  onOutsidePress?: (event: PopoverOutsidePressEvent) => void;
 
   /**
    * Content to display inside the popover.
@@ -547,6 +562,7 @@ export function Popover({
   anchorRef,
   anchor,
   anchorOutOfView,
+  onOutsidePress,
   content,
   placement = 'below',
   alignment = 'start',
@@ -606,6 +622,7 @@ export function Popover({
   const popover = usePopoverInternal({
     anchor,
     anchorOutOfView,
+    onOutsidePress,
     dialogLabel: label,
     role,
     isModal,

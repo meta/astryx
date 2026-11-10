@@ -53,6 +53,12 @@ export const docs = {
           default: "'hold'",
         },
         {
+          name: 'onOutsidePress',
+          type: '(event: PopoverOutsidePressEvent) => void',
+          description:
+            'Called for each press that starts and ends outside the open popover, before it closes for that press. event.preventDefault() keeps it open (the press itself still reaches the page). A press on a separate anchor is outside; a press on the trigger is not. Not called when hasLightDismiss is false, nor in a sheet.',
+        },
+        {
           name: 'content',
           type: 'ReactNode',
           description: 'Content to display inside the popover.',
@@ -336,6 +342,12 @@ export const docsZh = {
           default: "'hold'",
         },
         {
+          name: 'onOutsidePress',
+          type: '(event: PopoverOutsidePressEvent) => void',
+          description:
+            '每次在打开的弹出框外开始并结束的按压都会调用，在弹出框因此关闭之前。event.preventDefault() 使其保持打开（按压本身仍会到达页面）。在独立锚点上的按压算作外部；在触发器上的按压不算。hasLightDismiss 为 false 时或在底部面板中不会调用。',
+        },
+        {
           name: 'content',
           type: 'ReactNode',
           description: '在弹出框内显示的内容。',
@@ -617,6 +629,8 @@ export const docsDense = {
           'Element the popover sits on when not the trigger: ref or function returning one; no trigger ARIA on it; trigger-less needs isOpen.',
         anchorOutOfView:
           "While anchor out of view: 'hold' (default) keeps place; 'hide' hides without closing until it returns.",
+        onOutsidePress:
+          'Before an outside press closes it; event.preventDefault() keeps it open. Anchor press is outside, trigger press is not.',
         content: 'Content displayed inside popover.',
         placement:
           "Position relative to trigger. Logical: start/end resolve against the popover's inherited direction (RTL mirrors).",

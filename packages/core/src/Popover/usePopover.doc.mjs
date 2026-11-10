@@ -30,6 +30,12 @@ export const docs = {
       default: "'hold'",
     },
     {
+      name: 'onOutsidePress',
+      type: '(event: PopoverOutsidePressEvent) => void',
+      description:
+        'Called for each press that starts and ends outside the open popover, before it closes for that press. event.preventDefault() keeps it open without cancelling the native press. A press on a separate anchor is outside; a press on the trigger is not. Not called when hasLightDismiss is false, nor for Escape or the close button.',
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description: 'Callback fired when the popover becomes visible.',
@@ -221,6 +227,8 @@ export const docsDense = {
       'element popover sits on when not the trigger: ref or function; re-read on open, commits, and when its element leaves.',
     anchorOutOfView:
       "while anchor out of view: 'hold' (default) or 'hide' (hidden, still open).",
+    onOutsidePress:
+      'before an outside press closes it; preventDefault() keeps it open.',
     onShow: 'fires when popover becomes visible.',
     onHide: 'fires when popover hides; use to return focus when needed.',
     xstyle: 'StyleX styles for content wrapper, after default surface.',

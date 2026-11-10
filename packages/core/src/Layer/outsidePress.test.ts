@@ -126,6 +126,29 @@ describe('outsideDismissalCount', () => {
   });
 });
 
+describe('watchOutsidePress, an owner that keeps its layer open', () => {
+  it('hands the owner the press and does not count a press it declines', () => {
+    const owner = document.createElement('div');
+    const outside = document.createElement('div');
+    document.body.append(owner, outside);
+    const onOutside = vi.fn(() => false);
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(owner),
+      onOutside,
+    );
+    const before = outsideDismissalCount(document);
+    outside.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    const lift = new Event('pointerup', {bubbles: true});
+    outside.dispatchEvent(lift);
+    expect(onOutside).toHaveBeenCalledWith(lift);
+    expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+    owner.remove();
+    outside.remove();
+  });
+});
+
 describe('watchOutsidePress, closing on a pan', () => {
   afterEach(() => {
     document.body.replaceChildren();
