@@ -279,7 +279,7 @@ describe('the allowlist', () => {
       {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
     ]);
     expect(formatReport(comparison)).toContain(
-      'Stale allowlist rows (the crossing no longer occurs; remove the row)',
+      '`Link/Link` → `Tooltip` no longer crosses: delete its row from the Allowlist table in docs/architecture/component-import-boundaries.md in this pull request.',
     );
   });
 

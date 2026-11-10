@@ -611,19 +611,20 @@ export function formatReport(comparison, {costs = new Map(), sizes = []} = {}) {
       lines.push(crossingLine(row, costCell(row)));
       if (added.length > 0)
         lines.push(`    reached but not listed: ${added.join(', ')}`);
-      if (removed.length > 0)
-        lines.push(`    listed but no longer reached: ${removed.join(', ')}`);
+      if (removed.length > 0) {
+        lines.push(
+          `    listed but no longer reached: ${removed.join(', ')}. Delete them from this row's entries in ${RECORD} in this pull request.`,
+        );
+      }
       lines.push(...chainLines(row));
     }
     lines.push('');
   }
   if (comparison.stale.length > 0) {
-    lines.push(
-      'Stale allowlist rows (the crossing no longer occurs; remove the row):',
-    );
+    lines.push('Stale allowlist rows:');
     for (const row of comparison.stale) {
       lines.push(
-        `| \`${row.from}\` → \`${row.to}\` | ${row.entries.join(', ')} |`,
+        `    - \`${row.from}\` → \`${row.to}\` no longer crosses: delete its row from the Allowlist table in ${RECORD} in this pull request.`,
       );
     }
     lines.push('');
