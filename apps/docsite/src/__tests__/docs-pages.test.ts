@@ -2,13 +2,21 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  SIDEBAR_PARENTS,
+  applySidebarParents,
   mergeFlatTopics,
   namespaceCategory,
   namespacePage,
+  rootNamespacePages,
   sectionAnchors,
+  withCliCommands,
 } from '../../scripts/docs-pages.mjs';
 import {buildOutline} from '../components/docs/docOutline';
-import type {DocSection} from '../generated/docsRegistry';
+import {
+  docRedirects,
+  docTopics,
+  type DocSection,
+} from '../generated/docsRegistry';
 
 const section = (title: string, text = `${title} text.`) => ({
   title,
@@ -117,9 +125,9 @@ describe('a flat topic split into a docs-tree namespace', () => {
     const read = async () => ({
       type: 'docs.node',
       data: {
-        route: 'unorganized',
+        route: 'foundations',
         kind: 'namespace',
-        title: 'Unorganized',
+        title: 'Foundations',
         content: [],
         slots: [
           {
@@ -129,7 +137,7 @@ describe('a flat topic split into a docs-tree namespace', () => {
         ],
       },
     });
-    expect(await namespacePage(read, 'unorganized')).toBeNull();
+    expect(await namespacePage(read, 'foundations')).toBeNull();
   });
 });
 
@@ -202,6 +210,158 @@ describe('a page for part of a namespace', () => {
   });
 });
 
+describe('a nested namespace with a page of its own', () => {
+  const guideNode = (route: string, title: string) => ({
+    route,
+    kind: 'generic',
+    title,
+    sections: [section(title)],
+  });
+  const extras = {
+    route: 'kit/extras',
+    kind: 'namespace',
+    title: 'Extras',
+    summary: 'Extra parts for the kit.',
+    content: [{type: 'prose', text: 'Extras fit every kit.'}],
+    slots: [
+      {
+        name: 'guides',
+        children: [guideNode('kit/extras/fit', 'Fit an extra')],
+      },
+    ],
+  };
+  const reader = async (
+    route?: string,
+    _section?: string,
+    options: {depth?: number | 'all'} = {},
+  ) => {
+    if (route === 'kit' && options.depth === 'all') {
+      return {
+        type: 'docs.node',
+        data: {
+          route: 'kit',
+          kind: 'namespace',
+          title: 'Kit',
+          summary: 'Build the kit.',
+          content: [],
+          slots: [
+            {
+              name: 'guides',
+              children: [guideNode('kit/start', 'Start'), extras],
+            },
+          ],
+        },
+      };
+    }
+    if (route === 'kit/extras' && options.depth === 'all') {
+      return {type: 'docs.node', data: extras};
+    }
+    return {type: 'docs.detail', data: {category: 'guide', sections: []}};
+  };
+  const pages = () =>
+    rootNamespacePages(reader, 'kit', {nested: ['kit/extras']});
+
+  it('leaves the nested namespace off its root page', async () => {
+    const {root} = await pages();
+    const page = root?.page as {
+      topic: string;
+      sections: Array<{title: string}>;
+    };
+    expect(page.topic).toBe('kit');
+    expect(page.sections.map(s => s.title)).toEqual(['Start']);
+    expect(root?.redirects).toEqual({'kit-start': '/docs/kit#start'});
+  });
+
+  it('gives it a full page at its slug, under its root page', async () => {
+    const {nested} = await pages();
+    expect(nested).toHaveLength(1);
+    const [extrasPage] = nested;
+    expect(extrasPage.page).toMatchObject({
+      topic: 'kit-extras',
+      title: 'Extras',
+      description: 'Extra parts for the kit.',
+      category: 'guide',
+      parent: 'kit',
+    });
+    const page = extrasPage.page as {sections: Array<{title: string}>};
+    expect(page.sections.map(s => s.title)).toEqual([
+      'Overview',
+      'Fit an extra',
+    ]);
+    expect(extrasPage.redirects).toEqual({
+      'kit-extras-fit': '/docs/kit-extras#fit-an-extra',
+    });
+  });
+
+  it('keeps a root namespace with no nested page to one page', async () => {
+    const {root, nested} = await rootNamespacePages(
+      splitReader([
+        {
+          route: 'widgets/basics',
+          title: 'Basics',
+          category: 'foundations',
+          sections: widgetsBefore.sections,
+        },
+      ]),
+      'widgets',
+    );
+    expect(root?.page).toEqual(widgetsBefore);
+    expect(nested).toEqual([]);
+  });
+});
+
+describe('sidebar parents', () => {
+  const pageAt = (topic: string, parent?: string) => ({
+    topic,
+    ...(parent ? {parent} : {}),
+  });
+
+  it('puts each named page under its parent and leaves the rest alone', () => {
+    const pages = applySidebarParents(
+      [pageAt('icons'), pageAt('icon-files'), pageAt('kit-extras', 'kit')],
+      new Map([['icon-files', 'icons']]),
+    );
+    expect(pages).toEqual([
+      pageAt('icons'),
+      pageAt('icon-files', 'icons'),
+      pageAt('kit-extras', 'kit'),
+    ]);
+  });
+
+  it('fails the build on a missing page, a page under itself, or a second level', () => {
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['gone', 'icons']])),
+    ).toThrow(/gone/);
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['icons', 'gone']])),
+    ).toThrow(/gone/);
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['icons', 'icons']])),
+    ).toThrow(/two different pages/);
+    expect(() =>
+      applySidebarParents(
+        [pageAt('a'), pageAt('b', 'a'), pageAt('c')],
+        new Map([['c', 'b']]),
+      ),
+    ).toThrow(/itself under another page/);
+  });
+
+  it('places the site pages it names, at unchanged URLs', () => {
+    for (const [child, parent] of SIDEBAR_PARENTS) {
+      expect(docTopics.find(topic => topic.topic === child)?.parent).toBe(
+        parent,
+      );
+      expect(docTopics.some(topic => topic.topic === parent)).toBe(true);
+      expect(docRedirects).not.toHaveProperty(child);
+    }
+    expect(SIDEBAR_PARENTS.get('cli-experimental-icon-sets')).toBe('icons');
+    expect(SIDEBAR_PARENTS.get('cli-experimental-icon-set-files')).toBe(
+      'icons',
+    );
+    expect(SIDEBAR_PARENTS.get('styling')).toBe('styling-overview');
+  });
+});
+
 describe('namespaceCategory', () => {
   it('prefers the namespace, then foundations only when every guide is', () => {
     expect(namespaceCategory('guide', ['foundations'])).toBe('guide');
@@ -266,6 +426,47 @@ describe('sectionAnchors', () => {
     ];
     expect(sectionAnchors(sections)).toEqual(
       buildOutline(sections as DocSection[]).sectionIds,
+    );
+  });
+});
+
+describe('CLI commands on docsite pages', () => {
+  it('prefixes commands in prose, lists, tables and shell code only', () => {
+    const show = (text: string, lang: string | null = null) =>
+      lang === 'tsx' ? text : text.replaceAll('`astryx', '`npx astryx');
+    const [shown] = withCliCommands(
+      [
+        {
+          title: 'Run it',
+          content: [
+            {type: 'prose', text: 'Run `astryx docs`.'},
+            {type: 'list', items: ['`astryx doctor`']},
+            {type: 'table', rows: [['Neutral', 'astryx theme add neutral']]},
+            {type: 'code', lang: 'tsx', code: '`astryx docs`'},
+          ],
+        },
+      ],
+      show,
+      'npx astryx',
+    );
+    expect(shown.content).toEqual([
+      {type: 'prose', text: 'Run `npx astryx docs`.'},
+      {type: 'list', items: ['`npx astryx doctor`']},
+      {type: 'table', rows: [['Neutral', 'npx astryx theme add neutral']]},
+      {type: 'code', lang: 'tsx', code: '`astryx docs`'},
+    ]);
+  });
+
+  it('shows the Authoring page a command that runs before any install', () => {
+    const page = docTopics.find(topic => topic.topic === 'authoring');
+    const section = page?.sections.find(
+      each => each.title === 'Verify the packed import',
+    );
+    expect(section?.content).toContainEqual(
+      expect.objectContaining({
+        type: 'code',
+        code: 'npx @astryxdesign/cli integration verify',
+      }),
     );
   });
 });

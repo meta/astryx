@@ -11,8 +11,9 @@
  * @input A docs reader with the CLI docs API's shape
  *   (`docs(topic, section, options)` from `@astryxdesign/cli/api`) and the
  *   flat topics the site already built.
- * @output Doc pages ({topic, title, description, category, sections}) and
- *   redirects from each guide's own slug to its section on the full page.
+ * @output Doc pages ({topic, title, description, category, sections, and
+ *   the sidebar `parent` of a page shown under another}) and redirects from
+ *   each guide's own slug to its section on the full page.
  * @position Used by generate-data.mjs; tested on its own with a fake reader.
  */
 
@@ -25,34 +26,93 @@
 export const GUIDE_PAGE_NAMESPACES = new Set(['cli']);
 
 /**
- * The pages a root namespace in GUIDE_PAGE_NAMESPACES shows, as the docsite
- * listed them before the CLI's integration guide was split into short guides:
- * "CLI Integrations" and "Writing docs". Each is one full page of the
- * namespace at `route` (minus the routes in `except`, which another page
- * holds), at `slug`, so every guide slug below it redirects to its section
- * there. `aliases` are older slugs that redirect to the page.
+ * The pages a root namespace in GUIDE_PAGE_NAMESPACES shows besides one page
+ * per guide: each is one full page of the namespace at `route` (minus the
+ * routes in `except`, which another page holds), at `slug`, so every guide
+ * slug below it redirects to its section there. `aliases` are older slugs
+ * that redirect to the page. The integration guides that `cli` once held as
+ * two such pages now sit under `authoring`, an ordinary root namespace.
  * @type {Map<string, Array<{route: string, slug: string, title: string, except?: string[], aliases?: string[]}>>}
  */
-export const GUIDE_NAMESPACE_PAGES = new Map([
+export const GUIDE_NAMESPACE_PAGES = new Map();
+
+/**
+ * Nested namespaces that have a page of their own instead of a part of their
+ * root namespace's page, by root. The root page leaves each one out, and each
+ * one is a full page at its route's slug, with `parent` set to the root page's
+ * slug so the sidebar shows it under that page.
+ * @type {Map<string, string[]>}
+ */
+export const NESTED_NAMESPACE_PAGES = new Map();
+
+/**
+ * Pages the sidebar shows under another page, child slug to parent slug. The
+ * child keeps its URL and moves into its parent's sidebar group. A nested
+ * namespace's page (NESTED_NAMESPACE_PAGES) has its root page as parent with
+ * no entry here.
+ * @type {Map<string, string>}
+ */
+export const SIDEBAR_PARENTS = new Map([
+  ['cli-experimental-icon-sets', 'icons'],
+  ['cli-experimental-icon-set-files', 'icons'],
+  ['styling', 'styling-overview'],
+]);
+
+/**
+ * Older slugs of a root namespace's page, which redirect to it: global mode
+ * was `cli/global`, and before that the `cli/install-once` guide; the
+ * integration guides were the CLI Integrations page before `authoring` took
+ * them.
+ * @type {Map<string, string[]>}
+ */
+export const ROOT_PAGE_ALIASES = new Map([
+  ['global', ['cli-global', 'cli-install-once']],
+  ['authoring', ['cli-integrations', 'cli-integrations-overview']],
+]);
+
+/**
+ * Older guide slugs of a root namespace, from before its guides moved there:
+ * the integration guides were `cli/integrations/…` (/docs/cli-integrations-…)
+ * before `authoring` took them, and the Writing docs page and one older alias
+ * pointed into them. Each opens where its guide's new slug does.
+ * @type {Map<string, {prefix: string, pages: Record<string, string>}>}
+ */
+export const MOVED_GUIDE_SLUGS = new Map([
   [
-    'cli',
-    [
-      {
-        route: 'cli/integrations',
-        slug: 'cli-integrations',
-        title: 'CLI Integrations',
-        except: ['cli/integrations/building-blocks/docs'],
-        aliases: ['cli-integrations-overview'],
+    'authoring',
+    {
+      prefix: 'cli-integrations',
+      pages: {
+        'cli-writing-docs': 'authoring-building-blocks-docs',
+        'cli-integrations-docs-add-a-topic':
+          'authoring-building-blocks-docs-add-a-topic',
       },
-      {
-        route: 'cli/integrations/building-blocks/docs',
-        slug: 'cli-writing-docs',
-        title: 'Writing docs',
-        aliases: ['cli-integrations-docs-add-a-topic'],
-      },
-    ],
+    },
   ],
 ]);
+
+/**
+ * Redirects for a root namespace's older guide slugs (MOVED_GUIDE_SLUGS),
+ * read off the redirects its page made for the guides' new slugs.
+ * @param {string} root
+ * @param {Record<string, string>} redirects the page's redirects
+ * @returns {Record<string, string>}
+ */
+export function movedGuideRedirects(root, redirects) {
+  const moved = MOVED_GUIDE_SLUGS.get(root);
+  if (!moved) return {};
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [slug, href] of Object.entries(redirects)) {
+    if (slug.startsWith(`${root}-`)) {
+      out[`${moved.prefix}-${slug.slice(root.length + 1)}`] = href;
+    }
+  }
+  for (const [old, now] of Object.entries(moved.pages)) {
+    if (Object.hasOwn(redirects, now)) out[old] = redirects[now];
+  }
+  return out;
+}
 
 /**
  * Flat topics whose full text the site shows on another topic's page. The
@@ -121,6 +181,43 @@ export function withoutResolvedTokens(sections) {
 }
 
 /**
+ * Doc text with its CLI commands shown the way a reader runs them. Docs write
+ * commands as bare `astryx ...`; the CLI prefixes them when it prints a doc,
+ * and the docsite does the same with its own door name. `show(text, lang)`
+ * prefixes the commands in one piece of text: prose and list items (`lang`
+ * null), or one code block's body in its language. A table cell that is a
+ * whole command is prefixed too, the way `astryx docs` prints it.
+ * @param {any[]} sections
+ * @param {(text: string, lang?: string | null) => string} show
+ * @param {string} stem the invocation `show` prefixes with
+ */
+export function withCliCommands(sections, show, stem) {
+  /** @param {string} cell */
+  const cell = cell =>
+    /^astryx(\s|$)/.test(cell ?? '')
+      ? `${stem}${cell.slice('astryx'.length)}`
+      : show(cell ?? '');
+  return sections.map(section => ({
+    ...section,
+    content: (section.content ?? []).map(block => {
+      switch (block?.type) {
+        case 'prose':
+        case 'heading':
+          return {...block, text: show(block.text ?? '')};
+        case 'code':
+          return {...block, code: show(block.code ?? '', block.lang ?? '')};
+        case 'list':
+          return {...block, items: (block.items ?? []).map(item => show(item))};
+        case 'table':
+          return {...block, rows: (block.rows ?? []).map(row => row.map(cell))};
+        default:
+          return block;
+      }
+    }),
+  }));
+}
+
+/**
  * The sidebar group of a namespace page: the namespace's own category when it
  * declares one, otherwise `foundations` when every guide under it is a
  * foundations doc, otherwise `guide`.
@@ -142,8 +239,9 @@ export function namespaceCategory(own, guideCategories) {
  * starts on the page. Typed docs (commands, API docs) open only in
  * `astryx docs` and add nothing to the page.
  *
- * A namespace with no guide placed under it (the tree's Unorganized level,
- * whose children are flat topics with pages of their own) has no page.
+ * A namespace with no guide placed under it (a generated topic level, Guides
+ * or Foundations, whose children are flat topics with pages of their own) has
+ * no page.
  * @param {(topic?: string, section?: string, options?: object) => Promise<any>} readDocs
  * @param {string} route
  * @param {{slug?: string, title?: string, except?: string[], aliases?: string[]}} [options]
@@ -208,6 +306,66 @@ export async function namespacePage(readDocs, route, options = {}) {
     },
     redirects,
   };
+}
+
+/**
+ * The pages of a root namespace: its own page without its nested namespaces
+ * that have a page of their own, and one page for each of those, marked with
+ * the root page as its `parent`. A namespace with no guide below it has no
+ * page.
+ * @param {(topic?: string, section?: string, options?: object) => Promise<any>} readDocs
+ * @param {string} root
+ * @param {{aliases?: string[], nested?: string[]}} [options] older slugs of
+ *   the root page, and the nested namespaces with a page of their own
+ *   (NESTED_NAMESPACE_PAGES by default)
+ * @returns {Promise<{root: {page: object, redirects: Record<string, string>} | null, nested: Array<{page: object, redirects: Record<string, string>}>}>}
+ */
+export async function rootNamespacePages(readDocs, root, options = {}) {
+  const {
+    aliases = [],
+    nested: nestedRoutes = NESTED_NAMESPACE_PAGES.get(root) ?? [],
+  } = options;
+  const rootPage = await namespacePage(readDocs, root, {
+    aliases,
+    except: nestedRoutes,
+  });
+  const nested = [];
+  for (const route of nestedRoutes) {
+    const page = await namespacePage(readDocs, route, {slug: routeSlug(route)});
+    if (!page) continue;
+    if (rootPage) page.page.parent = rootPage.page.topic;
+    nested.push(page);
+  }
+  return {root: rootPage, nested};
+}
+
+/**
+ * Set the sidebar `parent` of each page that SIDEBAR_PARENTS names. Nesting is
+ * one level deep, so a parent cannot have a parent of its own.
+ * @param {Array<{topic: string, parent?: string}>} pages
+ * @param {Map<string, string>} [parents]
+ * @throws when an entry names a page that does not exist, or nests deeper
+ *   than one level
+ */
+export function applySidebarParents(pages, parents = SIDEBAR_PARENTS) {
+  const bySlug = new Map(pages.map(page => [page.topic, page]));
+  for (const [child, parent] of parents) {
+    const page = bySlug.get(child);
+    if (!page || !bySlug.has(parent) || child === parent) {
+      throw new Error(
+        `docs: sidebar parent "${child}" -> "${parent}" needs two different pages.`,
+      );
+    }
+    page.parent = parent;
+  }
+  for (const page of pages) {
+    if (page.parent && bySlug.get(page.parent)?.parent) {
+      throw new Error(
+        `docs: "${page.topic}" is under "${page.parent}", which is itself under another page.`,
+      );
+    }
+  }
+  return pages;
 }
 
 /**

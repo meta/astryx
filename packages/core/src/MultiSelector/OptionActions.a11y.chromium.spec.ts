@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file OptionActions.a11y.chromium.spec.ts
@@ -6,13 +7,20 @@
  *   built Storybook.
  * @output Real-engine proof for option actions: the action is visible at rest
  *   beside its row (`spec:AST-058` FR8), the keyboard reaches it through the
- *   inline-end arrow in both directions and fires it with Enter, and the
- *   highlight follows a real mouse across rows and actions.
+ *   inline-end arrow in both directions and fires it with Enter, the active
+ *   action cell draws the standard focus ring when the shared input modality
+ *   is keyboard and not after pointer input, and the highlight follows a real
+ *   mouse across rows and actions.
  * @position Run with `pnpm test:a11y-contract`; paint, pointer paths and the
  *   active descendant as an engine exposes them are not jsdom claims.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -141,6 +149,114 @@ test('the keyboard reaches an action through the inline-end arrow and fires it w
     .toBe('gridcell:Edit Bug');
   await search.press('ArrowLeft');
   await expect.poll(async () => activeDescendant(page)).toBe('row:Bug');
+});
+
+test('the active action cell draws the standard focus ring', async ({page}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-multiselector--row-actions&viewMode=story`,
+  );
+  const search = page.getByRole('combobox');
+  await expect(search).toBeFocused();
+  await search.press('ArrowDown'); // select-all
+  await search.press('ArrowDown'); // Feature (no action)
+  await search.press('ArrowDown'); // Bug
+  await search.press('ArrowRight');
+  await expect
+    .poll(async () => activeDescendant(page))
+    .toBe('gridcell:Edit Bug');
+  const ring = await page.evaluate(() => {
+    const id = document.activeElement?.getAttribute('aria-activedescendant');
+    const cell = id ? document.getElementById(id) : null;
+    if (!cell) {
+      return null;
+    }
+    const cs = getComputedStyle(cell);
+    // The ring the focus tokens describe, resolved by the browser on a probe.
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'outline-width:var(--focus-outline-width);outline-style:var(--focus-outline-style);outline-color:var(--focus-outline-color);outline-offset:var(--focus-outline-offset)';
+    document.body.appendChild(probe);
+    const want = getComputedStyle(probe);
+    const result = {
+      style: cs.outlineStyle,
+      width: cs.outlineWidth,
+      color: cs.outlineColor,
+      offset: cs.outlineOffset,
+      wantStyle: want.outlineStyle,
+      wantWidth: want.outlineWidth,
+      wantColor: want.outlineColor,
+      wantOffset: want.outlineOffset,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(ring).not.toBeNull();
+  expect(ring!.style).not.toBe('none');
+  expect(ring!.width).not.toBe('0px');
+  expect(ring!.style).toBe(ring!.wantStyle);
+  expect(ring!.width).toBe(ring!.wantWidth);
+  expect(ring!.color).toBe(ring!.wantColor);
+  expect(ring!.offset).toBe(ring!.wantOffset);
+  // Back on the option cell, the action cell drops the ring.
+  await search.press('ArrowLeft');
+  await expect.poll(async () => activeDescendant(page)).toBe('row:Bug');
+  const after = await page
+    .getByRole('row', {name: 'Bug'})
+    .locator('[data-multi-selector-action-cell]')
+    .evaluate(cell => getComputedStyle(cell).outlineStyle);
+  expect(after).toBe('none');
+});
+
+test('the action-cell ring follows the shared input modality', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-multiselector--row-actions&viewMode=story`,
+  );
+  const search = page.getByRole('combobox');
+  await expect(search).toBeFocused();
+  const actionCell = (name: string) =>
+    page.getByRole('row', {name}).locator('[data-multi-selector-action-cell]');
+  const outlineStyle = async (name: string) =>
+    actionCell(name).evaluate(cell => getComputedStyle(cell).outlineStyle);
+  const hover = async (name: string) => {
+    const cell = await box(actionCell(name));
+    await page.mouse.move(cell.x + cell.width / 2, cell.y + cell.height / 2, {
+      steps: 6,
+    });
+  };
+
+  // Pointer input: a click into the search field, then a hover onto an
+  // action, moves the highlight without the ring, and leaves none behind.
+  await search.click();
+  await hover('Bug');
+  await expect
+    .poll(async () => activeDescendant(page))
+    .toBe('gridcell:Edit Bug');
+  expect(await outlineStyle('Bug')).toBe('none');
+  // A modifier chord is not keyboard navigation for the shared tracker.
+  await search.press('Control+ArrowRight');
+  expect(await outlineStyle('Bug')).toBe('none');
+  await page.mouse.move(1, 1, {steps: 6});
+  expect(await outlineStyle('Bug')).toBe('none');
+
+  // Keyboard input: back onto the same cell, the ring is drawn.
+  await search.press('ArrowLeft');
+  await expect.poll(async () => activeDescendant(page)).toBe('row:Bug');
+  await search.press('ArrowRight');
+  await expect
+    .poll(async () => activeDescendant(page))
+    .toBe('gridcell:Edit Bug');
+  expect(await outlineStyle('Bug')).not.toBe('none');
+
+  // Still keyboard-driven, a hover that moves the highlight to another
+  // row's action carries the ring with it.
+  await hover('P0');
+  await expect
+    .poll(async () => activeDescendant(page))
+    .toBe('gridcell:Edit P0');
+  expect(await outlineStyle('P0')).not.toBe('none');
+  expect(await outlineStyle('Bug')).toBe('none');
 });
 
 test('under RTL the inline-end arrow is ArrowLeft', async ({page}) => {

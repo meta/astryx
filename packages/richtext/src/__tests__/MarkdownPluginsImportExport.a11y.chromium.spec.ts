@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file MarkdownPluginsImportExport.a11y.chromium.spec.ts
@@ -15,7 +16,7 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -23,7 +24,7 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 
 const STORYBOOK_DIR = process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR;
-const STORY = 'lab-richtexteditor--markdown-plugins-import-export';
+const STORY = 'richtext-richtexteditor--markdown-plugins-import-export';
 
 let storybook: StaticServer;
 
@@ -96,6 +97,40 @@ test('editing the text beside the nodes keeps every node and its marks', async (
   expect(edited).toContain(
     ':::note\nand this note starts on the next line.\n:::',
   );
+  expect(errors).toEqual([]);
+});
+
+// spec:AST-061 FR3: the first block's leading margin and the last block's
+// trailing margin are zero, a plugin block included. Lexical puts a zero-size
+// caret boundary element beside a decorator at either edge of the document, so
+// a plugin block there is not literally the first or last child.
+test('a plugin block at either edge of the document adds no outer margin', async ({
+  page,
+}) => {
+  const errors = await openStory(page);
+  await page
+    .locator('[data-plugins-input]')
+    .fill(':::note\nfirst\n:::\n\nBetween the notes.\n\n:::note\nlast\n:::');
+  const editor = page.locator('[contenteditable="true"]');
+  await expect(editor.getByText('Between the notes.')).toBeVisible();
+  const margins = await editor.evaluate(root => {
+    const blocks = [...root.children].filter(
+      child => !child.hasAttribute('data-lexical-decorator-boundary'),
+    );
+    const first = blocks[0];
+    const last = blocks[blocks.length - 1];
+    return {
+      first: first?.hasAttribute('data-lexical-decorator') ?? false,
+      last: last?.hasAttribute('data-lexical-decorator') ?? false,
+      start: first == null ? null : getComputedStyle(first).marginTop,
+      end: last == null ? null : getComputedStyle(last).marginBottom,
+    };
+  });
+  // Both edge blocks are the plugin's note blocks.
+  expect(margins.first).toBe(true);
+  expect(margins.last).toBe(true);
+  expect(margins.start).toBe('0px');
+  expect(margins.end).toBe('0px');
   expect(errors).toEqual([]);
 });
 

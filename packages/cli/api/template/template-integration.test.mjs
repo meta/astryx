@@ -12,20 +12,28 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
+import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./template.mjs')} */
+const {
   discoverAllWithErrors,
   discoverCoreTemplates,
   template,
-} from './template.mjs';
-import {search} from '../search/search.mjs';
-import {build} from '../build/build.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
+} = require('./template.mjs');
+/** @type {typeof import('../search/search.mjs')} */
+const {search} = require('../search/search.mjs');
+/** @type {typeof import('../build/build.mjs')} */
+const {build} = require('../build/build.mjs');
+/** @type {typeof import('../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../test-utils/run-cli.mjs');
 
 let tmpDir;
 let originalCwd;
 
 function makeConsumer() {
-  const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-template-it-'));
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-template-it-'));
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({name: 'consumer'}),
@@ -736,7 +744,7 @@ describe('integration template discovery', () => {
     const command = await runCli(['template', 'shell-side-nav'], tmpDir);
     expect(command.status).toBe(0);
     expect(command.stderr).toContain('@acme/extra has 1 integration issue');
-    expect(command.stderr).toContain('astryx doctor');
+    expect(command.stderr).toMatch(/Run: .+ doctor/);
 
     const doctor = await runCli(['doctor'], tmpDir);
     expect(doctor.status).toBe(0);

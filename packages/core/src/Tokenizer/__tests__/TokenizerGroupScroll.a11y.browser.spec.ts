@@ -141,7 +141,7 @@ for (const {story, start, end} of [
   });
 }
 
-test('forced colors restore the native scrollbar and drop the fades', async ({
+test('forced colors restore a thin native scrollbar and drop the fades', async ({
   page,
 }) => {
   await mount(page, END_CONTROLS);
@@ -171,7 +171,7 @@ test('forced colors restore the native scrollbar and drop the fades', async ({
   );
   await expect
     .poll(presentation)
-    .toEqual({scrollbarWidth: 'auto', mask: 'none'});
+    .toEqual({scrollbarWidth: 'thin', mask: 'none'});
 });
 
 test('a disabled strip is a named Tab stop only while it overflows', async ({

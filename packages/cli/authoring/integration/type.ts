@@ -11,7 +11,7 @@
  * The manifest module may also carry `debug` and `gapReport` NAMED exports.
  * They are not fields here on purpose: a CLI released before a given manifest
  * field existed could reject it and lose every contribution, while an unknown
- * named export is simply not read. See `astryx docs cli/integrations`.
+ * named export is simply not read. See `astryx docs authoring`.
  */
 export interface AstryxIntegration {
   /** Stable logical provider ID. Omit to use package.json#name. Set this only
@@ -38,12 +38,32 @@ export interface AstryxIntegration {
    *  lower-kebab theme directory contains a source module and mandatory
    *  same-stem, strongly typed `.doc.mjs` descriptor. */
   themes?: string;
+  /** Experimental contribution roots (spec:AST-017 FR27).
+   *  @experimental Their shape may change or be removed in a patch release. */
+  experimental?: {
+    /** Relative path to the icon-set root (spec:AST-084). Each lower-kebab
+     *  directory under it is one icon set holding a strongly typed
+     *  `<name>.doc.mjs` IconSetDoc and its `<name>.icons.json` data file. */
+    iconSets?: string;
+  };
   /** Static package guidance appended to the CLI-owned managed agent block. */
   agentDocs?: {
     append?: readonly string[];
   };
   /** Where to file issues/feedback for this integration. */
   issuesUrl?: string;
+  /** Link to this integration's docs site, such as its home page. The CLI
+   *  accepts it as a known field; catalogs that list the package may show
+   *  it. */
+  docsiteUrl?: string;
+  /** The command that runs the Astryx CLI for this package's users, such as
+   *  `acme astryx`. Every command the CLI prints in a project that loads
+   *  this package starts with it, in place of the package-manager prefix
+   *  (`pnpm exec astryx`, `yarn astryx`). One line, no subcommand. When two
+   *  loaded integrations set different commands, neither is used and
+   *  `astryx doctor` warns. An invalid value is ignored with a warning; the
+   *  rest of the manifest still loads. JSON output keeps commands bare. */
+  cliCommand?: string;
 }
 
 /**

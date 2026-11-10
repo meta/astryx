@@ -4,14 +4,14 @@
 
 /**
  * @file RichTextEditor.tsx
- * @input Uses React, useId, Lexical (lexical + @lexical/react, composed through
+ * @input Uses React, useId, a declared DOM boundary, Lexical (lexical + @lexical/react, composed through
  *   LexicalExtensionComposer), Field, VisuallyHidden, useInputStatusIcon,
  *   mergeProps, design tokens
  * @output Exports an accessibly labelled RichTextEditor component with a flush
  *   top toolbar slot, configurable editable-surface minimum height, and distinct
  *   read-only and disabled states that follow prop changes, RichTextEditorProps,
  *   RichTextEditorStatus, RichTextEditorStatusType, RichTextEditorSize
- * @position Experimental (richtext) implementation; consumed by the package index.ts and
+ * @position @astryxdesign/richtext implementation; consumed by the package index.ts and
  *   re-exported from @astryxdesign/richtext. Tested by RichTextEditor.test.tsx.
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -20,11 +20,8 @@
  * - /packages/richtext/src/index.ts (exports if types change)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (storybook stories)
  *
- * NOTE: This is an EXPERIMENTAL component in @astryxdesign/richtext (published only under
- * the `@canary` dist-tag, never as stable `latest`). It is the initial landing for the
- * OSS Lexical editor RFC; the goal is graduation to @astryxdesign/core after the
- * Component Specification Protocol. `lexical` and `@lexical/*` are OPTIONAL peer
- * dependencies — install them to use this component.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them to
+ * use this component.
  */
 
 import {
@@ -34,7 +31,6 @@ import {
   useMemo,
   useRef,
   useState,
-  forwardRef,
   type ReactNode,
   type Ref,
 } from 'react';
@@ -58,7 +54,12 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
+import {
+  isRenderable,
+  mergeProps,
+  themeProps,
+  type SizeValue,
+} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
 
 import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
@@ -76,13 +77,19 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
+import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
+import {CodeTabPlugin} from './CodeTabPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {DisabledLinkGuardPlugin} from './DisabledLinkGuardPlugin';
+import {SelectAllScopePlugin} from './SelectAllScopePlugin';
+import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
-export type {Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
 import {$exportMarkdownKeepingSource} from './markdownSource';
@@ -102,6 +109,7 @@ import {
   type LexicalNode,
   type EditorThemeClasses,
 } from 'lexical';
+import {rendererManagedRootProps} from './privateAttributes/layerPortalBoundary.stylex';
 
 /**
  * Serialized state for an empty editor: a root containing a single empty
@@ -231,7 +239,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 });
 
@@ -240,8 +248,8 @@ const dynamicStyles = stylex.create({
 });
 
 const editorBodySizeStyles = stylex.create({
-  sm: {},
-  md: {},
+  // Only `lg` adds block padding; `sm` and `md` take the base body spacing.
+  // An empty entry each would read as deliberate size-specific styling.
   lg: {
     paddingBlock: spacingVars['--spacing-2'],
   },
@@ -307,6 +315,12 @@ export interface RichTextEditorProps extends Omit<
   BaseProps,
   'onChange' | 'defaultValue'
 > {
+  /**
+   * Imperative handle for callers that manage the editor from outside. In
+   * React 19 `ref` is an ordinary prop, so it is declared here rather than
+   * supplied by a `forwardRef` wrapper.
+   */
+  ref?: Ref<RichTextEditorRef>;
   /** Label text for the editor (always rendered for accessibility). */
   label: string;
   /**
@@ -349,7 +363,8 @@ export interface RichTextEditorProps extends Omit<
   isReadOnly?: boolean;
   /**
    * Whether the editor is disabled: non-editable, dimmed, out of the tab
-   * order, and announced as disabled. Wins when `isReadOnly` is also set.
+   * order, and announced as disabled. Its links do not navigate and are not
+   * tab stops. Wins when `isReadOnly` is also set.
    * Takes effect when changed after mount.
    * @default false
    */
@@ -368,7 +383,7 @@ export interface RichTextEditorProps extends Omit<
    *   info-tip button that reveals the message
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`).
@@ -441,6 +456,14 @@ export interface RichTextEditorProps extends Omit<
    * serializable props.
    */
   markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /** Whether to automatically focus the editor on mount. @default false */
   hasAutoFocus?: boolean;
   /**
@@ -469,9 +492,8 @@ export interface RichTextEditorProps extends Omit<
 
 /**
  * A WYSIWYG rich-text editor built on Lexical, styled with Astryx design
- * tokens. Experimental — ships from `@astryxdesign/richtext` (canary). `lexical` and
- * `@lexical/*` are optional peer dependencies — install them to use this
- * component.
+ * tokens. Ships from `@astryxdesign/richtext`. `lexical` and `@lexical/*` are
+ * optional peer dependencies — install them to use this component.
  *
  * The editor is intentionally minimal and extensible: pass `toolbar`, `nodes`,
  * and `plugins` to layer richer behaviour (formatting, mentions, hover cards)
@@ -492,44 +514,40 @@ export interface RichTextEditorProps extends Omit<
  * />
  * ```
  */
-export const RichTextEditor = forwardRef<
-  RichTextEditorRef,
-  RichTextEditorProps
->(function RichTextEditor(
-  {
-    label,
-    isLabelHidden = false,
-    description,
-    isOptional = false,
-    isRequired = false,
-    defaultValue,
-    onChange,
-    placeholder,
-    isReadOnly = false,
-    isDisabled = false,
-    status,
-    statusVariant = 'attached',
-    width,
-    minHeight = '4.5rem',
-    labelTooltip,
-    size: sizeProp,
-    nodes,
-    toolbar,
-    plugins,
-    hasMarkdownShortcuts = true,
-    transformers = DEFAULT_TRANSFORMERS,
-    markdownExtensions,
-    hasAutoFocus = false,
-    tabEscapeHint: tabEscapeHintFromProps,
-    maxLength,
-    namespace = 'astryx-editor',
-    xstyle,
-    className,
-    style,
-    ...rest
-  }: RichTextEditorProps,
-  ref: Ref<RichTextEditorRef>,
-) {
+export const RichTextEditor = function RichTextEditor({
+  label,
+  isLabelHidden = false,
+  description,
+  isOptional = false,
+  isRequired = false,
+  defaultValue,
+  onChange,
+  placeholder,
+  isReadOnly = false,
+  isDisabled = false,
+  status,
+  statusVariant = 'attached',
+  width,
+  minHeight = '4.5rem',
+  labelTooltip,
+  size: sizeProp,
+  nodes,
+  toolbar,
+  plugins,
+  hasMarkdownShortcuts = true,
+  transformers = DEFAULT_TRANSFORMERS,
+  markdownExtensions,
+  codeLanguages,
+  hasAutoFocus = false,
+  tabEscapeHint: tabEscapeHintFromProps,
+  maxLength,
+  namespace = 'astryx-editor',
+  xstyle,
+  className,
+  style,
+  ref,
+  ...rest
+}: RichTextEditorProps) {
   const size = useSize(sizeProp, 'md');
   const t = useTranslator();
   const tabEscapeHint =
@@ -594,7 +612,7 @@ export const RichTextEditor = forwardRef<
   }
 
   const hasTabEscapeHint = editable && tabEscapeHint !== '';
-  const hasToolbar = toolbar != null && typeof toolbar !== 'boolean';
+  const hasToolbar = isRenderable(toolbar);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -647,6 +665,7 @@ export const RichTextEditor = forwardRef<
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             // Only disabled is dimmed, matching TextArea: a read-only editor
             // keeps full-opacity text and stays keyboard-reachable.
@@ -672,9 +691,9 @@ export const RichTextEditor = forwardRef<
               styles.editorBody,
               hasToolbar && styles.editorBodyWithToolbar,
               !!statusIcon && styles.editorBodyWithStatus,
-              editorBodySizeStyles[size],
+              size === 'lg' && editorBodySizeStyles.lg,
             )}>
-            <div {...stylex.props(styles.editorRoot)}>
+            <div {...stylex.props(styles.editorRoot)} dir={rest.dir}>
               <RichTextPlugin
                 contentEditable={
                   <EditorContentEditable
@@ -699,6 +718,7 @@ export const RichTextEditor = forwardRef<
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
+              <DisabledLinkGuardPlugin isDisabled={isDisabled} />
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
                   between cells. GFM tables have no merged cells or cell
@@ -710,16 +730,25 @@ export const RichTextEditor = forwardRef<
                 hasHorizontalScroll
               />
               <TableColumnFloorPlugin />
-              <CodeBlockHeaderPlugin />
-              <CodeSyntaxPlugin />
+              <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+              <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              {/* Backspace at the very start of a code block makes it a
+                  paragraph, instead of merging it into the block above. */}
+              <CodeBackspacePlugin />
+              <CodePastePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
                   transformers={markdownTransformers}
                 />
               ) : null}
+              {/* In a code block, Tab indents the lines the selection
+                  touches instead of inserting a tab character. */}
+              <CodeTabPlugin />
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
+              <SelectAllScopePlugin />
+              <ImageSourceCaretPlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}
@@ -750,6 +779,7 @@ export const RichTextEditor = forwardRef<
           <VisuallyHidden id={tabEscapeHintID}>{tabEscapeHint}</VisuallyHidden>
         )}
       </div>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
       {maxLength != null && (
         <div
           id={counterID}
@@ -773,8 +803,11 @@ export const RichTextEditor = forwardRef<
       )}
     </Field>
   );
-});
+};
 
+// Keeps the editor inside `@astryx/require-baseprops-passthrough`, which only
+// checks components that assign a top-level `displayName`. Without it, a
+// dropped `className`, `style` or `xstyle` on the root stops warning.
 RichTextEditor.displayName = 'RichTextEditor';
 
 /**
@@ -806,7 +839,8 @@ const ESCAPE_REARM_EXEMPT_KEYS = new Set([
  * listeners from the highest priority down, stopping at the first one that
  * returns true. Registering at COMMAND_PRIORITY_LOW (1) therefore runs first;
  * when the escape is armed we return true WITHOUT calling
- * `event.preventDefault()`, so the indentation handler never sees the event
+ * `event.preventDefault()`, so the indentation handlers (TabIndentationPlugin,
+ * and CodeTabPlugin at the front of the same priority) never see the event
  * and the browser performs its default Tab focus navigation.
  */
 function TabFocusEscapePlugin(): null {
@@ -890,7 +924,9 @@ function EditorRefBridge({
   editable,
   transformers,
 }: {
-  editorRef: Ref<RichTextEditorRef>;
+  // Optional, matching the public `ref` prop: with `forwardRef` gone, React
+  // no longer supplies `null` when the caller passes nothing.
+  editorRef: Ref<RichTextEditorRef> | undefined;
   editable: boolean;
   transformers: Array<Transformer>;
 }): null {
@@ -1041,6 +1077,8 @@ function EditorContentEditable({
       dynamicStyles.contentEditableMinHeight(minHeight),
     ),
     ...rest,
+    // Lexical reconciles this DOM, so Layer keeps corrective portals out.
+    ...rendererManagedRootProps,
   };
   if (placeholderText) {
     return (

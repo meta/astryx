@@ -20,9 +20,10 @@ import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {layoutHeaderMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -137,12 +138,12 @@ export interface LayoutHeaderProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     header={<LayoutHeader hasDivider>Page Title</LayoutHeader>}
  *     content={<LayoutContent>...</LayoutContent>}
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutHeader({
@@ -169,10 +170,10 @@ export function LayoutHeader({
       ref={ref}
       role={role}
       aria-label={label}
-      data-divider={resolvedHasDivider || undefined}
       {...mergeProps(
         themeProps('layout-header'),
         stylex.props(
+          layoutHeaderMarker,
           styles.header,
           dynamicStyles.sizing(height ?? null),
 
@@ -182,7 +183,8 @@ export function LayoutHeader({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      data-divider={resolvedHasDivider || undefined}>
       <div
         {...stylex.props(
           styles.inner,

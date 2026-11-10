@@ -1,0 +1,47 @@
+Usage: astryx [options] [command]
+
+<text>
+
+Options:
+  -V, --version                     <text>
+  --zh                              <text>
+  --dense                           <text>
+  --lang <locale>                   <text>
+  --detail <level>                  <text>
+  --json                            <text>
+  -h, --help                        <text>
+
+Commands:
+  init [options]                    <text>
+  component [options] [names...]    <text>
+  docs [options] [topic] [section]  <text>
+  blog [slug]                       <text>
+  swizzle [options] [component]     <text>
+  gap-report [options] [component]  <text>
+  template [options] [name] [path]  <text>
+  upgrade [options]                 <text>
+  theme                             <text>
+  integration                       <text>
+  hook [options] [name]             <text>
+  discover [options] [query]        <text>
+  search [options] <query...>       <text>
+  build [options] [query]           <text>
+  doctor [options]                  <text>
+  manifest                          <text>
+  help                              <text>
+
+<text>
+
+<text>
+
+<text>
+
+<text>
+
+<text>
+
+<text>
+
+Grep a field across records, e.g.  <text>
+
+<text>

@@ -37,6 +37,26 @@ export const docs = {
       description: 'Description text displayed between the label and editor.',
     },
     {
+      name: 'isOptional',
+      type: 'boolean',
+      description:
+        'Displays an "Optional" indicator next to the label. Mutually exclusive with isRequired.',
+      default: 'false',
+    },
+    {
+      name: 'isRequired',
+      type: 'boolean',
+      description:
+        'Displays a "Required" indicator next to the label and sets aria-required on the editable surface. Mutually exclusive with isOptional.',
+      default: 'false',
+    },
+    {
+      name: 'labelTooltip',
+      type: 'string',
+      description:
+        'Tooltip text displayed in an info icon at the end of the label.',
+    },
+    {
       name: 'defaultValue',
       type: 'string',
       description:
@@ -65,7 +85,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Wins when isReadOnly is also set. Takes effect when changed after mount.',
+        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Its links do not navigate and are not tab stops. Wins when isReadOnly is also set. Takes effect when changed after mount.',
       default: 'false',
     },
     {
@@ -119,6 +139,12 @@ export const docs = {
         'Markdown plugins whose nodes the editor draws, each adopted with createRichTextExtension. A plugin node renders exactly as core Markdown renders it and edits as one unit; a node whose plugin is not given here shows its source. Pass the extensions the content was converted with, and create them in a client module. RichTextView takes the same prop.',
     },
     {
+      name: 'codeLanguages',
+      type: 'ReadonlyArray<CodeLanguage>',
+      description:
+        'CodeBlock language values a fence may name, each imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Pass the same list as Markdown codeLanguages so a matched fence paints and labels the same while reading and editing. RichTextView takes the same prop.',
+    },
+    {
       name: 'transformers',
       type: 'ReadonlyArray<Transformer>',
       description:
@@ -159,6 +185,12 @@ export const docs = {
       default: "'4.5rem'",
     },
     {
+      name: 'namespace',
+      type: 'string',
+      description: 'The Lexical composer namespace, used for editor identity.',
+      default: "'astryx-editor'",
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description:
@@ -179,12 +211,12 @@ export const docs = {
   },
   usage: {
     description:
-      'A WYSIWYG rich-text editor built on Lexical, styled with Astryx design tokens. Its field container shares TextArea input visuals for the resting border, hover ring, focus-within ring, disabled state, and status colors. Experimental component in @astryxdesign/richtext (canary). lexical and @lexical/* are optional peer dependencies. The editor is deliberately minimal and extensible: pass toolbar, nodes, and plugins to layer richer behaviour (formatting, mentions, hover cards) on top without forking. Use RichTextView to render serialized content read-only.',
+      'A WYSIWYG rich-text editor built on Lexical, styled with Astryx design tokens. Its field container shares TextArea input visuals for the resting border, hover ring, focus-within ring, disabled state, and status colors. Ships from @astryxdesign/richtext; lexical and @lexical/* are optional peer dependencies. The editor is deliberately minimal and extensible: pass toolbar, nodes, and plugins to layer richer behaviour (formatting, mentions, hover cards) on top without forking. Use RichTextView to render serialized content read-only.',
     bestPractices: [
       {
         guidance: true,
         description:
-          'Install lexical and @lexical/react (optional peers) before importing from @astryxdesign/richtext.',
+          'RichText is built on Lexical and exposes it: nodes and transformers take Lexical types, plugins takes Lexical React plugins, and onChange and getEditorState() report Lexical types. Install the lexical and @lexical/* peers (optional peers) at the Lexical minor named in the package peer ranges before importing from @astryxdesign/richtext.',
       },
       {
         guidance: true,
@@ -209,6 +241,26 @@ export const docs = {
       {
         guidance: true,
         description:
+          'In a code block, Tab and Shift+Tab indent and outdent every line the selection touches, by the indent the block already uses: a tab when one of its lines starts with a tab, otherwise the fewest spaces an indented line starts with (2 to 8), otherwise 2 spaces. The selection stays on the same characters, and each press is one undo step. Escape then Tab still moves focus out of the editor.',
+      },
+      {
+        guidance: true,
+        description:
+          'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pasting into a code block inserts plain code. Rich content, such as a web page, a word processor document, or blocks copied from another editor, goes in as the plain text on the clipboard; when the clipboard has no plain text, each pasted block goes in as one line of its text. Headings, lists, tables, and formatting never land inside a code block.',
+      },
+      {
+        guidance: true,
+        description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
+      },
+      {
+        guidance: true,
+        description:
           'Thematic breaks (---, ***, ___, with or without spaces between) import as horizontal rules and export as ---. A dash line directly under a paragraph line stays with that paragraph, as in Markdown. Click a rule or arrow onto it to select it; Backspace removes it. RichTextView draws the same rules. Install @lexical/extension with the other lexical peers.',
       },
       {
@@ -229,7 +281,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open an Astryx Dialog. The form preserves the Lexical selection while focus moves into the URL input and supports add, update, remove, Escape, and focus return. Pass promptForUrl only when integrating an existing synchronous URL flow. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set linkOpensInNewTab={false} for same-tab links.',
+          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open an Astryx Dialog. The form preserves the Lexical selection while focus moves into the URL input and supports add, update, remove, Escape, and focus return. Pass promptForUrl only when integrating an existing synchronous URL flow. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links. The toolbar takes base props and passes them to the Astryx Toolbar it renders: ref, className, style and xstyle on its root; data-*, other aria-* attributes and DOM handlers on the toolbar element (name it with label, not aria-label).',
       },
       {
         guidance: true,
@@ -240,6 +292,11 @@ export const docs = {
         guidance: true,
         description:
           "The toolbar's glyphs are themeable. Each control resolves its icon from the core icon registry under a stable richtext:* key (see RICHTEXT_ICON_KEYS), falling back to a bundled inline SVG. A theme restyles any glyph without forking the toolbar by naming its key: defineTheme({icons: {'richtext:bold': <MyBoldIcon />}}). Undo and redo mirror under right-to-left direction, whichever glyph draws them.",
+      },
+      {
+        guidance: true,
+        description:
+          "To switch between reading (Markdown or RichTextView) and editing the same document in place, give the editor's field its inset and border outside the reading width, so every paragraph keeps its line count across the switch. Define the frame with stylex.create, for example const inPlace = stylex.create({editorFrame: {marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`}}), with spacingVars and borderVars from @astryxdesign/core/theme/tokens.stylex, and pass xstyle={inPlace.editorFrame} to the RichTextEditor. The recipe assumes no status: a status icon reserves another spacing-6 at the inline end. The field then extends past the column on both sides; leave room for it in the surrounding padding. A standalone editor in a form keeps its default width, so its border lines up with the fields around it.",
       },
       {
         guidance: false,

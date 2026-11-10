@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatMessageMetadata
 
 /**
  * @file ChatMessageMetadata.a11y.chromium.spec.ts
@@ -11,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -395,7 +396,9 @@ test('captures narrow touch reflow in both modes', async ({browser}) => {
   try {
     const page = await context.newPage();
     const scenario = CASES.find(item => item.name === 'narrow-overflow');
-    if (!scenario) {throw new Error('Narrow metadata fixture is missing');}
+    if (!scenario) {
+      throw new Error('Narrow metadata fixture is missing');
+    }
     const failures: string[] = [];
     for (const mode of ['light', 'dark'] as const) {
       failures.push(

@@ -13,6 +13,7 @@ import {List, ListItem} from '@astryxdesign/core/List';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Switch} from '@astryxdesign/core/Switch';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Section} from '@astryxdesign/core/Section';
@@ -821,6 +822,79 @@ export const TriggerInteractionEvidence: Story = {
   },
 };
 
+// =============================================================================
+// Keyboard Avoidance
+// =============================================================================
+
+const NOTE_TIPS = [
+  'Notes are shared with everyone on the project.',
+  'Mention a teammate to send them the note.',
+  'Pin a note to keep it at the top of the list.',
+  'Notes older than a year are archived.',
+  'Attach a file by dropping it on the note.',
+  'Use a short title: it is what the list shows.',
+];
+
+function NoteContent() {
+  const [title, setTitle] = React.useState('');
+  return (
+    <VStack gap={3}>
+      <Heading level={4} tabIndex={-1}>
+        Add a note
+      </Heading>
+      <TextInput
+        label="Title"
+        placeholder="Short title"
+        value={title}
+        onChange={setTitle}
+      />
+      <Divider />
+      {NOTE_TIPS.map(tip => (
+        <Text key={tip}>{tip}</Text>
+      ))}
+      <Button label="Save note" variant="primary">
+        Save note
+      </Button>
+    </VStack>
+  );
+}
+
+function SearchNotesField() {
+  const [query, setQuery] = React.useState('');
+  return (
+    <div style={{marginTop: 16, maxWidth: 320}}>
+      <TextInput
+        label="Search notes"
+        placeholder="Search"
+        value={query}
+        onChange={setQuery}
+      />
+    </div>
+  );
+}
+
+export const KeyboardAvoidance: Story = {
+  name: 'Keyboard Avoidance',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'A tall popover with a text field. On a phone, the field brings up the software keyboard; the popover keeps its top and stays clear of the keyboard, as a popover on iOS does. Search notes, below the trigger, brings the keyboard up before the popover opens: it then opens clear of the keyboard.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover label="Add a note" width={320} content={<NoteContent />}>
+        <Button label="Add note">Add note</Button>
+      </Popover>
+      <SearchNotesField />
+    </div>
+  ),
+};
+
 export const KeepPopoverPresentation: Story = {
   name: 'Keep Popover Presentation',
   parameters: {
@@ -861,6 +935,31 @@ export const BottomSheetPresentationOption: Story = {
       trigger.click();
     }
   },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Adaptive Presentation',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'presentation="adaptive": on a compact touch screen (a phone) the content is presented in a BottomSheet, the way iOS presents a popover on an iPhone; with a mouse or on a larger screen it stays anchored to its trigger.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover
+        label="Filter by status"
+        presentation="adaptive"
+        width={280}
+        content={<FilterContent />}>
+        <Button label="Filter">Filter</Button>
+      </Popover>
+    </div>
+  ),
 };
 
 export const AdaptivePopoverRecipe: PresentationRecipeStory = {

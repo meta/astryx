@@ -33,7 +33,8 @@ import {Section} from '@astryxdesign/core/Section';
 import {Table, proportional, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {Drawer, DrawerHeader, Stat} from '@astryxdesign/lab';
+import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
+import {Stat} from '@astryxdesign/lab';
 
 import {
   AUDIT_PROMPT,

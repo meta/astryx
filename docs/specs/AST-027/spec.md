@@ -197,7 +197,7 @@ production declarations across 40 files and these current gaps:
 | BottomSheet and BottomSheetSwitcher non-modal paths                                                    | Non-modal `dialog.show()` paths use static or dynamic values beginning at `1000`                                                                                                                                                        | **Confirmed global leaks.** A page band cannot provide dialog-layer semantics                                                                                      | Route non-modal hosting through Layer/native top-layer infrastructure; keep panel, handle, tint, action, and stack ordering locally isolated inside the host     |
 
 Current source already routes Tooltip, HoverCard, Popover, DropdownMenu and its
-submenus, ContextMenu, CommandPalette, modal Dialog, Lab Drawer, Lightbox,
+submenus, ContextMenu, CommandPalette, modal Dialog, Drawer, Lightbox,
 MobileNav, Tour, Date-input layers, and RadialTooltip through Layer, native
 Popover, or `showModal()`. Their cross-page mechanism is directionally
 conforming. The confirmed exceptions are ChartTooltip and the non-modal

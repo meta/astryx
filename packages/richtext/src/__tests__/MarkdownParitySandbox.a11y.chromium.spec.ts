@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file MarkdownParitySandbox.a11y.chromium.spec.ts
@@ -23,7 +24,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -34,10 +35,10 @@ import {
 const OUTPUT = path.resolve('test-results/richtext-markdown-parity');
 
 const STORY = {
-  sideBySide: 'lab-richtexteditor--markdown-parity',
-  toggle: 'lab-richtexteditor--markdown-parity-toggle',
-  overlay: 'lab-richtexteditor--markdown-parity-overlay',
-  longDocument: 'lab-richtexteditor--markdown-parity-long-document',
+  sideBySide: 'richtext-richtexteditor--markdown-parity',
+  toggle: 'richtext-richtexteditor--markdown-parity-toggle',
+  overlay: 'richtext-richtexteditor--markdown-parity-overlay',
+  longDocument: 'richtext-richtexteditor--markdown-parity-long-document',
 } as const;
 
 /** The exemptions the repository's Storybook axe audit already makes. */
@@ -315,7 +316,7 @@ test('a rule at either edge of the document adds no outer margin', async ({
 }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page.locator('textarea').fill('---\n\nBetween the rules.\n\n---');
@@ -449,6 +450,71 @@ test('side by side: a list of task and plain items keeps each task checkbox and 
   expect(errors).toEqual([]);
 });
 
+// spec:AST-061 FR11: however wide a numbered list's counters grow, from `99.`
+// to `100.` or from `i.` to `viii.` two lists down, each item's text, and each
+// nested list's, starts in the same place on both surfaces.
+test('side by side: wide counters start the text where RichText starts it', async ({
+  page,
+}) => {
+  const errors = await openStory(page, STORY.sideBySide, DESKTOP);
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const textStarts = (surface: string) =>
+    page.evaluate(selector => {
+      const block = document.querySelector(
+        `${selector} [data-parity-block="list-ordered-wide"]`,
+      );
+      const origin = block?.getBoundingClientRect().left ?? 0;
+      const starts: Array<[string, number]> = [];
+      for (const item of block?.querySelectorAll('li') ?? []) {
+        // The item's own first text; RichText holds a nested list in an item
+        // of its own, which has none.
+        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) {
+            continue;
+          }
+          if (node.parentElement?.closest('li') === item) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            starts.push([
+              node.textContent.trim(),
+              range.getBoundingClientRect().left - origin,
+            ]);
+          }
+          break;
+        }
+      }
+      return starts;
+    }, surface);
+  const markdown = await textStarts(MARKDOWN);
+  const richText = new Map(await textStarts(RICH_TEXT));
+  expect(markdown.map(([text]) => text)).toEqual([
+    'Wide step ninety-eight',
+    'Wide step ninety-nine',
+    'Lettered step a',
+    'Roman step i',
+    'Roman step ii',
+    'Roman step iii',
+    'Roman step iv',
+    'Roman step v',
+    'Roman step vi',
+    'Roman step vii',
+    'Roman step viii',
+    'Wide step one hundred',
+  ]);
+  expect([...richText.keys()].sort()).toEqual(
+    markdown.map(([text]) => text).sort(),
+  );
+  for (const [text, start] of markdown) {
+    expect(
+      Math.abs((richText.get(text) ?? Number.NaN) - start),
+      `text of ${text}`,
+    ).toBeLessThanOrEqual(1);
+  }
+  expect(errors).toEqual([]);
+});
+
 // spec:AST-061 FR5: each task item has one real checkbox where core
 // Markdown's is, the item stays a list item, and every list row has one
 // marker.
@@ -542,7 +608,7 @@ test('task items own their checkboxes, keep link tab order, and toggle by keyboa
 }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page
@@ -670,9 +736,8 @@ test('task items own their checkboxes, keep link tab order, and toggle by keyboa
 // both surfaces, so the code sits at the same place; the header is not part
 // of the editable text.
 /**
- * Whether core Markdown scrolls a fence's lines sideways. RichText wraps them
- * instead (a scrolling region inside the editable text cannot take focus), so
- * a fence whose lines do not fit is taller in RichText by its wrapped lines.
+ * Whether core Markdown scrolls a fence's lines sideways. Under spec:AST-061
+ * FR5 / DEC-9 it never does: both surfaces wrap long code lines.
  */
 async function markdownFenceScrolls(page: Page, key: string): Promise<boolean> {
   return page.evaluate(
@@ -695,12 +760,12 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     await waitForDocument(page, RICH_TEXT);
     const markdown = await surfaceGeometry(page, MARKDOWN);
     const richText = await surfaceGeometry(page, RICH_TEXT);
-    const code = (geometry: SurfaceGeometry) =>
-      geometry.blocks.find(block => block.key === 'code-fence');
-    if (!(await markdownFenceScrolls(page, 'code-fence'))) {
-      expect(
-        Math.abs((code(richText)?.height ?? 0) - (code(markdown)?.height ?? 0)),
-      ).toBeLessThanOrEqual(2);
+    // Fenced code wraps on both surfaces (spec:AST-061 FR5, DEC-9): no fence
+    // scrolls sideways.
+    for (const key of ['code-fence', 'code-long']) {
+      expect(await markdownFenceScrolls(page, key), `${key} scrolls`).toBe(
+        false,
+      );
     }
     // Each frame is sized like core Markdown's: as wide as its longest line,
     // at least the 680px measure (or the whole width when narrower), and no
@@ -747,6 +812,24 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
         keys: ['code-fence', 'code-plain', 'code-unknown', 'code-long'],
       },
     );
+    // The editor's frame is 18px narrower than the reader's at every width
+    // (the field inset). Above phone width `code-long` still wraps to the same
+    // number of lines on both surfaces (two at 1440px), so the block is as
+    // tall in read as in edit mode (DEC-9). At phone width it takes one more
+    // line in the editor: the known editor-frame gap that AST-061's
+    // Current-state impact records, so the check skips that width.
+    if (viewport.width !== PHONE.width) {
+      for (const key of ['code-fence', 'code-long']) {
+        const block = (geometry: SurfaceGeometry) =>
+          geometry.blocks.find(candidate => candidate.key === key);
+        expect(
+          Math.abs(
+            (block(richText)?.height ?? 0) - (block(markdown)?.height ?? 0),
+          ),
+          `${key} height`,
+        ).toBeLessThanOrEqual(2);
+      }
+    }
     for (const frame of frames) {
       if (frame.key === 'code-long') {
         // A long line widens the frame past the measure, up to the room.
@@ -790,7 +873,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(6);
+    ).toHaveCount(7);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -825,7 +908,7 @@ test('code blocks wrap long lines at phone width and copy from the keyboard', as
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setViewportSize(PHONE);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   const token = 'x'.repeat(160);
@@ -873,6 +956,7 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
     const richText = await surfaceGeometry(page, RICH_TEXT);
@@ -885,6 +969,42 @@ for (const globals of [
       expect(
         Math.abs(height(richText) - height(markdown)),
         `${key} height`,
+      ).toBeLessThanOrEqual(2);
+    }
+    // A fence that names no language keeps its corner copy button beside the
+    // code, never over it: the text ends as far from the frame's inline end
+    // on both surfaces.
+    const textInset = (surface: string, key: string) =>
+      page.evaluate(
+        ({selector}) => {
+          const block = document.querySelector<HTMLElement>(selector);
+          const frame = block?.matches('pre, code')
+            ? block
+            : block?.querySelector<HTMLElement>('pre, code');
+          if (frame == null) {
+            return -1;
+          }
+          const rect = frame.getBoundingClientRect();
+          const style = getComputedStyle(frame);
+          const rtl = style.direction === 'rtl';
+          const line = frame.querySelector('[data-line="1"]');
+          if (line != null) {
+            const text = line.getBoundingClientRect();
+            return rtl ? text.left - rect.left : rect.right - text.right;
+          }
+          return rtl
+            ? parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)
+            : parseFloat(style.borderRightWidth) +
+                parseFloat(style.paddingRight);
+        },
+        {selector: `${surface} [data-parity-block="${key}"]`},
+      );
+    for (const key of ['code-plain', 'code-plain-long']) {
+      const markdownInset = await textInset(MARKDOWN, key);
+      expect(markdownInset, `${key} markdown inset`).toBeGreaterThan(40);
+      expect(
+        Math.abs((await textInset(RICH_TEXT, key)) - markdownInset),
+        `${key} text inset`,
       ).toBeLessThanOrEqual(2);
     }
     // The label core Markdown shows for each fence.
@@ -909,14 +1029,14 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(6);
+    await expect(headers).toHaveCount(7);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5]) {
+    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();
@@ -938,7 +1058,7 @@ for (const globals of [
   test(`list markers cycle by depth (${globals})`, async ({page}) => {
     await page.setViewportSize(DESKTOP);
     await page.goto(
-      `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;${globals}`,
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;${globals}`,
       {waitUntil: 'load'},
     );
     const depths = Array.from({length: 9}, (_, depth) => depth);
@@ -1044,7 +1164,7 @@ test('struck text is a deletion around its other marks, and stays one while edit
 }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page
@@ -1275,7 +1395,7 @@ for (const globals of [
 test('edited code is colored again as it changes', async ({page}) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page.locator('textarea').fill('```ts\nlet value = 1;\n```');
@@ -1313,7 +1433,7 @@ test('bold italic text is emphasis and strong in the editor and the view', async
 }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page.locator('textarea').fill('Keep ***both*** and **bold** here.');
@@ -1334,7 +1454,7 @@ test('nested numbered lists keep their start in the editor and the view', async 
 }) => {
   await page.setViewportSize(DESKTOP);
   await page.goto(
-    `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
     {waitUntil: 'load'},
   );
   await page
@@ -1381,7 +1501,7 @@ for (const viewport of [PHONE, {width: 1280, height: 900}] as const) {
     }) => {
       await page.setViewportSize(viewport);
       await page.goto(
-        `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;${globals}`,
+        `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;${globals}`,
         {waitUntil: 'load'},
       );
       for (const columnCount of [2, 20]) {
@@ -1732,13 +1852,37 @@ for (const viewport of [DESKTOP, PHONE]) {
         .locator('[data-parity-anchor]')
         .evaluate(element => ({...(element as HTMLElement).dataset}));
       expect(await axeViolations(page)).toEqual([]);
+      const editGeometry = await surfaceGeometry(page, edit);
+      // spec:AST-061 FR9: edit mode offsets the whole document by one constant
+      // amount, and every block keeps its top and height within 2px after it.
+      // A paragraph that gained or lost a line changes height by a line.
+      const readBlocks = readGeometry.blocks.filter(block => block.copy === 1);
+      const editBlocks = new Map(
+        editGeometry.blocks
+          .filter(block => block.copy === 1)
+          .map(block => [block.key, block]),
+      );
+      const pairs = readBlocks.flatMap(block => {
+        const edited = editBlocks.get(block.key);
+        return edited == null ? [] : [{block, edited}];
+      });
+      expect(pairs.length).toBeGreaterThan(0);
+      const offset = pairs[0].edited.top - pairs[0].block.top;
+      for (const {block, edited} of pairs) {
+        expect
+          .soft(Math.abs(edited.top - block.top - offset), `${block.key} top`)
+          .toBeLessThanOrEqual(2);
+        expect
+          .soft(Math.abs(edited.height - block.height), `${block.key} height`)
+          .toBeLessThanOrEqual(2);
+      }
       await capture(page, `${name}--edit`, {
         story: STORY.toggle,
         viewport,
         globals: `neutral ${colorMode} ltr`,
         mode: 'edit',
         anchor,
-        geometry: await surfaceGeometry(page, edit),
+        geometry: editGeometry,
       });
 
       // Back to read with the keyboard: the control is reachable without a pointer.
@@ -1811,10 +1955,13 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// spec:AST-061 FR6: every block takes the direction of the surface around
-// it, whatever its first strong character, on both surfaces.
+// RichText blocks take the direction of the surface around them, whatever
+// their first strong character. Markdown blocks take the direction of their
+// own text, and the provider's when their text has no strong character.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take the provider direction (${direction})`, async ({page}) => {
+  test(`blocks take their surface's direction rule (${direction})`, async ({
+    page,
+  }) => {
     const errors = await openStory(
       page,
       STORY.sideBySide,
@@ -1824,24 +1971,43 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
     for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const geometry = await surfaceGeometry(page, surface);
-      const otherDirection = geometry.blocks
-        .filter(block => block.direction !== direction)
-        .map(block => block.key);
-      expect(otherDirection, surface).toEqual([]);
-      // Inside blocks too: table rows and cells, list items, and paragraphs.
-      const nested = await page.evaluate(
-        ({selector, expected}) =>
-          [
+      const ownText = surface === MARKDOWN;
+      // RichText: every block, and inside blocks too: table rows and cells,
+      // list items, and paragraphs. Markdown: every prose block and table
+      // cell, read against its own text; a container or wrapper is not
+      // checked, because it takes its parent's direction.
+      const mismatched = await page.evaluate(
+        ({selector, provider, isOwnText}) => {
+          const strong =
+            /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u9FFF\uAC00-\uD7AF]|([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])/u;
+          const expectedFor = (element: Element): string => {
+            if (!isOwnText) {
+              return provider;
+            }
+            const match = strong.exec(element.textContent ?? '');
+            return match == null ? provider : match[1] != null ? 'rtl' : 'ltr';
+          };
+          const targets = isOwnText
+            ? ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)'
+            : ':is([data-parity-block], tr, th, td, li, p)';
+          return [
             ...document.querySelectorAll(
-              `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
+              `${selector} [data-parity-body] ${targets}`,
             ),
           ]
-            .filter(element => getComputedStyle(element).direction !== expected)
-            .map(element => element.tagName),
-        {selector: surface, expected: direction},
+            .filter(
+              element =>
+                getComputedStyle(element).direction !== expectedFor(element),
+            )
+            .map(
+              element =>
+                (element as HTMLElement).dataset.parityBlock ??
+                `${element.tagName} ${(element.textContent ?? '').slice(0, 24)}`,
+            );
+        },
+        {selector: surface, provider: direction, isOwnText: ownText},
       );
-      expect(nested, `${surface} nested`).toEqual([]);
+      expect(mismatched, surface).toEqual([]);
     }
     expect(errors).toEqual([]);
   });
@@ -1853,7 +2019,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
   }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto(
-      `${storybook.origin}/iframe.html?id=lab-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
       {waitUntil: 'load'},
     );
     await page

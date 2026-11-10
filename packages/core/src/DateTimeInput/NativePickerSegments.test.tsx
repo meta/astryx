@@ -161,6 +161,37 @@ describe('DateTimeInput nativePicker', () => {
     expect(getNativeTimeInput()).toBeInTheDocument();
   });
 
+  it('keeps disabled native controls focusable and inert (AST-085 FR1, FR2)', () => {
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    for (const input of [getNativeDateInput(), getNativeTimeInput()]) {
+      expect(input).not.toHaveAttribute('disabled');
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+      expect(input).toHaveAttribute('readonly');
+      input.focus();
+      expect(input).toHaveFocus();
+    }
+    fireEvent.click(getNativeDateInput());
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('leaves enabled native controls editable (AST-043)', () => {
+    stubPointer(true);
+    render(<DateTimeInput label="Meeting" onChange={() => {}} />);
+    for (const input of [getNativeDateInput(), getNativeTimeInput()]) {
+      expect(input).not.toHaveAttribute('readonly');
+      expect(input).not.toHaveAttribute('aria-disabled');
+    }
+  });
+
   it('drops in-page popup ARIA because the OS owns both pickers', () => {
     stubPointer(true);
     render(<DateTimeInput label="Meeting" onChange={() => {}} />);

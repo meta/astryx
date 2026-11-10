@@ -14,13 +14,15 @@ export const doc = {
   namespace: 'cli/api',
   displayName: 'discover()',
   summary:
-    'Browse and search integrations: the ones a project has and, through discover sources, the ones it could add.',
+    'Browse and search integrations: the ones a project has and, through the official list and discover sources, the ones it could add.',
   description:
-    'Lists the integrations a project loads and, when the project or an integration provides a discover source, ' +
-    'the packages it could add, with what each one adds per kind. An @scope/name query shows one package with every ' +
+    'Lists the integrations a project loads and the official packages it declares, then the packages it could add: ' +
+    'the official Astryx packages first, from the list the CLI carries, then whatever the discover sources of the ' +
+    'project and its integrations list, with what each one adds per kind. An @scope/name query shows one package with every ' +
     'version its source knows; @scope/name@version shows one version; @scope/name/Component returns an installed ' +
     "component's validated doc, and any other item path returns that item. A free-text term searches every item and " +
-    'package. Discover only reads: it prints the command that adds a package and never runs it.',
+    'package. Discover only reads: it prints the command that adds a package and never runs it.' +
+    " In global mode: with `cwd` outside a project, integrations installed next to this CLI package globally are listed as installed; inside a project, only the project's own are, and the compatible global ones are listed in `meta.available` with source `installed for this computer` and an `install` command. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'discover(query?: string, options?: DiscoverOptions): Promise<DiscoverListResponse | DiscoverDetailResponse | DiscoverDetailDocResponse | DiscoverItemResponse | DiscoverSearchResponse>',
@@ -89,22 +91,22 @@ export const doc = {
     {
       type: 'discover.list',
       description:
-        'The installed integrations (name, category, components, version, and a list per other kind they add). With a discover source, meta.available lists what the project could add and meta.sources reports each source. When the list is empty it carries meta.configured.',
+        'What the project has: the integrations it loads and the official packages it declares (package, the npm package and always equal to name; name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with its package and the command that adds it; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and the install command for the project in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
     },
     {
       type: 'discover.detail',
       description:
-        'One package: what the shown version adds, whether the project has it, its versions and latest release when a source knows them, and the command that adds it when the project does not have it.',
+        "One package: its package (the npm package the result is about), what the shown version adds, whether the project has it, its versions and latest release when a source knows them, and the command that adds it when the project does not have it. An entry from the official list lists the newest release this CLI knows as latest and the project's Core version; its add command pins the project's Core version, else the Core range it declares (quoted), else the latest release. A version or item the official list does not show answers ERR_UNKNOWN_PACKAGE.",
     },
     {
       type: 'discover.detail.doc',
       description:
-        'The validated ComponentDoc for one installed component, for an @scope/name/Component query.',
+        'The validated ComponentDoc for one installed component, for an @scope/name/Component query, plus package, the npm package that owns the component.',
     },
     {
       type: 'discover.item',
       description:
-        'One item that is not an installed component: its kind, name, the package and version that add it, and whether the project has the package.',
+        'One item that is not an installed component: its kind, name, the package and version that add it, and whether the project has the package. The envelope\'s package names the same package.',
     },
     {
       type: 'discover.search',
@@ -123,7 +125,7 @@ export const doc = {
     },
     {
       code: 'ERR_UNKNOWN_PACKAGE',
-      when: 'neither the project nor any discover source has the package',
+      when: 'neither the project, the official list, nor any discover source has the package',
     },
     {
       code: 'ERR_UNKNOWN_COMPONENT',

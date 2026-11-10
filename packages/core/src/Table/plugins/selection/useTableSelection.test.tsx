@@ -195,9 +195,11 @@ describe('useTableSelection', () => {
   it('disables checkbox for disabled rows', () => {
     render(<SelectionTable getIsItemEnabled={item => !item.isLocked} />);
     const rowCheckboxes = screen.getAllByLabelText('Select row');
-    expect(rowCheckboxes[0]).not.toBeDisabled();
-    expect(rowCheckboxes[1]).not.toBeDisabled();
-    expect(rowCheckboxes[2]).toBeDisabled();
+    expect(rowCheckboxes[0]).not.toHaveAttribute('aria-disabled');
+    expect(rowCheckboxes[1]).not.toHaveAttribute('aria-disabled');
+    // Focusable disabled (spec:AST-085 FR1): aria-disabled, no native disabled.
+    expect(rowCheckboxes[2]).toHaveAttribute('aria-disabled', 'true');
+    expect(rowCheckboxes[2]).not.toHaveAttribute('disabled');
   });
 
   it('prepends selection <td> to each body row', () => {

@@ -4,8 +4,8 @@
  * @file container.stylex.ts
  * @input Uses @stylexjs/stylex, spacing from theme
  * @output StyleX utility for layout container styling
- * @position Layout utility; used by Card, Section, Dialog, BottomSheet, and the
- * Lab Drawer
+ * @position Layout utility; used by Card, Section, Dialog, BottomSheet, and
+ * Drawer
  *
  * ## Public API for themes
  *
@@ -19,7 +19,7 @@
  *   --astryx-card-padding-block-end
  *
  * Read order per level: `var(--astryx-…, <next level>)`, terminating at
- * `--spacing-4`. Same pattern for section, dialog, bottom-sheet, and the Lab
+ * `--spacing-4`. Same pattern for section, dialog, bottom-sheet, and
  * drawer.
  *
  * ```ts
@@ -33,8 +33,8 @@
  * ```
  *
  * Internal variables (`--layout-padding-inner-x`, `--container-padding-*`,
- * `--_section-padding-propagated`) are implementation details and must not be
- * referenced by themes. They also do not cross an overlay boundary — see
+ * `--container-corner-*`, `--_section-padding-propagated`) are implementation
+ * details and must not be referenced by themes. They also do not cross an overlay boundary — see
  * `overlayPaddingReset` in padding.stylex.ts.
  *
  * SYNC: When modified, update /packages/core/src/Layout/Layout.doc.mjs
@@ -102,6 +102,7 @@ const baseStyles = stylex.create({
  * CSS custom property cascade — no layer competition.
  */
 const SP4 = spacingVars['--spacing-4'];
+const SP6 = spacingVars['--spacing-6'];
 
 // Card padding chains: --astryx-* then the next specificity level, terminating
 // at --spacing-4. Built as chained const strings (no function calls) so StyleX
@@ -149,8 +150,13 @@ const bottomSheetInlineStart = `var(--astryx-bottom-sheet-padding-inline-start, 
 const bottomSheetInlineEnd = `var(--astryx-bottom-sheet-padding-inline-end, ${bottomSheetInline})`;
 const bottomSheetBlockStart = `var(--astryx-bottom-sheet-padding-block-start, ${bottomSheetShorthand})`;
 const bottomSheetBlockEnd = `var(--astryx-bottom-sheet-padding-block-end, ${bottomSheetShorthand})`;
+// The band under a bottom sheet's grab bar (--spacing-6) is not container
+// padding: the sheet publishes only the padding past it and applies the band
+// on top (BottomSheetPanel). The layout padding variables keep the plain
+// padding.
+const bottomSheetBlockStartClear = `max(calc(${bottomSheetBlockStart} - ${SP6}), 0px)`;
 
-// Drawer (Lab) padding chains: --astryx-* then the next specificity level,
+// Drawer padding chains: --astryx-* then the next specificity level,
 // terminating at --spacing-4 like Dialog. Built as chained const strings (no
 // function calls) so StyleX can statically analyze them; see naming.ts for the
 // prefix policy.
@@ -250,7 +256,7 @@ const bottomSheetDefaultPaddingStyles = stylex.create({
     '--container-padding-inline-end': bottomSheetInlineEnd,
   },
   containerPaddingBlockStart: {
-    '--container-padding-block-start': bottomSheetBlockStart,
+    '--container-padding-block-start': bottomSheetBlockStartClear,
   },
   containerPaddingBlockEnd: {
     '--container-padding-block-end': bottomSheetBlockEnd,
@@ -522,8 +528,8 @@ export interface ContainerOptions {
    * This allows themes to override container padding via component-specific
    * public CSS custom properties without touching internal vars.
    *
-   * Used by Card, Section, Dialog, BottomSheet, and the Lab Drawer when no
-   * explicit padding prop is provided.
+   * Used by Card, Section, Dialog, BottomSheet, and Drawer when no explicit
+   * padding prop is provided.
    * @default undefined (uses explicit spacing token values)
    */
   useThemeDefault?: ContainerComponent;

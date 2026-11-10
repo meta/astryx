@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {expect} from 'storybook/test';
+import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
@@ -28,7 +29,7 @@ const meta: Meta<typeof MultiSelector> = {
     description: {control: 'text'},
     placeholder: {control: 'text'},
     size: {control: 'radio', options: ['sm', 'md', 'lg']},
-    variant: {control: 'radio', options: ['input', 'ghost']},
+    variant: {control: 'radio', options: ['input', 'secondary', 'ghost']},
     presentation: {
       control: 'radio',
       options: ['popover', 'bottom-sheet', 'adaptive'],
@@ -391,6 +392,97 @@ export const GhostVariant: Story = {
           statusVariant="tooltip"
         />
         <Button label="Export" variant="ghost" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary variant for toolbar composition beside secondary buttons
+export const SecondaryVariant: Story = {
+  render: () => {
+    const [columns, setColumns] = useState<string[]>(['Name', 'Email']);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: 'max-content',
+        }}>
+        <Button label="Refresh" variant="secondary" />
+        <MultiSelector
+          label="Columns"
+          isLabelHidden
+          variant="secondary"
+          size="md"
+          width={180}
+          options={['Name', 'Email', 'Role', 'Status', 'Created']}
+          value={columns}
+          onChange={setColumns}
+          triggerDisplay="labels"
+          placeholder="Columns"
+        />
+        <Button label="Export" variant="secondary" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByRole('combobox', {name: 'Columns'});
+    const root = canvasElement.querySelector<HTMLElement>(
+      '.astryx-multi-selector[data-variant="secondary"]',
+    );
+    if (root == null) {
+      throw new Error('Secondary MultiSelector root not found');
+    }
+    const widthBefore = root.getBoundingClientRect().width;
+    expect(widthBefore).toBeCloseTo(180, 0);
+
+    await userEvent.click(trigger);
+    const listbox = within(document.body).getByRole('listbox');
+    await userEvent.click(within(listbox).getByRole('option', {name: /Role/}));
+    await waitFor(() =>
+      expect(root.getBoundingClientRect().width).toBeCloseTo(widthBefore, 0),
+    );
+    await userEvent.keyboard('{Escape}');
+    trigger.blur();
+  },
+};
+
+// Secondary trigger as the first, middle, and last member of an InputGroup:
+// it keeps its neutral fill and takes the group's row height and seam edges.
+export const SecondaryInInputGroup: Story = {
+  render: () => {
+    const selector = (label: string) => (
+      <MultiSelector
+        label={label}
+        isLabelHidden
+        variant="secondary"
+        options={['Name', 'Email', 'Role']}
+        value={['Name']}
+        onChange={() => {}}
+      />
+    );
+    return (
+      <div
+        data-secondary-input-group-matrix
+        style={{display: 'grid', gap: 16, width: 320}}>
+        <InputGroup label="Secondary first" isLabelHidden>
+          {selector('Columns first')}
+          <InputGroupText>cols</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary middle" isLabelHidden>
+          <InputGroupText>#</InputGroupText>
+          {selector('Columns middle')}
+          <InputGroupText>cols</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary last" isLabelHidden>
+          <InputGroupText>#</InputGroupText>
+          {selector('Columns last')}
+        </InputGroup>
       </div>
     );
   },

@@ -24,6 +24,7 @@ import {
   runCodeCodemod,
   runConfigCodemod,
 } from './run-codemod.mjs';
+import {withoutProtected} from './runner.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 
 /**
@@ -44,7 +45,7 @@ import {createFileProtectionResolver} from '../../foundation/fs/file-protection.
  * @param {string} [options.root]
  * @param {Map<string, string>} [options.contents] staged bytes from earlier dry-run phases
  * @param {{root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}} [options.protection]
- * @returns {{totalFilesChanged: number, totalTransformsApplied: number, changedFiles: string[], writtenFiles: string[], stagedContents: Map<string, string>, protectedFiles: import('../../authoring/codemod/type').CodemodRunResult['protectedFiles'], errors: Array<{file: string, codemod: string, error: string}>, skippedOptional: Array<import('../../authoring/codemod/type').CodemodEntry>}}
+ * @returns {{totalFilesChanged: number, totalTransformsApplied: number, changedFiles: string[], writtenFiles: string[], stagedContents: Map<string, string>, protectedFiles: import('../../authoring/codemod/type').CodemodRunResult['protectedFiles'], declinedCandidates: NonNullable<import('../../authoring/codemod/type').CodemodRunResult['declinedCandidates']>, errors: Array<{file: string, codemod: string, error: string}>, skippedOptional: Array<import('../../authoring/codemod/type').CodemodEntry>}}
  */
 export function runIntegrationCodemods(
   versionGroups,
@@ -74,6 +75,8 @@ export function runIntegrationCodemods(
   const writtenFiles = [];
   /** @type {import('../../authoring/codemod/type').CodemodRunResult['protectedFiles']} */
   const protectedFiles = [];
+  /** @type {NonNullable<import('../../authoring/codemod/type').CodemodRunResult['declinedCandidates']>} */
+  const declinedCandidates = [];
   /** @type {Array<{file: string, codemod: string, error: string}>} */
   const errors = [];
   /** @type {Array<import('../../authoring/codemod/type').CodemodEntry>} */
@@ -125,7 +128,7 @@ export function runIntegrationCodemods(
   if (codeEntries.length > 0) {
     const resolvedPath = path.resolve(srcPath);
     const files = fs.existsSync(resolvedPath)
-      ? findSourceFiles(resolvedPath)
+      ? findSourceFiles(resolvedPath, path.resolve(root))
       : [];
     for (const entry of codeEntries) {
       if (apply && writtenFiles.length !== protectionWriteCount) {
@@ -147,9 +150,11 @@ export function runIntegrationCodemods(
       changedFiles.push(...r.changedFiles);
       writtenFiles.push(...r.writtenFiles);
       protectedFiles.push(...r.protectedFiles);
+      declinedCandidates.push(...(r.declinedCandidates ?? []));
       errors.push(...r.errors);
     }
   }
+  const reportedDeclined = withoutProtected(declinedCandidates, protectedFiles);
 
   // A file several codemods changed is one file; transforms count each change.
   const totalFilesChanged = new Set(changedFiles).size;
@@ -161,6 +166,7 @@ export function runIntegrationCodemods(
     writtenFiles,
     stagedContents: virtualContents,
     protectedFiles,
+    declinedCandidates: reportedDeclined,
     errors,
     skippedOptional,
   };

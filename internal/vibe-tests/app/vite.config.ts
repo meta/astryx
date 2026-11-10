@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import stylexResolution from '../../../scripts/stylex-module-resolution.cjs';
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import stylex from '@stylexjs/unplugin';
@@ -36,10 +37,7 @@ export default defineConfig({
       dev: process.env.NODE_ENV === 'development',
       runtimeInjection: false,
       treeshakeCompensation: true,
-      unstable_moduleResolution: {
-        type: 'commonJS',
-        rootDir: repoRoot,
-      },
+      unstable_moduleResolution: stylexResolution.stylexModuleResolution,
       aliases: {
         '@astryxdesign/core/theme/tokens.stylex': path.resolve(
           repoRoot,

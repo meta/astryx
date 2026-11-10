@@ -95,6 +95,116 @@ describe('theme build adaptations', () => {
     );
   });
 
+  it('emits scoped status aliases in built CSS and preserves child extension parity', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-aliases',
+      tokens: {
+        '--color-info': '#225bff',
+        '--color-text-blue': '#203a6c',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {'--color-text-success': '#123456'},
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-green': '#abcdef'}},
+          },
+        ],
+      },
+      onDark: {
+        tokens: {'--color-text-blue': '#fefefe'},
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-aliases.css'),
+      'utf8',
+    );
+    const mediaAlias = '--color-text-info: var(--color-text-blue);';
+    const adaptationAlias = '--color-text-success: var(--color-text-green);';
+    const authoredRole = '--color-text-success: #123456;';
+    // The authored Info fill is a concrete hue, so theme generation derives
+    // its content, text, and pale-fill content (theme-compilation INV17).
+    for (const role of ['on-info', 'text-info', 'on-info-muted']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-${role}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+    }
+    // The dark media surface that sets the hue rebinds the text alias.
+    expect(css).toContain(mediaAlias);
+    expect(css).toContain(adaptationAlias);
+    expect(css.split(authoredRole).length - 1).toBeGreaterThanOrEqual(2);
+    expect(css.lastIndexOf(authoredRole)).toBeGreaterThan(
+      css.lastIndexOf(adaptationAlias),
+    );
+
+    const {statusAliasesTheme: builtTheme} = await import(
+      pathToFileURL(path.join(themesDir, 'status-aliases.js')).href
+    );
+    const source = defineTheme(input);
+    const childInput = {
+      name: 'status-alias-child',
+      tokens: {'--color-text-blue': '#345678'},
+    };
+    const fromSource = defineTheme({...childInput, extends: source});
+    const fromBuilt = defineTheme({...childInput, extends: builtTheme});
+    expect(generateThemeCSS(fromBuilt)).toEqual(generateThemeCSS(fromSource));
+  });
+
+  it('derives a complete status set for a minimal theme in built CSS (INV17)', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-minimal',
+      tokens: {
+        '--color-success': '#3FB950',
+        '--color-warning': '#D29922',
+        '--color-error': '#F85149',
+        '--color-info': '#6E40C9',
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-minimal.css'),
+      'utf8',
+    );
+    for (const status of ['success', 'warning', 'error', 'info']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-text-${status}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+      expect(css).toContain(
+        `--color-icon-${status}: var(--color-text-${status});`,
+      );
+    }
+    // Built and runtime output derive the same values.
+    const runtime = generateThemeCSS(defineTheme(input));
+    const derived = css.match(/--color-text-warning: [^;]+;/)?.[0];
+    expect(derived).toBeDefined();
+    expect(JSON.stringify(runtime)).toContain(derived);
+  });
+
   it.each([
     ['defined', writeTheme],
     ['plain', writePlainTheme],
@@ -167,7 +277,10 @@ describe('theme build adaptations', () => {
         css.indexOf('@media (width < 768px) and (pointer: coarse)'),
         css.indexOf('@media (prefers-contrast: more)'),
       );
-      expect(scaleBlock).toContain('--font-size-base: 0.875rem');
+      // Raw steps follow the reader's text size (spec:AST-102 FR3; 1 elsewhere).
+      expect(scaleBlock).toContain(
+        '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg))',
+      );
       expect(scaleBlock).not.toContain('.astryx-text');
       expect(scaleBlock).not.toContain('.astryx-heading');
       expect(scaleBlock).not.toContain('.astryx-button');
@@ -192,6 +305,70 @@ describe('theme build adaptations', () => {
       );
     },
   );
+
+  it("writes a built theme's font sizes following the reader's text size, as at runtime", async () => {
+    const {defineTheme, generateAdaptationCSS, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    // Butter's shape: a fixed supporting size, and a phone rule whose scale
+    // turns it back into a step.
+    const input = {
+      name: 'dynamic-type-built',
+      typography: {scale: {base: 14, ratio: 1.25}},
+      tokens: {'--text-supporting-size': '12px'},
+      adaptations: {
+        rules: [
+          {
+            when: {width: {below: 'lg'}, pointer: 'coarse'},
+            value: {typography: {scale: {base: 16, ratio: 1.2225}}},
+          },
+        ],
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+    const css = fs.readFileSync(
+      path.join(themesDir, 'dynamic-type-built.css'),
+      'utf8',
+    );
+    const compact = value => value.replace(/\s+/g, ' ').trim();
+    const source = defineTheme(input);
+    const runtime = generateThemeCSS(source);
+    // The built CSS writes the sizes as the runtime does: the root's steps and
+    // its fixed supporting size scaled, and the phone rule's steps scaled
+    // inside its own condition.
+    const adaptationCSS = generateAdaptationCSS(source).component;
+    expect(compact(css)).toContain(compact(adaptationCSS));
+    expect(adaptationCSS).toContain(
+      '--_scaled-font-size-base: min(calc(1rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg));',
+    );
+    expect(css).toContain(
+      '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg));',
+    );
+    expect(css).toContain(
+      '--text-supporting-size: calc(12px * var(--_dynamic-type-footnote, 1));',
+    );
+
+    // The built module and a theme extending it compile to the same CSS as
+    // the source.
+    const {dynamicTypeBuiltTheme: builtTheme} = await import(
+      pathToFileURL(path.join(themesDir, 'dynamic-type-built.js')).href
+    );
+    expect(generateThemeCSS(builtTheme)).toEqual(runtime);
+    const childInput = {
+      name: 'dynamic-type-child',
+      tokens: {'--text-body-size': '15px'},
+    };
+    expect(
+      generateThemeCSS(defineTheme({...childInput, extends: builtTheme})),
+    ).toEqual(generateThemeCSS(defineTheme({...childInput, extends: source})));
+    expect(
+      generateThemeCSS(defineTheme({...childInput, extends: builtTheme}))
+        .component,
+    ).toContain('--text-body-size: calc(15px * var(--_dynamic-type-body, 1));');
+  });
 
   it('resolves a plain object whose only input-only field is adaptations', async () => {
     const project = path.join(tmpDir, 'project');
@@ -349,7 +526,9 @@ describe('theme build adaptations', () => {
       'utf-8',
     );
     expect(rebuiltCss).toContain('@media (width < 700px)');
-    expect(rebuiltCss).toContain('--font-size-lg: 1.25rem');
+    expect(rebuiltCss).toContain(
+      '--_scaled-font-size-lg: min(calc(1.25rem * var(--_dynamic-type-title3, 1)), var(--_scaled-font-size-xl))',
+    );
     expect(rebuiltCss).toContain('light-dark(#111111, #eeeeee)');
     expect(rebuiltCss).toContain(':root { color-scheme: light dark; }');
     expect(`${rebuilt.stdout}${rebuilt.stderr}`).toContain(

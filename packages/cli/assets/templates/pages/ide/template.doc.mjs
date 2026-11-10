@@ -16,4 +16,9 @@ export const doc = {
   ],
   isReady: true,
   category: 'Tools - IDE',
+  icons: {
+    DocumentTextIcon: 'document',
+    FolderIcon: 'folder',
+    MagnifyingGlassIcon: 'search',
+  },
 };

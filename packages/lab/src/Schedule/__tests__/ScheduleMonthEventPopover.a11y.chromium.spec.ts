@@ -13,7 +13,7 @@
  *   cannot show a native popover, return focus through it, or lay out chips.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   finishEvidence,
   openStory,

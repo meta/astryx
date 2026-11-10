@@ -245,9 +245,9 @@ export const docs = {
     },
     {
       name: 'variant',
-      type: "'input' | 'ghost'",
+      type: "'input' | 'secondary' | 'ghost'",
       description:
-        'Visual trigger style. input is the bordered input treatment for forms; ghost is borderless and matches ghost buttons for toolbar usage.',
+        'Visual trigger style. input is the bordered input treatment for forms; secondary matches the secondary buttons of the active theme (borderless and neutral-filled by default) for navs and toolbars; ghost is borderless and transparent, matching ghost buttons for toolbar usage.',
       default: "'input'",
     },
     {
@@ -273,7 +273,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the selector is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the trigger focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled Selector in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. Use this instead of wrapping a disabled Selector in Tooltip.',
     },
     {
       name: 'isLabelHidden',
@@ -307,8 +307,9 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the bordered input and is only valid for the input variant; ghost selectors detach attached status messages by default. Use tooltip for compact toolbar controls.',
-      default: "'attached' for input selectors; 'detached' for ghost selectors",
+        'How the status message is placed relative to the input. attached overlaps directly below the bordered input and is only valid for the input variant; secondary and ghost selectors detach attached status messages by default. Use tooltip for compact toolbar controls.',
+      default:
+        "'attached' for input selectors; 'detached' for secondary and ghost selectors",
     },
     {
       name: 'renderOption',
@@ -439,7 +440,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use variant="ghost" when a selector sits in a toolbar with ghost buttons. If validation status is needed there, prefer statusVariant="tooltip" so the toolbar height stays compact.',
+          'Use variant="secondary" when a selector sits in a nav or toolbar beside secondary buttons or a segmented control, so it shares their treatment instead of reading as a form field. Use variant="ghost" when a selector sits in a toolbar with ghost buttons. If validation status is needed there, prefer statusVariant="tooltip" so the toolbar height stays compact.',
       },
       {
         guidance: true,
@@ -474,7 +475,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,
@@ -535,7 +536,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,
@@ -576,7 +577,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use variant="ghost" in toolbars with ghost buttons; prefer statusVariant="tooltip" for compact validation status.',
+          'Use variant="secondary" in navs/toolbars beside secondary buttons; use variant="ghost" in toolbars with ghost buttons; prefer statusVariant="tooltip" for compact validation status.',
       },
       {
         guidance: false,
@@ -606,7 +607,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,

@@ -10,7 +10,7 @@
 export const docs = {
   type: 'namespace',
   name: 'styling-libraries',
-  title: 'Styling Library Interop',
+  title: 'Other styling libraries',
   summary:
     'Integrate Tailwind, StyleX, Panda, Chakra, MUI, CSS-in-JS, CSS Modules, and non-CSS renderers with system tokens.',
   keywords: [
@@ -23,6 +23,7 @@ export const docs = {
     'styled-components',
     'CSS Modules',
     'interop',
+    'styling library interop',
   ],
   slots: {
     guides: {title: 'Guides', accepts: {kinds: ['generic']}},

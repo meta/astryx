@@ -21,6 +21,7 @@ export const docs = {
     'reset',
     'smoke test',
     'layer audit',
+    'cascade layers',
     'Tailwind coexistence',
   ],
 
@@ -45,7 +46,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'Install the packages and run `astryx init` for agent docs, then add the reset, `astryx.css`, and theme CSS imports (see Theme and CSS Setup below).',
+            'Install the packages and run `{@command init}` for agent docs, then add the reset, `astryx.css`, and theme CSS imports (see Theme and CSS Setup below).',
             'Wrap the app root with Theme and choose the initial light, dark, or system mode behavior.',
             'Make Tailwind and design system CSS layer order explicit before replacing components.',
             'Render the foundation smoke test page and confirm primitives keep their padding before migrating any surface.',
@@ -69,29 +70,29 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Migration-oriented CLI pass',
-          code: `astryx docs migration
-astryx docs theme
-astryx docs styling
-astryx template --list --type block
-astryx template AppShellTopNavWithSideNav --skeleton
-astryx template PopoverSettingsPanel --skeleton
-astryx component AppShell
-astryx component SideNav
-astryx component TopNav
-astryx component CommandPalette
-astryx component Button
-astryx component TextInput`,
+          code: `{@command docs migration}
+{@command docs theme}
+{@command docs styling}
+{@command template --list --type block}
+{@command template AppShellTopNavWithSideNav --skeleton}
+{@command template PopoverSettingsPanel --skeleton}
+{@command component AppShell}
+{@command component SideNav}
+{@command component TopNav}
+{@command component CommandPalette}
+{@command component Button}
+{@command component TextInput}`,
         },
         {
           type: 'prose',
-          text: 'For a shorter read to paste into an AI coding tool, add `--detail brief` (one line per section) or `--detail compact`. Use `--json` when building automated migration reports.',
+          text: 'For a shorter read to paste into an AI coding tool, see {@link generic:working-with-ai}. Use `--json` when building automated migration reports.',
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Short and JSON modes',
-          code: `astryx docs migration --full --detail brief
-astryx component Button --json`,
+          code: `{@command docs migration --full --detail brief}
+{@command component Button --json}`,
         },
       ],
     },
@@ -129,15 +130,31 @@ export function AppRoot({children}: {children: React.ReactNode}) {
         },
         {
           type: 'prose',
-          text: 'On Tailwind v3 there is no preflight.css to import, so wrap the @tailwind base directive in a named layer instead. Keep utilities unlayered so existing app utility classes still win everywhere.',
+          text: 'Import the global CSS file first in the root layout or app entry, before anything that imports Astryx or theme CSS, including the `astryx-themes` module and a root component like the `AppRoot` above. Why the order matters, and what to do when it cannot come first, is in {@link generic:tailwind}.',
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Root layout or app entry',
+          code: `import './globals.css'; // first: declares the cascade-layer order
+
+import {AppRoot} from './AppRoot';`,
+        },
+        {
+          type: 'prose',
+          text: 'On Tailwind v3 there is no preflight.css to import, so wrap the @tailwind base directive in a named layer instead. Keep utilities unlayered so existing app utility classes still win everywhere. Put the `@layer` order line in its own `layers.css` and import it first, before `globals.css`: Next.js (webpack or Turbopack) and other bundlers that hoist CSS imports move the imported files above an inline `@layer` line, so the order would arrive too late.',
         },
         {
           type: 'code',
           lang: 'css',
-          label: 'Tailwind v3 coexistence',
-          code: `@layer reset, tw-preflight, astryx-base, astryx-theme;
-
-@import "@astryxdesign/core/reset.css";
+          label: 'layers.css (imported first)',
+          code: `@layer reset, tw-preflight, astryx-base, astryx-theme;`,
+        },
+        {
+          type: 'code',
+          lang: 'css',
+          label: 'globals.css (Tailwind v3 coexistence)',
+          code: `@import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/core/astryx.css";
 @import "@astryxdesign/theme-neutral/theme.css";
 
@@ -146,6 +163,15 @@ export function AppRoot({children}: {children: React.ReactNode}) {
 }
 @tailwind components;
 @tailwind utilities; /* unlayered: legacy utility classes keep winning */`,
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Root layout or app entry (Tailwind v3)',
+          code: `import './layers.css'; // first: declares the cascade-layer order
+import './globals.css';
+
+import {AppRoot} from './AppRoot';`,
         },
       ],
     },
@@ -186,7 +212,7 @@ export function AppRoot({children}: {children: React.ReactNode}) {
           type: 'list',
           style: 'unordered',
           items: [
-            'Declare the canonical @layer order once, before any @import. With webpack-based bundlers (including Next.js) the order declaration must live in its own CSS file imported first, such as layers.css, because webpack hoists @import content above the inline CSS that follows it.',
+            'Declare the canonical @layer order once, before any @import. With Next.js (webpack or Turbopack) and other bundlers that hoist CSS imports, the order declaration must live in its own CSS file imported first, such as layers.css, because the bundler hoists @import content above the inline CSS that follows it.',
             'Audit every pre-existing global or reset stylesheet and assign each one to a layer deliberately. Top-level imports without layer() stay unlayered and beat every layer; imports nested inside a layered file inherit that layer.',
             'Remove or demote the app legacy reset. The design system ships its own :where() reset in the lowest layer, so any app reset belongs in that same reset layer and never in a layer above astryx-base.',
             'Layer Tailwind preflight. On Tailwind v4, import preflight.css with layer(base). On Tailwind v3, wrap the @tailwind base directive in a named layer (see the snippet in Theme and CSS Setup). Unlayered preflight overrides theme CSS silently.',

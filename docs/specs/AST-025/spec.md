@@ -11,11 +11,15 @@ approved_at: 2026-09-11
 phase: accepted
 owners: [cixzhang]
 affects_architecture:
-  [architecture:container-padding, architecture:public-component-api]
+  [
+    architecture:container-padding,
+    architecture:public-component-api,
+    architecture:interaction-modality,
+  ]
 affects_families: [family:layout-regions, family:layout-primitives]
 affects_contributing: []
 affects_consumer_docs:
-  [Layout, Stack, Table, Popover, DropdownMenu, Carousel, CodeBlock]
+  [Layout, Stack, Table, Popover, DropdownMenu, Carousel, CodeBlock, Tooltip]
 ---
 
 # Scrollable container behavior system spec
@@ -138,8 +142,13 @@ the behavior.
   MUST remain keyboard reachable as required by WCAG 2.1.1. A delivery surface that
   assigns keyboard scrolling to the viewport MUST add it to the tab order only
   while at least one applicable axis is effective, and MUST provide an appropriate
-  role and accessible name. An integration MAY instead rely on an existing
-  focusable descendant when that path gives keyboard users access to all overflowed
+  role and accessible name. The role is `group` unless the viewport is itself a
+  landmark. The name is the accessible name of the component that owns the viewport:
+  the caller's label, else that component's translated default. A viewport that is
+  the page's only landmark of its role, such as the single `main`, MAY rely on that
+  role and carry no name; a viewport that is one of several landmarks of its role
+  MUST be named. An integration MAY instead rely on an existing focusable descendant
+  when that path gives keyboard users access to all overflowed
   content. In shared `contentOrViewport` mode the named viewport MUST retain
   `tabIndex=0` while effectively scrollable. On forward keyboard Tab entry the
   hook MUST inspect the first sequential descendant once and MAY delegate only
@@ -152,6 +161,13 @@ the behavior.
   persistent subtree or ancestor observation for keyboard eligibility; existing
   geometry observation remains governed by FR5–FR9. Both paths MUST retain clear
   accessible naming and native Arrow/Page access to the full scroll range.
+  A tooltip is the one exception: content too tall for the viewport scrolls
+  inside it with no keyboard path. Under the ARIA tooltip pattern a tooltip
+  never takes focus, and its trigger keeps focus while it is shown; the full
+  content stays available to assistive technology through the trigger's
+  accessible description; long or essential content belongs in a HoverCard or
+  Popover, which do take focus; and the alternative, overflow left outside the
+  viewport, reaches no one.
 - **FR13 — Losing overflow does not move focus.** If a focused viewport stops
   overflowing, the system MAY remove it from future sequential navigation but MUST
   NOT move or blur current focus solely because geometry changed.
@@ -160,7 +176,8 @@ the behavior.
   the requested direction. A containment policy MAY stop chaining, but its
   `overscroll-behavior` effect MUST be active only on axes that currently overflow.
   This avoids dead scroll zones in engines that honor containment on non-overflowing
-  `overflow: auto` elements.
+  `overflow: auto` elements. Inside a touch presentation under a finger, who
+  gets a drag is decided once, when it begins (`spec:AST-094` FR14).
 - **FR15 — Native scrollbars are the default presentation.** The default presenter
   MUST preserve native scrolling and use standards-based CSS such as
   `scrollbar-width`, `scrollbar-color`, and `scrollbar-gutter` where supported.
@@ -390,6 +407,7 @@ Representative public evidence:
 | FR5–FR9          | Observer lifecycle and integration tests                   | viewport resize, content resize, async resource, hidden/show, reconnect, classic scrollbar                                                                                                                   | State remains stale, reports fitting while unmeasurable, loops, or publishes redundant updates                                                       |
 | FR10, FR11, FR18 | Real-browser nested Sticky matrix                          | arbitrary flow position; each logical edge; orthogonal and same-axis owners; inactive inner candidate                                                                                                        | Sticky binds to a non-effective or cross-axis owner, cannot appear mid-flow, or stacks against the wrong boundary                                    |
 | FR12, FR13       | Keyboard and accessibility-tree tests                      | fit/overflow, named viewport, native link/button delegation, excluded roles, nested owners, forward/reverse entry, pointer/programmatic focus, dynamic eligibility, full Arrow/Page range in Chromium/WebKit | Content is unreachable, a fitting area adds an unexplained stop, an existing path gains a duplicate stop, naming is absent, or focus moves on change |
+| FR12 naming      | Accessibility-tree tests                                   | owner-named `group` viewport, from the caller's label and from the translated default; the page's single `main` landmark as viewport, relying on its role; a second `main` landmark as viewport              | A non-landmark viewport is not a `group` named by its owner, or a second `main` viewport without a name passes                                       |
 | FR14             | Wheel/touch/keyboard chaining browser tests                | fitting child, active child, each edge, contain and chain                                                                                                                                                    | A fitting child creates a dead wheel zone or explicit containment leaks to an inactive axis                                                          |
 | FR15, FR16       | Native/custom presentation and forced-colors tests         | overlay/classic, thin/default, stable gutter, hidden/replacement, custom thumb                                                                                                                               | Presentation creates a second owner, masks state, loses platform fallback, or changes scrolling mechanics                                            |
 | FR17             | Type/API tests and browser fixtures                        | requested inline, block, both; attempted visible opposite axis                                                                                                                                               | Public API admits a CSS combination the platform computes to different semantics                                                                     |

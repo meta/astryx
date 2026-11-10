@@ -23,17 +23,11 @@ import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
 import {Button} from '@astryxdesign/core/Button';
 import {Minimize2} from 'lucide-react';
+import {PreviewFrame, type PreviewFrameGeneration} from './usePreviewFrame';
+
+const noop = () => {};
 
 export type Viewport = 'desktop' | 'phone';
-
-// Under `next dev` the preview frame keeps the site origin (the sandbox the
-// preview always had before isolation): the dev server serves its /_next
-// assets only to requests that name an allowlisted host in Origin or Referer,
-// and a document with an opaque origin sends neither, so an isolated preview
-// cannot load its own scripts there. Production builds, which is where
-// untrusted code meets real users, get the opaque origin — see the iframe
-// below. `process.env.NODE_ENV` is inlined at build time.
-const PREVIEW_KEEPS_SITE_ORIGIN = process.env.NODE_ENV === 'development';
 
 // iPhone 17 logical viewport (402 × 874 CSS px, ~9:19.5).
 const PHONE_WIDTH = 402;
@@ -129,7 +123,7 @@ interface PreviewStageProps {
    * the playground has issued one on the client — the nonce must never be
    * baked into server-rendered HTML.
    */
-  frame: {key: number; src: string} | null;
+  frame: PreviewFrameGeneration | null;
   /**
    * Fires on every load of the preview document — including a replaced one
    * (previewed code navigating or reloading its own frame), which is what
@@ -185,41 +179,15 @@ export function PreviewStage({
           isFullBleed && !isFullscreen && s.cardFullBleed,
           dynamic.size(width, height),
         ]}>
-        {frame != null &&
-          // Two elements rather than one with a computed `sandbox`: the lint
-          // rule guarding iframes wants the attribute spelled out, and so does
-          // a reader auditing the boundary.
-          (PREVIEW_KEEPS_SITE_ORIGIN ? (
-            <iframe
-              key={frame.key}
-              ref={frameRef}
-              onLoad={onFrameLoad}
-              src={frame.src}
-              sandbox="allow-scripts allow-same-origin"
-              title="Preview"
-              {...stylex.props(
-                s.iframe,
-                isInteractionDisabled && s.iframeInert,
-              )}
-            />
-          ) : (
-            // No allow-same-origin: the preview document gets an opaque
-            // origin, so the code it compiles and runs holds no cookies, no
-            // storage, and no reach into this page — see previewChannel.ts
-            // for how the two ends talk without a nameable origin.
-            <iframe
-              key={frame.key}
-              ref={frameRef}
-              onLoad={onFrameLoad}
-              src={frame.src}
-              sandbox="allow-scripts"
-              title="Preview"
-              {...stylex.props(
-                s.iframe,
-                isInteractionDisabled && s.iframeInert,
-              )}
-            />
-          ))}
+        {frame != null && (
+          <PreviewFrame
+            frame={frame}
+            frameRef={frameRef}
+            onLoad={onFrameLoad ?? noop}
+            title="Preview"
+            {...stylex.props(s.iframe, isInteractionDisabled && s.iframeInert)}
+          />
+        )}
       </Card>
     </Center>
   );

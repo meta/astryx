@@ -75,7 +75,7 @@ describe('theme build font-loading warning', () => {
     expect(result.stdout).toContain('display=swap');
     expect(result.stdout).toContain('@font-face');
     expect(result.stdout).toContain('font-display: swap');
-    expect(result.stdout).toContain('astryx docs typography');
+    expect(result.stdout).toContain(' docs typography');
     // The one-line summaries follow the CLI's stream contract. These are
     // NOTICES about a correct theme, not warnings, so they go to stdout with
     // the rest of the build's progress — stderr stays for the defects an
@@ -105,8 +105,8 @@ describe('theme build font-loading warning', () => {
     );
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain(
-      '[note] Fonts named but not loaded: "Space Grotesk", "JetBrains Mono". Load them in your app (recipe: astryx docs typography).\n',
+    expect(result.stdout).toMatch(
+      /\[note\] Fonts named but not loaded: "Space Grotesk", "JetBrains Mono"\. Load them in your app \(recipe: .+ docs typography\)\.\n/,
     );
     expect(result.stdout).not.toContain('fonts.googleapis.com');
     expect(result.stdout).not.toContain('@font-face');

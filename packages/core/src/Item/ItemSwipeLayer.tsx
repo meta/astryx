@@ -29,8 +29,9 @@ import {
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
@@ -175,6 +176,15 @@ const swipeVariantStyles = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    // Forced colors replace the fill with Canvas; a border keeps the
+    // destructive fill's shape visible (architecture:theme-tokens INV11). A
+    // border, not an outline, leaves the shared focus ring intact.
+    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
+    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
 });
 
@@ -298,13 +308,19 @@ export default function ItemSwipeLayer({
               <button
                 key={entry.id ?? entry.label}
                 type="button"
-                disabled={entry.isDisabled === true}
+                aria-disabled={entry.isDisabled === true ? true : undefined}
                 onClick={() =>
                   swipe.activateEntry(() => {
                     void entry.onActivate();
                     return entry.hasRemoval === true;
                   })
                 }
+                // A disabled entry stays focusable while the row rests open but
+                // is inert: it runs no `onActivate` and its click does not
+                // reach the row (spec:AST-085 FR1, FR2).
+                {...(entry.isDisabled === true
+                  ? disabledInteractionProps<HTMLButtonElement>()
+                  : null)}
                 {...mergeProps(
                   themeProps('item-swipe-action', {variant}),
                   focusOutlineProps.focusVisible(

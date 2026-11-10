@@ -8,6 +8,7 @@ import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
 import type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 
 const meta: Meta<typeof DateTimeInput> = {
   title: 'Core/DateTimeInput',
@@ -58,7 +59,7 @@ const meta: Meta<typeof DateTimeInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateTimeInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the fields (activation stays blocked). Use this instead of wrapping a disabled DateTimeInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -391,9 +392,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateTimeInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the fields (activation is still blocked). Use
+// disabledMessage instead of wrapping a disabled DateTimeInput in Tooltip, so
+// the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateTimeString | undefined>(
@@ -716,4 +717,32 @@ export const StylingParts: Story = {
       </div>
     </div>
   ),
+};
+
+function PersianDateTimeField() {
+  const [value, setValue] = useState<ISODateTimeString | undefined>(
+    '2026-11-02T09:30' as ISODateTimeString,
+  );
+  return (
+    <InternationalizationProvider locale="en" calendar="persian">
+      <div
+        data-calendar-field="en-persian"
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateTimeInput label="Appointment" value={value} onChange={setValue} />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * In a calendar other than Gregorian, DateTimeInput never shows native date
+ * and time controls: it opens the popovers on a mouse and the bottom sheet on
+ * a touch screen, whose Date panel shows months of the calendar. The value
+ * stays a Gregorian ISO date-time.
+ */
+export const CalendarSystems: Story = {
+  render: () => <PersianDateTimeField />,
 };

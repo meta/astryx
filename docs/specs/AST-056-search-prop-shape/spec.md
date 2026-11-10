@@ -80,7 +80,7 @@ An earlier draft proposed collecting these props into one object-valued
 deprecations across seven components, four of them a required prop, to solve
 a tidiness problem rather than one a person using an Astryx product meets.
 
-The trigger is [#6829](https://github.com/facebook/astryx/pull/6829), which
+The trigger is [#6829](https://github.com/meta/astryx/pull/6829), which
 proposes `hasCreate` + `onCreate` on `MultiSelector` — a sixth and seventh
 search-adjacent prop on a component that already carries three, under a name
 `Tokenizer` already ships with a different contract. That pull request is
@@ -192,10 +192,9 @@ somebody made alone:
    query input _is_ the control. Both are locally right, which is exactly why
    no component will fix this on its own.
 
-Beyond core, `packages/lab` has already copied the drift and added a fifth
-name: `MobileTokenizer` takes `searchSource` + `emptySearchResultsText`,
-`TransferList` takes `hasSearch` + `searchPlaceholder` + `searchLabel`, and
-`ChatEmojiPicker` takes `searchLabel`. Lab is not a stable public promise, so
+Beyond core, `packages/lab` has copied the drift: `TransferList` takes
+`hasSearch` + `searchPlaceholder` + `searchLabel`, and `ChatEmojiPicker` takes
+`searchLabel`. Lab is not a stable public promise, so
 this record does not govern it; it is evidence that the pattern spreads by
 copying.
 
@@ -252,10 +251,9 @@ copying.
   person on screen is not reading.
 - **AR2 — The query input has an accessible name that is not its placeholder.**
   A placeholder is placeholder text and MUST NOT be the input's only
-  accessible name. The component supplies the name — `Selector` and
-  `MultiSelector` use a localized "Search options" today — and a component
-  that falls back to the placeholder, as `CommandPaletteInput` does and its own
-  comment flags, MUST gain a real name as part of adopting this record.
+  accessible name. The component supplies the name: a localized "Search
+  options" in `Selector` and `MultiSelector`, and a localized "Search commands"
+  in `CommandPaletteInput`.
 
 ### Platform support
 
@@ -264,11 +262,11 @@ copying.
 - Unsupported behavior: none. A component that cannot satisfy FR3's
   required/optional rule does not partially adopt the prop; it keeps its
   current API until the rule is settled for it.
-- Browser evidence: this record contracts prop shape and announcement, not
-  layout or paint, so every requirement here is provable in jsdom. AR1's
-  announcement is a live-region assertion, not a pixel claim. Adopting
-  components keep whatever real-browser evidence their own records already
-  require.
+- Browser evidence: DOM live-region assertions prove the rendered content source,
+  but they do not prove what assistive technology announces or when. Any adopter
+  that changes announcement content or timing proves its routing, text, and
+  occasion count at the DOM and accessibility-tree layers; real-AT observation is
+  recommended follow-up under `spec:AST-009`.
 
 ## Migration and compatibility
 
@@ -346,7 +344,7 @@ describes, so `Tokenizer` already conforms and changes nothing.
   `component:CommandPalette` cite this record instead of each recording a
   private copy. `component:MultiSelector` is `authority: draft` and is drafting
   exactly such a copy; that claim is withdrawn in favour of FR5 and FR6 here.
-- [#6829](https://github.com/facebook/astryx/pull/6829) is blocked on this
+- [#6829](https://github.com/meta/astryx/pull/6829) is blocked on this
   ruling. Its `hasCreate` + `onCreate` pair is rejected by FR5, which admits
   the same user need as `hasCreate` alone, reported through the component's
   existing `onChange` with a descriptor naming the creation — the shape

@@ -1,4 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-export {gothicTheme, gothicPalettes} from './gothicTheme';
+export {gothicPalettes, gothicTheme} from './gothicTheme';
 export {gothicIconRegistry} from './icons';

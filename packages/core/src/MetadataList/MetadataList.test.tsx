@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import type {ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -124,6 +125,30 @@ describe('MetadataList', () => {
     expect(screen.getByText('B')).toBeInTheDocument();
   });
 
+  it('uses top labels in horizontal orientation even when position is start', () => {
+    render(
+      <MetadataList orientation="horizontal" label={{position: 'start'}}>
+        <MetadataListItem label="A">1</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const item = screen.getByRole('term').closest('.astryx-metadata-list-item');
+    expect(item).toContainElement(screen.getByRole('definition'));
+  });
+
+  it('defaults to side labels and preserves width when position is omitted', () => {
+    const {container} = render(
+      <MetadataList label={{width: 120}}>
+        <MetadataListItem label="A">1</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const list = container.querySelector('dl');
+    expect(list?.getAttribute('style')).toContain('120px minmax(0, 1fr)');
+    expect(screen.getByRole('term').parentElement).toBe(list);
+    expect(screen.getByRole('definition').parentElement).toBe(list);
+  });
+
   describe('numeric columns', () => {
     // A fixed column count is a runtime value, so it arrives as a StyleX
     // dynamic style: the template lands in the element's inline style (as the
@@ -161,6 +186,20 @@ describe('MetadataList', () => {
       );
 
       expect(gridTemplateOf(container)).not.toContain('repeat(');
+    });
+
+    it('defaults to top labels for columns={2} with a width-only label config', () => {
+      const {container} = render(
+        <MetadataList columns={2} label={{width: 260}}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      expect(gridTemplateOf(container)).toContain('repeat(2, 1fr)');
+      const item = screen
+        .getByRole('term')
+        .closest('.astryx-metadata-list-item');
+      expect(item).toContainElement(screen.getByRole('definition'));
     });
 
     it('ignores numeric columns in horizontal orientation', () => {
@@ -341,5 +380,55 @@ describe('MetadataList pass-through props', () => {
     const rootEl = screen.getByTestId('list');
     expect(rootEl).toHaveAttribute('data-columns', '2');
     expect(rootEl).toHaveAttribute('data-orientation', 'horizontal');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no title wrapper for %s', (_name, title) => {
+    const {container: withTitle} = render(
+      <MetadataList title={title as ReactNode}>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    const {container: without} = render(
+      <MetadataList>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    // The list's generated id differs between the two renders.
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/id="[^"]*"/g, 'id');
+    expect(html(withTitle)).toBe(html(without));
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no item icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <MetadataListItem label="Owner" icon={icon as ReactNode}>
+        Ana
+      </MetadataListItem>,
+    );
+    const {container: without} = render(
+      <MetadataListItem label="Owner">Ana</MetadataListItem>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as a title and as an item icon, as React does', () => {
+    render(
+      <MetadataList title={0}>
+        <MetadataListItem label="Owner" icon={0}>
+          Ana
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(2);
   });
 });

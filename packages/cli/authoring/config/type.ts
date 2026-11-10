@@ -115,10 +115,22 @@ export interface AstryxConfig {
     /** Experimental XLE (layout expression) configuration. */
     xle?: {
       /**
-       * Register app-local components so XLE layout expressions can
-       * reference them by name via {hint}. Keyed by component name.
+       * Custom components for the removed layout expander, keyed by
+       * component name. The CLI still validates the field, so an entry
+       * without a string `from` makes `astryx.config` invalid, but nothing
+       * reads it.
        */
       components?: Record<string, XleComponent>;
     };
+    /**
+     * Experimental icon sets (spec:AST-084): the project's main icon set, a
+     * set name (`"outline"`) or `"<package>/<set>"`, and the opt-in. A list
+     * (`["outline", "@acme/icons/brand"]`) names the main set first, then
+     * backup sets in order: a copied template takes each icon from the first
+     * set that has its meaning. Copied templates use these icons, and
+     * discover and Doctor report icon sets, only when it is set.
+     * @experimental May change or be removed in a patch release.
+     */
+    iconSet?: string | string[];
   };
 }

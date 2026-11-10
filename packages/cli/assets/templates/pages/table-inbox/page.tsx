@@ -82,6 +82,7 @@ import {
   StackItem,
   VStack,
 } from '@astryxdesign/core/Layout';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   durationVars,
   easeVars,
@@ -1391,7 +1392,13 @@ function ConversationPane({
               <Button
                 label="Inbox"
                 variant="ghost"
-                icon={<Icon icon={ArrowLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ArrowLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={onClose}
               />
             }
@@ -1652,8 +1659,8 @@ const COMPOSER_TOOLS: {
 /**
  * The compose sheet.
  *
- * **`BottomSheet hasScrim={false}`, which is the only non-modal surface in
- * core.** With the scrim off the sheet opens with `show()` rather than
+ * **`BottomSheet hasScrim={false}` keeps this bottom-edge composer non-modal.**
+ * With the scrim off the sheet opens with `show()` rather than
  * `showModal()`, so it never enters the top layer, never makes the page inert
  * and never locks body scroll: the inbox behind it stays live. That matters
  * more here than anywhere else in this template, because writing a message is
@@ -1661,12 +1668,14 @@ const COMPOSER_TOOLS: {
  * actually said, copy an order number out of a thread. A modal composer
  * answers that with "close me first".
  *
- * The trade is position, and it is worth naming. A sheet rises from the bottom
- * edge, centred: its positioner is `inset-inline: 0` with
- * `justify-content: center`, and there is no anchor, side or width prop. So
- * this cannot be docked to the inline-end corner the way a `Dialog` can be.
- * `Dialog` takes a static `position` and would put the window in that corner —
- * but `Dialog` is always modal, so buying the corner costs the live inbox.
+ * The trade is bottom-edge geometry, and it is worth naming. A non-modal
+ * `Drawer` keeps page context live from an inline edge, but it is a full-height
+ * side panel; this composer intentionally rises from the bottom. A sheet's
+ * positioner is `inset-inline: 0` with `justify-content: center`, and there is
+ * no anchor, side or width prop. So this cannot be docked to the inline-end
+ * corner the way a `Dialog` can be. `Dialog` takes a static `position` and would
+ * put the window in that corner — but `Dialog` is always modal, so buying the
+ * corner costs the live inbox.
  * `ChatComposerDrawer` is a false friend: despite the name it is an in-flow
  * disclosure tray for a ChatComposer's attachments, with no positioning of its
  * own.
@@ -1776,12 +1785,9 @@ function ComposeWindow({
       hasScrim={false}
       // The Layout below owns the inset; the sheet adds none of its own.
       padding={0}>
-      {/* The grab handle floats over the top edge, out of flow, about 12px
-          down. The Layout's own padding is not quite enough to clear it — the
-          heading came up level with the pill, four pixels under it — so the
-          sheet buys the handle its own band of space before the content
-          starts. */}
-      <VStack paddingBlockStart={3}>
+      {/* The sheet keeps a band under its grab handle at rest, so the Layout
+          starts below the pill without a band of its own. */}
+      <VStack>
         <Layout
           // auto, not fill: the sheet is sized by this Layout now rather than
           // the other way round. `fill` would stretch it to a height that
@@ -1838,7 +1844,9 @@ function ComposeWindow({
                   // than being rejected for not matching anything.
                   hasCreate
                   // Stamps data-autofocus, which is what the sheet looks for
-                  // once the window is actually visible.
+                  // once the window is actually visible. It applies to the
+                  // inline field: on a compact touch screen the field opens
+                  // its own sheet and ignores it.
                   //
                   // Deliberately without `hasEntriesOnFocus`: the two together
                   // mean the window can never open without the full directory

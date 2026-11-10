@@ -69,12 +69,13 @@ export default function PowerSearchPresetFilters() {
   ]);
 
   return (
-    <PowerSearch
-      style={{width: 360}}
-      config={config}
-      filters={filters}
-      onChange={newFilters => setFilters([...newFilters])}
-      placeholder="Add more filters..."
-    />
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 360px)'}}>
+      <PowerSearch
+        config={config}
+        filters={filters}
+        onChange={newFilters => setFilters([...newFilters])}
+        placeholder="Add more filters..."
+      />
+    </div>
   );
 }

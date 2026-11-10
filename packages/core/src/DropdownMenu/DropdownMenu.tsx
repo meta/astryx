@@ -4,8 +4,9 @@
 
 /**
  * @file DropdownMenu.tsx
- * @input Uses React, StyleX, usePopover, MenuBottomSheet, Button, List,
- *   useListFocus, and the shared viewport-safe menu-width resolver
+ * @input Uses React, StyleX, usePopover, MenuBottomSheet (lazy), Button, List,
+ *   useListFocus, the shared viewport-safe menu-width resolver, and the
+ *   layer runtime's entrance hold
  * @output Exports DropdownMenu with caller-selected popover or bottom-sheet
  *   presentation
  * @position Core implementation; consumed by index.ts
@@ -44,8 +45,15 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
+import {
+  claimPress,
+  currentGesture,
+  isPressInFlight,
+} from '../Layer/gestureCounter';
 import {Button, type ButtonProps} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
@@ -55,33 +63,45 @@ import type {DropdownMenuItemProps} from './DropdownMenuItem';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from './menuItemRoles';
 import {
   DropdownMenuContext,
+  DropdownMenuRootOpenContext,
+  DropdownMenuSurfaceContext,
   type DropdownMenuContextValue,
+  type DropdownMenuSurfaceHost,
+  type DropdownMenuSurfaceValue,
 } from './DropdownMenuContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {useListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInternalListFocus} from '../hooks/useListFocus';
+import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {focusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
+import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
-import {MenuRegionsContext} from './menuRegionsContext';
-import {getFocusableElements} from '../hooks/useFocusTrap';
+import {moveRegionsTab} from './menuRegionStops';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useMenuDrillIn} from './useMenuDrillIn';
 import {resolveMenuWidth} from './menuWidth';
+import {menuTouchActionStyles} from './menuTouchAction.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   useAdaptivePresentation,
   type AdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
-import {MenuBottomSheet} from './MenuBottomSheet';
-import {MenuBottomSheetActionList} from './MenuBottomSheetActionList';
+// Loaded on demand: only the bottom-sheet presentation renders the sheet.
+import {
+  MenuBottomSheet,
+  MenuBottomSheetActionList,
+  preloadMenuBottomSheetActionList,
+} from './lazyMenuBottomSheet';
+import {menuBottomSheetStyles} from './menuBottomSheet.stylex';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {
@@ -98,8 +118,14 @@ import {
   getInteractionModality,
   useInteractionModalityTracking,
 } from '../utils/interactionModality';
-import {useTranslator} from '../i18n';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DropdownMenu/DropdownMenu.generated';
+
+registerEnglishFallback(english);
 
 // The menu's own lower cap on the placement axis; the viewport cap underneath
 // it is the layer runtime's (spec:AST-059 FR3).
@@ -108,53 +134,14 @@ const MENU_MAX_BLOCK_SIZE = `min(${MENU_BLOCK_CAP}, ${layerViewportInset.maxBloc
 const MENU_MAX_BLOCK_SIZE_FALLBACK = `min(${MENU_BLOCK_CAP}, ${layerViewportInset.maxBlockSizeFallback})`;
 const MENU_TRIGGER_OPEN_BACKGROUND = `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']})`;
 
-/**
- * The elements Tab reaches inside a header or footer region, in order. Hidden
- * controls (`hidden`, `display: none`, `visibility: hidden`, inert or
- * aria-hidden subtrees) are not reachable, judged by the popover focus trap's
- * own test so the two never disagree about where Tab can go.
- */
-function tabbablesIn(region: HTMLElement | null): HTMLElement[] {
-  if (region == null) {
-    return [];
-  }
-  return getFocusableElements(region).filter(
-    element => element.tabIndex >= 0 && !isInsideHiddenWrapper(element, region),
-  );
-}
-
-/**
- * Whether a `display: none` ancestor between the element and its region hides
- * it — a control in a wrapper hidden at some widths, say. The trap's test reads
- * only the element's own display.
- */
-function isInsideHiddenWrapper(
-  element: HTMLElement,
-  region: HTMLElement,
-): boolean {
-  if (typeof window === 'undefined' || !window.getComputedStyle) {
-    return false;
-  }
-  for (
-    let node = element.parentElement;
-    node != null && node !== region.parentElement;
-    node = node.parentElement
-  ) {
-    if (window.getComputedStyle(node).display === 'none') {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Move focus to a region control. Reports whether focus actually arrived, so a
- * caller can close the menu instead of stranding focus on the page.
- */
-function focusRegionControl(element: HTMLElement): boolean {
-  element.focus();
-  return element.ownerDocument.activeElement === element;
-}
+// A sub-menu's drilled-in view with a header or footer renders in the surface
+// host that follows the menu (marked `data-astryx-submenu-host`), as the frame
+// marked `data-astryx-submenu-regions="view"` (hidden while a deeper view
+// shows). While one shows, the menu and its header and footer step aside. The
+// rule reads that from the DOM, so no state mirrors which view shows; it names
+// the host by its marker rather than a universal selector.
+const STEPS_ASIDE_FOR_VIEW =
+  ':has(~ [data-astryx-submenu-host] > [data-astryx-submenu-regions="view"]:not([hidden]))';
 
 const styles = stylex.create({
   triggerOpen: {
@@ -169,7 +156,12 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
-    display: 'flex',
+    display: {
+      default: 'flex',
+      // A sub-menu's drilled-in view with a header or footer shows in its
+      // place (see `stepsAsideForView`).
+      [STEPS_ASIDE_FOR_VIEW]: 'none',
+    },
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
     // Pointer opens focus this container so subsequent arrow keys and Escape
@@ -181,8 +173,8 @@ const styles = stylex.create({
     WebkitTouchCallout: 'none',
     userSelect: 'none',
     maxInlineSize: stylex.firstThatWorks(
-      layerViewportInset.maxInlineSize,
-      layerViewportInset.maxInlineSizeFallback,
+      `calc(${layerViewportInset.maxInlineSize})`,
+      `calc(${layerViewportInset.maxInlineSizeFallback})`,
     ),
     maxHeight: stylex.firstThatWorks(
       MENU_MAX_BLOCK_SIZE,
@@ -219,21 +211,25 @@ const styles = stylex.create({
     flexShrink: 1,
     minBlockSize: 0,
   },
+  // Where a sub-menu with a header or footer renders its surface: beside the
+  // menu, never inside it. It owns no box, so the popover's layout is
+  // unchanged.
+  surfaceHost: {
+    display: 'contents',
+  },
+  // While a sub-menu's drilled-in view with its own header or footer shows
+  // in the surface host, the header and footer step aside for it, as the menu
+  // does (see `dropdown`). Derived from the DOM by the rule itself: the view
+  // is the frame in the host that is not hidden.
+  stepsAsideForView: {
+    display: {
+      default: null,
+      [STEPS_ASIDE_FOR_VIEW]: 'none',
+    },
+  },
   region: {
     flexShrink: 0,
     padding: spacingVars['--spacing-1'],
-  },
-  // Scroll ownership by the browser's own signal. A menu whose rows fit keeps
-  // every one-finger move: a slide over its rows stays a slide. One that
-  // scrolls lets the browser pan it vertically and cancel the press when it
-  // does. Both leave a two-finger pinch to the browser, so the page stays
-  // zoomable over an open menu; `pinch-zoom` admits no one-finger pan.
-  touchPinchZoom: {
-    touchAction: 'pinch-zoom',
-  },
-  touchPanYPinchZoom: {
-    touchAction: 'pan-y pinch-zoom',
-    overscrollBehavior: 'contain',
   },
   // The menu's lower block cap rides on the layer box too, so the layer's
   // flip decision sees the same height the menu paints.
@@ -370,7 +366,7 @@ export type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>;
 export type DropdownMenuPresentation = AdaptivePresentation;
 
 /**
- * The props a custom `trigger` spreads onto the control that opens the menu.
+ * The props `renderTrigger` spreads onto the control that opens the menu.
  * They carry the press model — a mouse opens on press-down, a held finger
  * opens with the finger down — the keyboard opens (Enter, Space, ArrowDown,
  * ArrowUp), the toggle click, and the ARIA wiring that names the menu after
@@ -472,7 +468,10 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Surface used to present the actions. Pass a value selected by product
    * policy (for example, a compact-touch media query) when the presentation
    * should adapt. Bottom-sheet presentation is intended for short action sets.
-   * @default 'popover'
+   * Omitted, the menu is the anchored popover. Under a finger, on every
+   * device, the finger that opened it picks as UIMenu's does, once it has
+   * moved. `'popover'` pins the anchored popover with the pointer behavior on
+   * every device (the opening press follows the settle rule).
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -480,6 +479,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 }
 
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
+  /**
+   * `'popover'` pins the pointer behavior on every device (the opening press
+   * follows the settle rule). Omitted, on every device, the finger
+   * that opened the menu picks as UIMenu's does, once it has moved.
+   */
   presentation?: 'popover';
   items?: undefined;
   children: ReactNode;
@@ -545,46 +549,18 @@ function holdInvokerThroughPress(
   doc.addEventListener('pointercancel', onPressEnd, true);
 }
 
-/** Text an assistive technology reads from `element`, `aria-hidden` left out. */
-function visibleText(element: Element): string {
-  const copy = element.cloneNode(true) as Element;
-  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) {
-    hidden.remove();
-  }
-  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
-}
-
 /**
- * The name a custom trigger gives the menu it labels (`aria-labelledby` on
- * the menu points at it): its own `aria-labelledby` targets, its
- * `aria-label`, its text, or its `title`, in that order.
+ * The name of a menu opened from a custom trigger: the caller's `aria-label`
+ * when it is a non-empty string, else the trigger's own accessible name. The
+ * popover and the bottom sheet both name the menu through this.
  */
-function readAccessibleName(element: HTMLElement | null): string | undefined {
-  if (element == null) {
-    return undefined;
-  }
-  const labelledBy = element.getAttribute('aria-labelledby');
-  if (labelledBy != null && labelledBy.trim() !== '') {
-    const text = labelledBy
-      .split(/\s+/)
-      .map(id => element.ownerDocument.getElementById(id))
-      .filter((node): node is HTMLElement => node != null)
-      .map(visibleText)
-      .join(' ')
-      .trim();
-    if (text !== '') {
-      return text;
-    }
-  }
-  const label = element.getAttribute('aria-label')?.trim();
-  if (label) {
-    return label;
-  }
-  const text = visibleText(element);
-  if (text !== '') {
-    return text;
-  }
-  return element.getAttribute('title')?.trim() || undefined;
+function resolveCustomTriggerMenuName(
+  callerLabel: unknown,
+  triggerName: string | undefined,
+): string | undefined {
+  return typeof callerLabel === 'string' && callerLabel.trim() !== ''
+    ? callerLabel
+    : triggerName;
 }
 
 function DropdownMenuBottomSheet({
@@ -608,10 +584,19 @@ function DropdownMenuBottomSheet({
   'data-testid': testId,
   ...rest
 }: DropdownMenuDataProps & {presentation: 'bottom-sheet'}) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
+  // The trigger, where focus returns after the sheet closes, carries the
+  // modality tracking for its document.
+  const modality = useInteractionModalityTracking();
+  // The caller's `button.ref` rides along with the sheet's own trigger ref.
+  const triggerRef = useMergedRefs<HTMLButtonElement>(
+    buttonRef as React.Ref<HTMLButtonElement>,
+    modality.ref,
+    button.ref,
+  );
   const triggerId = useId();
   const sheetId = useId();
   const actionListRef = useRef<HTMLDivElement>(null);
@@ -621,7 +606,7 @@ function DropdownMenuBottomSheet({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(modality);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -635,11 +620,28 @@ function DropdownMenuBottomSheet({
       setSubmenuPath([]);
     }
   }
+  // The closed sheet renders nothing, so load its rows at rest: the first
+  // open shows the actions at once. The preload's result says whether they
+  // loaded; after a failure the first open loads them.
+  useEffect(() => {
+    void preloadMenuBottomSheetActionList();
+  }, []);
+  // The control's name is only readable from the DOM once it is rendered.
+  const [triggerName, setTriggerName] = useState<string | undefined>(undefined);
+  useIsomorphicLayoutEffect(() => {
+    if (renderTrigger != null && isOpen) {
+      setTriggerName(readAccessibleName(buttonRef.current));
+    }
+  }, [renderTrigger, isOpen]);
+  const rootTitle =
+    (renderTrigger != null
+      ? resolveCustomTriggerMenuName(rest['aria-label'], triggerName)
+      : undefined) ?? button.label;
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
-  const currentTitle = currentSubmenu?.label ?? button.label;
+  const currentTitle = currentSubmenu?.label ?? rootTitle;
   const sheetLabel =
-    typeof currentTitle === 'string' ? currentTitle : button.label;
+    typeof currentTitle === 'string' ? currentTitle : rootTitle;
 
   const setOpen = useCallback(
     (nextIsOpen: boolean) => {
@@ -681,12 +683,37 @@ function DropdownMenuBottomSheet({
     if (!isOpen || openModalityRef.current !== 'keyboard') {
       return;
     }
-    const frame = requestAnimationFrame(() => {
-      actionListRef.current
-        ?.querySelector<HTMLElement>('button:not(:disabled), a[href]')
-        ?.focus({preventScroll: true});
+    const findFirstAction = () =>
+      actionListRef.current?.querySelector<HTMLElement>(
+        'button:not(:disabled), a[href]',
+      ) ?? null;
+    let observer: MutationObserver | null = null;
+    let frame = requestAnimationFrame(() => {
+      const action = findFirstAction();
+      if (action != null) {
+        action.focus({preventScroll: true});
+        return;
+      }
+      // The sheet loads on demand, so a keyboard open can arrive before its
+      // rows exist. Wait for them, then focus a frame later so the sheet's
+      // own open-focus has already run.
+      observer = new MutationObserver(() => {
+        const loaded = findFirstAction();
+        if (loaded == null) {
+          return;
+        }
+        observer?.disconnect();
+        observer = null;
+        frame = requestAnimationFrame(() => {
+          loaded.focus({preventScroll: true});
+        });
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
   }, [currentItems, isOpen]);
 
   useEffect(() => {
@@ -729,13 +756,37 @@ function DropdownMenuBottomSheet({
     setOpen(!isOpen);
   };
 
+  // The root view's heading stands alone; a sub-menu's sits in a row with its
+  // back button.
+  const viewHeading = (
+    <Heading
+      ref={viewHeadingRef}
+      level={3}
+      tabIndex={-1}
+      xstyle={[
+        bottomSheetStyles.viewHeading,
+        submenuPath.length === 0 && [
+          bottomSheetStyles.rootHeading,
+          menuBottomSheetStyles.headingAlone,
+        ],
+      ]}>
+      {currentTitle}
+    </Heading>
+  );
+  // A stable ref: an inline one re-runs on every render (null, then the element).
+  const sheetModalityRef = modality.ref;
+  const sheetTriggerRef = useCallback(
+    (el: HTMLElement | null) => {
+      buttonRef.current = el;
+      sheetModalityRef(el);
+    },
+    [sheetModalityRef],
+  );
   return (
     <>
       {renderTrigger != null ? (
         renderTrigger({
-          ref: el => {
-            buttonRef.current = el;
-          },
+          ref: sheetTriggerRef,
           id: triggerId,
           onClick: handleSheetTriggerClick,
           onClickCapture: () => {},
@@ -750,7 +801,7 @@ function DropdownMenuBottomSheet({
       ) : (
         <Button
           {...button}
-          ref={buttonRef as React.Ref<HTMLButtonElement>}
+          ref={triggerRef}
           xstyle={[
             isOpen && styles.triggerOpen,
             button.xstyle,
@@ -788,12 +839,16 @@ function DropdownMenuBottomSheet({
           {...rest}
           {...mergeProps(
             themeProps('dropdown-menu', {presentation: 'bottom-sheet'}),
-            stylex.props(bottomSheetStyles.content, xstyle),
+            stylex.props(
+              bottomSheetStyles.content,
+              menuBottomSheetStyles.content,
+              xstyle,
+            ),
             className,
             style,
           )}>
-          <div {...stylex.props(bottomSheetStyles.header)}>
-            {submenuPath.length > 0 && (
+          {submenuPath.length > 0 ? (
+            <div {...stylex.props(bottomSheetStyles.header)}>
               <Button
                 label={backLabel}
                 variant="ghost"
@@ -808,18 +863,11 @@ function DropdownMenuBottomSheet({
                 isIconOnly
                 onClick={() => setSubmenuPath(path => path.slice(0, -1))}
               />
-            )}
-            <Heading
-              ref={viewHeadingRef}
-              level={3}
-              tabIndex={-1}
-              xstyle={[
-                bottomSheetStyles.viewHeading,
-                submenuPath.length === 0 && bottomSheetStyles.rootHeading,
-              ]}>
-              {currentTitle}
-            </Heading>
-          </div>
+              {viewHeading}
+            </div>
+          ) : (
+            viewHeading
+          )}
           {isRenderable(header) && (
             <div {...stylex.props(bottomSheetStyles.region)}>{header}</div>
           )}
@@ -849,6 +897,7 @@ function DropdownMenuPopover({
   placement = 'below',
   alignment = 'start',
   presentation: _presentation,
+  pressTouchModel = 'uikit',
   header,
   footer,
   className,
@@ -856,8 +905,14 @@ function DropdownMenuPopover({
   xstyle,
   'data-testid': testId,
   ...props
-}: DropdownMenuProps) {
-  const t = useTranslator();
+}: DropdownMenuProps & {
+  /**
+   * How a finger's press runs, on every device: UIMenu's, unless the caller
+   * pins `presentation="popover"`.
+   */
+  pressTouchModel?: 'pointer' | 'uikit';
+}) {
+  const t = useComponentTranslator();
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
 
   const items = ('items' in props ? props.items : undefined) ?? [];
@@ -888,14 +943,14 @@ function DropdownMenuPopover({
   const pendingControlledOpenRef = useRef(false);
   const suppressControlledRollbackHideRef = useRef(false);
 
-  useInteractionModalityTracking();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const modality = useInteractionModalityTracking();
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  } = useFocusReturnVisibility(modality);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const hasRegions = useMemo(
@@ -909,6 +964,52 @@ function DropdownMenuPopover({
   // The press model is mounted below (it needs the popover); the hide path
   // above it ends the gesture in flight through this ref.
   const cancelMenuPressRef = useRef<() => void>(() => {});
+  // The entrance hold starts as the layer shows. Its start is set below, once
+  // the list ref exists, and its release is kept for the close.
+  const holdEntranceRef = useRef<() => void>(() => {});
+  const releaseEntranceRef = useRef<(() => void) | null>(null);
+  // The trigger press that asks the menu to open. The show holds the trigger
+  // as the invoker through that press; that hold is set below, once the
+  // popover exists.
+  const openingPressRef = useRef<{gesture: number} | null>(null);
+  const holdOpeningPressRef = useRef<() => void>(() => {});
+
+  // Submenu flyouts are `popover="manual"` elements nested inside the menu's
+  // `popover="auto"` element, so the browser's light dismiss of the menu never
+  // reaches them: without a sweep they keep their open state and their
+  // top-layer entry while the menu is hidden, and re-anchor to the viewport
+  // corner when the menu reopens (#6893). Closing them through the popover
+  // API lets useLayer's toggle handling reset their state. Only flyouts that
+  // are actually open are touched: `:popover-open` ships wherever
+  // `hidePopover` does (they are one API), and the display fallback keeps its
+  // own open signal (`display: block`) so it is guarded the same way.
+  const hideOpenFlyouts = useCallback(() => {
+    const menuPopover = contentRef.current;
+    if (!menuPopover) {
+      return;
+    }
+    // Innermost first: hiding a flyout may unmount the flyouts nested inside
+    // it, and a detached element no longer has the toggle listener that
+    // resets its open state.
+    const flyouts = [
+      ...menuPopover.querySelectorAll<HTMLElement>('[popover]'),
+    ].reverse();
+    for (const flyout of flyouts) {
+      if (typeof flyout.hidePopover === 'function') {
+        if (flyout.matches(':popover-open')) {
+          flyout.hidePopover();
+        }
+      } else if (flyout.style.display === 'block') {
+        flyout.style.display = 'none';
+        const toggle = new Event('toggle', {bubbles: false});
+        Object.defineProperty(toggle, 'newState', {
+          value: 'closed',
+          configurable: true,
+        });
+        flyout.dispatchEvent(toggle);
+      }
+    }
+  }, []);
 
   // Focus lands somewhere stated when the menu closes. A press outside that
   // landed on a focusable control has already moved focus there; leave it.
@@ -917,6 +1018,11 @@ function DropdownMenuPopover({
   // keyboard (the modality tracker decides; the suppressed style hides the
   // pointer case, which Safari would otherwise paint after a touch pick).
   const handleLayerHide = useCallback(() => {
+    releaseEntranceRef.current?.();
+    releaseEntranceRef.current = null;
+    // Whatever closed the menu — light dismiss, the dismissal stack, Escape
+    // or a controlled close — its flyouts close with it.
+    hideOpenFlyouts();
     if (suppressControlledRollbackHideRef.current) {
       suppressControlledRollbackHideRef.current = false;
       return;
@@ -946,8 +1052,8 @@ function DropdownMenuPopover({
     // reaches only the design system's own Button; the browser's focus option
     // also reaches a control the caller renders, which the browser would
     // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    focusForLastInput(trigger, {preventScroll: true});
-  }, [isControlled, onOpenChange, prepareFocusReturn]);
+    returnFocusForLastInput(trigger);
+  }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
 
   // Defer item focus until the layer has committed open, so focus restore
   // captures the trigger instead of the first menu item.
@@ -962,8 +1068,20 @@ function DropdownMenuPopover({
   // ArrowUp opens with the LAST enabled row highlighted.
   const focusLastOnOpenRef = useRef(false);
 
+  // Synchronizes the dialog's name from the custom trigger's DOM, an external
+  // system React does not own: the rendered control's accessible name is only
+  // readable once it mounts. With a header or footer the dialog is named like
+  // the menu, so that name is needed before the first open, not only at it.
+  useIsomorphicLayoutEffect(() => {
+    if (renderTrigger != null && hasRegions && triggerName == null) {
+      setTriggerName(readAccessibleName(buttonRef.current));
+    }
+  }, [renderTrigger, hasRegions, triggerName]);
+
   const handleLayerShow = useCallback(() => {
     acceptedOpenRef.current = true;
+    holdOpeningPressRef.current();
+    holdEntranceRef.current();
     resetFocusReturn();
     if (renderTrigger != null) {
       setTriggerName(readAccessibleName(buttonRef.current));
@@ -978,15 +1096,38 @@ function DropdownMenuPopover({
     }
   }, [isControlled, onClick, onOpenChange, renderTrigger, resetFocusReturn]);
 
+  // The menu's name: the dialog around it with a header or footer, and the
+  // Back row of a drilled-in view ("Back to <this>"), both read it.
+  // The design system's button names the menu by its label. A custom trigger
+  // names it by reference (or the caller's `aria-label` does), so that name
+  // is read off the control as the menu opens.
+  const menuLabel =
+    renderTrigger != null
+      ? resolveCustomTriggerMenuName(rest['aria-label'], triggerName)
+      : typeof button.label === 'string'
+        ? button.label
+        : undefined;
+
   const popover = usePopover({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
     hasCloseButton: false,
     hasAutoFocus: false,
-    // The popup's own role="menu" is the exposed semantics; wrapping it in a
-    // modal dialog would announce an unnamed dialog around the menu.
-    role: 'none',
+    // Without a header or footer the popup's own role="menu" is the exposed
+    // semantics; a dialog around it would announce an extra container. With
+    // either, the popover holds controls that are not menu items, so it is a
+    // modal dialog named like the menu, with the menu inside it. A custom
+    // trigger's name is read off the control once it mounts; until then, or
+    // when the control exposes no readable name, the dialog takes the default
+    // menu label, so it is never unnamed and never loses its role.
+    role: hasRegions ? 'dialog' : 'none',
+    dialogLabel: hasRegions
+      ? (menuLabel ?? t(DEFAULT_BUTTON_I18N_KEY))
+      : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
 
   const closeMenu = useCallback(() => {
@@ -1005,8 +1146,9 @@ function DropdownMenuPopover({
     focusItem,
     ownsEvent,
     getItems: getMenuItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back, as macOS menus do;
     // a picker's list clamps instead.
@@ -1015,7 +1157,7 @@ function DropdownMenuPopover({
     onEscape: closeMenu,
   });
 
-  // Typeahead over the (enabled) menu items — jump to the next item whose
+  // Typeahead over the menu items, disabled ones included — jump to the next item whose
   // LABEL starts with the typed text, never its description, shortcut or
   // badge. Reuses the hook's scoped item collection so an inline submenu
   // flyout's items aren't swept in.
@@ -1078,12 +1220,67 @@ function DropdownMenuPopover({
     requestAnimationFrame(() => {
       const focusEnd = focusLastOnOpenRef.current ? focusLast : focusFirst;
       focusLastOnOpenRef.current = false;
-      if (openModalityRef.current === 'pointer' || !focusEnd()) {
-        listRef.current?.focus();
+      const isPointerOpen = openModalityRef.current === 'pointer';
+      // A pointer that lit a row before this frame keeps that row's
+      // highlight: the row under the pointer stays the focused row.
+      const list = listRef.current;
+      const active = list?.ownerDocument.activeElement;
+      const isRowLit =
+        isPointerOpen &&
+        active != null &&
+        active !== list &&
+        list?.contains(active) === true;
+      if (!isRowLit && (isPointerOpen || !focusEnd())) {
+        list?.focus();
       }
       openModalityRef.current = 'keyboard';
     });
   }, [popover.isOpen, focusFirst, focusLast, listRef]);
+
+  // Under a finger, where the primary pointer is coarse, a tap or a drag during
+  // the entrance reaches nothing, as in UIMenu. Keys and assistive technology
+  // stay live.
+  const holdEntrance = useCallback(() => {
+    releaseEntranceRef.current?.();
+    const layer =
+      pressTouchModel === 'uikit'
+        ? listRef.current?.closest('[popover]')
+        : null;
+    // The entrance plays on the popover's surface, inside the layer.
+    releaseEntranceRef.current =
+      layer == null
+        ? null
+        : holdEntranceInput(layer, {
+            entrance: popover.contentRef.current ?? layer,
+          });
+  }, [listRef, pressTouchModel, popover.contentRef]);
+  holdEntranceRef.current = holdEntrance;
+  // The layer runtime's input hold: an unmount during the entrance releases it.
+  useEffect(
+    () => () => {
+      releaseEntranceRef.current?.();
+      releaseEntranceRef.current = null;
+    },
+    [],
+  );
+
+  // With a header or footer the popover is a modal dialog: Tab and Shift+Tab
+  // walk the header's controls, the menu as one stop, then the footer's
+  // controls, and wrap at either end. The key is handled here in full, so the
+  // popover's own focus trap, which listens on the document, never reads it a
+  // second time.
+  const moveDialogTab = useCallback(
+    (e: React.KeyboardEvent, isFromFlyout = false) => {
+      moveRegionsTab(
+        e,
+        listRef.current,
+        headerRef.current,
+        footerRef.current,
+        isFromFlyout,
+      );
+    },
+    [listRef],
+  );
 
   // Extend useListFocus with Enter/Space activation + typeahead
   const listKeyDown = useCallback(
@@ -1091,20 +1288,14 @@ function DropdownMenuPopover({
       // A submenu flyout renders inline inside this menu; its key events bubble
       // up here. Let that level own them — only handle events from this level.
       if (!ownsEvent(e)) {
-        // Except Tab with a header or footer: each open flyout has closed
-        // itself as the key bubbled up, and the root moves focus on as Tab
-        // from one of its own rows would.
-        if (e.key === 'Tab' && hasRegions) {
-          const region = e.shiftKey ? headerRef.current : footerRef.current;
-          const tabbables = tabbablesIn(region);
-          e.stopPropagation();
-          const target = e.shiftKey
-            ? tabbables[tabbables.length - 1]
-            : tabbables[0];
-          if (target != null) {
-            e.preventDefault();
-          }
-          if (target == null || !focusRegionControl(target)) {
+        // Except Tab: each open flyout has closed itself as the key bubbled
+        // up, and the root moves on as Tab from one of its own rows would.
+        // With a header or footer that walks the regions; otherwise the menu
+        // closes and focus moves on from the trigger (APG menu button).
+        if (e.key === 'Tab') {
+          if (hasRegions) {
+            moveDialogTab(e, true);
+          } else {
             closeMenu();
           }
         }
@@ -1128,30 +1319,15 @@ function DropdownMenuPopover({
         }
         return;
       }
-      // APG menu-button pattern: Tab closes the menu. Menu items are
-      // tabIndex={-1} so the focus trap has nothing trappable and Tab would
-      // otherwise leak into the page while the menu stayed open (menus-5).
-      // Do NOT preventDefault — closing restores focus to the trigger, and the
-      // browser's default Tab then continues from there to the next element.
-      // A header or footer with something Tab can reach in that direction
-      // takes the Tab instead, and the menu stays open.
+      // With a header or footer the popover is a dialog and Tab wraps inside
+      // it. Without either, the APG menu-button pattern: Tab closes the menu.
+      // Menu items are tabIndex={-1} so the focus trap has nothing trappable
+      // and Tab would otherwise leak into the page while the menu stayed open
+      // (menus-5). Do NOT preventDefault — closing restores focus to the
+      // trigger, and the browser's default Tab then continues from there.
       if (e.key === 'Tab') {
-        const region = e.shiftKey ? headerRef.current : footerRef.current;
-        const tabbables = tabbablesIn(region);
-        if (tabbables.length > 0) {
-          // From a row, the browser's Shift+Tab would stop on the menu element
-          // itself — the row's ancestor and a Tab stop — before reaching the
-          // header. The menu is one stop, so go straight to the header.
-          if (e.shiftKey && e.target !== listRef.current) {
-            e.preventDefault();
-            // The popover's focus trap listens on the document and would read
-            // this same Shift+Tab against the field just focused — the trap's
-            // first element — and wrap to the footer. This key is handled.
-            e.stopPropagation();
-            if (!focusRegionControl(tabbables[tabbables.length - 1])) {
-              closeMenu();
-            }
-          }
+        if (hasRegions) {
+          moveDialogTab(e);
           return;
         }
         closeMenu();
@@ -1164,33 +1340,24 @@ function DropdownMenuPopover({
       }
       listNavKeyDown(e);
     },
-    [listNavKeyDown, closeMenu, typeahead, ownsEvent, listRef, hasRegions],
+    [
+      listNavKeyDown,
+      closeMenu,
+      typeahead,
+      ownsEvent,
+      hasRegions,
+      moveDialogTab,
+    ],
   );
 
-  // Tab past the last control of the footer, or Shift+Tab before the first
-  // control of the header, leaves the menu as Tab from its rows does: the
-  // menu closes, focus returns to the trigger, and the browser's own Tab
-  // continues from there. Between the regions, Tab moves through the menu
-  // as one stop.
+  // Tab from a header or footer control moves through the same dialog cycle.
   const handleRegionKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key !== 'Tab') {
-        return;
-      }
-      const tabbables = tabbablesIn(e.currentTarget);
-      const isHeader = e.currentTarget === headerRef.current;
-      const exit = isHeader
-        ? e.shiftKey
-          ? tabbables[0]
-          : undefined
-        : e.shiftKey
-          ? undefined
-          : tabbables[tabbables.length - 1];
-      if (exit != null && exit === document.activeElement) {
-        closeMenu();
+      if (e.key === 'Tab') {
+        moveDialogTab(e);
       }
     },
-    [closeMenu],
+    [moveDialogTab],
   );
 
   const openAndFocus = useCallback(
@@ -1229,6 +1396,25 @@ function DropdownMenuPopover({
     ? controlledIsOpen === true
     : popover.isOpen;
 
+  // The menu is `popover="auto"`. The browser's light dismiss reads a release
+  // outside the popover as a dismissal, also the release of the press that
+  // opened it. This holds for a mouse and for a finger after the long-press
+  // delay, and also when the show waited for another popover operation. So
+  // the trigger stays the popover's invoker through that press, as
+  // useKeepLayerOpenProps does for controls beside an open layer.
+  const holdOpeningPress = useCallback(() => {
+    const press = openingPressRef.current;
+    openingPressRef.current = null;
+    if (
+      press != null &&
+      press.gesture === currentGesture() &&
+      isPressInFlight()
+    ) {
+      holdInvokerThroughPress(buttonRef.current, popover.id);
+    }
+  }, [popover.id]);
+  holdOpeningPressRef.current = holdOpeningPress;
+
   // A mouse opens on press-down; a finger held on the trigger opens after
   // the long-press delay. Pressing the trigger of an open menu closes it, and
   // the click of that same gesture — reported by `isTriggerClickFromPress` —
@@ -1253,33 +1439,48 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern).
-      buttonRef.current?.focus({preventScroll: true});
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
+      if (buttonRef.current != null) {
+        focusForLastInput(buttonRef.current, {preventScroll: true});
+      }
+      openingPressRef.current = {gesture: currentGesture()};
       const didOpen = openAndFocus('pointer', true);
-      if (didOpen) {
-        // The menu is `popover="auto"`: the browser's light dismiss would
-        // read the release of this very press, on the trigger outside the
-        // popover, as a dismissal — a mouse's release, and as much a
-        // finger's after the long-press delay opened the menu under it.
-        // Holding the invoker relationship through the press exempts the
-        // trigger, the way useKeepLayerOpenProps does for controls beside
-        // an open layer.
-        holdInvokerThroughPress(buttonRef.current, popover.id);
+      // A mouse can release away from the trigger, or the trigger can move
+      // away under it. So the layer claims a mouse's press, and that release
+      // lands on the layer; over the trigger, the trigger keeps it. Only a
+      // show accepted here claims it. After a show that waited, the press
+      // model no longer tracks the press, and a settled release outside must
+      // still close the menu.
+      const layer = listRef.current?.closest('[popover]');
+      if (didOpen && pointerType === 'mouse' && layer instanceof HTMLElement) {
+        claimPress(layer, {releaseTarget: buttonRef.current});
       }
       return didOpen;
     },
-    [isMenuOpenNow, isControlled, onClick, onOpenChange, openAndFocus, popover],
+    [
+      isMenuOpenNow,
+      isControlled,
+      listRef,
+      onClick,
+      onOpenChange,
+      openAndFocus,
+      popover,
+    ],
   );
 
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useMenuPress({
+  const menuPress = useDropdownMenuPress({
     menuRef: listRef,
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
+    // Under a finger, on every device, the opening finger picks as UIMenu's
+    // does. `presentation="popover"` pins the pointer model.
+    touchModel: pressTouchModel,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 
@@ -1389,25 +1590,38 @@ function DropdownMenuPopover({
 
   // The drill-in view stack for sub-menus on a phone.
   const {drillIn, wrapContent} = useMenuDrillIn(isOpen);
-  // The name a drilled-in view's Back row returns to: the menu's own name.
-  // The design system's button names the menu by its label. A custom trigger
-  // names it by reference (or the caller's `aria-label` does), so that name
-  // is read off the control as the menu opens.
-  const callerMenuLabel = rest['aria-label'];
-  const menuLabel =
-    renderTrigger != null
-      ? typeof callerMenuLabel === 'string' && callerMenuLabel.trim() !== ''
-        ? callerMenuLabel
-        : triggerName
-      : typeof button.label === 'string'
-        ? button.label
-        : undefined;
-
+  // The surface host is owned through a ref. State keeps only a key that
+  // changes whenever a host element attaches, the host included when it
+  // moves (a header or footer coming or going), so sub-menus re-render into
+  // the element that is mounted.
+  const surfaceHostRef = useRef<HTMLDivElement | null>(null);
+  const [surfaceHostKey, setSurfaceHostKey] = useState(0);
+  const attachSurfaceHost = useCallback((node: HTMLDivElement | null) => {
+    surfaceHostRef.current = node;
+    if (node != null) {
+      setSurfaceHostKey(key => key + 1);
+    }
+  }, []);
+  const surfaceHost = useMemo<DropdownMenuSurfaceHost>(
+    () => ({
+      getElement: () => (surfaceHostKey > 0 ? surfaceHostRef.current : null),
+    }),
+    [surfaceHostKey],
+  );
   const resolvedMaxHeight = menuMaxHeight == null ? null : `${menuMaxHeight}px`;
   // Context for compound items
   const contextValue = useMemo<DropdownMenuContextValue>(
     () => ({closeMenu, menuSize, drillIn, menuLabel}),
     [closeMenu, menuSize, drillIn, menuLabel],
+  );
+  // What a sub-menu with a header or footer needs, on an internal context.
+  const surfaceValue = useMemo<DropdownMenuSurfaceValue>(
+    () => ({
+      host: surfaceHost,
+      ownerId: menuId,
+      menuMaxHeight: resolvedMaxHeight ?? undefined,
+    }),
+    [surfaceHost, menuId, resolvedMaxHeight],
   );
 
   // Resolve menu content: data-driven items become components
@@ -1417,7 +1631,17 @@ function DropdownMenuPopover({
   const hasOverflow = useMenuOverflow(listRef, menuContent, popover.isOpen);
 
   // The header and footer sit beside the menu inside the popover, never inside
-  // the role="menu" element: a menu holds only its rows.
+  // the role="menu" element: a menu holds only its rows. The surface host
+  // follows the menu, so a sub-menu with a header or footer renders beside the
+  // menu too; while such a sub-menu's drilled-in view shows there, the menu and
+  // the regions step aside (STEPS_ASIDE_FOR_VIEW).
+  const surfaceHostElement = (
+    <div
+      ref={attachSurfaceHost}
+      data-astryx-submenu-host=""
+      {...stylex.props(styles.surfaceHost)}
+    />
+  );
   const renderWithRegions = (menu: ReactNode): ReactNode =>
     hasRegions ? (
       <div
@@ -1430,7 +1654,7 @@ function DropdownMenuPopover({
           <div
             ref={headerRef}
             onKeyDown={handleRegionKeyDown}
-            {...stylex.props(styles.region)}>
+            {...stylex.props(styles.region, styles.stepsAsideForView)}>
             {header}
           </div>
         )}
@@ -1439,20 +1663,54 @@ function DropdownMenuPopover({
           <div
             ref={footerRef}
             onKeyDown={handleRegionKeyDown}
-            {...stylex.props(styles.region)}>
+            {...stylex.props(styles.region, styles.stepsAsideForView)}>
             {footer}
           </div>
         )}
+        {surfaceHostElement}
       </div>
     ) : (
-      menu
+      <>
+        {menu}
+        {surfaceHostElement}
+      </>
     );
 
-  const triggerProps: DropdownMenuTriggerProps = {
-    ref: el => {
+  // Stable trigger refs. An inline ref is a new function every render, so React
+  // re-runs it on every commit (null, then the element), and each run moved the
+  // popover's anchor off the trigger and back: two inline-style writes on the
+  // trigger per render of the menu.
+  const popoverTriggerRef = popover.triggerRef;
+  // The trigger, where focus returns, also carries the modality tracking for
+  // its document.
+  const modalityRef = modality.ref;
+  const triggerRef = useCallback(
+    (el: HTMLElement | null) => {
       buttonRef.current = el;
-      popover.triggerRef(el);
+      popoverTriggerRef(el);
+      // Called with each node and with `null`, so its cleanup isn't returned
+      // (a returned cleanup would stop React's `null` call to the others).
+      modalityRef(el);
     },
+    [popoverTriggerRef, modalityRef],
+  );
+  const consumerButtonRef = button.ref;
+  const buttonTriggerRef = useCallback(
+    (el: HTMLButtonElement | null) => {
+      triggerRef(el);
+      if (typeof consumerButtonRef === 'function') {
+        consumerButtonRef(el);
+      } else if (consumerButtonRef) {
+        /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
+        consumerButtonRef.current = el;
+        /* eslint-enable react-compiler/react-compiler */
+      }
+    },
+    [triggerRef, consumerButtonRef],
+  );
+
+  const triggerProps: DropdownMenuTriggerProps = {
+    ref: triggerRef,
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
@@ -1463,9 +1721,9 @@ function DropdownMenuPopover({
     // keeps the browser from drawing one after pointer input (see
     // handleLayerHide), so its focus needs no bookkeeping here.
     onFocus: () => {},
-    'aria-haspopup': 'menu',
+    'aria-haspopup': hasRegions ? 'dialog' : 'menu',
     'aria-expanded': isOpen,
-    'aria-controls': menuId,
+    'aria-controls': hasRegions ? popover.id : menuId,
   };
 
   return (
@@ -1475,18 +1733,7 @@ function DropdownMenuPopover({
       ) : (
         <Button
           {...button}
-          ref={el => {
-            buttonRef.current = el;
-            popover.triggerRef(el);
-            const consumerRef = button.ref;
-            if (typeof consumerRef === 'function') {
-              consumerRef(el);
-            } else if (consumerRef) {
-              /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
-              consumerRef.current = el;
-              /* eslint-enable react-compiler/react-compiler */
-            }
-          }}
+          ref={buttonTriggerRef}
           xstyle={[
             styles.triggerPressable,
             isOpen && styles.triggerOpen,
@@ -1513,9 +1760,9 @@ function DropdownMenuPopover({
             button.onFocus?.(event);
             onFocusReturnTargetFocus();
           }}
-          aria-haspopup="menu"
+          aria-haspopup={hasRegions ? 'dialog' : 'menu'}
           aria-expanded={isOpen}
-          aria-controls={menuId}
+          aria-controls={hasRegions ? popover.id : menuId}
           data-testid={testId}
         />
       )}
@@ -1557,18 +1804,20 @@ function DropdownMenuPopover({
               )?.(event);
               if (event.target === event.currentTarget) {
                 setIsMenuKeyboardFocused(
-                  getInteractionModality() === 'keyboard',
+                  getInteractionModality(event.currentTarget) === 'keyboard',
                 );
               }
             }}
             {...menuPress.menuProps}
             {...mergeProps(
-              themeProps('dropdown-menu'),
+              themeProps('dropdown-menu', {presentation: 'popover'}),
               stylex.props(
                 styles.dropdown,
                 resolvedMaxHeight != null &&
                   dynamicStyles.menuMaxHeight(resolvedMaxHeight),
-                hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom,
+                hasOverflow
+                  ? menuTouchActionStyles.scrolls
+                  : menuTouchActionStyles.fits,
                 hasOverflow && styles.scrollable,
                 hasRegions && styles.menuInFrame,
                 // Between a header and a footer the menu is a Tab stop, so
@@ -1582,11 +1831,13 @@ function DropdownMenuPopover({
               className,
               style,
             )}>
-            <MenuRegionsContext value={hasRegions}>
-              <DropdownMenuContext value={contextValue}>
-                {menuContent}
-              </DropdownMenuContext>
-            </MenuRegionsContext>
+            <DropdownMenuContext value={contextValue}>
+              <DropdownMenuSurfaceContext value={surfaceValue}>
+                <DropdownMenuRootOpenContext value={isOpen}>
+                  {menuContent}
+                </DropdownMenuRootOpenContext>
+              </DropdownMenuSurfaceContext>
+            </DropdownMenuContext>
           </div>,
         ),
         {
@@ -1598,7 +1849,6 @@ function DropdownMenuPopover({
             resolvedMaxHeight != null &&
               dynamicStyles.popoverViewportMaxBlockSize(resolvedMaxHeight),
             popoverXstyle,
-            layerAnimations[placement],
           ],
         },
       )}
@@ -1611,8 +1861,8 @@ export function DropdownMenu(props: DropdownMenuProps) {
   // Both presentations hang the menu off ONE control.
   useDevWarning(
     'DropdownMenu',
-    '`button` and `trigger` are mutually exclusive: the menu hangs off one ' +
-      'control. `trigger` wins; drop `button`.',
+    '`button` and `renderTrigger` are mutually exclusive: the menu hangs ' +
+      'off one control. `renderTrigger` wins; drop `button`.',
     props.button != null && props.renderTrigger != null,
   );
   const requestedPresentation =
@@ -1642,14 +1892,26 @@ export function DropdownMenu(props: DropdownMenuProps) {
     props.items !== undefined
   ) {
     return (
-      <DropdownMenuBottomSheet
-        {...(sharedProps as DropdownMenuDataProps)}
-        presentation="bottom-sheet"
-      />
+      <PressGroupContext value={null}>
+        <DropdownMenuBottomSheet
+          {...(sharedProps as DropdownMenuDataProps)}
+          presentation="bottom-sheet"
+        />
+      </PressGroupContext>
     );
   }
 
-  return <DropdownMenuPopover {...sharedProps} presentation="popover" />;
+  // In a group that tracks presses, the trigger keeps its own press and
+  // opening, whatever its `aria-haspopup`.
+  return (
+    <PressGroupContext value={null}>
+      <DropdownMenuPopover
+        {...sharedProps}
+        presentation="popover"
+        pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
+      />
+    </PressGroupContext>
+  );
 }
 
 DropdownMenu.displayName = 'DropdownMenu';

@@ -9,8 +9,22 @@
  */
 
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
-import ignore from 'ignore';
+
+/**
+ * The `ignore` matcher factory, loaded on first use: this module is reached
+ * from every CLI run through the agent-docs helpers, and only a run that
+ * classifies a file needs the matcher.
+ * @type {typeof import('ignore') | undefined}
+ */
+let ignoreFactory;
+
+/** @param {import('ignore').Options} [options] */
+function ignore(options) {
+  ignoreFactory ??= createRequire(import.meta.url)('ignore');
+  return /** @type {typeof import('ignore')} */ (ignoreFactory)(options);
+}
 
 const DEPENDENCY_DIRS = new Set([
   'node_modules',

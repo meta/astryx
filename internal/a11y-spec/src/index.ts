@@ -135,24 +135,59 @@ export {
 } from './patterns/breadcrumb';
 
 export {
+  COMBOBOX_PATTERN,
+  type ComboboxPopupRole,
+  type ComboboxStateFacts,
+} from './patterns/combobox';
+
+export {
   LANDMARK_PATTERN,
   type LandmarkRole,
   type LandmarkStateFacts,
 } from './patterns/landmark';
 
 export {SLIDER_PATTERN, type SliderStateFacts} from './patterns/slider';
+export {
+  SLIDER_MULTITHUMB_PATTERN,
+  UPPER_THUMB,
+  type SliderMultithumbStateFacts,
+} from './patterns/slider-multithumb';
+export {
+  PROGRESSBAR_PATTERN,
+  type ProgressbarStateFacts,
+} from './patterns/progressbar';
 export {TREE_VIEW_PATTERN, type TreeViewStateFacts} from './patterns/tree-view';
 export {CAROUSEL_PATTERN, type CarouselStateFacts} from './patterns/carousel';
 export {
   ACCORDION_PATTERN,
   type AccordionStateFacts,
 } from './patterns/accordion';
+export {GRID_PATTERN, type GridStateFacts} from './patterns/grid';
 export {
   ALERT_DIALOG_PATTERN,
   type AlertDialogStateFacts,
 } from './patterns/alert-dialog';
 export {
+  WINDOW_SPLITTER_PATTERN,
+  type WindowSplitterStateFacts,
+} from './patterns/window-splitter';
+export {
+  MENU_BUTTON_PATTERN,
+  type MenuButtonStateFacts,
+} from './patterns/menu-button';
+export {MENU_PATTERN, type MenuStateFacts} from './patterns/menu';
+export {
   LINK_PATTERN,
   type LinkCurrentToken,
   type LinkStateFacts,
 } from './patterns/link';
+export {
+  TABLE_AST_020_FR15,
+  TABLE_PATTERN,
+  composeTablePattern,
+  tableApgRequirement,
+  type TableModuleContract,
+  type TableStateFacts,
+} from './patterns/table';
+export {TOOLBAR_PATTERN, type ToolbarStateFacts} from './patterns/toolbar';
+export {TOOLTIP_PATTERN, type TooltipStateFacts} from './patterns/tooltip';

@@ -36,7 +36,7 @@ const KNOWN_TOPICS = new Set(docTopics.map(d => d.topic));
  */
 const docTopic: CodeLinkifier = code => {
   const match =
-    /^(?:npx )?astryx docs(?:\s+([a-z][\w-]*(?:\/[a-z][\w-]*)*))?(?:\s.*)?$/.exec(
+    /^(?:npx (?:@astryxdesign\/cli(?:@\S+)?|astryx)|astryx) docs(?:\s+([a-z][\w-]*(?:\/[a-z][\w-]*)*))?(?:\s.*)?$/.exec(
       code,
     );
   if (!match) {
@@ -47,7 +47,7 @@ const docTopic: CodeLinkifier = code => {
     return '/docs';
   }
   // A docs-tree guide has a slug named after its route, with "/" as "-": its
-  // own page (`cli/integrations/quick-start`), or a redirect to its section on
+  // own page (`authoring/quick-start`), or a redirect to its section on
   // its namespace's page (`layout/scaffold` -> /docs/layout#scaffold).
   const slug = topic.replaceAll('/', '-');
   if (KNOWN_TOPICS.has(slug)) {

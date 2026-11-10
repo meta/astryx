@@ -51,6 +51,7 @@ export const doc = {
     },
     {label: 'Themes you can add', cli: 'astryx search warm --type theme'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {

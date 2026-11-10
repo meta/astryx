@@ -316,6 +316,7 @@ export default function TapTargetsPage() {
                       value={tokens}
                       onChange={setTokens}
                       hasClear
+                      presentation="popover"
                     />
                   </MeasuredOverlay>
                 </VStack>
@@ -333,6 +334,7 @@ export default function TapTargetsPage() {
                       value={tokensB}
                       onChange={setTokensB}
                       hasClear
+                      presentation="popover"
                     />
                   </MeasuredOverlay>
                 </VStack>

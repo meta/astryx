@@ -31,4 +31,12 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Monitoring',
+  icons: {
+    ArrowDownIcon: 'arrowDown',
+    ArrowUpIcon: 'arrowUp',
+    BellAlertIcon: 'notificationActive',
+    CheckCircleIcon: 'success',
+    ServerStackIcon: 'server',
+    StopIcon: 'stop',
+  },
 };

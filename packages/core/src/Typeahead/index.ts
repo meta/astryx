@@ -12,7 +12,7 @@
  */
 
 // Shared types
-export type {SearchableItem, SearchSource} from './types';
+export type {SearchableItem, SearchContext, SearchSource} from './types';
 
 // Search source utilities
 export {createStaticSource} from './createStaticSource';
@@ -20,7 +20,13 @@ export type {CreateStaticSourceOptions} from './createStaticSource';
 
 // Base (unstyled) typeahead
 export {BaseTypeahead} from './BaseTypeahead';
-export type {BaseTypeaheadProps} from './BaseTypeahead';
+export type {
+  BaseTypeaheadProps,
+  BaseTypeaheadMenu,
+  BaseTypeaheadHandle,
+  BaseTypeaheadListboxMenuInfo,
+  BaseTypeaheadDialogMenuInfo,
+} from './BaseTypeahead';
 
 // Styled typeahead
 export {Typeahead} from './Typeahead';

@@ -158,7 +158,7 @@ export const docs = {
       {
         name: '--_dropdown-menu-radius',
         description: 'Border radius of the menu popup',
-        default: 'var(--radius-element)',
+        default: 'var(--radius-container)',
         private: true,
       },
       {
@@ -180,7 +180,7 @@ export const docs = {
       name: 'button',
       type: 'DropdownMenuButtonProps',
       description:
-        'Props for the trigger button (Button props except onClick). Mutually exclusive with `trigger`.',
+        'Props for the trigger button (Button props except onClick). Mutually exclusive with `renderTrigger`.',
       default: "{ label: 'Menu' }",
     },
     {
@@ -201,8 +201,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only.",
-      default: "'popover'",
+        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only. Omitted, the menu is anchored, and under a finger, on every device, the finger that opened it picks a row only after moving 10 px. Pass 'popover' to keep the pointer behavior on every device, the settle rule included.",
     },
     {
       name: 'isMenuOpen',
@@ -231,13 +230,13 @@ export const docs = {
       name: 'header',
       type: 'ReactNode',
       description:
-        'Content above the rows and outside the menu itself — a filter field, a toggle. A menu holds only its rows, so a control that is not a row goes here or in `footer`, never among the rows. It keeps its own keys and presses; Tab moves from it into the menu, and Shift+Tab before its first control closes the menu. The bottom sheet shows it above the actions.',
+        'Content above the rows and outside the menu itself — a filter field, a toggle. A menu holds only its rows, so a control that is not a row goes here or in `footer`, never among the rows. It keeps its own keys and presses. With a header or footer the popover is a modal dialog around the menu: Tab and Shift+Tab move through the header, the menu and the footer and wrap at either end, and Escape closes. The bottom sheet shows it above the actions.',
     },
     {
       name: 'footer',
       type: 'ReactNode',
       description:
-        'Content below the rows and outside the menu itself — a "Create" button. Tab from the menu moves into it, and Tab past its last control closes the menu. The bottom sheet shows it below the actions.',
+        'Content below the rows and outside the menu itself — a "Create" button. Tab from the menu moves into it, and Tab past its last control wraps to the start of the dialog (see `header`). The bottom sheet shows it below the actions.',
     },
     {
       name: 'placement',
