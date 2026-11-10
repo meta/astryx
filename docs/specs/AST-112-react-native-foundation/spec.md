@@ -29,7 +29,7 @@ that create, check, and preview the app. The app gets Astryx's components,
 themes, and icons, and native capabilities (storage, files, camera, media, web
 content, documents, native controls) through one consistent API. The app
 itself holds no hand-written native code, builds in a generated native
-project, and installs only the native capabilities it uses.
+project, and links only the native capabilities it opts in.
 
 Two apps work with these packages: the Astryx app on iOS and Android, for
 previewing projects and browsing the components, and Astryx Stage, the
@@ -63,63 +63,70 @@ shared icon names under FR17.
   - `@astryxdesign/react-native`: the component library. Components, the app
     root (`AstryxAppRoot`), theming, and the hooks an app uses. JavaScript and
     TypeScript only.
-  - `@astryxdesign/react-native-platform`: the platform core. The result
-    vocabulary (FR6), the capability shape (FR7), the types of every
-    capability, the registry seams the capability packages plug into, the
-    generic capabilities (storage, secure storage, files, network, cookies,
-    permissions, haptics, clipboard, client identity), the gesture owner,
-    gesture root, touch shield, presentation, menu, and action-sheet hosts,
-    system symbols, and system materials.
-  - Capability packages, each one native unit:
-    `@astryxdesign/react-native-platform-camera` (camera view, live code
-    scanning, and code decoding from still images), `-media` (audio and video
-    playback), `-web` (web view and sign-in session), `-pdf` (document view),
-    and `-controls` (native button, text field, date pickers, and the
-    swipe-row, drag-snap, and zoom-pager views).
+  - `@astryxdesign/react-native-platform`: the platform, one package. Its core
+    is always present: the result vocabulary (FR6), the capability shape
+    (FR7), the types of every capability, the registry seams the capabilities
+    plug into, the generic capabilities (storage, secure storage, files,
+    network, cookies, permissions, haptics, clipboard, client identity), the
+    gesture owner, gesture root, touch shield, presentation, menu, and
+    action-sheet hosts, system symbols, and system materials. Its optional
+    capabilities are opt-in modules (FR3), each with its own entry (FR5):
+    `camera` (camera view, live code scanning, and code decoding from still
+    images), `media` (audio and video playback), `web` (web view and sign-in
+    session), `pdf` (document view), and `controls` (native button, text
+    field, date pickers, and the swipe-row, drag-snap, and zoom-pager views).
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
-  - The library takes the platform core as a peer dependency and calls it
+  - The library takes the platform as a peer dependency and calls it
     directly. The platform imports nothing from the library, in source or in
     tests.
-  - A capability package depends on the platform core only. A need that
-    crosses capabilities goes through a registration hook in the platform
-    core, never through a dependency between capability packages.
-  - The library reaches an optional capability package only through the
-    platform core's guarded loader (`AstryxPlatform.capability(name)`), so an
-    app without that package installs and bundles nothing of it.
+  - A capability uses the platform's core only, and the core never imports a
+    capability. A need that crosses capabilities goes through a registration
+    hook in the core, never through an import between capabilities.
+  - The library reaches an optional capability only through the core's
+    guarded loader (`AstryxPlatform.capability(name)`), which loads that
+    capability's entry, so an app that never uses a capability bundles none
+    of its JavaScript.
   - None of these packages depends on another Astryx package at run time,
     other than these dependencies, the reads of `@astryxdesign/core` that
     `spec:AST-082/FR16` allows, and `@astryxdesign/native` (FR10, OQ2, OQ3),
-    which a platform package uses at the version the repository's release
-    gives every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
+    which the platform uses at the version the repository's release gives
+    every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
     never depend on them (`spec:AST-082/FR14`).
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
-- **FR3 — Installing a package is the opt-in.** Each capability package
-  carries its own native module, permissions, system frameworks, manifest
-  entries, and services. An app that does not install it carries none of
-  them. No build flag, environment variable, or configuration switch turns a
-  capability on or off. The platform core requests no permission beyond
-  network state.
-- **FR4 — Native code lives only in the platform packages.**
+- **FR3 — An app opts in to each capability.** Each optional capability
+  carries its own native module, system frameworks, dependencies, manifest
+  components, and services, and the app's native build links them only when
+  the app opts the capability in: on iOS a Podfile helper adds the
+  capability's subspec, and on Android a Gradle property enables its source
+  set. The configuration plugin writes both from the app's list of
+  capabilities (FR4). An app that does not opt a capability in links none of
+  its native code, frameworks, or dependencies; its entry still loads, and
+  its probes answer false with the reason `not-linked` (FR6, FR7). The
+  package's manifests declare no permission.
+- **FR4 — Native code lives only in the platform.**
   - The library contains no native code and has no runtime dependency beyond
-    `react`, `react-native`, and the platform core.
+    `react`, `react-native`, and the platform.
   - An app holds no hand-written native code. Its iOS and Android projects are
-    generated from the app's configuration. The platform core ships one
-    configuration plugin, and each capability package provides its host
-    declarations (usage descriptions, manifest entries, background modes) as
-    data that the plugin writes into the generated project. A capability
-    package ships no plugin of its own.
+    generated from the app's configuration. The platform ships one
+    configuration plugin. From the app's list of capabilities, it writes the
+    opt-in (FR3) and the host declarations each listed capability needs
+    (permissions, usage descriptions, manifest entries, background modes),
+    from data the package provides per capability. Every usage description
+    has a default that the app can override, and the plugin writes nothing for
+    a capability the app does not list.
   - An app-level native setting is configuration that a plugin writes into the
     generated project. JavaScript cannot read or change it at run time.
-  - Each platform package ships its native code as source that the app's
-    native build compiles; it registers itself through autolinking and React
-    Native's code generation.
+  - The platform ships its native code as source that the app's native build
+    compiles; the core and each opted-in capability register through
+    autolinking and React Native's code generation.
   - `@astryxdesign/native` is the single cross-platform contracts package of
-    `spec:AST-082` (DEC-7). The React Native platform ships as the core and
-    per-capability packages of FR1 because each capability carries its own
-    native code, permissions, and size, so an app installs only what it uses.
+    `spec:AST-082` (DEC-7). The React Native platform ships as one
+    package whose capabilities an app opts in (FR3) because each capability
+    carries its own native code, permissions, and size, so an app links only
+    what it uses.
     The React Native packages may consume `@astryxdesign/native`'s generated
     contracts (OQ2).
 - **FR5 — The public surface is deliberate.** Each package declares its entries
@@ -128,14 +135,15 @@ shared icon names under FR17.
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
-  - `./host` holds the plumbing the library and the capability packages need,
-    such as the library's hosts. It has the status `spec:AST-017` FR21 gives
+  - On the platform, `.` is the core and loads no capability; `./camera`,
+    `./media`, `./web`, `./pdf`, and `./controls` are the capabilities' entries.
+  - `./host` holds the plumbing the library and the capabilities need, such
+    as the library's hosts. It has the status `spec:AST-017` FR21 gives
     Core's `./internal/*`: reserved for Astryx's own packages, undocumented
     for apps, versioned in lockstep with the set (FR14), limited by a
     package-boundary check, and outside the compatibility promise. An app
-    imports from `.`.
-  - `./app.plugin.js`, on the platform core only, is the configuration plugin
-    (FR4).
+    imports from `.` and the capability entries.
+  - `./app.plugin.js`, on the platform, is the configuration plugin (FR4).
   - `.` exports nothing named `*ForTesting`, `reset*`, `SIMULATED_*`, or
     `*_NAME`.
   - A renamed or removed public name stays exported, marked `@deprecated`, for
@@ -144,8 +152,10 @@ shared icon names under FR17.
   packages resolves `AstryxResult<T, R>`: `{ok: true, …}` with its data, or
   `{ok: false, reason, message?}`. It never rejects.
   - `reason` comes from a closed set per capability plus the common reasons
-    `no-module`, `unsupported`, `unsupported-option`, `cancelled`, and
-    `error`. `unsupported` means the binary predates the method;
+    `no-module`, `not-linked`, `unsupported`, `unsupported-option`,
+    `cancelled`, and `error`. `not-linked` means the app did not opt the
+    capability's native code in (FR3); `unsupported` means the binary
+    predates the method;
     `unsupported-option` means it predates an option of a method it has, or
     the platform cannot honor that option.
   - `cancelled` is the one failure that is not an error: the person declined
@@ -156,7 +166,8 @@ shared icon names under FR17.
   - Every capability object has `isAvailable(): boolean` (synchronous, cheap,
     cached) and `version(): number | null`, and `supports(feature)` where the
     capability has optional features. Every view has an
-    `is<View>Available()` probe.
+    `is<View>Available()` probe. A capability the app did not opt in answers
+    false, and its calls answer `not-linked`.
   - A path a platform or an older binary does not support answers
     `unsupported` or `unsupported-option`. It is never a silent no-op and
     never a quietly weaker behavior.
@@ -170,8 +181,8 @@ shared icon names under FR17.
     string unions for closed sets. A call takes its subject first and one
     options object, with defaults for every option.
 - **FR8 — Native interfaces evolve additively.** Every TurboModule and native
-  component spec in the platform packages follows these rules, and a check in
-  each package enforces them:
+  component spec in the platform follows these rules, and a check in the
+  package enforces them:
   - A module is read with `TurboModuleRegistry.get`, never `getEnforcing`; an
     absent module answers `no-module`.
   - Each module's handle is read only by its own wrapper.
@@ -202,7 +213,7 @@ shared icon names under FR17.
     drawing a second one.
 - **FR11 — Expo builds are supported; Expo Go is not a target.** The platform
   packages build in a prebuild or development-build project and in EAS Build
-  through the platform core's configuration plugin (FR4), with no manual native
+  through the platform's configuration plugin (FR4), with no manual native
   edits. They do
   not run in Expo Go, and no package requires an Expo runtime library
   (`spec:AST-082/FR13`). Expo's API shapes do not limit the platform's API.
@@ -252,11 +263,8 @@ shared icon names under FR17.
     once a platform is supported.
   - A package that depends on another package of the set requires it at
     exactly the set's version.
-  - The platform core's loader refuses a capability package whose version
-    differs from core's, or that reports no version, in development and in
-    release alike: it treats the package as not installed, so the library
-    takes its non-native path, and it logs one error that names both
-    versions. Packages from two releases never run together.
+  - The platform is one package with one version. Its capabilities are opted
+    in, never versioned apart.
   - Before 1.0, a minor version may change the API. Each release has a
     changelog per package with migration steps for every rename and removal,
     and a release records the packed tarballs with their hashes.
@@ -267,7 +275,7 @@ shared icon names under FR17.
     checked there and in Astryx Stage.
   - A passing build is not evidence of behavior. A claim about camera,
     haptic feel, or performance needs a real device.
-  - Every platform package's tests cover each native module in its absent,
+  - The platform's tests cover each native module in its absent,
     older, and current shapes through `./testing`.
   - API blocks in each package's documentation are generated from source, and
     a check fails when they drift.
@@ -287,8 +295,8 @@ shared icon names under FR17.
 
 ## Current-state impact
 
-- New packages under `packages/`: the library, the platform core, the five
-  capability packages, and the experiment CLI, each canary-only (FR14).
+- New packages under `packages/`: the library, the platform, and the
+  experiment CLI, each canary-only (FR14).
 - `@astryxdesign/cli` is unchanged. The released command-line shape for React
   Native (OQ5) may change `architecture:cli-surface` when it is decided.
 - The React Native packages join the repository's canary release and carry
@@ -299,28 +307,29 @@ shared icon names under FR17.
   code lives in the platform packages of `spec:AST-112` (FR4), and
   `@astryxdesign/native` stays the single cross-platform contracts package.
 - The package-boundary check gains the FR2 rules: no import from the library in
-  the platform, no dependency between capability packages, and no dependency on
-  these packages from core or the CLI.
+  the platform, no import of a capability from the platform's core or from
+  another capability, and no dependency on these packages from core or the
+  CLI.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                            | Representative states                                                       | Mutation or failure expectation                                                                                                                                 |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Package manifest check of names and entries; the canary release's package list                                                                                                          | each package in the public set                                              | A package missing from the set, or a set package missing from the canary release                                                                                |
-| FR2      | Package-boundary and source check                                                                                                                                                       | the platform's source and tests; each capability package                    | The platform imports the library, or one capability package depends on another                                                                                  |
-| FR3      | Generated native project of an app with the core only, compared with one per capability package                                                                                         | permissions, frameworks, manifest entries, services                         | An app without a capability package carries any of its declarations                                                                                             |
-| FR4      | `npm pack` file lists; a generated sample app's project from configuration                                                                                                              | the library's files; the sample's iOS and Android projects                  | The library ships native code, a capability package ships a plugin, or the sample needs a manual native edit                                                    |
-| FR5      | `exports` map and public-entry name check; package-boundary check of `./host` imports                                                                                                   | `.`, `./testing`, `./host`, `./app.plugin.js`                               | A private name on `.`, a deep import resolving, or an app importing `./host`                                                                                    |
-| FR6      | Unit tests of every asynchronous call through `./testing` mocks                                                                                                                         | absent, older, and current module; a missing option; a native throw; cancel | A call rejects, or answers a reason outside its set                                                                                                             |
-| FR7      | Unit tests of each capability's probes, permissions, and hook cleanup                                                                                                                   | an older binary; a view mounted without permission; unmount                 | A silent no-op, a prompt on mount, or work that outlives its component                                                                                          |
-| FR8      | Spec rules check in each platform package                                                                                                                                               | a new method; a component spec; a platform-only member                      | A changed shipped method, a missing header, or a new method without `status`                                                                                    |
-| FR9      | Source check of platform public types; library tests of the mappings and the default hosts                                                                                              | an icon name; a feedback moment; a theme change                             | Astryx vocabulary in a generic capability type, or the app root without hosts                                                                                   |
-| FR10     | Token comparison between the library and core's theme; review of shared native controls                                                                                                 | every token; each component with a shared native control                    | A token value that differs from core's, or a second native control drawn beside a shared one                                                                    |
-| FR11     | Prebuild and EAS Build of the sample app                                                                                                                                                | the sample with every capability package                                    | The build needs a manual native edit, or a package requires an Expo runtime library                                                                             |
-| FR12     | Scripted checks of each capability in Astryx Stage, the simulator, and the emulator                                                                                                     | each public API                                                             | An Astryx Stage result differs from iOS and Android and the documentation does not name it                                                                      |
-| FR13     | CLI contract tests of each `astryx-rn` command: JSON envelopes, exit codes, Astryx Stage's checksum and signature refusal, `--remote` parity; a dependency check of `@astryxdesign/cli` | each command; a tampered binary; a web project                              | An exit code that depends on `--json`, a tampered binary runs, or `@astryxdesign/cli` contains or depends on React Native commands                              |
-| FR14     | Canary release dry run; dependency check of in-set ranges; a loader test with a capability package of another version and one without a version                                         | a release of every package; a mixed install                                 | Packages with different versions, an in-set range that is not exact, a mixed install that runs, or a release without a changelog or hashes                      |
-| FR15     | Review of each native change's evidence; documentation drift check                                                                                                                      | a native behavior change; a renamed API                                     | A native claim backed only by a build or by anything other than the Simulator, the emulator, a device, or Astryx Stage, or documentation that no longer matches |
+| Contract | Verification                                                                                                                                                                            | Representative states                                                                                     | Mutation or failure expectation                                                                                                                                 |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Package manifest check of names and entries; the canary release's package list                                                                                                          | each package in the public set; each capability entry                                                     | A package missing from the set, a set package missing from the canary release, or a capability without its entry                                                |
+| FR2      | Package-boundary and source check                                                                                                                                                       | the platform's source and tests; the core and each capability                                             | An import from the library in the platform, a capability import in the core, or an import between capabilities                                                  |
+| FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; probe tests                                                            | a capability's native module, frameworks, dependencies, permissions                                       | An app that did not opt a capability in links any of its native code or declarations, or a probe that answers anything but `not-linked`                         |
+| FR4      | `npm pack` file lists; a generated sample app's project from configuration with a capability list                                                                                       | the library's files; the sample's iOS and Android projects; a default and an overridden usage description | The library ships native code, the package manifests declare a permission, or the sample needs a manual native edit                                             |
+| FR5      | `exports` map and public-entry name check; package-boundary check of `./host` imports                                                                                                   | `.`, `./testing`, `./host`, `./app.plugin.js`                                                             | A private name on `.`, a deep import resolving, or an app importing `./host`                                                                                    |
+| FR6      | Unit tests of every asynchronous call through `./testing` mocks                                                                                                                         | absent, older, and current module; a missing option; a native throw; cancel                               | A call rejects, or answers a reason outside its set                                                                                                             |
+| FR7      | Unit tests of each capability's probes, permissions, and hook cleanup                                                                                                                   | an older binary; a view mounted without permission; unmount                                               | A silent no-op, a prompt on mount, or work that outlives its component                                                                                          |
+| FR8      | Spec rules check in each platform package                                                                                                                                               | a new method; a component spec; a platform-only member                                                    | A changed shipped method, a missing header, or a new method without `status`                                                                                    |
+| FR9      | Source check of platform public types; library tests of the mappings and the default hosts                                                                                              | an icon name; a feedback moment; a theme change                                                           | Astryx vocabulary in a generic capability type, or the app root without hosts                                                                                   |
+| FR10     | Token comparison between the library and core's theme; review of shared native controls                                                                                                 | every token; each component with a shared native control                                                  | A token value that differs from core's, or a second native control drawn beside a shared one                                                                    |
+| FR11     | Prebuild and EAS Build of the sample app                                                                                                                                                | the sample with every capability opted in                                                                 | The build needs a manual native edit, or a package requires an Expo runtime library                                                                             |
+| FR12     | Scripted checks of each capability in Astryx Stage, the simulator, and the emulator                                                                                                     | each public API                                                                                           | An Astryx Stage result differs from iOS and Android and the documentation does not name it                                                                      |
+| FR13     | CLI contract tests of each `astryx-rn` command: JSON envelopes, exit codes, Astryx Stage's checksum and signature refusal, `--remote` parity; a dependency check of `@astryxdesign/cli` | each command; a tampered binary; a web project                                                            | An exit code that depends on `--json`, a tampered binary runs, or `@astryxdesign/cli` contains or depends on React Native commands                              |
+| FR14     | Canary release dry run; dependency check of in-set ranges                                                                                                                               | a release of every package                                                                                | Packages with different versions, an in-set range that is not exact, or a release without a changelog or hashes                                                 |
+| FR15     | Review of each native change's evidence; documentation drift check                                                                                                                      | a native behavior change; a renamed API                                                                   | A native claim backed only by a build or by anything other than the Simulator, the emulator, a device, or Astryx Stage, or documentation that no longer matches |
 
 ## Decision log
 
@@ -338,25 +347,28 @@ library can change without touching native code.
 Rejected: a design-system-neutral platform built for standalone use, because
 it would duplicate the mapping the library owns.
 
-### DEC-2 — One package per native capability
+### DEC-2 — One platform package with opt-in capabilities
 
 **Reference:** `spec:AST-112/DEC-2`
 **Decider:** imdreamrunner, 2026-11-09
 
 An app that stores data does not ship a camera permission, a media service, or
-their frameworks. Installing a package is the opt-in, which autolinking and
-prebuild already support without any switch.
+their frameworks: it links only the capabilities it opts in. One package keeps
+one version, one install, and one place for the capability list, and the
+configuration plugin writes the opt-in and the declarations, so an app never
+edits a native project by hand.
 
-Rejected: one package with build flags, because every app would carry every
-declaration unless each build remembered to turn it off.
+Rejected: one package per capability, because the packages could be installed
+at different versions and each app would track several packages that only
+work together.
 
 ### DEC-3 — Apps hold no native code
 
 **Reference:** `spec:AST-112/DEC-3`
 **Decider:** imdreamrunner, 2026-11-09
 
-The platform packages bring all native code; an app's native projects are
-generated from configuration with the platform core's plugin. An Astryx upgrade then
+The platform brings all native code; an app's native projects are
+generated from configuration with the platform's plugin. An Astryx upgrade then
 reaches every app through its dependencies, and no app carries native code that
 drifts from the platform.
 
@@ -379,7 +391,7 @@ easy to miss and its reason is not typed.
 **Reference:** `spec:AST-112/DEC-5`
 **Decider:** imdreamrunner, 2026-11-09
 
-Cloud and prebuild builds are a goal, so the platform core carries a
+Cloud and prebuild builds are a goal, so the platform carries a
 configuration plugin. Expo Go cannot load the packages' native code, and an API limited to
 what every Expo module offers would cap the platform.
 
@@ -409,7 +421,7 @@ keeps Astryx Stage matched to them. A missing or divergent path is a defect.
 **Reference:** `spec:AST-112/DEC-8`
 **Decider:** imdreamrunner, 2026-11-09
 
-The library and the platform packages change together, so they share
+The library and the platform change together, so they share
 one version and release together. They stay on the canary channel until a
 platform is supported under `spec:AST-082/FR15`.
 
@@ -421,7 +433,7 @@ platform is supported under `spec:AST-082/FR15`.
   ships. Recommendation: once the portable entry ships, with a check until then
   that the library's props match the generated contracts.
 - **OQ3 — How does an app receive `@astryxdesign/native`'s Swift code?**
-  (`checkable`) Options: the platform package vendors the Swift sources it
+  (`checkable`) Options: the platform vendors the Swift sources it
   wraps; or the platform's native build depends on the Swift package directly.
 - **OQ4 — Where are Astryx Stage's binaries published?** (`human-design`) Options: per
   OS and architecture packages on npm that the CLI installs; or release assets
