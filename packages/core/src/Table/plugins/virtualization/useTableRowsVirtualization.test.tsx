@@ -180,6 +180,40 @@ describe('actual Table virtualization', () => {
     expect(await mountedRows()).toBe(data.length);
     restore();
   });
+  it('warns in development when the parent gives no height, and not when it does', async () => {
+    const message = "Every row is mounted because the Table's scroll area";
+    // jsdom has no layout, so the scroll area's measured sizes are set here.
+    async function warnings(viewport: number) {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const isArea = (el: Element) => el.matches('[role="group"]');
+      const client = vi
+        .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return isArea(this) ? viewport : 0;
+        });
+      const scroll = vi
+        .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return isArea(this) ? Math.max(viewport, 101 * 48) : 0;
+        });
+      render(<Fixture />);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      const calls = warn.mock.calls.filter(call =>
+        String(call[0]).includes(message),
+      ).length;
+      cleanup();
+      client.mockRestore();
+      scroll.mockRestore();
+      warn.mockRestore();
+      return calls;
+    }
+    // A parent with no height: the scroll area is as tall as every row.
+    expect(await warnings(101 * 48)).toBe(1);
+    // A sized parent: the scroll area holds a few rows.
+    expect(await warnings(240)).toBe(0);
+  });
   it('falls back for an initialViewportHeight that is not a positive finite size', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {container} = render(<Fixture initialViewportHeight={0} />);
