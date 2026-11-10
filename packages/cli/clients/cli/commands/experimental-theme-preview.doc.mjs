@@ -14,8 +14,8 @@ export const doc = {
   stability: 'experimental',
   summary: 'A page in your app that shows the theme on real pages',
   description:
-    "One route in the app, a normal page that keeps the app's layout, global CSS and providers: an app shell with a side nav item per preview page and a top bar with the theme name and a light, dark and system switch. `add` adds pages (the default pages, the best template pages for a description, or one template) and writes the route the first time; `list` lists them; `remove` removes one, or the whole preview. With no app, `add --app <dir>` makes a starter app with the preview in it. Pictures of a theme are on `experimental theme editor show`. Experimental: it may change or be removed in a patch release.",
-  subcommands: ['add', 'list', 'remove'],
+    "One route in the app, a normal page that keeps the app's layout, global CSS and providers: an app shell with a side nav item per preview page and a top bar with the theme name and, when it wears a theme made by `editor`, a light, dark and system switch. `add` adds pages (the default pages, the best template pages for a description, or one template) and writes the route the first time; `list` lists them; `remove` removes one, or the whole preview. With no app, `app <dir>` makes a starter app with the preview in it. Pictures of a theme are on `experimental theme editor show`. Experimental: it may change or be removed in a patch release.",
+  subcommands: ['add', 'app', 'list', 'remove'],
   examples: [
     {
       label: 'The default pages',

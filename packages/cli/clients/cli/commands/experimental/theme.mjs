@@ -27,6 +27,7 @@ import {
   themeEditHow,
   themeEditNew,
   themeEditPreviewAdd,
+  themeEditPreviewApp,
   themeEditPreviewList,
   themeEditPreviewRemove,
   themeEditSet,
@@ -42,6 +43,7 @@ import {doc as showDoc} from '../experimental-theme-editor-show.doc.mjs';
 import {doc as undoDoc} from '../experimental-theme-editor-undo.doc.mjs';
 import {doc as previewDoc} from '../experimental-theme-preview.doc.mjs';
 import {doc as previewAddDoc} from '../experimental-theme-preview-add.doc.mjs';
+import {doc as previewAppDoc} from '../experimental-theme-preview-app.doc.mjs';
 import {doc as previewListDoc} from '../experimental-theme-preview-list.doc.mjs';
 import {doc as previewRemoveDoc} from '../experimental-theme-preview-remove.doc.mjs';
 import {doc as howDoc} from '../experimental-theme-editor-how.doc.mjs';
@@ -60,6 +62,7 @@ import {doc as setFn} from '../../../../api/theme-edit/themeEditSet.doc.mjs';
 import {doc as showFn} from '../../../../api/theme-edit/themeEditShow.doc.mjs';
 import {doc as undoFn} from '../../../../api/theme-edit/themeEditUndo.doc.mjs';
 import {doc as previewAddFn} from '../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs';
+import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewApp.doc.mjs';
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
@@ -523,23 +526,39 @@ export function registerExperimentalTheme(group, program) {
               template: o.template,
               top: o.top == null ? undefined : Number(o.top),
               path: o.path,
-              app: o.app,
-              overwrite: o.overwrite ?? false,
             }),
           r => [
             `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}; pages: ${r.data.pages.join(', ')}`,
             `  theme: ${r.data.theme ?? "the app's own"}`,
-            ...(r.data.app
-              ? [
-                  `  new app: ${r.data.app.folder} (${r.data.app.files.length} files)`,
-                ]
-              : []),
             ...r.data.notes.map(n => `  note: ${n}`),
             `  open: ${r.data.open}`,
           ],
         ),
     }),
     previewAddDoc,
+  );
+
+  explained(
+    defineCommand(preview, previewAppDoc, {
+      fn: previewAppFn,
+      action: (/** @type {string} */ dir, /** @type {any} */ o) =>
+        run(
+          program,
+          () =>
+            themeEditPreviewApp(dir, {
+              cwd: process.cwd(),
+              theme: o.theme,
+              overwrite: o.overwrite ?? false,
+            }),
+          r => [
+            `[ok] new app in ${r.data.folder} (${r.data.files.length} files) with the theme preview; pages: ${r.data.pages.join(', ')}`,
+            `  theme: ${r.data.theme ?? "the app's own neutral theme"}`,
+            ...r.data.notes.map(n => `  note: ${n}`),
+            `  open: ${r.data.open}`,
+          ],
+        ),
+    }),
+    previewAppDoc,
   );
 
   explained(

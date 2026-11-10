@@ -141,7 +141,13 @@ export const doc = {
       value: 'themeEdit.previewAdd',
       stability: 'experimental',
       description:
-        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added` and every page (`pages`), the `files` the preview wrote, `notes`, a new starter `app` (its folder and files) or null, and how to `open` it. Experimental: may change or be removed in a patch release.",
+        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added` and every page (`pages`), the template pages `skipped` because the app lacks packages they import (each with its `missingPackages` and `installCommand`), the `files` the preview wrote, `notes`, and how to `open` it. Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.previewApp',
+      stability: 'experimental',
+      description:
+        'A new starter app with the theme preview inside: the app `folder`, the `theme` copied into it that the pages wear (null for its own neutral theme), the preview `pages`, the `files` written, `notes`, and how to `open` it (install, run, then the page). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.previewList',

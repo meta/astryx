@@ -150,8 +150,6 @@
  * @property {string} [template] - Add this page template instead of ranking one from a description.
  * @property {number} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1).
  * @property {string} [path] - The folder of the preview route, inside the project (default: theme-preview/ in the app's routes folder, app/ or src/app/).
- * @property {string} [app] - Make a new starter app (Next.js app router, Core and the neutral theme) in this folder, with the preview route in it.
- * @property {boolean} [overwrite] - With `app`: write into a folder that is not empty.
  */
 
 /**
@@ -163,11 +161,33 @@
  * @property {string} data.folder - The preview route folder.
  * @property {string | null} data.theme - The theme the pages wear; null for the app's own theme.
  * @property {string[]} data.added - Pages added by this call.
+ * @property {Array<{page: string, missingPackages: string[], installCommand: string | null}>} data.skipped - Template pages not added because the app lacks packages they import, with the command that installs them.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.
- * @property {{folder: string, files: string[]} | null} data.app - With `app`: the new app and its files.
  * @property {string} data.open - How to open the preview.
+ */
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewAppOptions
+ * @property {string} [cwd] - The folder the app folder is inside (default: process.cwd()).
+ * @property {string} [theme] - A theme made by `experimental theme editor` here: it is copied into the app, and the preview pages wear it (default: the app's own neutral theme).
+ * @property {boolean} [overwrite] - Write into a folder that is not empty. A protected file there is never replaced, and the folder's own package.json and .gitignore are kept.
+ */
+
+/**
+ * `astryx --json experimental theme preview app <dir>`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewAppResponse
+ * @property {'themeEdit.previewApp'} type
+ * @property {object} data
+ * @property {string} data.folder - The new app folder.
+ * @property {string | null} data.theme - The theme copied into the app, which the pages wear; null for the app's own neutral theme.
+ * @property {string[]} data.pages - The preview pages.
+ * @property {string[]} data.files - Every file written.
+ * @property {string[]} data.notes - What else to know.
+ * @property {string} data.open - How to install, run and open the app.
  */
 
 /**

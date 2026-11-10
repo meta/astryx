@@ -691,6 +691,13 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
+    name: 'experimental theme preview app',
+    args: ['experimental', 'theme', 'preview', 'app', 'theme-app', '--theme', 'nope'],
+    cwd: '__TMP__',
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
     name: 'experimental theme preview list',
     args: ['experimental', 'theme', 'preview', 'list'],
     skipFieldChecks: true,

@@ -12,7 +12,7 @@ export const doc = {
   summary:
     'Add pages to the theme preview in the app: the default pages, the best template pages for a description, or one template',
   description:
-    "Writes the theme preview into the app: one route, a normal page of the app that keeps its layout, global CSS and providers, in an app shell with a side nav item per preview page and a top bar with the theme name and a light, dark and system switch. A description (\"a sales dashboard\") asks the same page ranking `build` uses for the template pages that fit it best (--top of them, default 1), and adds each as a page; --template names one page template instead; with neither, it adds the default pages: the sample app page and every component grouped. The route goes in theme-preview/ in the app's routes folder (app/ or src/app/), or in --path; the first add records the pages and the files it wrote in theme-preview.json beside the route, so later calls find it. With no routes folder and no --path, it refuses and names both ways on. --app makes a new starter app in that folder instead (Next.js app router, Core and the neutral theme, with the Astryx packages pinned to this CLI's release) with the route in it; no install runs. A file the preview did not write is never replaced. The pages wear --theme (default: the only theme under themes/; with none or several, the app's own theme). Experimental: it may change or be removed in a patch release.",
+    'Writes the theme preview into the app: one route, a normal page of the app that keeps its layout, global CSS and providers, in an app shell with a side nav item per preview page and a top bar with the theme name and, when it wears a theme made by `editor`, a light, dark and system switch. A description ("a sales dashboard") asks the same page ranking `build` uses for the template pages that fit it best (--top of them, default 1), and adds each as a page; --template names one page template instead; with neither, it adds the default pages: the sample app page and every component grouped. The route goes in theme-preview/ in the app\'s routes folder (app/ or src/app/), or in --path; the first add records the pages and the files it wrote in theme-preview.json beside the route, so later calls find it. With no routes folder and no --path, it refuses and names both ways on: --path, or `experimental theme preview app <dir>`, which makes a new starter app with the preview in it. Every check (the theme, the template, the ranking and every file it writes) runs before the first write, so a refusal changes nothing. A template page that imports a package the app lacks is not added: the result names it and the command that installs it. A file the preview did not write is never replaced. The pages wear --theme (default: the only theme under themes/; with none or several, the app\'s own theme). Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditPreviewAdd',
   args: [
     {
@@ -46,17 +46,6 @@ export const doc = {
       description:
         "The folder of the preview route, inside the project. Default: theme-preview/ in the app's routes folder (app/ or src/app/); later commands find it there, or take the same --path",
     },
-    {
-      flag: '--app <dir>',
-      param: 'options.app',
-      description:
-        "Make a new starter app in this folder (Next.js app router, Core and the neutral theme, Astryx pinned to this CLI's release) with the preview in it. Nothing is installed: the result prints the install and dev commands",
-    },
-    {
-      flag: '--overwrite',
-      param: 'options.overwrite',
-      description: 'With --app: write into a folder that is not empty',
-    },
   ],
   examples: [
     {
@@ -71,16 +60,12 @@ export const doc = {
       label: 'One template',
       cli: 'astryx experimental theme preview add --template dashboard',
     },
-    {
-      label: 'A new app',
-      cli: 'astryx experimental theme preview add --app theme-app',
-    },
   ],
-  outsideProject: 'own',
+  outsideProject: 'refuse',
   notes: [
     {
       type: 'prose',
-      text: "Outside a project, with no package.json in the folder or above it, it needs --app, which makes a new app; without it, it writes nothing and stops with `ERR_PROJECT_REQUIRED`. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
+      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme preview add writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the app project, or make a new app with `experimental theme preview app <dir>`. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
     },
   ],
   exitCodes: [
@@ -90,8 +75,12 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'no routes folder and neither --path nor --app, a file there that the preview did not write, a non-empty --app folder without --overwrite, a path outside the current folder, an unknown theme or template, or a bad --top',
+      when: 'outside a project, no routes folder and no --path, a file there that the preview did not write, a path outside the project, an unknown theme or template, no template page whose packages the app has, or a bad --top',
     },
   ],
-  related: ['experimental theme preview', 'experimental theme editor show'],
+  related: [
+    'experimental theme preview',
+    'experimental theme preview app',
+    'experimental theme editor show',
+  ],
 };

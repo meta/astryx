@@ -65,6 +65,7 @@ const OWN_TESTED = new Set([
   'integration pack',
   'theme add',
   'experimental theme add',
+  'experimental theme preview app',
   'upgrade',
 ]);
 
@@ -792,6 +793,51 @@ describe('experimental theme add outside a project (own)', () => {
       expect(r.written).toEqual([]);
       expect(r.kind).toBe('ERR_THEME_INVALID');
       expect(r.envelope.error).toContain('app project');
+    },
+    SLOW,
+  );
+});
+
+describe('experimental theme preview app outside a project (own)', () => {
+  it(
+    'makes the new starter app with the preview in it, writing only inside its folder',
+    async () => {
+      const r = await answer(
+        ['--json', 'experimental', 'theme', 'preview', 'app', 'theme-app'],
+        tmpDir('theme-preview-app'),
+      );
+      expect(r.status).toBe(0);
+      expect(r.kind).toBe('themeEdit.previewApp');
+      expect(r.written).toContain(path.join('theme-app', 'package.json'));
+      expect(r.written).toContain(
+        path.join('theme-app', 'src', 'app', 'theme-preview', 'page.tsx'),
+      );
+      expect(
+        r.written.filter(file => !file.startsWith(`theme-app${path.sep}`)),
+      ).toEqual([]);
+    },
+    SLOW,
+  );
+
+  it(
+    'writes nothing for a theme that is not there',
+    async () => {
+      const r = await answer(
+        [
+          '--json',
+          'experimental',
+          'theme',
+          'preview',
+          'app',
+          'theme-app',
+          '--theme',
+          'brand',
+        ],
+        tmpDir('theme-preview-app-theme'),
+      );
+      expect(r.status).toBe(1);
+      expect(r.written).toEqual([]);
+      expect(r.kind).toBe('ERR_UNKNOWN_THEME');
     },
     SLOW,
   );

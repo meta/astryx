@@ -310,66 +310,138 @@ export async function renderSheet(ctx, slug, data, options = {}) {
   };
 }
 
-/** @param {unknown} v @param {number} depth @returns {string} */
-function jsxValue(v, depth) {
-  if (
+/** @param {unknown} v @returns {v is import('./_catalog.mjs').Tree} */
+const isElement = v =>
+  Boolean(
     v &&
     typeof v === 'object' &&
     !Array.isArray(v) &&
-    /** @type {any} */ (v).__element
-  )
-    return jsx(/** @type {any} */ (v), depth);
+    typeof (/** @type {any} */ (v).__element) === 'string',
+  );
+
+/**
+ * The Core name an element stands for, or null when Core has no module for
+ * it. Some playground samples still use the old `XDS` prefix (`XDSVStack`).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+function coreName(project, name) {
+  if (importPathOf(project, name)) return name;
+  const bare = name.replace(/^XDS(?=[A-Z])/, '');
+  return bare !== name && importPathOf(project, bare) ? bare : null;
+}
+
+/**
+ * A copy of an element tree with Core names only. An element Core has no
+ * module for is left out.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withCoreNames(project, v) {
+  if (Array.isArray(v))
+    return v.map(x => withCoreNames(project, x)).filter(x => x !== undefined);
+  if (isElement(v)) {
+    const name = coreName(project, v.__element);
+    if (!name) return undefined;
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {})
+        .map(([k, x]) => [k, withCoreNames(project, x)])
+        .filter(([, x]) => x !== undefined),
+    );
+    return {
+      __element: name,
+      props,
+      ...(v.children === undefined
+        ? {}
+        : {children: withCoreNames(project, v.children)}),
+    };
+  }
+  if (v && typeof v === 'object')
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [k, withCoreNames(project, x)]),
+    );
+  return v;
+}
+
+/** @param {unknown} v @returns {boolean} */
+const holdsElement = v =>
+  isElement(v) || (Array.isArray(v) && v.some(holdsElement));
+
+/** @param {unknown} v @param {number} depth @returns {string} */
+function jsxValue(v, depth) {
+  if (isElement(v)) return jsx(v, depth);
+  if (Array.isArray(v) && v.some(holdsElement))
+    return `[${v
+      .map((x, i) =>
+        isElement(x)
+          ? jsx({...x, props: {key: String(i), ...x.props}}, depth)
+          : jsxValue(x, depth),
+      )
+      .join(', ')}]`;
   return JSON.stringify(v);
 }
 
 /**
- * JSX source for an element tree.
+ * JSX source for an element tree whose names are Core names. Each element
+ * renders through `C`, the page's table of Core components.
  * @param {import('./_catalog.mjs').Tree} tree
  * @param {number} depth
  * @returns {string}
  */
 function jsx(tree, depth) {
   const pad = '  '.repeat(depth);
-  const props = Object.entries(tree.props ?? {}).map(([k, v]) =>
-    typeof v === 'string' && !/[{}"\n]/.test(v)
+  const {children: childProp, ...rest} = tree.props ?? {};
+  const props = Object.entries(rest).map(([k, v]) =>
+    typeof v === 'string' && !/[{}"<>&\n]/.test(v)
       ? `${k}="${v}"`
       : v === true
         ? k
         : `${k}={${jsxValue(v, depth + 1)}}`,
   );
   const kids = /** @type {unknown[]} */ (
-    [].concat(/** @type {any} */ (tree.children ?? []))
+    [].concat(/** @type {any} */ (tree.children ?? childProp ?? []))
   );
-  const open = `<${tree.__element}${props.length ? ` ${props.join(' ')}` : ''}`;
+  const tag = `C.${tree.__element}`;
+  const open = `<${tag}${props.length ? ` ${props.join(' ')}` : ''}`;
   if (!kids.length) return `${open} />`;
   const inner = kids
     .map(k =>
-      k && typeof k === 'object'
-        ? `${pad}  ${jsx(/** @type {any} */ (k), depth + 1)}`
-        : `${pad}  {${JSON.stringify(k)}}`,
+      isElement(k)
+        ? `${pad}  ${jsx(k, depth + 1)}`
+        : `${pad}  {${jsxValue(k, depth + 1)}}`,
     )
     .join('\n');
-  return `${open}>\n${inner}\n${pad}</${tree.__element}>`;
+  return `${open}>\n${inner}\n${pad}</${tag}>`;
 }
 
 /**
- * Import lines for the elements a page uses: Core modules by name, a
- * template page that is not in Core left out.
+ * The imports of a page and its table of components, `C`. Playground samples
+ * are not full prop sets (a controlled part has no handler), so `C` takes
+ * any props for each part; children must still be React nodes, and every
+ * name must be imported from Core.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Record<string, string>} imports element -> module
+ * @param {unknown} trees element trees with Core names
+ * @returns {string[]}
  */
-function importLines(project, imports) {
+function componentTable(project, trees) {
   /** @type {Map<string, string[]>} */
   const byModule = new Map();
-  for (const [name, spec] of Object.entries(imports)) {
-    if (spec.startsWith('./templates/')) continue;
+  for (const name of [...elementNames(trees)].sort()) {
+    const spec = /** @type {string} */ (importPathOf(project, name));
     byModule.set(spec, [...(byModule.get(spec) ?? []), name]);
   }
-  void project;
-  return [...byModule].map(
-    ([spec, names]) =>
-      `import {${names.join(', ')}} from ${JSON.stringify(spec)};`,
-  );
+  const names = [...byModule.values()].flat();
+  return [
+    ...[...byModule].map(
+      ([spec, list]) =>
+        `import {${list.join(', ')}} from ${JSON.stringify(spec)};`,
+    ),
+    '',
+    'type Part = React.ComponentType<{children?: React.ReactNode} & Record<string, unknown>>;',
+    `const C = {${names.map(n => `${n}: ${n} as unknown as Part`).join(', ')}};`,
+  ];
 }
 
 const SAFE = [
@@ -393,8 +465,10 @@ const SAFE = [
  * @returns {{source: string, components: number}}
  */
 export function componentsPageSource(project) {
-  const shownItems = showcaseItems(project, undefined);
-  const items = shownItems.items.filter(it => it.group !== 'pages');
+  const items = showcaseItems(project, undefined)
+    .items.filter(it => it.group !== 'pages')
+    .map(it => ({...it, tree: withCoreNames(project, it.tree)}))
+    .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
   const groups = new Map();
   for (const it of items) {
@@ -428,9 +502,10 @@ export function componentsPageSource(project) {
     "'use client';",
     '',
     "import * as React from 'react';",
-    ...importLines(project, shownItems.imports),
-    '',
-    'const noop = () => {};',
+    ...componentTable(
+      project,
+      items.map(it => it.tree),
+    ),
     '',
     ...SAFE,
     '',
@@ -453,23 +528,16 @@ export function componentsPageSource(project) {
  * @returns {string}
  */
 export function overviewPageSource(project) {
-  /** @type {Record<string, string>} */
-  const imports = {};
-  for (const n of elementNames(SAMPLE_PAGE)) {
-    const spec = importPathOf(project, n);
-    if (spec) imports[n] = spec;
-  }
+  const page = withCoreNames(project, SAMPLE_PAGE);
   return [
     '// Written by `astryx experimental theme preview add`: a sample app page.',
     "'use client';",
     '',
     "import * as React from 'react';",
-    ...importLines(project, imports),
-    '',
-    'const noop = () => {};',
+    ...componentTable(project, page),
     '',
     'export default function OverviewPage() {',
-    `  return ${jsx(/** @type {any} */ (SAMPLE_PAGE), 1)};`,
+    `  return ${jsx(/** @type {any} */ (page), 1)};`,
     '}',
     '',
   ].join('\n');
@@ -477,8 +545,8 @@ export function overviewPageSource(project) {
 
 /**
  * The source of the preview route: an app shell with a side nav item per
- * preview page, a top bar with the theme name and a light/dark/system
- * switch, and the selected page in the content area. It is a normal page of
+ * preview page, a top bar with the theme name and, with a theme, a
+ * light/dark/system switch, and the selected page in the content area. It is a normal page of
  * the app, so it keeps the app's layout, global CSS and providers.
  * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[]} | null}} spec
  *   `file` relative to the route folder, without extension; no theme: the app's own theme

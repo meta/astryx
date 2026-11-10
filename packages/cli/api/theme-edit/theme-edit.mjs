@@ -11,6 +11,7 @@
  *   themeEditUndo('brand', {thing: 'corners'})          themeEdit.undo (one setting)
  *   themeEditShow('brand')                              themeEdit.show
  *   themeEditPreviewAdd('a sales dashboard')            themeEdit.previewAdd
+ *   themeEditPreviewApp('theme-app')                    themeEdit.previewApp
  *   themeEditHow('banner')                              themeEdit.how
  *
  * Every change is checked first against what the installed Core's parts
@@ -89,6 +90,19 @@ export async function themeEditUndo(theme, options = {}) {
  */
 export async function themeEditPreviewAdd(description, options = {}) {
   return adapter.themeEditPreviewAdd(description, options);
+}
+
+/**
+ * Make a new starter app with the theme preview route and its default pages
+ * inside. With `theme`, the theme is copied into the app and the pages wear
+ * it. No install runs.
+ * @experimental
+ * @param {string} dir
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAppOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
+ */
+export async function themeEditPreviewApp(dir, options = {}) {
+  return adapter.themeEditPreviewApp(dir, options);
 }
 
 /**

@@ -12,7 +12,7 @@ export const doc = {
   displayName: 'themeEditPreviewList()',
   summary: 'The pages of the theme preview in the app.',
   description:
-    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, the list is empty. Experimental: it may change or be removed in a patch release.',
+    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, and with no routes folder (app/ or src/app/) for one, the list is empty. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditPreviewList(options?: object): Promise<object>',
   keywords: ['theme', 'experimental theme', 'preview', 'theme preview'],
@@ -39,7 +39,7 @@ export const doc = {
   throws: [
     {
       code: 'ERR_PROJECT_REQUIRED',
-      when: 'no package.json in the folder (without `app`)',
+      when: 'no package.json in the folder or above it',
     },
   ],
   examples: [

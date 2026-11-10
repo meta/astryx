@@ -12,7 +12,7 @@ export const doc = {
   displayName: 'themeEditPreviewRemove()',
   summary: 'Remove one page from the theme preview, or the whole preview.',
   description:
-    'Removes one page and its nav item, and rewrites the route. With no page, or for the last page, it removes the whole preview: only the files the preview wrote (theme-preview.json lists them) are deleted, and the folder only when nothing else is in it. Experimental: it may change or be removed in a patch release.',
+    'Removes one page and its nav item, and rewrites the route. With no page, or for the last page, it removes the whole preview: only the files the preview wrote (theme-preview.json lists them) are deleted, and the folder only when nothing else is in it. A path in theme-preview.json that leads outside the route folder is refused before anything is deleted. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature:
     'themeEditPreviewRemove(page?: string, options?: object): Promise<object>',
@@ -43,12 +43,16 @@ export const doc = {
   ],
   throws: [
     {
+      code: 'ERR_PATH_TRAVERSAL',
+      when: 'theme-preview.json names a file outside the route folder; nothing is deleted',
+    },
+    {
       code: 'ERR_NOT_FOUND',
       when: 'there is no preview, or it has no such page',
     },
     {
       code: 'ERR_PROJECT_REQUIRED',
-      when: 'no package.json in the folder (without `app`)',
+      when: 'no package.json in the folder or above it',
     },
   ],
   examples: [

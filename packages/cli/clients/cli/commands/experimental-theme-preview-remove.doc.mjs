@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Remove one page from the theme preview, or the whole preview',
   description:
-    'Removes one page and its nav item, and rewrites the route. With no page, or for the last page, it removes the whole preview: only the files the preview wrote (theme-preview.json lists them) are deleted, and the folder only when nothing else is in it. Experimental: it may change or be removed in a patch release.',
+    'Removes one page and its nav item, and rewrites the route. With no page, or for the last page, it removes the whole preview: only the files the preview wrote (theme-preview.json lists them) are deleted, and the folder only when nothing else is in it. A path in theme-preview.json that leads outside the route folder is refused before anything is deleted. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditPreviewRemove',
   args: [
     {
@@ -52,7 +52,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'there is no preview, it has no such page, or outside a project',
+      when: 'there is no preview, it has no such page, theme-preview.json names a file outside the route folder, or outside a project',
     },
   ],
   related: ['experimental theme preview'],

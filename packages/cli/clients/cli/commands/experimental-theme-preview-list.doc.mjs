@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'The pages of the theme preview in the app',
   description:
-    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, it says so and how to add one. Experimental: it may change or be removed in a patch release.',
+    'Lists the pages of the theme preview, in nav order, with the theme they wear and the route folder. With no preview, and with no routes folder for one, it says so and how to add one (the JSON list is empty). Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditPreviewList',
   options: [
     {

@@ -24,6 +24,10 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+import {
+  FIXTURE_PACKAGES,
+  writeFixtureBaseTheme,
+} from '../../test-utils/base-theme-fixture.mjs';
 
 /** @type {string} */
 let cwd;
@@ -63,11 +67,9 @@ const sourceOf = slug =>
   fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.theme.ts`), 'utf8');
 
 beforeAll(async () => {
-  cwd = makeLinkedFixture('astryx-theme-edit-', [
-    '@astryxdesign',
-    'react',
-    'react-dom',
-  ]);
+  cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
+  // CI builds only Core, so the base theme is a fixture, not a built package.
+  writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('t', {cwd, like: 'neutral'});
 }, 120_000);
 

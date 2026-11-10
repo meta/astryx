@@ -16,6 +16,7 @@ export {
   themeEditShow,
   themeEditUndo,
   themeEditPreviewAdd,
+  themeEditPreviewApp,
   themeEditPreviewList,
   themeEditPreviewRemove,
   themeEditHow,
