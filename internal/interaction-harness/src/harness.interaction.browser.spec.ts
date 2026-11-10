@@ -1437,6 +1437,26 @@ test.describe('frame evidence', () => {
     const {fine, whole, shown} = await run('compositor');
     expect(fine.verdict.failures, fine.summary).toEqual([]);
     expect(fine.stepPx).toBe(SUBPIXEL_STEP_PX);
+    // The slide moves about 0.3 px in a 60 Hz frame. A runner that presents
+    // frames further apart moves it further between them. Past 0.4 px a
+    // frame on average, the read is no longer tested under a pixel. The
+    // whole-pixel read then changes on about half the frames, so that run is
+    // starved, by name.
+    const slidePxPerMs = 0.3 / (1000 / 60);
+    const meanFrameMs =
+      (fine.expectedFrames * fine.cadenceMs) /
+      Math.max(1, fine.deliveredFrames);
+    const frameMs = Math.max(fine.cadenceMs, meanFrameMs);
+    if (frameMs * slidePxPerMs > 0.4) {
+      throw new FrameStarvationError({
+        by: 'the sub-pixel self-test',
+        frames: fine.deliveredFrames,
+        during: 'the block held the main thread',
+        min: Math.ceil(fine.deliveredFrames * (frameMs / (1000 / 60))),
+        longestGapMs: fine.longestStallMs,
+        cause: `a frame every ${frameMs.toFixed(1)} ms moves the slide ${(frameMs * slidePxPerMs).toFixed(2)} px a frame, past the 0.4 px this read is tested under`,
+      });
+    }
     expect(fine.pxPerFrame, fine.summary).toBeGreaterThan(0.2);
     expect(fine.pxPerFrame, fine.summary).toBeLessThan(0.4);
     // Every frame the read judged shows a new position; the same frames read
@@ -1794,9 +1814,16 @@ test.describe('frame evidence', () => {
       slowMs > 30_000 ||
       (testInfo.timeout > 0 && needMs > testInfo.timeout - 5000)
     ) {
-      throw new Error(
-        `a frame every ${compositor.cadenceMs.toFixed(0)} ms needs blocks of ${(slowMs / 1000).toFixed(1)} s, about ${(needMs / 1000).toFixed(0)} s in all, past ${slowMs > 30_000 ? 'the 30 s cap' : `the test's ${(testInfo.timeout / 1000).toFixed(0)} s`}: this machine presents too little to judge in time`,
-      );
+      throw new FrameStarvationError({
+        by: 'the busy-main-thread self-test',
+        frames: compositor.deliveredFrames,
+        during: 'its compositor block held the main thread',
+        min: Math.ceil(
+          compositor.deliveredFrames * (compositor.cadenceMs / (1000 / 60)),
+        ),
+        longestGapMs: compositor.longestStallMs,
+        cause: `a frame every ${compositor.cadenceMs.toFixed(0)} ms needs blocks of ${(slowMs / 1000).toFixed(1)} s, about ${(needMs / 1000).toFixed(0)} s in all, past ${slowMs > 30_000 ? 'the 30 s cap' : `the test's ${(testInfo.timeout / 1000).toFixed(0)} s`}: this machine presents too little to judge in time`,
+      });
     }
 
     // The mutant: a main-thread animation freezes while the control moves.
@@ -2276,8 +2303,12 @@ test.describe('frame evidence', () => {
             ? run
             : {
                 ...run,
+                // Every control frame the proof can read for the block,
+                // its look-around included: a frame stamped just outside
+                // the block can be dated inside it.
                 control: run.control.map(frame =>
-                  frame.t >= run.window.from && frame.t <= run.window.to
+                  frame.t >= run.window.from - BUSY_PROOF_LOOKAROUND_MS &&
+                  frame.t <= run.window.to + BUSY_PROOF_LOOKAROUND_MS
                     ? {...frame, box: null}
                     : frame,
                 ),
@@ -2601,9 +2632,20 @@ test.describe('frame evidence', () => {
         }
       }, 100);
     });
-    await expect(waitForRest(box, {timeout: 900})).rejects.toThrow(
-      /waitForRest: still moving \(/,
+    const moving = await waitForRest(box, {timeout: 900}).then(
+      () => null,
+      (error: unknown) => error,
     );
+    // On a starved runner the still frames between the moves come further
+    // apart than `FRAME_STARVATION_MS`, so the wait fails by name. Its
+    // starved span starts after the long task, which ends 220 ms in. A span
+    // that holds the task would read an early gap as starvation.
+    if (moving instanceof FrameStarvationError) {
+      const spanMs = Number(/waited (\d+) ms/.exec(moving.numbers.during)?.[1]);
+      expect(spanMs, String(moving)).toBeLessThan(900 - 220);
+      throw moving;
+    }
+    expect(String(moving)).toMatch(/waitForRest: still moving \(/);
     // Stops the script motion: the element rests again.
     await box.evaluate(el => {
       el.id = 'rested';
