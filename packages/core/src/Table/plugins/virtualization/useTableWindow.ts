@@ -5,58 +5,34 @@
 /**
  * @file useTableWindow.ts
  * @input Parent-admitted data/keys, parent-owned shared geometry source and DOM refs
- * @output React-tracked stable row/gap plan, one focus island and fixed-mode status
- * @position Table pre-cell planner; DOM refs are effect resources, with no owned observation
+ * @output Table's admission into the shared list window, logical-position
+ *   column widths and mounted-row diagnostics
+ * @position Table's adapter over the private list-windowing hook
+ *   (`virtualization/useListWindow`); DOM refs are effect resources, with no
+ *   owned observation
  */
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type RefObject,
-} from 'react';
+import {useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
-import {
-  moveFocusLeftBehind,
-  noteFocusWithin,
-  type FocusWithin,
-} from '../../../utils/focusReturn';
-import {useInteractionModalityTrackingFor} from '../../../utils/interactionModality';
 import {useDevWarningPerMessage} from '../../../hooks/useDevWarning';
 import {
   calculateListWindow,
-  createListWindowSegments,
   isPositiveFinite,
-  reconcileListAnchor,
-  type ListWindowPlan,
   type ListWindowSegment,
-} from '../../../utils/listWindow';
+} from '../../../virtualization/listWindow';
+import {measureText, readPixels} from '../../../virtualization/measure';
+import {
+  useListWindow,
+  type ListWindowGeometry,
+  type ListWindowGeometrySource,
+} from '../../../virtualization/useListWindow';
 import {
   getTableVirtualizationConfig,
   type TableVirtualizationCapability,
   type UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
 
-export interface TableWindowGeometry {
-  /** Actual unobscured body viewport height; sticky occlusion is accounted for once by Table. */
-  viewportHeight: number;
-  scrollTop: number;
-  /** Native scroll content extent, including after-table chrome when measured. */
-  scrollHeight?: number;
-  /** Effective body origin in the same coordinate space as scrollTop. */
-  bodyOffset: number;
-  isMeasured: boolean;
-  /** Increments on each content or layout invalidation; a scroll keeps it. */
-  revision?: number;
-  /** Increments on each size, font, or outer class or style change. */
-  layoutRevision?: number;
-}
-export interface TableWindowGeometrySource {
-  subscribe: (onChange: () => void) => () => void;
-  getSnapshot: () => TableWindowGeometry;
-  getServerSnapshot: () => TableWindowGeometry;
-}
+export type TableWindowGeometry = ListWindowGeometry;
+export type TableWindowGeometrySource = ListWindowGeometrySource;
 export interface UseTableWindowOptions<T> {
   capability: TableVirtualizationCapability | undefined;
   data: T[];
@@ -81,23 +57,6 @@ export interface TableWindowResult {
   /** Parent invokes only for genuine departure, including its recognized layer ownership. */
   onRowBlur: () => void;
 }
-interface RenderedWindow {
-  data: unknown[];
-  keys: (string | number)[];
-  config: Readonly<UseTableRowsVirtualizationConfig>;
-  geometry: TableWindowGeometry;
-  plan: ListWindowPlan;
-}
-interface PendingAnchor {
-  snapshot: TableWindowGeometry;
-  to: number;
-}
-interface WindowTracking {
-  source: TableWindowGeometrySource;
-  snapshot: TableWindowGeometry;
-  window: RenderedWindow;
-  pending: PendingAnchor | undefined;
-}
 interface ValidationState {
   data: unknown[];
   keys: (string | number)[];
@@ -114,12 +73,6 @@ interface Violation {
   config: Readonly<UseTableRowsVirtualizationConfig>;
   reason: string;
 }
-const EMPTY_GEOMETRY: TableWindowGeometry = Object.freeze({
-  viewportHeight: 0,
-  scrollTop: 0,
-  bodyOffset: 0,
-  isMeasured: false,
-});
 const EMPTY_LOGICAL_POSITION_COLUMNS: ReadonlySet<number> = new Set();
 const EMPTY_POSITION_WIDTHS: ReadonlyMap<number, number> = new Map();
 
@@ -137,27 +90,6 @@ function areWidthsEqual(
     }
   }
   return true;
-}
-
-let textContext: OffscreenCanvasRenderingContext2D | null | undefined;
-
-/** Canvas text metrics: no layout read and no DOM write. */
-function measureText(font: string, text: string): number | undefined {
-  if (textContext === undefined) {
-    textContext =
-      typeof OffscreenCanvas === 'undefined'
-        ? null
-        : new OffscreenCanvas(1, 1).getContext('2d');
-  }
-  if (textContext == null) {
-    return undefined;
-  }
-  textContext.font = font;
-  return textContext.measureText(text).width;
-}
-
-function readPixels(value: string): number {
-  return Number.parseFloat(value) || 0;
 }
 
 /**
@@ -218,8 +150,6 @@ function measureLogicalPositionWidth(
   }
   return Math.ceil(textWidth + spacing * text.length + chrome + 1);
 }
-const getEmptyGeometry = () => EMPTY_GEOMETRY;
-const subscribeToNothing = () => () => {};
 
 function hasClippedRowNumber(cell: HTMLTableCellElement): boolean {
   const view = cell.ownerDocument.defaultView;
@@ -322,10 +252,6 @@ function getGeometryViolation(
   return undefined;
 }
 
-function scrollViewport(node: HTMLDivElement, scrollTop: number) {
-  node.scrollTop = scrollTop;
-}
-
 export function useTableWindow<T>({
   capability,
   data,
@@ -339,6 +265,17 @@ export function useTableWindow<T>({
 }: UseTableWindowOptions<T>): TableWindowResult {
   const [violation, setViolation] = useState<Violation | undefined>();
   const config = getTableVirtualizationConfig(capability);
+  // The engine plans its first window from the declared first-frame height.
+  const pitch = useMemo(
+    () =>
+      config === undefined
+        ? undefined
+        : {
+            rowHeight: config.rowHeight,
+            viewportHeight: config.initialViewportHeight,
+          },
+    [config],
+  );
   const hasValidConfig =
     config !== undefined &&
     calculateListWindow({
@@ -359,14 +296,6 @@ export function useTableWindow<T>({
     !isRejected &&
     keys.length === data.length &&
     data.length > 0;
-  const snapshot = useSyncExternalStore(
-    canWindow ? geometry.subscribe : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getEmptyGeometry,
-    canWindow ? geometry.getServerSnapshot : getEmptyGeometry,
-  );
-  const [focusedKey, setFocusedKey] = useState<string | number | undefined>();
-  const [tracking, setTracking] = useState<WindowTracking | undefined>();
-  const focusNoteRef = useRef<FocusWithin | null>(null);
   const [positionWidths, setPositionWidths] = useState(EMPTY_POSITION_WIDTHS);
   const validationRef = useRef<ValidationState | null>(null);
   useDevWarningPerMessage(
@@ -374,179 +303,23 @@ export function useTableWindow<T>({
     `${violation?.reason} Rendering all rows without fixed constraints.`,
     isRejected,
   );
-  // Focus return reads the last input, so only a windowed table tracks it.
-  useInteractionModalityTrackingFor(viewport, canWindow);
-
-  // This is the only full-data pass owned here, and never runs on a scroll snapshot.
-  const keyIndices = useMemo(() => {
-    const indices = new Map<string | number, number>();
-    if (hasValidConfig && isAdmitted) {
-      for (let index = 0; index < keys.length; index++) {
-        indices.set(keys[index], index);
-      }
-    }
-    return indices;
-  }, [keys, hasValidConfig, isAdmitted]);
-  const focusIndex =
-    focusedKey === undefined ? undefined : keyIndices.get(focusedKey);
-  if (focusedKey !== undefined && focusIndex === undefined) {
-    setFocusedKey(undefined);
-  }
-  const last = tracking?.window;
-  const hasCurrentMeasurement =
-    snapshot.isMeasured &&
-    isPositiveFinite(snapshot.viewportHeight) &&
-    Number.isFinite(snapshot.scrollTop) &&
-    Number.isFinite(snapshot.bodyOffset) &&
-    snapshot.bodyOffset >= 0;
-  const effectiveGeometry = hasCurrentMeasurement
-    ? snapshot
-    : last != null && last.config === config
-      ? last.geometry
-      : {
-          viewportHeight: config?.initialViewportHeight ?? 0,
-          scrollTop: 0,
-          bodyOffset: 0,
-          isMeasured: false,
-        };
-  const hasChangedInputs =
-    last !== undefined &&
-    (last.data !== data ||
-      last.keys !== keys ||
-      last.config.rowHeight !== config?.rowHeight ||
-      last.config.initialViewportHeight !== config?.initialViewportHeight);
-  const anchorScroll =
-    canWindow && !isRejected && hasChangedInputs && config && last
-      ? reconcileListAnchor({
-          previousKeys: last.keys,
-          keys,
-          keyIndices,
-          firstVisibleIndex: last.plan.firstVisibleIndex,
-          // A negative offset is a distance inside the leading content, not a
-          // fraction of a row, so a new pitch does not scale it.
-          offset:
-            last.plan.offset < 0
-              ? last.plan.offset
-              : (last.plan.offset / last.config.rowHeight) * config.rowHeight,
-          rowHeight: config.rowHeight,
-          viewportHeight: effectiveGeometry.viewportHeight,
-          startOffset: effectiveGeometry.bodyOffset,
-          trailingContentHeight: Math.max(
-            0,
-            (last.geometry.scrollHeight ?? 0) -
-              last.geometry.bodyOffset -
-              last.plan.totalHeight,
-          ),
-        })
-      : undefined;
-  const pending = tracking?.pending;
-  const isAwaitingAnchor =
-    tracking?.source === geometry &&
-    pending !== undefined &&
-    pending.snapshot.scrollTop === snapshot.scrollTop &&
-    (pending.to !== snapshot.scrollTop || pending.snapshot === snapshot);
-  const pendingScroll =
-    anchorScroll ?? (isAwaitingAnchor ? pending.to : undefined);
-  const resolvedScroll = pendingScroll ?? effectiveGeometry.scrollTop;
-  const plan =
-    canWindow && !isRejected && config
-      ? calculateListWindow({
-          rowCount: data.length,
-          rowHeight: config.rowHeight,
-          viewportHeight: effectiveGeometry.viewportHeight,
-          scrollTop: resolvedScroll,
-          scrollHeight: effectiveGeometry.scrollHeight,
-          startOffset: effectiveGeometry.bodyOffset,
-          isMeasured: effectiveGeometry.isMeasured,
-          focusIndex,
-        })
-      : null;
-  const isWindowed = plan !== null;
-  const start = plan?.start ?? 0;
-  const end = plan?.end ?? data.length;
-  const rowHeight = config?.rowHeight ?? 0;
-  // The last window affects rendering, so it lives in state.
-  // Immutable inputs limit this update to one extra render.
-  if (plan !== null && config !== undefined) {
-    if (
-      tracking === undefined ||
-      tracking.source !== geometry ||
-      tracking.snapshot !== snapshot ||
-      last?.data !== data ||
-      last.keys !== keys ||
-      last.config !== config
-    ) {
-      setTracking({
-        source: geometry,
-        snapshot,
-        window: {
-          data,
-          keys,
-          config,
-          geometry: {...effectiveGeometry, scrollTop: resolvedScroll},
-          plan,
-        },
-        pending:
-          anchorScroll !== undefined
-            ? {snapshot, to: anchorScroll}
-            : isAwaitingAnchor
-              ? pending
-              : undefined,
-      });
-    }
-  } else if (tracking !== undefined) {
-    setTracking(undefined);
-  }
-  // Range snapshots within the same mounted interval retain the exact segment array.
-  const segments = useMemo<ListWindowSegment[]>(() => {
-    if (!isWindowed) {
-      return data.length === 0
-        ? []
-        : [{type: 'rows', start: 0, end: data.length}];
-    }
-    return createListWindowSegments(
-      data.length,
-      rowHeight,
-      start,
-      end,
-      focusIndex,
-    );
-  }, [isWindowed, start, end, data.length, rowHeight, focusIndex]);
-
-  const onRowFocus = useCallback(
-    (key: string | number, focusTarget?: HTMLElement) => {
-      focusNoteRef.current =
-        noteFocusWithin(focusTarget ?? body.current) ?? focusNoteRef.current;
-      setFocusedKey(key);
-    },
-    [body],
-  );
-  const onRowBlur = useCallback(() => {
-    focusNoteRef.current = null;
-    setFocusedKey(undefined);
-  }, []);
-
-  useIsomorphicLayoutEffect(() => {
-    // Syncs DOM focus and the viewport scroll position with the committed rows.
-    if (
-      focusNoteRef.current != null &&
-      (focusedKey === undefined || focusIndex === undefined)
-    ) {
-      moveFocusLeftBehind(focusNoteRef.current, viewport.current, null, {
-        preventScroll: true,
-      });
-      focusNoteRef.current = null;
-    }
-    if (!isWindowed || !config || !plan) {
-      return;
-    }
-    if (
-      pendingScroll !== undefined &&
-      viewport.current &&
-      Math.abs(viewport.current.scrollTop - pendingScroll) > 0.5
-    ) {
-      scrollViewport(viewport.current, pendingScroll);
-    }
+  const {
+    segments,
+    plan,
+    isWindowed,
+    snapshot,
+    onItemFocus: onRowFocus,
+    onItemBlur: onRowBlur,
+  } = useListWindow({
+    items: data,
+    keys,
+    rowCount: data.length,
+    pitch,
+    isEligible: hasValidConfig && isAdmitted,
+    canWindow,
+    geometry,
+    viewport,
+    focusContainer: body,
   });
 
   const totalHeight = plan?.totalHeight ?? 0;

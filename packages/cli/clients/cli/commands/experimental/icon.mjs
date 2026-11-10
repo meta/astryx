@@ -256,10 +256,17 @@ export function registerExperimentalIcon(group, program) {
         return answered;
       }
 
-      const {status, projectSet, reason, sets, withdrawn} = result.data;
+      const {status, projectSet, reason, sets, withdrawn, order, next} =
+        result.data;
       emit(
         section('Icon sets'),
-        record({status, projectSet, reason}),
+        record({
+          status,
+          projectSet,
+          ...(order.length > 1 ? {order: order.join(' > ')} : {}),
+          reason,
+        }),
+        ...(next ? [text(`[warn] ${next}`)] : []),
         ...(sets.length > 0
           ? [
               records(
@@ -283,6 +290,7 @@ export function registerExperimentalIcon(group, program) {
                     'definitions',
                     'own',
                     'missing',
+                    'role',
                     'project',
                     'description',
                   ],
@@ -346,21 +354,42 @@ export function registerExperimentalIcon(group, program) {
 
   defineCommand(iconCli, iconUseCommand, {
     fn: iconUseFn,
-    action: (/** @type {string} */ set) =>
+    action: (
+      /** @type {string} */ set,
+      /** @type {{backup?: string[]}} */ options,
+    ) =>
       run(
-        () => iconUse(set, {cwd: process.cwd()}),
-        ({data}) =>
+        () => iconUse(set, {cwd: process.cwd(), backups: options.backup ?? []}),
+        ({data}) => {
+          /** @type {Array<{iconSet: string, set: string}>} */
+          const backups = data.backups;
+          const shown = (/** @type {string | string[]} */ value) =>
+            Array.isArray(value) ? JSON.stringify(value) : `"${value}"`;
+          const main = `"${data.iconSet}" (${data.set})`;
+          const order =
+            backups.length > 0
+              ? `main set ${main}, then ${backups.map(each => `"${each.iconSet}" (${each.set})`).join(', then ')}`
+              : main;
           emit(
             text(
               data.changed
-                ? `[ok] experimental.iconSet is now "${data.iconSet}" (${data.set}) in ${data.config}${data.created ? ', created' : ''}.`
-                : `[ok] experimental.iconSet already names "${data.iconSet}" in ${data.config}.`,
+                ? `[ok] experimental.iconSet is now ${order} in ${data.config}${data.created ? ', created' : ''}.`
+                : `[ok] experimental.iconSet already names ${order} in ${data.config}.`,
             ),
-            ...(data.previous && data.changed
-              ? [text(`It was "${data.previous}".`)]
+            ...(backups.length > 0
+              ? [
+                  text(
+                    'A copied template takes each icon from the first set in this order that has its meaning.',
+                  ),
+                ]
               : []),
+            ...(data.previous && data.changed
+              ? [text(`It was ${shown(data.previous)}.`)]
+              : []),
+            ...(data.next ? [text(`[warn] ${data.next}`)] : []),
             ...(data.warning ? [text(`[warn] ${data.warning}`)] : []),
-          ),
+          );
+        },
       ),
   });
 
