@@ -542,9 +542,44 @@ describe('API changes', () => {
       {surface: null, haveSurface: false, unchanged: true},
       {base: 'C', baseSource: 'committed'},
     ],
+    [
+      'no report for a changed package that a merge base this run built could not surface',
+      {surface: null, haveSurface: true, unchanged: false, selfBuilt: true},
+      {base: null, baseSource: 'unknown', baseUnknown: true},
+    ],
+    [
+      'this build for an unchanged package that a merge base this run built could not surface',
+      {surface: null, haveSurface: true, unchanged: true, selfBuilt: true},
+      {base: 'H', baseSource: 'head'},
+    ],
   ])("takes the merge base's report from %s", (_label, input, expected) => {
     expect(chooseBase({...input, head: 'H', committedAtBase: 'C'})).toEqual(
       expected,
+    );
+  });
+
+  it('marks a package whose merge-base surface is unavailable as unknown, with no rows, even when its committed report is stale', () => {
+    const stalePast = report.replace(/^.*resetChips.*$/m, '');
+    const [change] = computeChanges([
+      {
+        pkg: '@astryxdesign/demo',
+        base: null,
+        baseSource: 'unknown',
+        head: report,
+        committed: stalePast,
+      },
+    ]);
+    // merge-guard reads `baseline` as an unknown base for a package the pull
+    // request touches; `baseUnknown` says why it is unknown.
+    expect(change).toMatchObject({
+      baseline: true,
+      baseUnknown: true,
+      baseSource: 'unknown',
+      rows: [],
+      counts: {added: 0, changed: 0, removed: 0},
+    });
+    expect(renderChanges([change])).toContain(
+      'Unknown: base surface unavailable for `demo`',
     );
   });
 
