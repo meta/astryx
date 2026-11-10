@@ -60,6 +60,8 @@ import {devWarn} from '../utils/devWarning';
 import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
 import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
+import {resolvePopoverAnchor, type PopoverAnchor} from './popoverAnchor';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {usePresentationHold} from '../Layer/presentationHold';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
 import {
@@ -229,6 +231,19 @@ export interface PopoverProps extends Pick<
    * handlers and ARIA attributes to it directly.
    */
   anchorRef?: React.RefObject<HTMLElement>;
+
+  /**
+   * The element the popover sits on, when it is not the trigger: a ref to any
+   * element (a card, a table cell, a chart region), or a function that
+   * returns the element (or `null`) and is read again when the page changes.
+   *
+   * The trigger (`children` or `anchorRef`) keeps its toggle and ARIA; the
+   * anchor gets neither. With `anchor` and no trigger, the popover opens and
+   * closes only through `isOpen`, and a dismissal reports
+   * `onOpenChange(false)`. While `anchor` resolves to nothing, an open
+   * popover shows no surface.
+   */
+  anchor?: PopoverAnchor;
 
   /**
    * Content to display inside the popover.
@@ -521,6 +536,7 @@ function windowOf(element: Element | null): Window & typeof globalThis {
 export function Popover({
   children,
   anchorRef,
+  anchor,
   content,
   placement = 'below',
   alignment = 'start',
@@ -569,7 +585,16 @@ export function Popover({
     onOpenChange?.(false);
   }, [onOpenChange]);
 
+  const hasTrigger = children != null || anchorRef != null;
+  useDevWarning(
+    'Popover',
+    'a Popover with `anchor` and no trigger (`children` or `anchorRef`) ' +
+      'opens only through `isOpen`. Pass `isOpen` and `onOpenChange`.',
+    anchor != null && !hasTrigger && !isControlled,
+  );
+
   const popover = usePopoverInternal({
+    anchor,
     dialogLabel: label,
     role,
     isModal,
@@ -604,9 +629,12 @@ export function Popover({
   // The layer's show handler calls this as the popover opens. It reads the
   // surface and the anchor when it runs, so a render-time store is safe.
   presentSurfaceRef.current = () => {
+    const separateAnchor = anchor == null ? null : resolvePopoverAnchor(anchor);
     surfaceMotion.present(
       surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
-      anchorElementRef.current,
+      separateAnchor instanceof HTMLElement
+        ? separateAnchor
+        : anchorElementRef.current,
       surfaceRef.current,
     );
   };
@@ -1110,8 +1138,8 @@ export function Popover({
         xstyle: popoverSizeXstyle,
       });
 
-  // Sibling mode: render only the popover (no wrapper needed)
-  if (anchorRef && children == null) {
+  // Sibling or trigger-less mode: render only the popover (no wrapper needed)
+  if ((anchorRef || anchor) && children == null) {
     return (
       <>
         {anchoredLayer}

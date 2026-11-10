@@ -40,6 +40,12 @@ export const docs = {
             'External ref to use as the popover anchor in sibling mode.',
         },
         {
+          name: 'anchor',
+          type: 'React.RefObject<Element | null> | (() => Element | null)',
+          description:
+            'The element the popover sits on when it is not the trigger: a ref to any element (a card, a table cell, a chart region) or a function returning one, read again when the page changes. The trigger keeps its toggle and ARIA; the anchor gets neither. With no trigger, the popover opens only through isOpen. While it resolves to nothing, an open popover shows no surface.',
+        },
+        {
           name: 'content',
           type: 'ReactNode',
           description: 'Content to display inside the popover.',
@@ -308,6 +314,12 @@ export const docsZh = {
           name: 'anchorRef',
           type: 'React.RefObject<HTMLElement>',
           description: '在兄弟模式下用作弹出框锚点的外部 ref。',
+        },
+        {
+          name: 'anchor',
+          type: 'React.RefObject<Element | null> | (() => Element | null)',
+          description:
+            '弹出框所依附的元素（当它不是触发器时）：任意元素的 ref，或返回元素的函数，页面变化时会重新读取。触发器保留其切换行为和 ARIA；锚点两者都不获得。没有触发器时，弹出框只能通过 isOpen 打开。解析不到元素时，打开的弹出框不显示表面。',
         },
         {
           name: 'content',
@@ -587,6 +599,8 @@ export const docsDense = {
         children:
           'Trigger element. Must contain <button> or [role="button"] element.',
         anchorRef: 'External ref for popover anchor in sibling mode.',
+        anchor:
+          'Element the popover sits on when not the trigger: ref or function returning one; no trigger ARIA on it; trigger-less needs isOpen.',
         content: 'Content displayed inside popover.',
         placement:
           "Position relative to trigger. Logical: start/end resolve against the popover's inherited direction (RTL mirrors).",
