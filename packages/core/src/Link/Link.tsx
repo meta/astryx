@@ -430,6 +430,14 @@ export function Link({
           tooltipInterest.onPointerDown,
           props.onPointerDown,
         ),
+        onMouseEnter: composeEventHandlers(
+          tooltipInterest.onMouseEnter,
+          props.onMouseEnter,
+        ),
+        onMouseLeave: composeEventHandlers(
+          tooltipInterest.onMouseLeave,
+          props.onMouseLeave,
+        ),
         onFocus: composeEventHandlers(tooltipInterest.onFocus, props.onFocus),
         onBlur: composeEventHandlers(tooltipInterest.onBlur, props.onBlur),
       }
