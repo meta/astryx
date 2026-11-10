@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 
-import {REPO, findAll, findInSource} from './shared-identity.mjs';
+import {REPO, findAll, findInSource, sharedSlots} from './shared-identity.mjs';
 
 const BASELINE = path.join(REPO, 'scripts/shared-identity.baseline.json');
 const FIX =
@@ -103,6 +103,29 @@ describe('cross-module identity in module scope (spec:AST-110 FR3)', () => {
       stale,
       'baseline entries the source no longer has; delete them',
     ).toEqual([]);
+  });
+
+  it('names every shared slot with a literal name and version, once', () => {
+    // A slot's name and version are its identity across copies: a computed
+    // name could change with a file move, and two calls with one name would
+    // share a slot by accident. A move keeps the name, or bumps the version.
+    const slots = sharedSlots();
+    expect(
+      slots
+        .filter(slot => slot.slot == null)
+        .map(slot => `${slot.file}:${slot.line} ${slot.helper}`),
+      'shared slots named without a literal name and version',
+    ).toEqual([]);
+    const seen = new Map();
+    const repeated = [];
+    for (const slot of slots) {
+      if (slot.slot == null) continue;
+      const first = seen.get(slot.slot);
+      if (first)
+        repeated.push(`${slot.slot}: ${first} and ${slot.file}:${slot.line}`);
+      else seen.set(slot.slot, `${slot.file}:${slot.line}`);
+    }
+    expect(repeated, 'shared slots named twice').toEqual([]);
   });
 
   it('gives every allowed entry a reason and every open entry a fix group', () => {
