@@ -3,7 +3,7 @@
 /**
  * @file Routing contract for the TypeScript checks of @astryxdesign/native.
  *
- * The native package is outside the root `pnpm build`, and Vitest neither
+ * The root `pnpm build` builds the native package, but Vitest neither
  * typechecks its source nor loads the declaration file of every platform
  * condition. The `typecheck` job is the only gate over both: its
  * `pnpm typecheck` runs native's own `typecheck` script, which checks the
@@ -47,7 +47,7 @@ describe('native TypeScript checks', () => {
     expect(rootScripts.typecheck).not.toContain('@astryxdesign/native');
   });
 
-  it("check the package, its build, and the emitted types, in that order", () => {
+  it('check the package, its build, and the emitted types, in that order', () => {
     expect(native.scripts.typecheck).toBe(
       'tsc --project tsconfig.json --noEmit && pnpm build && pnpm typecheck:types',
     );
