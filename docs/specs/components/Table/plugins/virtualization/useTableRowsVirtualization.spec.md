@@ -31,6 +31,7 @@ parent_component: component:Table
 references:
   [
     architecture:component-theming-surface,
+    architecture:list-windowing,
     architecture:interaction-modality,
     architecture:public-component-api,
     architecture:react-component-runtime,
@@ -75,13 +76,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- Fixed-height capability, visible range, internal overscan and gap geometry.
-- Bounded retained-focus participation, anchor policy and virtualized accessibility outcomes.
+- Fixed-height capability and Table's admission into the shared list window.
+- Table's retained-focus participation and virtualized accessibility outcomes.
 - Supported flat-row composition, fixed-height admission and performance targets.
 
 **Does not own / non-goals**
 
 - Data, columns, canonical identity, rendering mode, row kind, whole-row ownership, pre-cell render plan, viewport and logical appearance metadata: `component:Table`.
+- The visible range, internal overscan, gap geometry, the first-visible-key anchor math, the focus-island retention and the offset and measurement helpers: the shared windowing module, `architecture:list-windowing`. This module supplies Table's pitch and admission to it.
 - Fetching, loading presentation, selection, activation, sort/filter state, navigation, route restoration or arbitrary imperative row navigation: their module or product owners.
 - Tree/grouped/detail rows, expanded panels, custom row anatomy, paginated global-offset data, variable-height or column virtualization in v1.
 - A new theme target, public ScrollableArea wrapper, external-root mode, overscan setting or `scrollToRow` API.
@@ -94,14 +96,14 @@ seeds the first window; it sizes no element. The Table's scroll area takes its
 height from its parent, and after mount the measured viewport sets the window. The hook reads the measured height of the Table's scroll area and never defines it. Table consumes it with its existing
 `data`, `columns`, `idKey` and `plugins` and owns types/runtime admission.
 
-| Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                             | Stability          |
-| ------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------- | --------------------------------- | ------------------ |
-| Geometry      | Positive finite CSS-pixel `rowHeight` and `initialViewportHeight` | Total body-row pitch; the viewport height the first window plans for | Both required         | This module                       | Stable; unreleased |
-| Capability    | Opaque Table-compatible value                                     | Carries geometry intent, not sliced props or an engine handle        | Absent without opt-in | This module; parent consumption   | Stable; unreleased |
-| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`          | One complete logical dataset and parent-resolved key source          | Required for opt-in   | `component:Table`                 | Parent dependency  |
-| Range         | Half-open contiguous logical interval                             | Viewport-intersecting rows before overscan                           | Derived               | This module                       | Stable; unreleased |
-| Focus island  | Absent or one retained product-row subtree                        | Preserves the focused row outside the ordinary window                | Absent                | This module; existing focus owner | Stable; unreleased |
-| Metadata      | Logical index/count, header count, parity and final-row state     | One source for distinct ARIA and visible numbering                   | Derived               | `component:Table`                 | Parent dependency  |
+| Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                                               | Stability          |
+| ------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------- | --------------------------------------------------- | ------------------ |
+| Geometry      | Positive finite CSS-pixel `rowHeight` and `initialViewportHeight` | Total body-row pitch; the viewport height the first window plans for | Both required         | This module                                         | Stable; unreleased |
+| Capability    | Opaque Table-compatible value                                     | Carries geometry intent, not sliced props or an engine handle        | Absent without opt-in | This module; parent consumption                     | Stable; unreleased |
+| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`          | One complete logical dataset and parent-resolved key source          | Required for opt-in   | `component:Table`                                   | Parent dependency  |
+| Range         | Half-open contiguous logical interval                             | Viewport-intersecting rows before overscan                           | Derived               | `architecture:list-windowing`                       | Stable; unreleased |
+| Focus island  | Absent or one retained product-row subtree                        | Preserves the focused row outside the ordinary window                | Absent                | `architecture:list-windowing`; existing focus owner | Stable; unreleased |
+| Metadata      | Logical index/count, header count, parity and final-row state     | One source for distinct ARIA and visible numbering                   | Derived               | `component:Table`                                   | Parent dependency  |
 
 ## Behavioral contract
 
@@ -131,7 +133,7 @@ browser, accessibility and performance verification remain release requirements.
 
 - **ORD1 — Logical inputs.** Caller sort/filter owners establish Table data; parent identity, rendering mode, row kind and ownership resolve before windowing.
 - **ORD2 — Admission.** Parent validates capability geometry, identity, flat compatibility and fixed content before invoking product cell renderers. Children mode remains an unchanged no-op.
-- **ORD3 — Range.** Body-relative scroll geometry accounts for headers/chrome and sticky occlusion once; range intersection is clamped, expanded by four rows per side and combined with one focus island.
+- **ORD3 — Range.** Body-relative scroll geometry accounts for headers/chrome and sticky occlusion once; range intersection is clamped, expanded by four rows per side and combined with one focus island. The shared windowing module (`architecture:list-windowing`) computes the range, the island and the anchor from that geometry.
 - **ORD4 — Rendering.** Parent BaseTable performs the pre-cell plan, renders gaps and keyed product rows in logical order, and runs existing sequential element transforms only on mounted product rows.
 - **ORD5 — Metadata/paint.** Parent logical indices/counts drive ARIA, row numbering, parity and final-row appearance before paint; selection and activation retain their respective state owners.
 - **ORD6 — Change/fallback.** Anchor reconciliation and range publication use the same current inputs; disabled virtualization releases resources/gaps/constraints, preserves unrelated plugins and fully renders compatible content with one deduplicated development diagnostic per condition. Recovery requires a changed valid admission input, not repeated retry of a violating configuration.

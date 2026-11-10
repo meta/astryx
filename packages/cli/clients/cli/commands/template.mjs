@@ -57,9 +57,10 @@ function demoContentNote(count, file) {
 }
 
 /**
- * The icon report as text lines (AST-084 FR10): one line per mapped or kept
- * icon, or one line saying why nothing was mapped. Nothing when the project
- * has no icon set at all (no report: icon sets are experimental).
+ * The icon report as text lines (AST-084 FR10): one line per mapped,
+ * placeholder, or kept icon, or one line saying why nothing was mapped.
+ * Nothing when the project has no icon set at all (no report: icon sets are
+ * experimental). A placeholder line names its meaning and both fixes.
  * @param {import('../../../api/template/template.type.mjs').TemplateIconsReport | undefined} icons
  * @returns {string[]}
  */
@@ -74,9 +75,17 @@ function iconLines(icons) {
     ...icons.mapped.map(
       each =>
         `icons: mapped ${each.source.export} (${each.source.module}) -> ${each.target.export} (${each.target.module}) by ${each.by}` +
+        (icons.order ? ` from ${each.target.package}/${each.target.set}` : '') +
+        (each.variant
+          ? `; ${each.variant.asked} look not in the set, drew ${each.variant.used ?? 'its default look'}`
+          : '') +
         (each.dropped && each.dropped.length > 0
           ? `; dropped ${each.dropped.join(', ')} (size comes from CSS)`
           : ''),
+    ),
+    ...(icons.placeholder ?? []).map(
+      each =>
+        `icons: placeholder ${each.source.export} (${each.source.module}) -> ${each.target.local}: no set in your list has "${each.definitions.join('", "')}", so the file draws a placeholder it declares. Fix: add a backup set that has it, \`${each.fixes[1]}\`; or, if you author your main set, map it there, \`${each.fixes[0]}\`.`,
     ),
     ...icons.kept.map(
       each =>

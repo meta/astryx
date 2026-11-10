@@ -546,8 +546,20 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ).toEqual([]);
   });
 
-  it('leaves every run name as it was', () => {
-    expect(ci['run-name']).toBeUndefined();
+  it("leaves every run name as it was, but main's nightly interaction run's", () => {
+    const name = operation =>
+      Function(
+        'github',
+        'inputs',
+        `return (${ci['run-name'].replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/format\('Interaction proofs of \{0\}', github\.sha\)/, '`Interaction proofs of ${github.sha}`')});`,
+      )(
+        {event_name: operation ? 'workflow_dispatch' : 'pull_request', sha},
+        operation ? {operation} : {},
+      );
+    // An empty name keeps the event's default name.
+    for (const operation of [undefined, 'capture', 'release-check'])
+      expect(name(operation), String(operation)).toBe('');
+    expect(name('interaction-full')).toBe(`Interaction proofs of ${sha}`);
   });
 
   it('does not check a tip twice', async () => {
