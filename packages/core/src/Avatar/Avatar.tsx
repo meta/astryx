@@ -202,6 +202,17 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
   },
+  // Generated content with empty alternative text draws the initials. They are
+  // part of the picture, not text of the control. On a link or button, visible
+  // text that the name does not contain fails Label in Name.
+  initials: {
+    '::before': {
+      content: stylex.firstThatWorks(
+        'attr(data-initials) / ""',
+        'attr(data-initials)',
+      ),
+    },
+  },
   // After `fallback` on a lone Avatar: in forced colors its initials and
   // default icon take the color around them, which the browser forces to
   // CanvasText, so a control that paints itself disabled (GrayText) or
@@ -806,12 +817,13 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                styles.initials,
                 avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
               ),
-            )}>
-            {initials}
-          </div>
+            )}
+            data-initials={initials}
+          />
         )}
         {showIcon && (
           <div

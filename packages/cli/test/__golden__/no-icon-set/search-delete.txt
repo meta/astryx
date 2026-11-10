@@ -14,6 +14,12 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Dialog
 command:     pnpm exec astryx component Dialog
+name:        global/uninstall
+section:     reset
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/uninstall reset
+parent:      pnpm exec astryx docs global/uninstall --index
 name:        cli/api/functions/theme-template
 domain:      doc
 package:     @astryxdesign/cli
@@ -35,12 +41,6 @@ section:     agent-guide
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs global/uninstall agent-guide
-parent:      pnpm exec astryx docs global/uninstall --index
-name:        global/uninstall
-section:     reset
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs global/uninstall reset
 parent:      pnpm exec astryx docs global/uninstall --index
 name:        migration/migration-setup
 section:     foundation-smoke-test

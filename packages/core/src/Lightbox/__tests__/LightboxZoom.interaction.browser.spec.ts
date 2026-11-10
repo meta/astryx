@@ -28,6 +28,7 @@ import {
   blockMainThread,
   BusyWindowTooLateError,
   BusyFrameUnjudgedError,
+  BusyPredictionError,
   busyWindowProof,
   type BusyProof,
   type UnjudgedFrame,
@@ -37,6 +38,7 @@ import {
   curveOf,
   drag,
   flick,
+  FRAME_STARVATION_MS,
   FrameStarvationError,
   frames,
   freezePageOn,
@@ -59,6 +61,7 @@ import {
   timeline,
   touchDriver,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   waitForRest,
@@ -1110,8 +1113,13 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   await driver.play(doubleTap(mid));
   await waitForAnimation(photo);
   await waitForRest(photo);
+  // The offset at which the photo's right side meets the stage's: the stop
+  // check below needs the landing 20 px short of it.
+  const zoomed = await state();
+  const edge =
+    zoomed.stage.width - zoomed.fit.width * zoomed.scale - zoomed.fit.x;
   // The photo's offset at the flick's lift, read in the page.
-  await recordLiftOffset(photo);
+  const liftOffset = await recordLiftOffset(photo);
   await photo.evaluate(el => el.setAttribute('data-freeze-photo', ''));
   // The scene stops once the coast has carried the photo 10 px past the
   // lift, however late this process reacts. A poll from here can land the
@@ -1119,11 +1127,19 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   const coasting = freezePageWhen(
     page,
     () => {
-      const lift = (globalThis as unknown as {__liftOffset?: number})
-        .__liftOffset;
+      const record = globalThis as unknown as {
+        __liftOffset?: number;
+        __coastFrames?: {t: number}[];
+        __harnessFreeze: {realNow: () => number};
+      };
+      const lift = record.__liftOffset;
       const img = document.querySelector('[data-freeze-photo]') as Element;
       const translate = getComputedStyle(img).translate;
       const x = translate === 'none' ? 0 : parseFloat(translate);
+      // Every frame checked, on the real clock: the longest gap in the coast
+      // tells a late freeze from a fast coast.
+      record.__coastFrames ??= [];
+      record.__coastFrames.push({t: record.__harnessFreeze.realNow()});
       return (
         lift != null &&
         x < lift - 10 &&
@@ -1136,6 +1152,91 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
     flick(mid, {velocity: {x: -900, y: 0}, durationMs: 80, hz: 120}),
   );
   await coasting;
+  // A starved page draws its first frame past the 10 px late. The
+  // compositor coasts on meanwhile, and the scene freezes where the screen
+  // is, which can be the photo's edge. The landing then catches a photo that
+  // the edge stopped, so the run proves nothing about the finger.
+  const {x: frozenX} = await state();
+  if (frozenX <= edge + 20) {
+    const {coasting, gap, spanMs} = await photo.evaluate(
+      (img, [from, to]) => {
+        const record = globalThis as unknown as {
+          __coastFrames?: {t: number}[];
+          __harnessFreeze: {offset: number};
+        };
+        const coast = img
+          .getAnimations()
+          .find(animation =>
+            (animation.effect as KeyframeEffect | null)
+              ?.getKeyframes()
+              .some(k => k.translate != null),
+          );
+        if (coast == null) {
+          return {coasting: false, gap: 0, spanMs: Number.NaN};
+        }
+        // A gap counts only from the coast's start, on the real clock: a
+        // stall that ends before the coast starts cannot carry it.
+        const start = Number(coast.startTime) + record.__harnessFreeze.offset;
+        const coastFrames = record.__coastFrames ?? [];
+        let longest = 0;
+        for (let i = 1; i < coastFrames.length; i++) {
+          const gapStart = Math.max(coastFrames[i - 1].t, start);
+          longest = Math.max(longest, coastFrames[i].t - gapStart);
+        }
+        // The coast's own time from `from` to `to`. The held coast steps
+        // linearly between its keyframes.
+        const effect = coast.effect as KeyframeEffect;
+        const duration = Number(effect.getComputedTiming().duration);
+        const keys = effect.getKeyframes().map(k => ({
+          offset: k.computedOffset,
+          x: parseFloat(String(k.translate)),
+        }));
+        const timeAt = (bound: number) => {
+          for (let i = 1; i < keys.length; i++) {
+            const [a, b] = [keys[i - 1], keys[i]];
+            if (a.x > bound && b.x <= bound) {
+              const along = (a.x - bound) / (a.x - b.x);
+              return (a.offset + (b.offset - a.offset) * along) * duration;
+            }
+          }
+          return Number.NaN;
+        };
+        return {
+          coasting: true,
+          gap: longest,
+          spanMs: timeAt(to) - timeAt(from),
+        };
+      },
+      [(await liftOffset()) - 10, edge + 20] as const,
+    );
+    const fromEdge = frozenX - edge;
+    // Past the edge, the photo is in its bounce.
+    const place =
+      fromEdge >= 0
+        ? `${fromEdge.toFixed(1)} px from its edge`
+        : `${(-fromEdge).toFixed(1)} px past its edge`;
+    if (!coasting) {
+      throw new Error(
+        `the scene froze with the photo ${place}, with no coast running`,
+      );
+    }
+    // Starvation explains the late freeze only when no frame came for as
+    // long as the coast takes to cross the span.
+    if (gap > FRAME_STARVATION_MS && gap >= spanMs) {
+      throw new FrameStarvationError({
+        by: 'freezePageWhen',
+        during:
+          "the coast ran from 10 px past the lift to 20 px short of the photo's edge",
+        frames: 0,
+        min: 1,
+        longestGapMs: gap,
+        cause: `the coast takes ${spanMs.toFixed(1)} ms over that span, and the scene froze with the photo ${place}. The page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the landing`,
+      });
+    }
+    throw new Error(
+      `the scene froze with the photo ${place}. The longest gap between frames in the coast was ${gap.toFixed(1)} ms, and the coast takes ${spanMs.toFixed(1)} ms from 10 px past the lift to 20 px short of the edge: a frame came in time to stop it there, so starvation does not explain the late freeze`,
+    );
+  }
   // The landing must find the coast still running, or it proves nothing.
   await photo.evaluate(el => {
     // The pointer event comes first, and the photo stops on it.
@@ -1258,7 +1359,10 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await markElement(photo, {mode: 'outline'});
   // A compositor-only control animation in the same window: what the
   // compositor presented while the main thread spun, on this machine.
-  await startBusyControl(page);
+  const busyControl = await startBusyControl(page);
+  // A second control half a leg ahead reads the frames near the first one's
+  // turns. So every frame has a time of its own, and the proof predicts.
+  const aheadControl = await startBusyControl(page, {ahead: true});
   const at = {x: 201, y: before.stage.y + before.stage.height / 2};
   // The same zoom at the default tempo, to compare the slowed one with.
   await driver.play(doubleTap(at));
@@ -1295,9 +1399,13 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const ahead = await trackControl(page, castFrames, {ahead: true});
   // The run's frames and storyboard, kept whatever the proof concludes.
   const record = async (
-    result: {proof: BusyProof} | {unjudged: ReadonlyArray<UnjudgedFrame>},
+    result:
+      | {proof: BusyProof}
+      | {unjudged: ReadonlyArray<UnjudgedFrame>}
+      | {error: string},
     judged: {from: number; to: number},
   ) => {
     await writeEvidence(
@@ -1306,6 +1414,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
         [`${testInfo.project.name}.json`]: JSON.stringify(
           {
             block,
+            controlStarts: [busyControl.start, aheadControl.start],
             ...result,
             frames: tracked.map(f => ({
               t: +(f.t - block.from).toFixed(1),
@@ -1313,6 +1422,10 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
               h: f.box?.height ?? null,
             })),
             control: control.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+            ahead: ahead.map(f => ({
               t: +(f.t - block.from).toFixed(1),
               x: f.box?.x ?? null,
             })),
@@ -1334,21 +1447,29 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
     });
     await film.write(testInfo, {block, judged});
   };
-  // Every frame the control moves on is judged by the edge's own step. A
-  // frame the cast's 1 px step cannot show the edge's move on is too little
-  // to judge, and fails by name (`BusyFrameUnjudgedError`). That run keeps its
-  // frames and storyboard too.
+  // Every frame the control moves on is judged by the edge's predicted move.
+  // A frame predicted to move under the cast's step is named in `unjudged`.
+  // Where the proof falls back to the cast's step, as in WebKit, a frame
+  // that step cannot show is too little to judge. It fails by name
+  // (`BusyFrameUnjudgedError`). Each such run keeps its frames and storyboard.
   let proof: BusyProof;
   try {
     proof = busyWindowProof(tracked, block, {
       axis: ZOOM_AXIS,
       settledWithin: ZOOM_SETTLED_PX,
       control,
+      ahead,
+      controlStarts: [busyControl.start, aheadControl.start],
       judgeEveryFrame: true,
     });
   } catch (error) {
     if (error instanceof BusyFrameUnjudgedError) {
       await record({unjudged: error.frames}, block);
+    } else if (
+      error instanceof FrameStarvationError ||
+      error instanceof BusyPredictionError
+    ) {
+      await record({error: error.message}, block);
     }
     throw error;
   }
