@@ -18,6 +18,13 @@ import yaml from 'yaml';
 import {isInteractionSpec} from './playwright-legs.mjs';
 import {proofImporters} from './a11y-pr-contracts.mjs';
 
+// What a proof's page loads: the interaction specs, the stories they open,
+// and Storybook's preview.
+const isProofPage = file =>
+  isInteractionSpec(file) ||
+  /\.stories\.[cm]?[jt]sx?$/.test(file) ||
+  file === 'apps/storybook/.storybook/preview.tsx';
+
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
   fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
@@ -57,6 +64,8 @@ const RUNTIME = [
   // Theme sources are shared infrastructure: a test there selects too.
   'packages/themes/neutral/src/neutralTheme.test.ts',
   'packages/core/src/theme/Theme.test.tsx',
+  // So is every package outside the component packages.
+  'packages/native/src/contract/contracts.test.ts',
 ];
 
 describe('the interaction scope', () => {
@@ -72,6 +81,12 @@ describe('the interaction scope', () => {
         expect(scope.test(file), file).toBe(true);
       }
     });
+
+    if (lane.startsWith('Chromium'))
+      it(`${lane}: a test at the root of a package outside the component packages still selects them`, () => {
+        // WebKit's scope never covered a package's src root.
+        expect(scope.test('packages/build/src/babel.test.mjs')).toBe(true);
+      });
 
     it(`${lane}: a changed interaction spec still selects them`, () => {
       expect(
@@ -125,7 +140,30 @@ describe('a left-out file that a proof imports', () => {
       expect(SCOPES['Chromium proofs'].test(file), file).toBe(false);
   });
 
-  it('does not exist: no proof in the repository imports a file the scopes leave out', () => {
+  it('is found through a story a proof opens', () => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'story-imports-'));
+    const files = {
+      'apps/storybook/stories/Sheet.stories.tsx':
+        "import {Sheet} from '@astryxdesign/core/Sheet/Sheet';\n",
+      'packages/core/src/Sheet/Sheet.tsx':
+        "import {notes} from './Sheet.doc.mjs';\n",
+      'packages/core/src/Sheet/Sheet.doc.mjs': '',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const importers = proofImporters({
+      root: tree,
+      listed: Object.keys(files),
+      isProof: isProofPage,
+    });
+    expect([...importers.get('packages/core/src/Sheet/Sheet.doc.mjs')]).toEqual(
+      ['apps/storybook/stories/Sheet.stories.tsx'],
+    );
+  });
+
+  it('does not exist: no proof, story or Storybook preview in the repository loads a file the scopes leave out', () => {
     const listed = execFileSync('git', ['ls-files'], {
       cwd: root,
       encoding: 'utf8',
@@ -135,7 +173,7 @@ describe('a left-out file that a proof imports', () => {
     const importers = proofImporters({
       root,
       listed,
-      isProof: isInteractionSpec,
+      isProof: isProofPage,
     });
     expect(importers.size).toBeGreaterThan(0);
     const leftOut = [...importers.keys()].filter(

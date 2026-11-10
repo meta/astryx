@@ -2596,8 +2596,9 @@ jobs:
         with:
           # Unit tests, docs, records and accessibility specs under a package's
           # src put nothing on a page these proofs load, so they stay out of
-          # scope. Theme sources are shared infrastructure and stay in.
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          # scope. That holds only in the component packages; theme sources
+          # and every other package are shared code and stay in.
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
@@ -2609,8 +2610,9 @@ jobs:
         with:
           # Unit tests, docs, records and accessibility specs under a package's
           # src put nothing on a page these proofs load, so they stay out of
-          # scope. Theme sources are shared infrastructure and stay in.
-          paths: '^(packages/[^/]+/src/[^/]+/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
+          # scope. That holds only in the component packages; theme sources
+          # and every other package are shared code and stay in.
+          paths: '^(packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/[^/]+/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
@@ -2771,8 +2773,9 @@ jobs:
         with:
           # Unit tests, docs, records and accessibility specs under a package's
           # src put nothing on a page these proofs load, so they stay out of
-          # scope. Theme sources are shared infrastructure and stay in.
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          # scope. That holds only in the component packages; theme sources
+          # and every other package are shared code and stay in.
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
@@ -3038,8 +3041,9 @@ jobs:
         with:
           # Unit tests, docs, records and accessibility specs under a package's
           # src put nothing on a page these proofs load, so they stay out of
-          # scope. Theme sources are shared infrastructure and stay in.
-          paths: '^(packages/[^/]+/src/[^/]+/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
+          # scope. That holds only in the component packages; theme sources
+          # and every other package are shared code and stay in.
+          paths: '^(packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/[^/]+/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
