@@ -62,6 +62,13 @@ const RELEASE_CHECK_JOBS = [
 ];
 const RELEASE_GATE =
   "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]'";
+/**
+ * The contract legs also take the paid pool for a cut-evidence run, which the
+ * bot dispatches: their timing gates only on the release runner.
+ */
+const EVIDENCE_GATE =
+  "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && !(github.triggering_actor == 'github-actions[bot]' && !inputs.evidence)";
+const EVIDENCE_JOBS = ['a11y-contracts-shard'];
 
 describe('runner labels', () => {
   it('finds runner labels to check', () => {
@@ -128,8 +135,9 @@ describe('runner labels', () => {
     const ci = Object.fromEntries(workflows)['ci.yml'];
     for (const id of RELEASE_CHECK_JOBS) {
       const [paid, free] = labelsOf(ci.jobs[id]);
+      const gate = EVIDENCE_JOBS.includes(id) ? EVIDENCE_GATE : RELEASE_GATE;
       expect(ci.jobs[id]['runs-on'], id).toBe(
-        `\${{ (${RELEASE_GATE}) && '${paid}' || '${free}' }}`,
+        `\${{ (${gate}) && '${paid}' || '${free}' }}`,
       );
       expect(FREE.has(free), id).toBe(true);
       expect(FREE.has(paid), id).toBe(false);

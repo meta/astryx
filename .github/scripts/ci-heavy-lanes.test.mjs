@@ -293,7 +293,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     return calls;
   }
 
-  const releaseCheck = tip => ({
+  const releaseCheck = (tip, {evidence = false} = {}) => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'ci.yml',
@@ -302,6 +302,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       operation: 'release-check',
       'release-branch': 'main',
       'expected-head': tip,
+      ...(evidence ? {evidence: 'true'} : {}),
     },
   });
   // A unit run names the commit it tests (FR21, FR22).
@@ -370,7 +371,12 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           runs: [at(now, 90)],
           units: [at(now, 20)],
         });
-        expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+        // It is cut evidence: its contract legs gate timing on the release
+        // runner.
+        expect(calls.dispatch).toEqual([
+          releaseCheck(sha, {evidence: true}),
+          unitRun,
+        ]);
         expect(calls.notices).toContain(
           'The pre-cut release-check runs now for aaaaaaa.',
         );
@@ -387,10 +393,36 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.dispatch).toEqual([]);
     });
 
-    it('is not needed when the tip already has a check', async () => {
+    it('runs as cut evidence when the tip has only a monitoring check from before 06:30', async () => {
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 90, {head_sha: sha})],
+        units: [
+          at(MONDAY_0637, 20, {
+            head_sha: sha,
+            display_title: `Main validation of ${sha}`,
+          }),
+        ],
+      });
+      expect(calls.dispatch).toEqual([releaseCheck(sha, {evidence: true})]);
+    });
+
+    it('sends cut evidence with a windowed check that starts in the pre-cut hour', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 200)],
+        units: [at(MONDAY_0637, 20)],
+      });
+      expect(calls.dispatch).toEqual([
+        releaseCheck(sha, {evidence: true}),
+        unitRun,
+      ]);
+    });
+
+    it('is not needed when the tip already has a check since 06:30', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 5, {head_sha: sha})],
         units: [
           at(MONDAY_0637, 20, {
             head_sha: sha,

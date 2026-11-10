@@ -44,6 +44,40 @@ describe('Table release timing gate', () => {
     expect(step).toBeDefined();
   });
 
+  /** The condition's value for one dispatch. */
+  const holds = (condition, {event, operation, actor, evidence}) =>
+    Function(
+      'github',
+      'inputs',
+      `return Boolean(${condition});`,
+    )({event_name: event, triggering_actor: actor}, {operation, evidence});
+
+  it('gates a cut-evidence run the bot dispatches, but not its monitoring runs', () => {
+    const condition = conditionFor(step.env.ASTRYX_TABLE_TIMING_GATE, '1');
+    const dispatch = {event: 'workflow_dispatch', operation: 'release-check'};
+    const bot = 'github-actions[bot]';
+    // The release owner's or the release tooling's own release-check.
+    expect(
+      holds(condition, {...dispatch, actor: 'someone', evidence: false}),
+    ).toBe(true);
+    // The pre-cut release-check and the release re-check.
+    expect(holds(condition, {...dispatch, actor: bot, evidence: true})).toBe(
+      true,
+    );
+    // The three-hourly monitoring check reports timing only.
+    expect(holds(condition, {...dispatch, actor: bot, evidence: false})).toBe(
+      false,
+    );
+    expect(
+      holds(condition, {
+        event: 'pull_request',
+        operation: '',
+        actor: 'someone',
+        evidence: false,
+      }),
+    ).toBe(false);
+  });
+
   it('gates on exactly the condition that picks 4-core-ubuntu', () => {
     expect(conditionFor(step.env.ASTRYX_TABLE_TIMING_GATE, '1')).toBe(
       conditionFor(job['runs-on'], '4-core-ubuntu'),

@@ -49,6 +49,10 @@ on:
         description: 'Release re-check, sent by the release re-check workflow: takes the main check lane at once'
         type: boolean
         default: false
+      evidence:
+        description: 'Cut evidence, sent by the pre-cut release-check and the release re-check: the contract legs run on the release runner with timing gated'
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -78,7 +82,9 @@ permissions: {}
 # cannot starve them: release-bump, release-merge-back on a merge-back branch
 # (chore/merge-v*), and the build and audit jobs of a release-check a person or
 # the release tooling dispatches (one dispatched by github-actions[bot] stays
-# on standard runners). The release-check's short gating and join jobs
+# on standard runners, except the contract legs of a cut-evidence run: the
+# pre-cut release-check and the release re-check send `evidence`, and their
+# timing gates only on the release runner). The release-check's short gating and join jobs
 # (release-authority, pr-a11y, a11y-contracts, pr-rtl, release-check) stay on ubuntu-slim. Arm jobs stay arm and x64 stay x64 on
 # both pools, so visual baselines and native builds see the same architecture.
 #
@@ -2476,7 +2482,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     # One core per worker: on two cores, four workers starved the CPU-bound
     # "every expectation" specs past their timeouts.
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && !(github.triggering_actor == 'github-actions[bot]' && !inputs.evidence)) && '4-core-ubuntu' || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -2510,7 +2516,7 @@ jobs:
           A11Y_CONTRACT_WORKERS: 4
           # The Table release proof's timing budgets hold on 4-core-ubuntu only;
           # on the scheduled ubuntu-latest checks its receipt reports timing.
-          ASTRYX_TABLE_TIMING_GATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '1' || '0' }}
+          ASTRYX_TABLE_TIMING_GATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && !(github.triggering_actor == 'github-actions[bot]' && !inputs.evidence)) && '1' || '0' }}
         # Tests are split by recorded duration (a11y-contract-shard.mjs), not
         # Playwright's count-based --shard; every listed test runs in one leg.
         run: |
