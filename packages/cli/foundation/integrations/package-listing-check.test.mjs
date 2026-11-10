@@ -1,0 +1,259 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {afterEach, describe, expect, it} from 'vitest';
+import {loadLocalIntegration} from './integrations.mjs';
+import {
+  isListingImage,
+  packageListingCheck,
+} from './validate-contributions.mjs';
+import {validateIntegration} from '../../api/integration/validate-integration.mjs';
+
+const SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#06f"/></svg>';
+const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
+
+/** @type {string[]} */
+const dirs = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0))
+    fs.rmSync(dir, {recursive: true, force: true});
+});
+
+/**
+ * A package folder with these files (contents as strings or Buffers).
+ * @param {Record<string, string | Buffer>} files
+ */
+function makePackage(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-listing-'));
+  dirs.push(dir);
+  for (const [rel, content] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), {recursive: true});
+    fs.writeFileSync(path.join(dir, rel), content);
+  }
+  return dir;
+}
+
+const DOC =
+  "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n";
+
+const manifest = (/** @type {string} */ body) => `export default {${body}};\n`;
+
+/** @param {object} extra */
+const packageJson = extra =>
+  JSON.stringify({name: '@acme/widgets', version: '1.0.0', ...extra});
+
+async function check(/** @type {string} */ dir) {
+  const loaded = await loadLocalIntegration(dir, {fresh: true});
+  return packageListingCheck(/** @type {any} */ (loaded.integration ?? loaded));
+}
+
+const codes = (/** @type {{notes: {code: string}[]}} */ result) =>
+  result.notes.map(note => note.code);
+
+describe('isListingImage', () => {
+  it('accepts PNG and shapes-only SVG, refuses scripts, links and oversize', () => {
+    expect(isListingImage(PNG)).toBe(true);
+    expect(isListingImage(Buffer.from(SVG))).toBe(true);
+    expect(isListingImage(Buffer.from('<svg><script>x()</script></svg>'))).toBe(
+      false,
+    );
+    expect(
+      isListingImage(
+        Buffer.from('<svg><image href="https://e.x/a.png"/></svg>'),
+      ),
+    ).toBe(false);
+    expect(isListingImage(Buffer.from('not an image'))).toBe(false);
+    expect(isListingImage(Buffer.alloc(512 * 1024 + 1, 137))).toBe(false);
+  });
+});
+
+describe('packageListingCheck', () => {
+  it('notes a package with no logo, and names the field to set', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({}),
+      'astryx.integration.mjs': manifest("docs: './docs'"),
+      'docs/widgets.doc.mjs':
+        "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+    });
+    const result = await check(dir);
+    expect(codes(result)).toEqual(['package_without_logo']);
+    expect(result.notes[0].message).toContain(
+      'astryx.integration.mjs `logo.light` is not set',
+    );
+    expect(result.notes[0].message).toContain(
+      "set `logo: {light: './marketplace/logo.svg'}` in astryx.integration.mjs",
+    );
+  });
+
+  it('reads the logo from the integration file', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({}),
+      'astryx.integration.mjs': manifest(
+        "docs: './docs', logo: {light: './marketplace/logo.svg'}",
+      ),
+      'marketplace/logo.svg': SVG,
+      'docs/widgets.doc.mjs': DOC,
+    });
+    expect(codes(await check(dir))).toEqual([]);
+  });
+
+  it('prefers the integration file to package.json, and names it in the note', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({
+        marketplace: {logo: {light: 'logo.png'}},
+      }),
+      'logo.png': PNG,
+      'astryx.integration.mjs': manifest(
+        "docs: './docs', logo: {light: './missing.svg'}",
+      ),
+      'docs/widgets.doc.mjs': DOC,
+    });
+    const result = await check(dir);
+    expect(codes(result)).toEqual(['package_without_logo']);
+    expect(result.notes[0].message).toContain(
+      'astryx.integration.mjs `logo.light` names missing.svg, which does not exist',
+    );
+  });
+
+  it('checks an integration-file dark logo the same way', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({}),
+      'logo.png': PNG,
+      'astryx.integration.mjs': manifest(
+        "docs: './docs', logo: {light: './logo.png', dark: './dark.png'}",
+      ),
+      'docs/widgets.doc.mjs': DOC,
+    });
+    const result = await check(dir);
+    expect(codes(result)).toEqual(['package_without_logo']);
+    expect(result.notes[0].message).toContain('point `logo.dark` at');
+  });
+
+  it('is quiet for a packed shapes-only SVG logo and a docs-only package', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({
+        marketplace: {logo: {light: 'marketplace/logo.svg'}},
+      }),
+      'astryx.integration.mjs': manifest("docs: './docs'"),
+      'marketplace/logo.svg': SVG,
+      'docs/widgets.doc.mjs':
+        "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+    });
+    expect(codes(await check(dir))).toEqual([]);
+  });
+
+  it('notes a logo that is missing, outside the package, or not an image', async () => {
+    for (const [light, extra] of [
+      ['marketplace/missing.svg', {}],
+      ['../logo.svg', {}],
+      [
+        'marketplace/logo.svg',
+        {'marketplace/logo.svg': '<svg><script>x()</script></svg>'},
+      ],
+    ]) {
+      const dir = makePackage({
+        'package.json': packageJson({marketplace: {logo: {light}}}),
+        'astryx.integration.mjs': manifest("docs: './docs'"),
+        'docs/widgets.doc.mjs':
+          "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+        ...extra,
+      });
+      expect(codes(await check(dir))).toEqual(['package_without_logo']);
+    }
+  });
+
+  it('notes a logo no `files` entry packs', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({
+        files: ['docs', 'astryx.integration.mjs'],
+        marketplace: {logo: {light: 'marketplace/logo.svg'}},
+      }),
+      'astryx.integration.mjs': manifest("docs: './docs'"),
+      'marketplace/logo.svg': SVG,
+      'docs/widgets.doc.mjs':
+        "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+    });
+    const result = await check(dir);
+    // npm answers (packed list) or the files field decides; either way it is a note.
+    expect(codes(result)).toEqual(['package_without_logo']);
+    expect(result.notes[0].message).toMatch(/npm leaves out|no `files` entry/u);
+  });
+
+  it('notes a component package with no example block, not a theme-only one', async () => {
+    const component = makePackage({
+      'package.json': packageJson({marketplace: {logo: {light: 'logo.png'}}}),
+      'logo.png': PNG,
+      'astryx.integration.mjs': manifest("components: './components'"),
+      'components/AcmeBadge.tsx':
+        'export function AcmeBadge() { return null; }\n',
+      'components/AcmeBadge.doc.mjs':
+        "export default {name: 'AcmeBadge', description: 'A badge.', category: 'Data display', props: []};\n",
+    });
+    const result = await check(component);
+    expect(codes(result)).toEqual(['package_without_example']);
+    expect(result.notes[0].message).toContain('1 component ');
+  });
+
+  it('is quiet once a block template is the example of a component', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({marketplace: {logo: {light: 'logo.png'}}}),
+      'logo.png': PNG,
+      'astryx.integration.mjs': manifest(
+        "components: './components', templates: './templates'",
+      ),
+      'components/AcmeBadge.tsx':
+        'export function AcmeBadge() { return null; }\n',
+      'components/AcmeBadge.doc.mjs':
+        "export default {name: 'AcmeBadge', description: 'A badge.', category: 'Data display', props: []};\n",
+      'templates/acme-badge-showcase.tsx':
+        'export default function AcmeBadgeShowcase() { return null; }\n',
+      'templates/acme-badge-showcase.doc.mjs':
+        "export default {type: 'block', name: 'acme-badge-showcase', displayName: 'AcmeBadge showcase', description: 'A badge in use.', exampleFor: 'AcmeBadge', isShowcase: true};\n",
+    });
+    expect(codes(await check(dir))).toEqual([]);
+  });
+
+  it('reaches `integration check` as a `next` note', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({}),
+      'astryx.integration.mjs': manifest("docs: './docs'"),
+      'docs/widgets.doc.mjs':
+        "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+    });
+    const result = await validateIntegration(undefined, {cwd: dir});
+    expect(result.data.notes).toContainEqual(
+      expect.objectContaining({code: 'package_without_logo', next: true}),
+    );
+  });
+
+  it('draws no listing note for a package of icon sets alone', async () => {
+    const dir = makePackage({'package.json': packageJson({})});
+    const result = await packageListingCheck(
+      /** @type {any} */ ({
+        __packageDir: dir,
+        experimental: {iconSets: path.join(dir, 'icon-sets')},
+      }),
+    );
+    expect(codes(result)).toEqual([]);
+  });
+
+  it('names the field it read the logo from in the note', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({
+        marketplace: {logo: {light: 'logo.png', dark: 'missing.png'}},
+      }),
+      'logo.png': PNG,
+      'astryx.integration.mjs': manifest("docs: './docs'"),
+      'docs/widgets.doc.mjs':
+        "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
+    });
+    const result = await check(dir);
+    expect(codes(result)).toEqual(['package_without_logo']);
+    expect(result.notes[0].message).toContain(
+      'package.json `marketplace.logo.dark`',
+    );
+  });
+});
