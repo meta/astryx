@@ -693,59 +693,19 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       return at;
     }, cover);
 
-  // Gboard's slides run about 300 ms. On a busy machine, a hold or a read sent
-  // from the test after the report or the blur can arrive after the ride ends.
-  // So the page holds the ride itself as it starts.
+  // Gboard's show runs 267 ms and its hide 167 ms. On a busy machine, a hold
+  // or a read sent from the test after the report or the blur can arrive
+  // after the ride ends. So the page holds the ride itself as it starts.
   const armRideHold = async (page: Page, dock: Locator) =>
     armHold(page, dock, {judges: {target: dock, property: 'translate'}});
 
-  // Records the start of each ride the motion engine starts on the dock from
-  // here on, on the document timeline. The engine sets the start in the task
-  // that makes the ride, so a microtask reads it before a hold pauses it.
-  const recordRideStarts = async (page: Page) =>
+  // Records each ride the motion engine starts on the dock from here on, when
+  // it starts and when it is cancelled, in epoch ms. Reading an animation's
+  // times reads no layout. The engine sets the start in the task that makes
+  // the ride, so a microtask reads it, before a hold pauses it. A promise on
+  // `ready` would add a main-thread frame when the compositor starts the ride.
+  const recordRides = async (page: Page) =>
     page.evaluate(() => {
-      const dock = document.querySelector('[data-testid="keyboard-dock"]');
-      const starts: number[] = [];
-      (window as unknown as {__rideStarts: number[]}).__rideStarts = starts;
-      const animate = Element.prototype.animate;
-      Element.prototype.animate = function (
-        this: Element,
-        keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
-        options?: number | KeyframeAnimationOptions,
-      ) {
-        const animation = animate.call(this, keyframes, options);
-        if (
-          this === dock &&
-          Array.isArray(keyframes) &&
-          keyframes.some(keyframe => 'translate' in keyframe)
-        ) {
-          queueMicrotask(() => {
-            if (animation.startTime != null) {
-              starts.push(Number(animation.startTime));
-            }
-          });
-        }
-        return animation;
-      };
-    });
-
-  // The start of the first ride since `recordRideStarts`.
-  const firstRideStart = async (page: Page) => {
-    const starts = await page.evaluate(
-      () => (window as unknown as {__rideStarts: number[]}).__rideStarts,
-    );
-    expect(starts, 'the engine started a ride on the dock').not.toHaveLength(0);
-    return starts[0];
-  };
-
-  test('the rise does no Layout or Paint per frame', async ({page}) => {
-    const {editable} = await openChat(page, {android: true});
-    // Records each ride the motion engine starts on the dock, when it starts
-    // and when it is cancelled. Reading an animation's times reads no layout.
-    // The engine sets the start in the task that makes the ride, so a
-    // microtask reads it. A promise on `ready` would add a main-thread frame
-    // when the compositor starts the ride.
-    await page.evaluate(() => {
       const dock = document.querySelector('[data-testid="keyboard-dock"]');
       const rides: {start: number | null; cancelled: number | null}[] = [];
       (window as unknown as {__rides: typeof rides}).__rides = rides;
@@ -778,6 +738,26 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         return animation;
       };
     });
+
+  // The start of the first ride since `recordRides`, on the document
+  // timeline, where an event's `timeStamp` sits.
+  const firstRideStart = async (page: Page) => {
+    const starts = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __rides: {start: number | null}[];
+        }
+      ).__rides.flatMap(({start}) =>
+        start == null ? [] : [start - performance.timeOrigin],
+      ),
+    );
+    expect(starts, 'the engine started a ride on the dock').not.toHaveLength(0);
+    return starts[0];
+  };
+
+  test('the rise does no Layout or Paint per frame', async ({page}) => {
+    const {editable} = await openChat(page, {android: true});
+    await recordRides(page);
     // No polling inside the trace: reading a sticky element's presented style
     // from the test forces a layout every frame by itself.
     let reported = 0;
@@ -967,7 +947,7 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
   }) => {
     const {dock, editable, lift} = await openChat(page, {android: true});
     await editable.focus();
-    await recordRideStarts(page);
+    await recordRides(page);
     const hold = await armRideHold(page, dock);
     const reported = await reportAt(page, COVER);
     const ride = rideOf(await hold.held());
@@ -1023,7 +1003,7 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     await waitForRest(dock);
     await page.waitForTimeout(100);
     const lifted = -(await dockY(dock));
-    await recordRideStarts(page);
+    await recordRides(page);
     const hold = await armRideHold(page, dock);
     const blurAt = await editable.evaluate(el => {
       let at = 0;
