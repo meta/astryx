@@ -660,6 +660,165 @@ test('a trigger that paints no box of its own lifts on the theme’s surface, ro
   expect(back.inline, detail).not.toMatch(/background|radius/);
 });
 
+/** Holds a finger on a trigger of the plate story until its menu shows. */
+async function liftPlateTrigger(page: Page, testId: string) {
+  await openStory(page, storybook(), 'core-contextmenu--touch-lift-plate');
+  const trigger = page.locator(`[data-testid="${testId}"]`);
+  await expect(trigger).toHaveAttribute('data-astryx-pressable', '', {
+    timeout: 10_000,
+  });
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error(`no ${testId}`);
+  }
+  const driver = await touchDriver(page);
+  await driver.play(
+    tap(
+      {x: box.x + box.width / 2, y: box.y + box.height / 2},
+      {holdMs: menuDisplayMs + 100},
+    ),
+  );
+  await expect(page.getByRole('menu')).toBeVisible();
+  await untilGrown(page);
+  return trigger;
+}
+
+test('a picture that paints its own surface lifts as it is, with no plate, though its trigger is taller than the picture', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-contextmenu--touch-lift-plate');
+  const rest = page.locator('[data-testid="plate-thumbnail"]');
+  await expect(rest.locator('img')).toBeVisible({timeout: 10_000});
+  const shape = await rest.evaluate(el => ({
+    trigger: el.getBoundingClientRect().height,
+    picture: el.querySelector('img')?.getBoundingClientRect().height ?? 0,
+  }));
+  // The case: the trigger's box is taller than the picture it shows.
+  expect(shape.picture, JSON.stringify(shape)).toBeGreaterThan(0);
+  expect(shape.trigger, JSON.stringify(shape)).toBeGreaterThan(
+    shape.picture + 1,
+  );
+  const trigger = await liftPlateTrigger(page, 'plate-thumbnail');
+  const open = await trigger.evaluate(el => {
+    const style = getComputedStyle(el);
+    return {
+      lifted: el.matches(':popover-open'),
+      background: style.backgroundColor,
+      outline:
+        style.outlineStyle === 'none' ? 0 : parseFloat(style.outlineWidth),
+    };
+  });
+  const detail = JSON.stringify(open);
+  expect(open.lifted, detail).toBe(true);
+  expect(open.background, detail).toBe('rgba(0, 0, 0, 0)');
+  expect(open.outline, detail).toBe(0);
+});
+
+test('a table cell lifts on a plate that reaches past its text on every side, with the container radius outside', async ({
+  page,
+}) => {
+  const trigger = await liftPlateTrigger(page, 'plate-cell');
+  const open = await trigger.evaluate(el => {
+    const style = getComputedStyle(el);
+    const label = Array.from(el.querySelectorAll('*')).find(
+      node => node.children.length === 0 && node.textContent === 'Budget.xlsx',
+    );
+    const range = document.createRange();
+    if (label != null) {
+      range.selectNodeContents(label);
+    }
+    const text = range.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    // The lift scales the trigger: measure in its own pixels.
+    const scale = box.width / (el as HTMLElement).offsetWidth;
+    const reach =
+      style.outlineStyle === 'none'
+        ? 0
+        : parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--color-background-surface)';
+    el.append(probe);
+    const surface = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const sized = document.createElement('span');
+    sized.style.position = 'absolute';
+    sized.style.width = 'var(--spacing-2)';
+    el.append(sized);
+    const spacing = parseFloat(getComputedStyle(sized).width);
+    sized.remove();
+    return {
+      lifted: el.matches(':popover-open'),
+      textWidth: text.width,
+      left: (text.left - box.left) / scale + reach,
+      right: (box.right - text.right) / scale + reach,
+      top: (text.top - box.top) / scale + reach,
+      bottom: (box.bottom - text.bottom) / scale + reach,
+      outerRadius: parseFloat(style.borderTopLeftRadius) + reach,
+      background: style.backgroundColor,
+      outlineColor: reach > 0 ? style.outlineColor : surface,
+      surface,
+      spacing,
+    };
+  });
+  const detail = JSON.stringify(open);
+  expect(open.lifted, detail).toBe(true);
+  expect(open.textWidth, detail).toBeGreaterThan(0);
+  expect(open.background, detail).toBe(open.surface);
+  expect(open.outlineColor, detail).toBe(open.surface);
+  for (const side of [open.left, open.right, open.top, open.bottom]) {
+    expect(side, detail).toBeGreaterThanOrEqual(open.spacing - 0.5);
+  }
+  expect(open.outerRadius, detail).toBeCloseTo(12, 0);
+});
+
+for (const [testId, shape, plated] of [
+  ['plate-row', 'a row with an icon beside its text', true],
+  ['plate-outlined', 'an outlined box with no fill', true],
+  ['plate-translucent', 'a box with a translucent fill', true],
+  ['plate-card', 'a card', false],
+  ['plate-before', 'a box filled by a pseudo-element', false],
+  ['plate-inline-image', 'an inline image in a block trigger', false],
+] as const) {
+  test(`${shape} lifts ${plated ? 'on a plate' : 'as it is, with no plate'}`, async ({
+    page,
+  }) => {
+    const trigger = await liftPlateTrigger(page, testId);
+    const open = await trigger.evaluate(el => {
+      const style = getComputedStyle(el);
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--color-background-surface)';
+      el.append(probe);
+      const surface = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const sized = document.createElement('span');
+      sized.style.position = 'absolute';
+      sized.style.width = 'var(--spacing-2)';
+      el.append(sized);
+      const spacing = parseFloat(getComputedStyle(sized).width);
+      sized.remove();
+      return {
+        lifted: el.matches(':popover-open'),
+        background: style.backgroundColor,
+        reach:
+          style.outlineStyle === 'none'
+            ? 0
+            : parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset),
+        surface,
+        spacing,
+      };
+    });
+    const detail = JSON.stringify(open);
+    expect(open.lifted, detail).toBe(true);
+    if (plated) {
+      expect(open.background, detail).toBe(open.surface);
+      expect(open.reach, detail).toBe(open.spacing);
+    } else {
+      expect(open.background, detail).toBe('rgba(0, 0, 0, 0)');
+      expect(open.reach, detail).toBe(0);
+    }
+  });
+}
+
 test('the menu fades in on springs.contextMenuMorph, opacity only: no blur, travel or growth (AST-094 FR5)', async ({
   page,
 }) => {

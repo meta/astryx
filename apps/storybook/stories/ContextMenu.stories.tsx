@@ -9,6 +9,17 @@ import {
   ContextMenuRadioItem,
 } from '@astryxdesign/core/ContextMenu';
 import {Divider} from '@astryxdesign/core/Divider';
+import {Card} from '@astryxdesign/core/Card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+} from '@astryxdesign/core/Table';
+import {Text} from '@astryxdesign/core/Text';
+import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {
   PencilIcon,
   TrashIcon,
@@ -736,5 +747,143 @@ export const TouchLongPressPopover: Story = {
       ]}>
       <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
     </ContextMenu>
+  ),
+};
+
+// A flat swatch as an image, so the story needs no network for its picture.
+const PLATE_SWATCH = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="hsl(280 70% 55%)"/></svg>',
+)}`;
+
+const plateStyles = stylex.create({
+  demo: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gap: 24,
+    padding: 24,
+    alignItems: 'start',
+  },
+  block: {display: 'block'},
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  outlined: {
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: '#9ca3af',
+    borderRadius: 12,
+  },
+  translucent: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  beforeSurface: {
+    position: 'relative',
+    isolation: 'isolate',
+    padding: 12,
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      zIndex: -1,
+      borderRadius: 12,
+      backgroundColor: '#e5e7eb',
+    },
+  },
+});
+
+const PLATE_ITEMS = [
+  {label: 'Copy', icon: ClipboardIcon},
+  {label: 'Share', icon: ShareIcon},
+];
+
+export const TouchLiftPlate: Story = {
+  name: 'Touch / lift plate',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Where the primary pointer is coarse, hold a finger on each trigger. A trigger that paints no surface of its own, such as a table cell, a row of text or an outlined box, lifts on a plate of the theme surface, inset from its content and rounded. A picture, a card or a box with its own fill lifts as it is.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(plateStyles.demo)}>
+      <ContextMenu
+        data-testid="plate-thumbnail"
+        label="Picture actions"
+        items={PLATE_ITEMS}>
+        <Thumbnail src={PLATE_SWATCH} alt="Purple swatch" />
+      </ContextMenu>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHeaderCell>Name</TableHeaderCell>
+            <TableHeaderCell>Size</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>
+              <ContextMenu
+                data-testid="plate-cell"
+                label="File actions"
+                items={PLATE_ITEMS}
+                triggerXstyle={plateStyles.block}>
+                <Text>Budget.xlsx</Text>
+              </ContextMenu>
+            </TableCell>
+            <TableCell>24 KB</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <ContextMenu
+        data-testid="plate-row"
+        label="Row actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.row)}>
+          <ShareIcon width={20} height={20} aria-hidden />
+          <Text>A row with an icon</Text>
+        </div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-card"
+        label="Card actions"
+        items={PLATE_ITEMS}>
+        <Card padding={2}>
+          <Text>A card</Text>
+        </Card>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-outlined"
+        label="Outlined box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.outlined)}>An outlined box</div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-translucent"
+        label="Translucent box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.translucent)}>A translucent fill</div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-before"
+        label="Painted box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.beforeSurface)}>
+          A fill from a pseudo-element
+        </div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-inline-image"
+        label="Image actions"
+        items={PLATE_ITEMS}>
+        <img src={PLATE_SWATCH} alt="Purple swatch" width={64} height={64} />
+      </ContextMenu>
+    </div>
   ),
 };
