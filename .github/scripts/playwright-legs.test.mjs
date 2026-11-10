@@ -1347,8 +1347,7 @@ describe('what a Chromium run covers for a pull request', () => {
       "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport function Tour() {}\n",
     'packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts': '',
     'apps/storybook/stories/Menu.stories.tsx':
-      "import {Menu} from '@astryxdesign/core/Menu/Menu';\nimport {notes} from '../../../packages/core/src/Menu/Menu.doc.mjs';\n",
-    'packages/core/src/Menu/Menu.doc.mjs': '',
+      "import {Menu} from '@astryxdesign/core/Menu/Menu';\n",
   };
   const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-selection-'));
   for (const [file, text] of Object.entries(files)) {
@@ -1415,15 +1414,6 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it('ignores a unit test, doc or record beside the code', () => {
-    expect(
-      select([
-        'packages/core/src/Button/Button.test.tsx',
-        'packages/core/src/Button/Button.doc.mjs',
-      ]),
-    ).toEqual({full: false, specs: [], touched: [], dependents: []});
-  });
-
   it('runs the specs that import a changed file, a unit-test helper included', () => {
     // Card's spec imports a `.test` helper beside it, which makes the helper
     // a change to Card.
@@ -1446,14 +1436,6 @@ describe('what a Chromium run covers for a pull request', () => {
       full: true,
       reason:
         'packages/core/src/Button/__tests__/hold.test.ts is in the shared primitive core/Button',
-    });
-  });
-
-  it('runs the full suite for a doc a story loads, since any proof may open the story', () => {
-    expect(select(['packages/core/src/Menu/Menu.doc.mjs'])).toMatchObject({
-      full: true,
-      reason:
-        "packages/core/src/Menu/Menu.doc.mjs is loaded by a story or Storybook's preview",
     });
   });
 
@@ -1499,6 +1481,31 @@ describe('what a Chromium run covers for a pull request', () => {
     expect(select(change, {importers: null}).full).toBe(true);
     expect(select(change, {everySpec: true}).full).toBe(true);
     expect(select(change, {proofs: null}).full).toBe(true);
+  });
+
+  it("with ci.yml's scope, a component folder's unit test, doc or record reaches no selection", () => {
+    const counter = ci.jobs['interaction-legs'];
+    const ciScope = new RegExp(
+      counter.steps.find(each => each.id === 'select-chromium').env.SCOPE_PATHS,
+    );
+    // The lane's scope leaves it out before the selector runs; the guard in
+    // ci-interaction-scope.test.mjs keeps every proof page from loading one.
+    expect(
+      select(
+        [
+          'packages/core/src/Card/__tests__/ease.test.ts',
+          'packages/core/src/Button/Button.test.tsx',
+          'packages/core/src/Button/Button.doc.mjs',
+        ],
+        {scope: ciScope},
+      ),
+    ).toEqual({full: false, specs: [], touched: [], dependents: []});
+    // A fixture a spec loads is runtime code and still selects that spec.
+    expect(
+      select(['packages/core/src/Menu/__tests__/fixtures/press.ts'], {
+        scope: ciScope,
+      }).specs,
+    ).toContain(spec('Card'));
   });
 
   it("adds an escape's edge from the selection file", () => {

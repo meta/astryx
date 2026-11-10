@@ -327,12 +327,6 @@ export function selectProofs({listed, changed, shared, filters}) {
   return [...out];
 }
 
-// Files in a component folder (`packages/<component package>/src/<Component>/`)
-// that put nothing on a page a proof loads. Shared folders, src roots, theme
-// sources and every other package are shared code.
-const NOT_ON_A_PAGE =
-  /^packages\/(?:core|lab|charts|richtext|vega)\/src\/[A-Z][^/]*\/.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$/;
-
 /** What a proof's page loads: the specs, the stories they open, the preview. */
 export const isProofPage = file =>
   isInteractionSpec(file) ||
@@ -346,9 +340,9 @@ export const isProofPage = file =>
  * edits, every spec that loads a changed file through its own imports, and
  * every spec in the component folders the change touches and in the folders
  * that render them through value imports. A story maps to no component, so a
- * changed story runs the whole suite. A unit test, doc, record or
- * accessibility spec in a component folder touches no component unless a
- * spec loads it; then it touches its component like any change there. It
+ * changed story runs the whole suite. The lane's scope leaves out a
+ * component folder's unit tests, docs, records and accessibility specs, and
+ * `ci-interaction-scope.test.mjs` keeps every proof page from loading one. It
  * fails closed: an unknown change, a
  * missing import graph or proof import map, a full-suite classification, a
  * shared path, a listed shared primitive, or a changed path that maps to no
@@ -395,15 +389,6 @@ export function chromiumSelection({
     if (isInteractionSpec(file)) {
       if (present.has(file)) specs.add(file);
       continue;
-    }
-    if (NOT_ON_A_PAGE.test(file)) {
-      // A story or the preview that loads it is on every page that opens it,
-      // and no map says which proofs open which story.
-      if (loaders.some(loader => !isInteractionSpec(loader)))
-        return full(`${file} is loaded by a story or Storybook's preview`);
-      // A spec that loads it makes it a change to its component, which the
-      // shared-code checks below decide like any other change there.
-      if (loaders.length === 0) continue;
     }
     if (selection.shared.some(prefix => file.startsWith(prefix)))
       return full(`${file} is shared code`);
