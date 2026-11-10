@@ -441,9 +441,10 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     const pressed = Math.min(...pressedFrames.map(p => p.value));
     const strength = (v: number) => (rest - v) / (rest - pressed);
     // A loaded runner's cast can stamp a frame tens of ms after it shows it,
-    // and unevenly. So each frame takes its time from the release clock.
-    // Every frame of the fade inside the box's leg must get a time, so no
-    // frame there is left out unread.
+    // and unevenly. So each frame takes its time from the release clock. The
+    // frames go in their order on it, since the cast sorts by stamp. A frame
+    // stamped late can sort after frames it came before. Every frame of the
+    // fade inside the box's leg must get a time, so none there is left out.
     const clock = await releaseClockTimes(page, frames, clockMs);
     const clocked = stamped.map(p => clock.times.has(p.t));
     const unclocked = stamped.filter((p, i) => {
@@ -460,17 +461,15 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
       unclocked.map(p => p.t),
       'frames of the fade inside the release clock with no time on it',
     ).toEqual([]);
-    const pixels = stamped.flatMap(p => {
-      const t = clock.times.get(p.t);
-      return t == null ? [] : [{...p, stamp: p.t, t}];
-    });
-    // Judge the release while it was still visibly moving inside the block.
-    // The frames go in their order on the clock. The cast sorts by stamp, and
-    // a frame stamped late can sort after frames it came before.
-    const end = Math.min(block.to, release.to) - 10;
-    const during = pixels
-      .filter(p => p.t > block.from && p.t <= end)
+    const pixels = stamped
+      .flatMap(p => {
+        const t = clock.times.get(p.t);
+        return t == null ? [] : [{...p, stamp: p.t, t}];
+      })
       .sort((a, b) => a.t - b.t);
+    // Judge the release while it was still visibly moving inside the block.
+    const end = Math.min(block.to, release.to) - 10;
+    const during = pixels.filter(p => p.t > block.from && p.t <= end);
     const strengths = during.map(p => ({
       t: +(p.t - block.from).toFixed(1),
       stamp: +(p.stamp - block.from).toFixed(1),
