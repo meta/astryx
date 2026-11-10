@@ -8,10 +8,11 @@
  *   `writeLayerEntranceSide` gives that side to the layer's entrance.
  * @position Layer runtime: runs in the task that shows a layer, before its
  *   first frame. The entrance in layerAnimations.stylex.ts reads the custom
- *   properties it writes.
+ *   properties it writes. Popover's touch growth grows from the same point.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Layer/layerAnimations.stylex.ts
+ * - /packages/core/src/Popover/popoverSurfaceFrame.ts
  */
 
 import {settledBox} from './settledBox';

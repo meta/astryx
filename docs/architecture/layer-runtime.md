@@ -42,7 +42,9 @@ verified_by:
     packages/core/src/Layer/presentationHold.test.tsx,
     packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
     packages/core/src/Layer/layerEntranceSide.test.ts,
+    packages/core/src/Popover/popoverSurfaceMotion.test.ts,
     packages/core/src/Layer/__tests__/LayerEntranceSide.interaction.browser.spec.ts,
+    packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
@@ -634,13 +636,15 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
-- **INV20 — An entrance starts from the side its layer lands on.** On the
-  pointer path an anchored layer's entrance slides from, and scales about,
-  the side it lands on after any flip. So it never slides onto its trigger.
-  It scales about the point where the layer meets its trigger: on the edge
-  that faces the trigger, on the trigger's center line. A layer that covers
-  its trigger's center has no side: its entrance scales about that center
-  and does not slide.
+- **INV20 — An entrance starts from the side its layer lands on.** An
+  anchored layer's shared entrance (`layerAnimations`) slides from, and
+  scales about, the side it lands on after any flip. So it never slides onto
+  its trigger. It scales about the point where the layer meets its trigger:
+  on the edge that faces the trigger, on the trigger's center line. A layer
+  that covers its trigger's center has no side: its entrance scales about
+  that center and does not slide. A show reads the side in its one
+  measurement pass. Popover's touch growth starts from the same point. Over
+  its trigger's center it has no side to lengthen along, so it only scales.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -857,7 +861,7 @@ this current architecture record.
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                                                                                                                                                                                                                                                                                                                             | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                            | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                             | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
-| INV20        | `layerEntranceSide.test.ts` for the side and the meeting point, and `LayerEntranceSide.interaction.browser.spec.ts` in Chromium and WebKit for the first frame of each anchored layer that flips                                                                                                                                                                                                                                                                                                                                                                                                          |
+| INV20        | `layerEntranceSide.test.ts` and `popoverSurfaceMotion.test.ts`, which read one fixture table; `LayerEntranceSide.interaction.browser.spec.ts` and `PopoverTouchMotion.interaction.browser.spec.ts` in Chromium and WebKit; `useLayer.test.tsx`                                                                                                                                                                                                                                                                                                                                                            | A flipped layer whose first frame moves onto its trigger, an origin off the point where the layer meets its trigger, a layer over its trigger that steps, a touch growth that starts anywhere else, or a show that reads the layer twice                                                                                                                                                                                     |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
