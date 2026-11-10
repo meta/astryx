@@ -43,9 +43,13 @@ export interface ContextMenuTouchHandle {
   isTracking(): boolean;
   /**
    * Lifts the trigger from where the press feedback left it, above a tinted
-   * page. Returns where it landed, or null without the popover API.
+   * page. `onLayerShown` runs once the lift's layer shows, before the
+   * trigger lifts into it. Returns where it landed, or null without the
+   * popover API.
    */
-  lift(): LiftFromTriggerResult | null;
+  lift(
+    onLayerShown?: (lifted: LiftFromTriggerResult) => void,
+  ): LiftFromTriggerResult | null;
   /** The menu's entrance beside the lifted trigger. */
   enterMenu(menu: HTMLElement): void;
   /** The lifted trigger returns to its place. */
@@ -219,7 +223,7 @@ export function ContextMenuTouchLayer({
     () => ({
       release: () => feedbackRef.current.release(),
       isTracking: () => recognizer.numberOfTouches > 0,
-      lift: () => {
+      lift: onLayerShown => {
         const trigger = triggerRef.current;
         if (trigger == null) {
           return null;
@@ -236,6 +240,7 @@ export function ContextMenuTouchLayer({
             height: pressed.height,
           },
           () => feedbackRef.current.letGo(),
+          onLayerShown,
         );
         // A lift that did not happen lets go too.
         feedbackRef.current.letGo();

@@ -120,9 +120,14 @@ export interface ContextMenuLift {
   /**
    * Lifts the trigger from `from`, client px: where the press feedback left
    * it. `release` runs after the lift reads the page and before it writes.
-   * Returns where it landed, or null without the popover API.
+   * `onLayerShown` runs once the layer shows, before the trigger lifts into
+   * it. Returns where it landed, or null without the popover API.
    */
-  lift(from: MorphRect, release: () => void): LiftFromTriggerResult | null;
+  lift(
+    from: MorphRect,
+    release: () => void,
+    onLayerShown?: (lifted: LiftFromTriggerResult) => void,
+  ): LiftFromTriggerResult | null;
   /** The menu's entrance beside the lifted trigger: it fades in. */
   enterMenu(menu: HTMLElement): void;
   /** Returns the trigger to its place. */
@@ -141,7 +146,7 @@ export function useContextMenuLift(
   layerInsetRef.current = use(LayerContext)?.inset;
   return useMemo(
     () => ({
-      lift(from, release) {
+      lift(from, release, onLayerShown) {
         const trigger = triggerRef.current;
         if (trigger == null) {
           return null;
@@ -156,6 +161,7 @@ export function useContextMenuLift(
           },
           from,
           release,
+          onLayerShown,
           inset: layerInsetRef.current,
           onBackdropTap: () => onBackdropTapRef.current(),
         });

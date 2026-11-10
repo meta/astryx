@@ -824,12 +824,13 @@ export function ContextMenu({
   });
   const {continueGesture} = menuPress;
 
-  // Opens the menu beside the lifted trigger. The layer's anchor is the
-  // lift's own box at the lifted rect: an anchor inside the trigger would
-  // move with the trigger's lift. The menu renders below first, and once
-  // shown its height picks the side (the layout effect below), before the
-  // frame paints. It fades in.
-  const openLifted = useCallback(
+  // Opens the menu beside the lifted trigger, as the lift's layer shows and
+  // before the trigger lifts into it: the menu shows at its moment. The
+  // layer's anchor is the lift's own box at the lifted rect: an anchor inside
+  // the trigger would move with the trigger's lift. The menu renders below
+  // first, and once shown its height picks the side (the layout effect
+  // below), before the frame paints.
+  const showLifted = useCallback(
     (lifted: LiftFromTriggerResult) => {
       liftRef.current = lifted;
       setLiftPlacement(
@@ -854,12 +855,8 @@ export function ContextMenu({
         removeAnchorName(cursorAnchor, layer.anchorId);
       }
       addAnchorName(lifted.anchor, layer.anchorId);
-      const menu = listRef.current?.closest<HTMLElement>('[popover]');
-      if (menu != null) {
-        touchHandleRef.current?.enterMenu(menu);
-      }
     },
-    [layer, listRef],
+    [layer],
   );
   useIsomorphicLayoutEffect(() => {
     const lifted = liftRef.current;
@@ -894,10 +891,14 @@ export function ContextMenu({
       // sheet keep the menu where the finger landed.
       const lifted =
         triggerAs !== 'span' && !usesBottomSheet
-          ? (touchHandleRef.current?.lift() ?? null)
+          ? (touchHandleRef.current?.lift(showLifted) ?? null)
           : null;
       if (lifted != null) {
-        openLifted(lifted);
+        // The menu fades in once the lift holds the trigger.
+        const menu = listRef.current?.closest<HTMLElement>('[popover]');
+        if (menu != null) {
+          touchHandleRef.current?.enterMenu(menu);
+        }
       } else {
         const local = toTriggerLocal(point);
         openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
@@ -911,8 +912,9 @@ export function ContextMenu({
     },
     [
       continueGesture,
+      listRef,
       openAtLocalPoint,
-      openLifted,
+      showLifted,
       toTriggerLocal,
       triggerAs,
       usesBottomSheet,
