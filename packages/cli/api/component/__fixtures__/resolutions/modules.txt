@@ -282,7 +282,7 @@ useOverlay useOverlay Overlay/useOverlay.doc.mjs Overlay/useOverlay.tsx
 useOwnScrollGesture useOwnScrollGesture DateInput/DateInput.doc.mjs DateInput/useOwnScrollGesture.ts
 usePager usePager hooks/useAnimatedLayout.doc.mjs hooks/usePager.ts
 usePointerDragScroll usePointerDragScroll DateInput/DateInput.doc.mjs DateInput/usePointerDragScroll.ts
-usePowerSearchConfig usePowerSearchConfig PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchConfig.ts
+usePowerSearchConfig usePowerSearchConfig PowerSearch/usePowerSearchConfig.doc.mjs PowerSearch/usePowerSearchConfig.ts
 usePowerSearchSource usePowerSearchSource PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchSource.ts
 useRenamedProp useRenamedProp hooks/useAnimatedLayout.doc.mjs hooks/useRenamedProp.ts
 useResolvedRequired useResolvedRequired hooks/useAnimatedLayout.doc.mjs hooks/useResolvedRequired.ts

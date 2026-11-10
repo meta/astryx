@@ -236,10 +236,7 @@ async function importModule(file, fresh) {
   // "type", the extension, or the source's syntax. The query names a new ES
   // module. A CommonJS module also needs its cache entry gone.
   url.searchParams.set('astryx-fresh', String(++freshImportNonce));
-  return await readInTurn(file, () => {
-    delete requireFromHere.cache[cacheKey(file)];
-    return import(url.href);
-  });
+  return await readFreshInTurn(file, () => import(url.href));
 }
 
 /**
@@ -285,6 +282,22 @@ export function readInTurn(file, read) {
     if (readsInProgress.get(key) === ended) readsInProgress.delete(key);
   });
   return result;
+}
+
+/**
+ * Run `read`, a fresh import of `file`, in the file's turn (`readInTurn`),
+ * once the file is gone from Node's CommonJS cache. A new URL names a new ES
+ * module only, so a CommonJS module also needs its cache entry gone.
+ * @template T
+ * @param {string} file absolute path
+ * @param {() => Promise<T>} read
+ * @returns {Promise<T>}
+ */
+export function readFreshInTurn(file, read) {
+  return readInTurn(file, () => {
+    delete requireFromHere.cache[cacheKey(file)];
+    return read();
+  });
 }
 
 

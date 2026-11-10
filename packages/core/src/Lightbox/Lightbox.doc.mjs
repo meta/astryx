@@ -99,7 +99,7 @@ export const docs = {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
+        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back, and 0 returns to the fitted size. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
       default: 'false',
     },
     {
@@ -149,7 +149,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Use the lightbox for non-image content; it is specialized for images.',
+          'Use the lightbox for content other than images and videos; it shows one media item at a time.',
       },
       {
         guidance: false,
@@ -214,7 +214,7 @@ export const docsZh = {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
+        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原，0 键恢复到适合大小。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
       default: 'false',
     },
     {
@@ -250,7 +250,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Use the lightbox for non-image content; it is specialized for images.',
+          'Use the lightbox for content other than images and videos; it shows one media item at a time.',
       },
       {
         guidance: false,
@@ -283,7 +283,8 @@ export const docsDense = {
       },
       {
         guidance: false,
-        description: 'Use for non-image content; specialized for images.',
+        description:
+          'Use for content other than images and videos; one media item at a time.',
       },
       {
         guidance: false,
@@ -301,7 +302,7 @@ export const docsDense = {
     onIndexChange:
       'Callback when gallery index changes (buttons, keys or a swipe).',
     hasZoom:
-      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-) and pan (drag, trackpad scroll, or arrow keys) for images.',
+      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-; 0 resets) and pan (drag, trackpad scroll, or arrow keys) for images.',
     xstyle: 'StyleX styles for layout customization.',
   },
 };

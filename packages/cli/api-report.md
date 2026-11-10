@@ -1015,7 +1015,7 @@ type RenderReverseResponse
   data: { input: string; mode: "embedded" | "rebuilt"; output: string; files: string[]; exact: boolean; missing?: string[] | undefined; components?: string[] | undefine … #2d35150e
   type: "render.reverse"
 type RenderWarning
-  code: "dropped-children" | "remote-asset" | "missing-asset" | "page-output" | "page-script" | "no-astryx-styles" | "chart-size" | "not-embedded"
+  code: "dropped-children" | "remote-asset" | "missing-asset" | "page-output" | "page-script" | "no-astryx-styles" | "chart-size" | "not-embedded" | "node-crash"
   message: string
 ```
 
