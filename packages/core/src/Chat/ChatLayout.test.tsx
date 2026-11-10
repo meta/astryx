@@ -131,17 +131,6 @@ describe('ChatLayout — default scroll button keyboard reachability', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Self-scroll layout contract (#2573)
-//
-// jsdom has no layout, so these assert the class-level CSS intent: the root
-// must be a flex column whose message area flexes (grow, no shrink) instead
-// of forcing minHeight: 100%. With minHeight: 100% the in-flow sticky dock
-// added its full height on top of the message area, so the root always
-// overflowed by exactly the dock height (phantom scrollbar). Real-layout
-// geometry was verified in a browser; see the PR for measurements.
-// ---------------------------------------------------------------------------
-
 describe('ChatLayout — a page that scrolls the document', () => {
   // The page's root element scrolls, and the browser raises the scroll at the
   // document. The root's offsetHeight is the page's height; its clientHeight
@@ -189,6 +178,17 @@ describe('ChatLayout — a page that scrolls the document', () => {
     expect(hiddenPill()).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Self-scroll layout contract (#2573)
+//
+// jsdom has no layout, so these assert the class-level CSS intent: the root
+// must be a flex column whose message area flexes (grow, no shrink) instead
+// of forcing minHeight: 100%. With minHeight: 100% the in-flow sticky dock
+// added its full height on top of the message area, so the root always
+// overflowed by exactly the dock height (phantom scrollbar). Real-layout
+// geometry was verified in a browser; see the PR for measurements.
+// ---------------------------------------------------------------------------
 
 describe('ChatLayout — self-scroll layout contract (#2573)', () => {
   it('root is a flex column so the dock height is part of the 100%', () => {

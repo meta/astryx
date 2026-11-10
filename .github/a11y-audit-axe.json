@@ -64,5 +64,9 @@
       "core-layout--dual-panels",
       "core-layout--content-width-with-start-panel"
     ]
+  },
+  "Lightbox": {
+    "stories": ["core-lightbox--open-viewer"],
+    "readySelector": "dialog[open]"
   }
 }

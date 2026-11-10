@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Write one string field of a project's astryx.config.
+ * @file Write one string field, or one list of strings, in a project's
+ * astryx.config.
  *
  * The field is a top-level key or a dotted path into nested object literals
  * (`experimental.iconSet`); a missing object on the path is created.
@@ -18,7 +19,8 @@
  * `ERR_CODEMOD_PROTECTED` naming the protecting declaration, and an unreadable
  * protection source fails with `ERR_CODEMOD_PROTECTION_SOURCE`.
  *
- * @input A project directory, a field name, and its string value
+ * @input A project directory, a field name, and its value: a string or a
+ *   list of strings
  * @output The config file written and the value it replaced
  * @position packages/cli/foundation/config — read by `astryx experimental icon use`
  */
@@ -87,6 +89,47 @@ function propertyNamed(property, name) {
   );
 }
 
+/** @param {string} text */
+const quote = text => `'${text.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`;
+
+/** @param {string | readonly string[]} value */
+const written = value =>
+  typeof value === 'string'
+    ? quote(value)
+    : `[${value.map(each => quote(each)).join(', ')}]`;
+
+/**
+ * The string, or list of strings, a config property holds; null for any
+ * other value.
+ * @param {any} node
+ * @returns {string | string[] | null}
+ */
+function literalValue(node) {
+  if (node?.type === 'StringLiteral' || node?.type === 'Literal') {
+    return typeof node.value === 'string' ? node.value : null;
+  }
+  if (node?.type === 'ArrayExpression') {
+    const items = node.elements.map((/** @type {any} */ each) =>
+      each?.type === 'StringLiteral' ||
+      (each?.type === 'Literal' && typeof each.value === 'string')
+        ? String(each.value)
+        : null,
+    );
+    return items.every((/** @type {string | null} */ each) => each != null)
+      ? /** @type {string[]} */ (items)
+      : null;
+  }
+  return null;
+}
+
+/**
+ * @param {string | string[] | null} a
+ * @param {string | readonly string[]} b
+ */
+function sameValue(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * Set `key` to `value` in the project's astryx.config.
  * @param {string} projectDir
@@ -95,6 +138,22 @@ function propertyNamed(property, name) {
  * @returns {{file: string, created: boolean, previous: string | null, changed: boolean}}
  */
 export function setConfigString(projectDir, key, value) {
+  const result = setConfigValue(projectDir, key, value);
+  return {
+    ...result,
+    previous: typeof result.previous === 'string' ? result.previous : null,
+  };
+}
+
+/**
+ * Set `key` to `value`, a string or a list of strings, in the project's
+ * astryx.config.
+ * @param {string} projectDir
+ * @param {string} key a top-level key, or a dotted path (`experimental.iconSet`)
+ * @param {string | readonly string[]} value
+ * @returns {{file: string, created: boolean, previous: string | string[] | null, changed: boolean}}
+ */
+export function setConfigValue(projectDir, key, value) {
   const keys = key.split('.');
   const leaf = /** @type {string} */ (keys[keys.length - 1]);
   const existing = CONFIG_BASENAMES.map(name =>
@@ -103,7 +162,6 @@ export function setConfigString(projectDir, key, value) {
   if (!existing) {
     const file = path.join(projectDir, 'astryx.config.mjs');
     assertWritable(projectDir, file);
-    const quoted = `'${value.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`;
     // Each key on the path opens one nested object: `experimental: {`.
     const open = keys
       .slice(0, -1)
@@ -116,7 +174,7 @@ export function setConfigString(projectDir, key, value) {
       .join('');
     writeAtomically(
       file,
-      `export default {\n${open}${'  '.repeat(keys.length)}${leaf}: ${quoted},\n${close}};\n`,
+      `export default {\n${open}${'  '.repeat(keys.length)}${leaf}: ${written(value)},\n${close}};\n`,
     );
     return {file, created: true, previous: null, changed: true};
   }
@@ -127,7 +185,7 @@ export function setConfigString(projectDir, key, value) {
   let object = findManifestObject(j, ast);
   const refuse = () =>
     new Error(
-      `Could not update ${path.basename(existing)} safely: its default export is not a static object literal. Set "${key}: '${value}'" in it yourself.`,
+      `Could not update ${path.basename(existing)} safely: its default export is not a static object literal. Set "${key}: ${written(value)}" in it yourself.`,
     );
   if (!object) throw refuse();
   // A spread on the path can hold the same keys: a key added beside it would
@@ -137,7 +195,7 @@ export function setConfigString(projectDir, key, value) {
   const assertNoSpread = (holder, where) => {
     if (holder.properties.some((/** @type {any} */ each) => isSpread(each))) {
       throw new Error(
-        `Could not update ${path.basename(existing)} safely: ${where} spreads another object (\`...\`), whose keys a written "${key}" could replace. Set "${key}: '${value}'" in it yourself.`,
+        `Could not update ${path.basename(existing)} safely: ${where} spreads another object (\`...\`), whose keys a written "${key}" could replace. Set "${key}: ${written(value)}" in it yourself.`,
       );
     }
   };
@@ -160,22 +218,20 @@ export function setConfigString(projectDir, key, value) {
   const property = object.properties.find((/** @type {any} */ each) =>
     propertyNamed(each, leaf),
   );
-  /** @type {string | null} */
+  const node =
+    typeof value === 'string'
+      ? j.stringLiteral(value)
+      : j.arrayExpression(value.map(each => j.stringLiteral(each)));
+  /** @type {string | string[] | null} */
   let previous = null;
   if (property) {
-    const current = property.value;
-    previous =
-      current?.type === 'StringLiteral' || current?.type === 'Literal'
-        ? String(current.value)
-        : null;
-    if (previous === value) {
+    previous = literalValue(property.value);
+    if (sameValue(previous, value)) {
       return {file: existing, created: false, previous, changed: false};
     }
-    property.value = j.stringLiteral(value);
+    property.value = node;
   } else {
-    object.properties.push(
-      j.objectProperty(j.identifier(leaf), j.stringLiteral(value)),
-    );
+    object.properties.push(j.objectProperty(j.identifier(leaf), node));
   }
   let next = ast.toSource({quote: 'single', reuseWhitespace: true});
   if (source.endsWith('\n') && !next.endsWith('\n')) next += '\n';

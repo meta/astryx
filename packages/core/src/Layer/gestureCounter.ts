@@ -23,31 +23,33 @@
  */
 
 import {subscribeInput} from '../utils/inputStream';
+import {sharedState} from '../utils/sharedRealm';
 
-let gesture = 0;
-let clickedGesture: number | null = null;
-let contextMenuGesture: number | null = null;
-let pressPointerId: number | null = null;
-let claimedPress: {
-  layer: HTMLElement;
-  pointerId: number;
-  gesture: number;
-} | null = null;
-let isListening = false;
+const state = sharedState('layer/gesture-counter/state', 1, () => ({
+  gesture: 0,
+  clickedGesture: null as number | null,
+  contextMenuGesture: null as number | null,
+  pressPointerId: null as number | null,
+  claimedPress: null as {
+    layer: HTMLElement;
+    pointerId: number;
+    gesture: number;
+  } | null,
+  isListening: false,
+  unsubscribePress: null as (() => void) | null,
+}));
 
 function advance() {
-  gesture += 1;
+  state.gesture += 1;
 }
-
-let unsubscribePress: (() => void) | null = null;
 
 // The page listens for a press's end and its context menu only while a press
 // is down, so at rest it keeps no pointerup listener of its own.
 function startPress(event: PointerEvent) {
   advance();
-  pressPointerId = event.pointerId;
+  state.pressPointerId = event.pointerId;
   const view = event.view ?? document.defaultView;
-  if (unsubscribePress != null || view == null) {
+  if (state.unsubscribePress != null || view == null) {
     return;
   }
   const unsubscribes = [
@@ -55,7 +57,7 @@ function startPress(event: PointerEvent) {
     subscribeInput(view, 'pointercancel', endPress, {first: true}),
     subscribeInput(view, 'contextmenu', markContextMenu, {first: true}),
   ];
-  unsubscribePress = () => {
+  state.unsubscribePress = () => {
     for (const unsubscribe of unsubscribes) {
       unsubscribe();
     }
@@ -63,24 +65,24 @@ function startPress(event: PointerEvent) {
 }
 
 function endPress() {
-  pressPointerId = null;
-  unsubscribePress?.();
-  unsubscribePress = null;
+  state.pressPointerId = null;
+  state.unsubscribePress?.();
+  state.unsubscribePress = null;
 }
 
 function markContextMenu() {
-  contextMenuGesture = gesture;
+  state.contextMenuGesture = state.gesture;
 }
 
 function markClicked() {
-  clickedGesture = gesture;
+  state.clickedGesture = state.gesture;
 }
 
 function listen() {
-  if (isListening || typeof document === 'undefined') {
+  if (state.isListening || typeof document === 'undefined') {
     return;
   }
-  isListening = true;
+  state.isListening = true;
   // Capture phase: the count must advance before any handler reads it.
   const view = document.defaultView;
   if (view != null) {
@@ -97,19 +99,19 @@ function listen() {
  */
 export function currentGesture(): number {
   listen();
-  return gesture;
+  return state.gesture;
 }
 
 /** Whether the click belonging to the current gesture already bubbled. */
 export function currentGestureHasClicked(): boolean {
   listen();
-  return clickedGesture === gesture;
+  return state.clickedGesture === state.gesture;
 }
 
 /** Whether a press is down, its release not yet seen by the page. */
 export function isPressInFlight(): boolean {
   listen();
-  return pressPointerId !== null;
+  return state.pressPointerId !== null;
 }
 
 /**
@@ -132,21 +134,21 @@ export function claimPress(
   {releaseTarget = null}: {releaseTarget?: HTMLElement | null} = {},
 ): void {
   listen();
-  const pointerId = pressPointerId;
+  const pointerId = state.pressPointerId;
   const view = layer.ownerDocument.defaultView;
   if (pointerId === null || view == null) {
     return;
   }
   if (
-    claimedPress !== null &&
-    claimedPress.layer === layer &&
-    claimedPress.pointerId === pointerId &&
-    claimedPress.gesture === gesture
+    state.claimedPress !== null &&
+    state.claimedPress.layer === layer &&
+    state.claimedPress.pointerId === pointerId &&
+    state.claimedPress.gesture === state.gesture
   ) {
     return;
   }
-  const claim = {layer, pointerId, gesture};
-  claimedPress = claim;
+  const claim = {layer, pointerId, gesture: state.gesture};
+  state.claimedPress = claim;
   // Gives the pointer to `holder`, or lets it go when `holder` is null.
   const holdCapture = (holder: HTMLElement | null) => {
     try {
@@ -220,8 +222,8 @@ export function claimPress(
       unsubscribe();
     }
     unsubscribes.length = 0;
-    if (claimedPress === claim) {
-      claimedPress = null;
+    if (state.claimedPress === claim) {
+      state.claimedPress = null;
     }
   };
   const endClaim = (event: PointerEvent) => {
@@ -259,7 +261,7 @@ export function claimPress(
  */
 export function claimContextMenuPress(layer: HTMLElement): void {
   listen();
-  if (contextMenuGesture === gesture) {
+  if (state.contextMenuGesture === state.gesture) {
     claimPress(layer);
   }
 }

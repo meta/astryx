@@ -90,6 +90,12 @@ Astryx tracks the last input modality as one shared state:
 - before any input, the state is `keyboard` so initial or restored focus remains
   perceivable.
 
+The same state records whether every key since the last pointer press typed
+into a text-entry field. Those keys still set `keyboard`; only a touch
+trigger's focus guard reads the record, because an on-screen keyboard sends a
+key press for each typed character. The record reads text-entry fields in
+the page's own window only.
+
 Programmatic focus does not create a new modality. Its focus indicator follows
 the last input modality: it is hidden after pointer input and shown after
 keyboard input. Components use the browser's `:focus-visible` behavior together

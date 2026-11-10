@@ -78,7 +78,7 @@ overrides:
   # next@15 pins postcss 8.4.31. Drop when Next raises its postcss dep.
   postcss: ^8.5.23
   # monaco-editor@0.55 pins dompurify 3.2.7. Drop when it catches up.
-  dompurify: ^3.4.13
+  dompurify: ^3.4.17
   # tsup@8.5 resolves esbuild 0.27.7. Drop when tsup raises its range.
   esbuild: '>=0.28.1'
   # read-yaml-file 1.x is stuck on js-yaml 3.x (`safeLoad`, no CVE-2026-53550
