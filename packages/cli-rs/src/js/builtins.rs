@@ -292,8 +292,8 @@ export default { EOL, platform, homedir, tmpdir };
 "#;
 
 const UTIL: &str = r#"
-export function inspect(v) { return __astryx_host.inspect(v); }
-export function format(...a) { return __astryx_host.format(...a); }
+export function inspect(v) { return globalThis.__astryx_inspect(v); }
+export function format(...a) { return globalThis.__astryx_format(...a); }
 export function isDeepStrictEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 export default { inspect, format, isDeepStrictEqual };
 "#;

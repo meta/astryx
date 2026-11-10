@@ -1,0 +1,12 @@
+{
+ "id": "w_global-install-once",
+ "args": [
+  "docs",
+  "global/install-once"
+ ],
+ "fixture": "app",
+ "stdout": "Install Astryx globally\nInstall the Astryx CLI once for your computer with npm, pnpm, Yarn, Bun, or Volta, and what happens when you are\noffline.\n\npackage: @astryxdesign/cli\n\ninstall                Install it - Install the CLI package with your package manager. One astryx command then works in\n                       every folder.\neacces                 Permission denied (EACCES) - If `npm i -g` fails with `EACCES`, do not use `sudo`. Give npm a\n                       global folder you own, then add its `bin` folder to your PATH, or use a Node version manager such\n                       as nvm, fnm, or Volta:\nversions-for-projects  Versions for your projects - When a project's own CLI is installed but cannot start, Astryx runs\n                       the CLI version equal to the project's Core instead, installing it once into a cache in your home\n                       folder and reusing it. It uses npm for that, so your npm registry,...\noffline                Offline - Your global install answers offline in a project with only Core, and so does any\n                       project that installs its own CLI. Outside a project, commands that read components, such as `npx\n                       @astryxdesign/cli@0.7.12 component Button`, need your global version's Core:...\nmore                   More on global mode - This page is part of `npx @astryxdesign/cli@0.7.12 docs global`, which\n                       explains what global mode is and how each part works. Next: `npx @astryxdesign/cli@0.7.12 docs\n                       global/who-answers`.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs global/install-once <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs global/install-once --full\nUp: npx @astryxdesign/cli@0.7.12 docs global\nPrevious: npx @astryxdesign/cli@0.7.12 docs global/project-global-or-both\nNext: npx @astryxdesign/cli@0.7.12 docs global/who-answers\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\n",
+ "exit": 0,
+ "files": []
+}

@@ -1,9 +1,10 @@
 //! `astryx upgrade`: version migration codemods, ported from
 //! `packages/cli/assets/codemods` and `packages/cli/api/upgrade`.
 
-pub mod fsutil;
-pub mod integration_discovery;
 pub mod css;
+pub mod fsutil;
+pub mod hooks;
+pub mod integration_discovery;
 pub mod jsc;
 pub mod jsre;
 pub mod protection;
@@ -17,6 +18,8 @@ pub mod ui;
 
 #[cfg(test)]
 mod fixtures_test;
+#[cfg(test)]
+mod project_tests;
 
 use crate::cli::command::{CmdResult, Exit, Invocation, OptSource, Out};
 use crate::cli::format::{json_fields, records, section, Block};

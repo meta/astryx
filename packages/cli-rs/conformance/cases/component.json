@@ -26215,5 +26215,70 @@
     ],
     "fixture": "comptheme",
     "cwd": "comptheme/bare"
+  },
+  {
+    "id": "w_component_Linked_@compkit",
+    "args": [
+      "component",
+      "Linked"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--props_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--props"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--props_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--props",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_--detail_compact_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_Linked_Button_--json_@compkit",
+    "args": [
+      "component",
+      "Linked",
+      "Button",
+      "--json"
+    ],
+    "fixture": "compkit"
+  },
+  {
+    "id": "w_component_--list_--json_@compkit",
+    "args": [
+      "component",
+      "--list",
+      "--json"
+    ],
+    "fixture": "compkit"
   }
 ]

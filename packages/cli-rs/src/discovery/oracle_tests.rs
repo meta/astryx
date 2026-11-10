@@ -408,3 +408,85 @@ fn matches_js_doc_commands() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn matches_js_integration_doc_files() {
+    use_js_cli_root();
+    let file = std::env::var("DOCFILES_ORACLE").unwrap_or_else(|_| "/tmp/docfiles-oracle.json".into());
+    let Some(Value::Array(cases)) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    for c in &cases {
+        let p = super::project::Project::load(c["dir"].as_str().unwrap()).unwrap();
+        let r = p.loaded_integrations.iter().find(|r| r.get("name") == c.get("name")).unwrap();
+        let got = super::integration_doc_files::integration_doc_files(r).to_json();
+        if got != c["result"] {
+            failures.push(format!("{}:\n rust {got}\n js   {}", c["name"], c["result"]));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn matches_js_copied_passages_and_fluff() {
+    use_js_cli_root();
+    let file = std::env::var("PROSE_ORACLE").unwrap_or_else(|_| "/tmp/prose-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let mut failures = Vec::new();
+    let mut r = crate::json::Map::new();
+    r.insert("name".into(), Value::String("@x/prose".into()));
+    r.insert("docs".into(), o["docsDir"].clone());
+    let found = super::docs_discovery::discover_integration_docs(&r);
+    let copied = Value::Array(super::copied_passages::find_copied_passages(&found).iter().map(|c| c.to_json()).collect());
+    if copied != o["copied"] {
+        failures.push(format!("copied:\n rust {copied}\n js   {}", o["copied"]));
+    }
+    let fluff = Value::Array(super::doc_fluff::find_fluff(&found).iter().map(|c| c.to_json()).collect());
+    if fluff != o["fluff"] {
+        failures.push(format!("fluff:\n rust {fluff}\n js   {}", o["fluff"]));
+    }
+    for t in o["filler"].as_array().unwrap() {
+        let got = Value::Array(
+            super::doc_fluff::filler_at(t[0].as_str().unwrap())
+                .iter()
+                .map(|f| serde_json::json!({"phrase": f.phrase, "at": f.at, "thatAfter": f.that_after}))
+                .collect(),
+        );
+        if got != t[1] {
+            failures.push(format!("filler {}: rust {got} js {}", t[0], t[1]));
+        }
+    }
+    let m = super::doc_fluff::core_density_median();
+    if Some(m) != o["median"].as_f64() {
+        failures.push(format!("median rust {m} js {}", o["median"]));
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn matches_js_stray_pointers() {
+    use_js_cli_root();
+    let file = std::env::var("STRAY_ORACLE").unwrap_or_else(|_| "/tmp/stray-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let mut r = crate::json::Map::new();
+    r.insert("name".into(), Value::String("@x/stray".into()));
+    r.insert("docs".into(), o["docsDir"].clone());
+    let found = super::docs_discovery::discover_integration_docs(&r);
+    let comps: Vec<(String, String)> = o["components"].as_array().unwrap().iter().map(|c| (c[0].as_str().unwrap().into(), c[1].as_str().unwrap().into())).collect();
+    let got = Value::Array(super::stray_pointers::find_stray_pointers(&found, &comps).iter().map(|s| s.to_json()).collect());
+    assert_eq!(got, o["found"], "\n rust {got}\n js   {}", o["found"]);
+}
+
+#[test]
+fn matches_js_older_cli_and_icon_notes() {
+    use_js_cli_root();
+    let file = std::env::var("STABILITY_ORACLE").unwrap_or_else(|_| "/tmp/stability-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let loaded = o["loaded"].as_object().unwrap().clone();
+    let pkg_dir = loaded["__packageDir"].as_str().unwrap().to_string();
+    let older = Value::Array(super::doc_stability::older_cli_notes(&loaded, &o["pkg"], &pkg_dir).iter().map(|n| n.to_json()).collect());
+    assert_eq!(older, o["older"], "\n rust {older}\n js   {}", o["older"]);
+    let icons = Value::Array(
+        super::doc_stability::template_icon_notes(&loaded, &pkg_dir).iter().map(|(c, m)| serde_json::json!({"code": c, "message": m})).collect(),
+    );
+    assert_eq!(icons, o["icons"], "\n rust {icons}\n js   {}", o["icons"]);
+}

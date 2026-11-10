@@ -1,0 +1,15 @@
+{
+ "id": "w_render_missinglocal",
+ "args": [
+  "experimental",
+  "render",
+  "missinglocal.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page imports ./nope, which does not exist\n",
+ "exit": 1,
+ "files": []
+}

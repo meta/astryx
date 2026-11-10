@@ -141,7 +141,7 @@ pub fn list_theme_packages(cwd: &str) -> Vec<String> {
     }
     let Some(nm) = nm else { return vec![] };
     let scope = np::join2(&nm, "@astryxdesign");
-    let Some(entries) = np::read_dir(&scope) else { return vec![] };
+    let Some(entries) = crate::commands::doctor::support::read_dir_sorted(&scope) else { return vec![] };
     entries
         .into_iter()
         .filter(|e| e.name.starts_with("theme-"))

@@ -1,0 +1,14 @@
+{
+ "id": "w_acme-handbook-deploying_rollback_--json_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook/deploying",
+  "rollback",
+  "--json"
+ ],
+ "fixture": "docsint",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"id\": \"rollback\",\n    \"title\": \"Rolling back\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"unordered\",\n        \"items\": [\n          \"one {@link generic:nope}\",\n          \"two\"\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"[reference: \\\"command:docs\\\" names no doc]\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs acme-handbook/deploying --index\",\n      \"previous\": \"astryx docs acme-handbook/deploying overview\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

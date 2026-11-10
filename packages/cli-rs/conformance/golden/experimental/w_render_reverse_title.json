@@ -1,0 +1,16 @@
+{
+ "id": "w_render_reverse_title",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "page.html",
+  "--title",
+  "x"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --title applies only to rendering, not to --reverse\n",
+ "exit": 1,
+ "files": []
+}

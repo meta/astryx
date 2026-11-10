@@ -186,3 +186,31 @@ fn debug_integration() {
         }
     }
 }
+
+#[test]
+#[ignore]
+fn time_gather() {
+    let Ok(core) = std::env::var("SEARCH_CORE") else { return };
+    let core = std::path::PathBuf::from(core);
+    let t = std::time::Instant::now();
+    let n = crate::discovery::component_discovery::discover_components(&core).len();
+    eprintln!("discover_components {:?} {n}", t.elapsed());
+    let t = std::time::Instant::now();
+    super::gather::preload_core(&core, true, true);
+    eprintln!("preload {:?}", t.elapsed());
+    for _ in 0..2 {
+        let t = std::time::Instant::now();
+        let c = super::gather::gather_core_components(&core);
+        eprintln!("core components {:?} {}", t.elapsed(), c.len());
+        let t = std::time::Instant::now();
+        let h = super::gather::gather_hooks(&core);
+        eprintln!("hooks {:?} {}", t.elapsed(), h.len());
+    }
+    let names: Vec<String> = crate::discovery::component_discovery::discover_components(&core).into_values().flatten().collect();
+    let t = std::time::Instant::now();
+    for c in &names { let _ = crate::discovery::component_discovery::find_component_readme(&core, c); }
+    eprintln!("readmes {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    for c in &names { let _ = crate::discovery::component_discovery::resolve_import_path(&core, c); }
+    eprintln!("imports {:?}", t.elapsed());
+}

@@ -511,6 +511,7 @@ impl Run {
             opts: self.values.get(&node.full_name).cloned().unwrap_or_default(),
             opt_sources: self.sources.get(&node.full_name).cloned().unwrap_or_default(),
             parent_opts: ancestors(&node.full_name).into_iter().map(|a| (a.clone(), self.values.get(&a).cloned().unwrap_or_default())).collect(),
+            parent_sources: ancestors(&node.full_name).into_iter().map(|a| (a.clone(), self.sources.get(&a).cloned().unwrap_or_default())).collect(),
             all_args: all_args.clone(),
             globals: self.globals(),
             cwd: self.cwd.clone(),
@@ -763,4 +764,20 @@ pub fn output_help_for(full_name: &str, out: &mut Out, argv: &[String], cwd: &st
 pub fn help_for(full_name: &str, out: &mut Out, argv: &[String], cwd: &std::path::Path) -> CmdResult {
     output_help_for(full_name, out, argv, cwd);
     Err(Exit(out.exit_code))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn option_sources_follow_commander() {
+        let root = program::root();
+        let mut run = Run::new(vec![], std::env::temp_dir());
+        run.init_defaults(root);
+        assert_eq!(run.sources[""].get("detail"), Some(&OptSource::Default));
+        let _ = run.parse_options(root, vec!["docs".into(), "--detail".into(), "full".into()]);
+        assert_eq!(run.sources[""].get("detail"), Some(&OptSource::Cli));
+        assert_eq!(run.values[""].get("detail"), Some(&OptValue::Str("full".into())));
+    }
 }

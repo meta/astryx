@@ -1,0 +1,14 @@
+{
+ "id": "wide_legacy_list_with_from",
+ "args": [
+  "upgrade",
+  "--list",
+  "--from",
+  "0.1.0"
+ ],
+ "fixture": "upgrade-legacy",
+ "stdout": "",
+ "stderr": "`--list` cannot be combined with --from: it lists available codemods and does not run a migration.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,36 @@
+{
+ "id": "wide_themes_apply_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.6.0",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "upgrade-themes",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.6.0\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 11,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 4,\n    \"transformsApplied\": 4,\n    \"modifiedFiles\": [\n      \"src/themes/deep-sea/deepSeaTheme.doc.mjs\",\n      \"src/theme.ts\",\n      \"src/themes/brand/brandTheme.ts\",\n      \"src/themes/deep-sea/deepSeaTheme.ts\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "upgrade-themes/src/theme.ts",
+   "status": "changed",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport default defineTheme({\n  name: 'app',\n  components: {'code-block': {root: {}}, 'progress-bar': {root: {}}},\n});\n"
+  },
+  {
+   "path": "upgrade-themes/src/themes/brand/brandTheme.ts",
+   "status": "changed",
+   "text": "export const brandTheme = {\n  name: 'brand',\n  components: {\n    'nav-icon': {base: {}},\n    'hover-card': {root: {}},\n  },\n};\nexport const otherLibraryTheme = {name: 'other', components: {checkbox: {root: {}}}};\n"
+  },
+  {
+   "path": "upgrade-themes/src/themes/deep-sea/deepSeaTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'deep-sea',\n  displayName: 'Deep Sea',\n  description: 'Deep Sea theme copied into this app.',\n  maintained: false,\n};\n"
+  },
+  {
+   "path": "upgrade-themes/src/themes/deep-sea/deepSeaTheme.ts",
+   "status": "changed",
+   "text": "export const deepSeaTheme = {name: 'deep-sea', components: {'nav-icon': {base: {}}}};\n"
+  }
+ ]
+}

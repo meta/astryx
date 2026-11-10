@@ -1,0 +1,18 @@
+{
+ "id": "w_AcmeBadge_@integration",
+ "args": [
+  "search",
+  "AcmeBadge"
+ ],
+ "fixture": "integration",
+ "stdout": "Results for \"AcmeBadge\" (2)\n\nname:        AcmeBadge\ndomain:      component\npackage:     @acme/kit\nimport:      @acme/kit\ndescription: A small zorblax status badge.\ncommand:     npx @astryxdesign/cli@0.7.12 component AcmeBadge\n\nname:        authoring/building-blocks/components/component-imports\nsection:     export-the-component\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Components › Resolve the import › Export the component\ndescription: Apps copy the component doc's `import` field into their code, so that exact specifier must resolve from your packed package. `integration add` writes it together with an `exports` entry in package.json.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/components/component-imports export-the-component\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/components/component-imports --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover AcmeBadge\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

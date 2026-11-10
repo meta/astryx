@@ -1,0 +1,19 @@
+{
+ "id": "w_theme_--zh_@docsint",
+ "args": [
+  "docs",
+  "theme",
+  "--zh"
+ ],
+ "fixture": "docsint",
+ "stdout": "Theming\n如何使用和创建主题：请参阅\"使用主题\"了解如何应用主题，参阅\"创作主题\"了解如何创建和自定义主题。\n\npackage: @astryxdesign/cli\n\nquick-start              为应用添加主题 - 安装主题包，用 `<Theme>`（`import {Theme} from '@astryxdesign/core/theme'`）包\n                         裹应用，选择浅色或深色模式。完整指南--可用主题、集成主题、深色模式、嵌套主题和生产构建--请参阅\n                         `npx @astryxdesign/cli@0.7.12 docs use-a-theme`。\nacme-tips                Acme tips (@acme/docs) - Tip.\ncreating-a-custom-theme  创建自定义主题 - 使用 `defineTheme` 进行令牌覆盖、比例配置和组件样式覆盖。新建完整调色板时，请\n                         运行 `npx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json --out\n                         palette.generated.ts`，审核并提交生成的模块和收据，再使用 `import {palette} from\n                         './palette.generated';` 导入调色板，让语义令牌引用稳定的色阶，例如...\nicon-sizes               图标尺寸 - 主题在样式表中设置每个 Icon 尺寸的大小：在 `components.icon['size:sm']`（或 `xsm`、\n                         `md`、`lg`）上设置 `width` 和 `height`，即可调整该尺寸的图标，语义图标名称和直接传给 `Icon` 的\n                         SVG 组件都适用。请使用 `px` 或 `rem` 设置尺寸：语义图标会据此设置自身的字号，因此 `em` 值也会放\n                         大它的外框。主题未设置的尺寸在 16px 根字号下保持 12、16、20 或...\nlight-dark-mode          Dark mode (@acme/docs) - Replaced by Acme.\nintegration-themes       Integration themes - Install an integration and Astryx discovers its themes automatically.\n                         Import one with `npx @astryxdesign/cli@0.7.12 theme add <name> --package <integration>`. Use\n                         `theme eject` only for an independent source fork. For the full walkthrough, see `npx\n                         @astryxdesign/cli@0.7.12 docs...\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs theme <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs theme --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_theme_Quick-Start",
+ "args": [
+  "docs",
+  "theme",
+  "Quick-Start"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Section \"Quick-Start\" not found in \"theme\"\n\n  Wrap your app in a theme  (available section)\n  Create a custom theme  (available section)\n  Icon sizes  (available section)\n  Dark mode  (available section)\n  Integration themes  (available section)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "w_render_syntax",
+ "args": [
+  "experimental",
+  "render",
+  "syntax.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page does not compile (line 2): Unterminated JSX contents. (2:12)\n",
+ "exit": 1,
+ "files": []
+}

@@ -3,7 +3,7 @@
 //! answer with one typed `{type, package, data}` response.
 
 use super::deps::{self, LoadedIntegration, ReadOpts};
-use super::jsv::{has_key, s, truthy};
+use super::jsv::{s, truthy};
 use crate::cli::command::Suggestion;
 use crate::discovery::component_discovery::{
     self as cd, discover_components, discover_external_components_grouped, discover_valid_integration_components,
@@ -136,58 +136,11 @@ pub struct ExternalPackage {
 }
 
 /// `discoverExternalPackages(cwd)`.
-/// TEMP: replace with src/discovery/paths.rs discover_external_packages.
 pub fn discover_external_packages(cwd: &Path) -> Vec<ExternalPackage> {
-    let mut dir = cwd.to_path_buf();
-    let mut nm = None;
-    for _ in 0..5 {
-        let c = dir.join("node_modules");
-        if c.exists() {
-            nm = Some(c);
-            break;
-        }
-        match dir.parent() {
-            Some(p) => dir = p.to_path_buf(),
-            None => break,
-        }
-    }
-    let Some(nm) = nm else { return Vec::new() };
-    let mut out = Vec::new();
-    fn scan(d: &Path, out: &mut Vec<ExternalPackage>) {
-        if !d.exists() {
-            return;
-        }
-        for e in cd::list_dir_entries(d) {
-            if !e.is_dir || e.name.starts_with('.') {
-                continue;
-            }
-            let full = d.join(&e.name);
-            if e.name.starts_with('@') {
-                scan(&full, out);
-                continue;
-            }
-            let Ok(t) = std::fs::read_to_string(full.join("package.json")) else { continue };
-            let Ok(pkg) = serde_json::from_str::<Value>(&t) else { continue };
-            if pkg.get("name").and_then(|n| n.as_str()) == Some(CORE_PACKAGE) {
-                continue;
-            }
-            let Some(docs) = pkg.get("astryx").and_then(|a| a.get("docs")).filter(|d| truthy(Some(d))) else { continue };
-            let docs_dir = crate::discovery::module_exports::normalize(&full.join(crate::cli::format::js_string(docs)));
-            let category = pkg
-                .get("astryx")
-                .and_then(|a| a.get("category"))
-                .and_then(|c| c.as_str())
-                .map(String::from)
-                .unwrap_or_else(|| crate::cli::format::js_string(pkg.get("name").unwrap_or(&Value::Null)));
-            out.push(ExternalPackage {
-                name: crate::cli::format::js_string(pkg.get("name").unwrap_or(&Value::Null)),
-                category,
-                docs_dir,
-            });
-        }
-    }
-    scan(&nm, &mut out);
-    out
+    crate::discovery::paths::discover_external_packages(&cwd.to_string_lossy())
+        .into_iter()
+        .map(|e| ExternalPackage { name: e.name, category: e.category, docs_dir: PathBuf::from(e.docs_dir) })
+        .collect()
 }
 
 enum Scope {
@@ -593,8 +546,7 @@ fn batch_failure(selector: &str, err: ApiError) -> Value {
     }
     let not_found = matches!(err.code.as_str(), "ERR_UNKNOWN_COMPONENT" | "ERR_UNKNOWN_PACKAGE" | "ERR_NOT_FOUND");
     m.insert("status".into(), Value::String(if not_found { "not_found" } else { "error" }.into()));
-    let code = if crate::cli::error_codes::is_error_code(&err.code) { err.code } else { err.code };
-    m.insert("code".into(), Value::String(code));
+    m.insert("code".into(), Value::String(err.code));
     m.insert("error".into(), Value::String(err.message));
     if let Some(sg) = err.suggestions {
         m.insert("suggestions".into(), Value::Array(sg.iter().map(|x| x.to_json()).collect()));
@@ -849,9 +801,4 @@ pub(crate) fn valid_integration_components(i: &LoadedIntegration) -> Vec<cd::Int
 
 pub(crate) fn external_grouped(dir: &Path) -> cd::ComponentGroups {
     discover_external_components_grouped(dir)
-}
-
-#[allow(dead_code)]
-fn _unused(v: &Value) -> bool {
-    has_key(v, "x")
 }

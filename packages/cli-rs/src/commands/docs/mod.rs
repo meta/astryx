@@ -4,8 +4,9 @@ pub mod api;
 pub mod model;
 pub mod runtime;
 pub mod sections;
-pub mod suggest;
 pub mod text;
+
+pub use runtime::{link_resolver, LinkResolver};
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, OptSource, Out, Suggestion};
 use crate::json::Value;

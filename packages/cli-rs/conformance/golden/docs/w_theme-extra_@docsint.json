@@ -1,0 +1,12 @@
+{
+ "id": "w_theme-extra_@docsint",
+ "args": [
+  "docs",
+  "theme-extra"
+ ],
+ "fixture": "docsint",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"theme-extra\"\n\n  theme  (available topic)\n  author-a-theme  (available topic)\n  use-a-theme  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

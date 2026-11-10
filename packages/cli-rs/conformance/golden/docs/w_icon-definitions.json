@@ -1,0 +1,12 @@
+{
+ "id": "w_icon-definitions",
+ "args": [
+  "docs",
+  "icon-definitions"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"icon-definitions\"\n\n  cli/experimental/icon-definitions  (Every icon definition: what an icon stands for, and the shared name icon sets map their icons to.)\n",
+ "exit": 1,
+ "files": []
+}

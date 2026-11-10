@@ -44,10 +44,6 @@ pub fn md_cell(v: Option<&Value>) -> String {
     str_or_empty(v).replace('|', "\\|")
 }
 
-fn md(s: &str) -> String {
-    s.replace('|', "\\|")
-}
-
 fn format_props_table(props: Option<&Value>) -> String {
     let list = match props {
         Some(Value::Array(a)) if !a.is_empty() => a,
@@ -537,9 +533,4 @@ pub fn format_props(docs: &Value, component_name: &str) -> String {
         return sections.join("\n");
     }
     format!("No props documentation found for {component_name}.\n")
-}
-
-#[allow(dead_code)]
-fn unused(_: &str) -> String {
-    md("")
 }

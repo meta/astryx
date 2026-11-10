@@ -1,0 +1,27 @@
+{
+ "id": "wide_config_codemod",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.1.0",
+  "--codemod",
+  "migrate-layout-components-to-experimental",
+  "--apply"
+ ],
+ "fixture": "upgrade-config",
+ "stdout": "\nUpgrade\nFrom version: 0.1.0\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-config/src for source files...\nFound 2 source files\nApplying v0.1.2 codemods...\nApplying v0.1.3 codemods...\n  Migrate astryx.config layout.components to experimental.xle.components\n[ok]     [ok] astryx.config.mjs\nApplying v0.1.5 codemods...\nApplying v0.1.7 codemods...\nApplying v0.1.8 codemods...\nApplying v0.2.0 codemods...\nApplying v0.2.1 codemods...\nApplying v0.3.0 codemods...\nApplying v0.4.0 codemods...\nApplying v0.5.0 codemods...\nApplying v0.6.0 codemods...\nApplying v0.6.4 codemods...\nApplying v0.6.7 codemods...\nApplying v0.7.0 codemods...\nApplying v0.7.2 codemods...\nApplying v0.7.5 codemods...\nApplying v0.7.8 codemods...\n\n[ok] Done! Applied 1 change across 1 file.\nRun your type checker and tests to verify the changes.\n1 codemod to run\nUpgrade complete\n\n",
+ "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/upgrade-config\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "upgrade-config/astryx.config.mjs",
+   "status": "changed",
+   "text": "export default {\n  experimental: {\n    xle: {\n      components: {\n        Hero: {\n          from: \"./src/Hero.tsx\"\n        },\n\n        Footer: {from: './src/Footer.tsx'}\n      }\n    }\n  }\n};\n"
+  }
+ ]
+}

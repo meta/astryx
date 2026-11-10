@@ -1,0 +1,14 @@
+{
+ "id": "w_acme-handbook-deploying_--zh_--json_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook/deploying",
+  "--zh",
+  "--json"
+ ],
+ "fixture": "docsint",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"placement\": {\n      \"parent\": \"namespace:acme-handbook\"\n    },\n    \"name\": \"acme-handbook/deploying\",\n    \"description\": \"中文描述\",\n    \"type\": \"generic\",\n    \"title\": \"Deploying\",\n    \"sections\": [\n      {\n        \"id\": \"overview\",\n        \"title\": \"概述\",\n        \"package\": \"@acme/docs\",\n        \"content\": [\n          {\n            \"type\": \"prose\",\n            \"text\": \"中文正文\"\n          },\n          {\n            \"type\": \"code\",\n            \"lang\": \"bash\",\n            \"code\": \"npx astryx docs\"\n          }\n        ]\n      },\n      {\n        \"id\": \"rollback\",\n        \"title\": \"Rolling back\",\n        \"package\": \"@acme/docs\",\n        \"content\": [\n          {\n            \"type\": \"list\",\n            \"style\": \"unordered\",\n            \"items\": [\n              \"one {@link generic:nope}\",\n              \"two\"\n            ]\n          },\n          {\n            \"type\": \"prose\",\n            \"text\": \"[reference: \\\"command:docs\\\" names no doc]\"\n          }\n        ]\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs acme-handbook\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

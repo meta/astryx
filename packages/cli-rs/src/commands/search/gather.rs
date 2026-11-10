@@ -93,30 +93,89 @@ pub fn preload_docs(docs: Vec<(PathBuf, &'static str)>) {
     });
 }
 
+/// Map `f` over `items` on a few threads, keeping the order. The file
+/// lookups it runs are independent reads.
+pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
+    if items.len() < 16 || threads == 1 {
+        return items.iter().map(f).collect();
+    }
+    let chunk = items.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> =
+            items.chunks(chunk).map(|part| scope.spawn(|| part.iter().map(&f).collect::<Vec<R>>())).collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
+}
+
+/// Run `f` over a few contiguous chunks of `items` on threads and join the
+/// results in order.
+pub fn par_map_chunks<T: Sync, R: Send>(items: &[T], f: impl Fn(&[T]) -> Vec<R> + Sync) -> Vec<R> {
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
+    if items.len() < 64 || threads == 1 {
+        return f(items);
+    }
+    let chunk = items.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = items.chunks(chunk).map(|part| scope.spawn(|| f(part))).collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
+}
+
+/// What Core's file layout gives search, read once: each component's doc
+/// and import path, the family docs without a component, each hook's doc.
+struct CoreLayout {
+    names: Vec<String>,
+    readmes: Vec<Option<PathBuf>>,
+    imports: Vec<String>,
+    family_docs: Vec<PathBuf>,
+    hooks: Vec<(String, Option<PathBuf>)>,
+}
+
+fn core_layout(core_dir: &Path) -> std::sync::Arc<CoreLayout> {
+    static C: OnceLock<std::sync::Mutex<HashMap<PathBuf, std::sync::Arc<CoreLayout>>>> = OnceLock::new();
+    let cache = C.get_or_init(Default::default);
+    if let Some(l) = cache.lock().unwrap().get(core_dir) {
+        return l.clone();
+    }
+    let (names, hook_names) = std::thread::scope(|scope| {
+        let h = scope.spawn(|| discover_hooks(core_dir).into_values().flatten().collect::<Vec<String>>());
+        let n: Vec<String> = discover_components(core_dir).into_values().flatten().collect();
+        (n, h.join().unwrap())
+    });
+    let per: Vec<(Option<PathBuf>, String)> =
+        par_map(&names, |c| (find_component_readme(core_dir, c), resolve_import_path(core_dir, c)));
+    let (readmes, imports) = per.into_iter().unzip();
+    let src = core_dir.join("src");
+    let family_docs = if src.exists() {
+        list_dir(&src)
+            .into_iter()
+            .filter(|dir| !names.contains(dir))
+            .map(|dir| src.join(&dir).join(format!("{dir}.doc.mjs")))
+            .filter(|doc| doc.exists())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let hooks = hook_names.iter().cloned().zip(par_map(&hook_names, |h| find_hook_doc(core_dir, h))).collect();
+    let l = std::sync::Arc::new(CoreLayout { names, readmes, imports, family_docs, hooks });
+    cache.lock().unwrap().insert(core_dir.to_path_buf(), l.clone());
+    l
+}
+
 /// The docs Core's components and hooks read.
 fn core_doc_paths(core_dir: &Path, hooks: bool) -> Vec<(PathBuf, &'static str)> {
-    let names: Vec<String> = discover_components(core_dir).into_values().flatten().collect();
-    let mut out: Vec<(PathBuf, &'static str)> = names
+    let l = core_layout(core_dir);
+    let mut out: Vec<(PathBuf, &'static str)> = l
+        .readmes
         .iter()
-        .filter_map(|c| find_component_readme(core_dir, c))
+        .flatten()
         .filter(|p| p.to_string_lossy().ends_with(".doc.mjs"))
-        .map(|p| (p, "components"))
+        .map(|p| (p.clone(), "components"))
         .collect();
-    let src = core_dir.join("src");
-    if src.exists() {
-        for dir in list_dir(&src) {
-            let doc = src.join(&dir).join(format!("{dir}.doc.mjs"));
-            if !names.contains(&dir) && doc.exists() {
-                out.push((doc, "components"));
-            }
-        }
-    }
+    out.extend(l.family_docs.iter().map(|d| (d.clone(), "components")));
     if hooks {
-        for name in discover_hooks(core_dir).into_values().flatten() {
-            if let Some(p) = find_hook_doc(core_dir, &name) {
-                out.push((p, "hooks"));
-            }
-        }
+        out.extend(l.hooks.iter().filter_map(|(_, p)| p.clone()).map(|p| (p, "hooks")));
     }
     out
 }
@@ -210,10 +269,11 @@ fn family_places(docs: &Value, out: &mut HashMap<String, (String, usize)>) {
 
 /// `gatherCoreComponents(coreDir)`.
 pub fn gather_core_components(core_dir: &Path) -> Vec<Value> {
-    let names: Vec<String> = discover_components(core_dir).into_values().flatten().collect();
+    let layout = core_layout(core_dir);
+    let names = &layout.names;
     let mut places: HashMap<String, (String, usize)> = HashMap::new();
     let mut out = Vec::new();
-    for comp in &names {
+    for (ci, comp) in names.iter().enumerate() {
         let mut m = Map::new();
         m.insert("domain".into(), "component".into());
         m.insert("name".into(), Value::String(comp.clone()));
@@ -221,9 +281,9 @@ pub fn gather_core_components(core_dir: &Path) -> Vec<Value> {
         let mut description = Value::String(String::new());
         let mut guidance = Vec::new();
         let mut deprecated = None;
-        if let Some(readme) = find_component_readme(core_dir, comp) {
+        if let Some(readme) = &layout.readmes[ci] {
             if readme.to_string_lossy().ends_with(".doc.mjs") {
-                let loaded = load_module_doc(&readme, "components");
+                let loaded = load_module_doc(readme, "components");
                 let doc = family_member(&loaded, comp).unwrap_or(&loaded);
                 if super::cand::truthy(doc) {
                     keywords = arr(doc.get("keywords"));
@@ -241,18 +301,11 @@ pub fn gather_core_components(core_dir: &Path) -> Vec<Value> {
             m.insert("_deprecated".into(), d);
         }
         m.insert("_package".into(), CORE_PACKAGE.into());
-        m.insert("_import".into(), Value::String(resolve_import_path(core_dir, comp)));
+        m.insert("_import".into(), Value::String(layout.imports[ci].clone()));
         out.push(m);
     }
-    let src = core_dir.join("src");
-    if src.exists() {
-        for dir in list_dir(&src) {
-            let doc = src.join(&dir).join(format!("{dir}.doc.mjs"));
-            if names.contains(&dir) || !doc.exists() {
-                continue;
-            }
-            family_places(&load_module_doc(&doc, "components"), &mut places);
-        }
+    for doc in &layout.family_docs {
+        family_places(&load_module_doc(doc, "components"), &mut places);
     }
     out.into_iter()
         .map(|mut m| {
@@ -268,15 +321,17 @@ pub fn gather_core_components(core_dir: &Path) -> Vec<Value> {
 
 /// `gatherHooks(coreDir)`.
 pub fn gather_hooks(core_dir: &Path) -> Vec<Value> {
-    let names: Vec<String> = discover_hooks(core_dir).into_values().flatten().collect();
-    names
-        .into_iter()
-        .map(|name| {
+    let layout = core_layout(core_dir);
+    layout
+        .hooks
+        .iter()
+        .map(|(name, doc_path)| {
+            let name = name.clone();
             let mut keywords = Value::Array(Vec::new());
             let mut description = Value::String(String::new());
             let mut import = Value::String("@astryxdesign/core/hooks".into());
-            if let Some(doc_path) = find_hook_doc(core_dir, &name) {
-                let doc = load_module_doc(&doc_path, "hooks");
+            if let Some(doc_path) = doc_path {
+                let doc = load_module_doc(doc_path, "hooks");
                 if super::cand::truthy(&doc) {
                     keywords = arr(doc.get("keywords"));
                     description = description_of(&doc);

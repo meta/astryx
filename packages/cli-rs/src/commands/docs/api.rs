@@ -8,7 +8,6 @@
 
 use super::model::Variant;
 use super::sections::{find_doc_section, section_title_key, ReaderSection};
-use super::suggest::order_route_suggestions;
 use crate::json::{Map, Value};
 use std::collections::HashMap;
 
@@ -220,12 +219,9 @@ impl Docs {
     /// The project's docs: the CLI's own, plus whatever its integrations
     /// contribute.
     pub fn load_project(pm: &str, cwd: &str) -> Docs {
-        let found = super::runtime::discover(cwd);
-        if found.is_empty() {
-            return Self::load(pm);
-        }
+        let Some(catalog) = super::runtime::discover(cwd) else { return Self::load(pm) };
         let variant = Variant::get(pm);
-        let built = super::runtime::build(&variant, found);
+        let built = super::runtime::build(&variant, catalog);
         Docs {
             tree: Tree::new(built.nodes),
             topics: built.topics.into_iter().map(|v| Topic { v }).collect(),
@@ -264,7 +260,9 @@ impl Docs {
 
     fn resolve(&self, name: &str) -> Option<&Topic> {
         let key = name.to_lowercase();
-        self.topics.iter().find(|t| t.name().to_lowercase() == key)
+        self.topics.iter().find(|t| t.name().to_lowercase() == key).or_else(|| {
+            self.topics.iter().find(|t| t.v["aliases"].as_array().map(|a| a.iter().any(|x| x.as_str() == Some(key.as_str()))).unwrap_or(false))
+        })
     }
 
     fn topic_entry(t: &Topic) -> Entry {
@@ -398,7 +396,7 @@ impl Docs {
                 suggestions.push((t.name().to_string(), "available topic".into()));
             }
         }
-        suggestions = order_route_suggestions(topic, suggestions, !route_children);
+        suggestions = crate::text::suggest_order::order_route_suggestions(topic, &suggestions, &|s: &(String, String)| s.0.clone(), false, !route_children);
         if let Some(moved) = self.moved_route(topic) {
             let mut s = vec![(moved.route().to_string(), moved.summary().to_string())];
             s.extend(suggestions.into_iter().filter(|(n, _)| n != moved.route()));
@@ -481,6 +479,12 @@ impl Docs {
             m.insert("topic".into(), Value::from(t.name()));
             m.insert("description".into(), t.v.get("description").cloned().unwrap_or(Value::from("")));
             m.insert("package".into(), Value::from(t.package()));
+            if let Some(r) = t.v.get("replaces").filter(|r| r.is_string()) {
+                m.insert("replaces".into(), r.clone());
+                if let Some(p) = t.v.get("replacedPackage").filter(|r| r.is_string()) {
+                    m.insert("replacedPackage".into(), p.clone());
+                }
+            }
             entries.push(Value::Object(m));
         }
         let levels = depth.map(|d| d.unwrap_or(u64::MAX));

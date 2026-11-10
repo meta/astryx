@@ -1,0 +1,12 @@
+{
+ "id": "w_acme_@integration",
+ "args": [
+  "docs",
+  "acme"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"acme\"\n\n  acme-guide  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

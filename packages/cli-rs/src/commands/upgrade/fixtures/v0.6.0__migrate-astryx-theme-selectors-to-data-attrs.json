@@ -329,7 +329,7 @@
  },
  {
   "transform": "v0.6.0/migrate-astryx-theme-selectors-to-data-attrs",
-  "path": "/tmp/astryx-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
   "options": null,
   "source": "a:: { color: red; }\n",
   "output": "/* TODO(astryx upgrade): verify selector a::; the CSS selector parser could not migrate it safely. */\na:: { color: red; }\n",

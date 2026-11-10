@@ -957,7 +957,7 @@ mod tests {
 // ── Integrations ────────────────────────────────────────────────────────
 
 /// One loaded integration, the fields component discovery reads.
-/// TEMP: replace with the discovery lane's loaded-integration record.
+/// A typed view of a project integration record (`deps::integration_of`).
 #[derive(Debug, Clone, Default)]
 pub struct LoadedIntegration {
     pub name: String,
@@ -977,8 +977,8 @@ pub struct LoadedIntegration {
     pub load_error: bool,
 }
 
-/// Loads a component doc strictly (`loadComponentDoc(docPath)`), as data.
-/// TEMP: replace with the discovery lane's doc compiler.
+/// Loads a component doc strictly (`loadComponentDoc(docPath)`), as data,
+/// through the shared `readDocView`.
 pub fn load_component_doc_strict(doc_path: &Path) -> Result<Value, String> {
     crate::commands::component::deps::read_doc_view(
         doc_path,

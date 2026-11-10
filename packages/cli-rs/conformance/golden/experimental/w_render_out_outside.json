@@ -1,0 +1,15 @@
+{
+ "id": "w_render_out_outside",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "../escape.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The output /tmp/astryx-conformance/work/escape.html is outside the current folder; nothing was written. Write inside the folder you run the command from.\n",
+ "exit": 1,
+ "files": []
+}

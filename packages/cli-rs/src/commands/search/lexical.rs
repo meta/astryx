@@ -117,7 +117,7 @@ pub struct Lexical {
     pub results: Vec<SearchResult>,
 }
 
-struct Ranked {
+pub struct Ranked {
     result: SearchResult,
     priority: u8,
     key: f64,
@@ -214,38 +214,46 @@ pub fn rank_lexical(query: &str, limit: usize, catalog: &Catalog) -> Lexical {
         best
     };
 
-    let mut q = QueryCtx::new(&term, tokens, words);
-    let mut ranked: Vec<Ranked> = Vec::new();
-    for (ci, c) in all.iter().enumerate() {
-        let (hit, compound) = score_query(&mut q, c, false);
-        if let Some(hit) = hit {
-            let priority = domain_priority(&mut q, c, &hit, &compound);
-            ranked.push(Ranked {
-                result: SearchResult {
-                    domain: c.domain.clone(),
-                    name: if c.domain == "doc" {
-                        c.topic.clone().unwrap_or_else(|| c.name.clone())
-                    } else {
-                        c.result_name().to_string()
+    // Each candidate scores on its own; the scoring runs on a few threads,
+    // each with its own term cache, and keeps the catalog order.
+    let idx: Vec<usize> = (0..all.len()).collect();
+    let mut ranked: Vec<Ranked> = super::gather::par_map_chunks(&idx, |part: &[usize]| {
+        let mut q = QueryCtx::new(&term, tokens.clone(), words.clone());
+        let mut out = Vec::new();
+        for &ci in part {
+            let c = &all[ci];
+            let (hit, compound) = score_query(&mut q, c, false);
+            if let Some(hit) = hit {
+                let priority = domain_priority(&mut q, c, &hit, &compound);
+                out.push(Ranked {
+                    result: SearchResult {
+                        domain: c.domain.clone(),
+                        name: if c.domain == "doc" {
+                            c.topic.clone().unwrap_or_else(|| c.name.clone())
+                        } else {
+                            c.result_name().to_string()
+                        },
+                        package: c.package.clone(),
+                        section: if c.domain == "doc" { c.section.clone().filter(|s| !s.is_empty()) } else { None },
+                        score: hit.score,
+                        reason: hit.reason.clone(),
+                        matched: hit.matched,
+                        total: hit.total,
+                        cand: ci,
+                        description: c.description.clone(),
                     },
-                    package: c.package.clone(),
-                    section: if c.domain == "doc" { c.section.clone().filter(|s| !s.is_empty()) } else { None },
-                    score: hit.score,
-                    reason: hit.reason.clone(),
-                    matched: hit.matched,
-                    total: hit.total,
-                    cand: ci,
-                    description: c.description.clone(),
-                },
-                priority,
-                key: hit.score as f64,
-                alias: hit.alias,
-                alias_words: hit.alias_words,
-                span: named_span(c),
-                word: word_named(c),
-            });
+                    priority,
+                    key: hit.score as f64,
+                    alias: hit.alias,
+                    alias_words: hit.alias_words,
+                    span: named_span(c),
+                    word: word_named(c),
+                });
+            }
         }
-    }
+        out
+    });
+    let mut q = QueryCtx::new(&term, tokens, words);
     let inside = |inner: (usize, usize), outer: (usize, usize)| {
         outer.0 <= inner.0 && outer.1 >= inner.1 && outer.1 - outer.0 > inner.1 - inner.0
     };

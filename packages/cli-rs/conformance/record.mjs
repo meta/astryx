@@ -20,7 +20,8 @@ const opt = name => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const jobs = Number(opt('jobs') ?? Math.max(8, Math.floor(os.cpus().length / 2)));
+// The box is shared by many lanes: keep the default small.
+const jobs = Number(opt('jobs') ?? 16);
 const missingOnly = argv.includes('--missing');
 const once = argv.includes('--once');
 

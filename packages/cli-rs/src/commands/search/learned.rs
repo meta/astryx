@@ -18,11 +18,7 @@ pub struct SearcherWeights {
     pub sd: Vec<f64>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ClassifierWeights {
-    pub classes: Vec<String>,
-    pub tokens: HashMap<String, Vec<f64>>,
-}
+pub use crate::route::ClassifierWeights;
 
 #[derive(Debug, Clone, Default)]
 pub struct Card {
@@ -69,23 +65,11 @@ impl SearchData {
             }
         }
         let router_v = read_json(&dir.join("tree.weights.json"));
-        let classes = router_v["classes"]
-            .as_array()
-            .map(|a| a.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect())
-            .unwrap_or_default();
-        let mut tokens = HashMap::new();
-        if let Some(m) = router_v["tokens"].as_object() {
-            for (k, v) in m {
-                tokens.insert(
-                    k.clone(),
-                    v.as_array().map(|a| a.iter().map(|x| x.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default(),
-                );
-            }
-        }
+        let router = ClassifierWeights::from_json(&router_v).expect("router weights");
         let sw = |f: &str| -> SearcherWeights { serde_json::from_value(read_json(&dir.join(f))).expect("weights") };
         SearchData {
             cards,
-            router: ClassifierWeights { classes, tokens },
+            router,
             main: sw("_main-searcher.weights.json"),
             doc: sw("_doc-searcher.weights.json"),
             template: sw("_template-searcher.weights.json"),
@@ -93,23 +77,7 @@ impl SearchData {
     }
 }
 
-// ── foundation/route classify (TEMP: replace with src/route.rs) ─────
-
-/// `classify(weights, tokens)`: softmax over summed rows.
-pub fn classify(weights: &ClassifierWeights, tokens: &[String]) -> Vec<f64> {
-    let mut score = vec![0.0f64; weights.classes.len()];
-    for t in tokens {
-        if let Some(row) = weights.tokens.get(t) {
-            for k in 0..score.len() {
-                score[k] += row.get(k).copied().unwrap_or(f64::NAN);
-            }
-        }
-    }
-    let top = score.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let e: Vec<f64> = score.iter().map(|x| crate::js::jsmath::exp(x - top)).collect();
-    let sum = e.iter().fold(0.0, |a, b| a + b);
-    e.iter().map(|x| x / sum).collect()
-}
+use crate::route::classify;
 
 // ── _entries.mjs ────────────────────────────────────────────────────
 
@@ -182,16 +150,14 @@ pub fn build_table(all: &[Candidate], cards: &HashMap<String, Card>) -> EntryTab
     }
     let mut ids = by_order;
     ids.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-    let mut docs: [Vec<Vec<(String, f64)>>; 3] = [Vec::new(), Vec::new(), Vec::new()];
-    let mut domain = Vec::new();
-    let mut names = Vec::new();
-    for id in &ids {
+    // Each entry's word counts are its own: work them out on a few threads.
+    let per: Vec<(usize, Vec<String>, [Vec<(String, f64)>; 3])> = super::gather::par_map(&ids, |id: &String| {
         let group = &by[id];
         let plain = id.split('|').next().unwrap().split('#').next().unwrap();
         let colon = plain.find(':').unwrap_or(0);
         let (d, name) = (&plain[..colon], &plain[colon + 1..]);
         let nw: Vec<String> = name_words(name).iter().map(|w| fold(w)).collect();
-        domain.push(DOMAINS.iter().position(|x| *x == d).unwrap_or(usize::MAX));
+        let dom = DOMAINS.iter().position(|x| *x == d).unwrap_or(usize::MAX);
         let mut text: Vec<&str> = Vec::new();
         for &ci in group {
             let c = &all[ci];
@@ -207,9 +173,9 @@ pub fn build_table(all: &[Candidate], cards: &HashMap<String, Card>) -> EntryTab
         let card = if d == "component" || d == "hook" { cards.get(name) } else { None };
         let mut name_list = nw.clone();
         name_list.push(nw.concat());
-        docs[0].push(counts(name_list));
-        docs[1].push(counts(qwords(&text.join(" ")).iter().map(|w| fold(w)).collect()));
-        docs[2].push(counts(match card {
+        let name_counts = counts(name_list);
+        let desc_counts = counts(qwords(&text.join(" ")).iter().map(|w| fold(w)).collect());
+        let card_counts = counts(match card {
             Some(card) => {
                 let mut parts = vec![card.what.clone()];
                 parts.extend(card.synonyms.iter().cloned());
@@ -217,8 +183,18 @@ pub fn build_table(all: &[Candidate], cards: &HashMap<String, Card>) -> EntryTab
                 qwords(&parts.join(" ")).iter().map(|w| fold(w)).collect()
             }
             None => Vec::new(),
-        }));
+        });
+        (dom, nw, [name_counts, desc_counts, card_counts])
+    });
+    let mut docs: [Vec<Vec<(String, f64)>>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    let mut domain = Vec::new();
+    let mut names = Vec::new();
+    for (dom, nw, [a, b, c]) in per {
+        domain.push(dom);
         names.push(nw);
+        docs[0].push(a);
+        docs[1].push(b);
+        docs[2].push(c);
     }
     let n = ids.len() as f64;
     let fields = docs.map(|field_docs| {
@@ -630,14 +606,20 @@ fn names_loosely(c: &Candidate, loose: &str) -> bool {
 }
 
 /// `rankWith(request, catalog, weights)`.
-pub fn rank_with(query: &str, limit: usize, catalog: &Catalog, data: &SearchData, weights: &SearcherWeights, table: &dyn Fn() -> std::rc::Rc<EntryTable>) -> Lexical {
+pub fn rank_with(query: &str, limit: usize, catalog: &Catalog, data: &SearchData, weights: &SearcherWeights, table_fn: &dyn Fn() -> std::rc::Rc<EntryTable>) -> Lexical {
     let term = lower(js_trim(query));
     let loose = loose_name(&term);
     if catalog.all.iter().any(|c| names_whole(c, &term) || names_loosely(c, &loose)) {
         return rank_lexical(query, limit, catalog);
     }
-    let table = table();
-    let lexical = rank_lexical(query, usize::MAX, catalog);
+    // The entry table does not depend on the query's matches: build it
+    // beside the lexical ranking.
+    let (table, lexical) = std::thread::scope(|scope| {
+        let t = scope.spawn(|| build_table(&catalog.all, &data.cards));
+        let lexical = rank_lexical(query, usize::MAX, catalog);
+        (t.join().unwrap(), lexical)
+    });
+    let _ = table_fn;
     let route = classify(&data.router, &router_tokens(query));
     let rows = signals(&table, query, &lexical.results, &route);
     let order = rank(&table, &rows, weights);

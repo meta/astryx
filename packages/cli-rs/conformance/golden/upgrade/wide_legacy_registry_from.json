@@ -1,0 +1,15 @@
+{
+ "id": "wide_legacy_registry_from",
+ "args": [
+  "upgrade",
+  "--registry",
+  "--from",
+  "0.1.0",
+  "--force"
+ ],
+ "fixture": "upgrade-legacy",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "`--registry` cannot be combined with --from, --force.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "tb_icons_inline-ts",
+ "args": [
+  "theme",
+  "build",
+  "themes/icons/inline.ts"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Theme sets an icon registry but no import for the registry was found. The generated module cannot preserve inline registries because they may contain React elements, which cannot be serialized. Move the registry to its own module and import it into the theme file.\n",
+ "exit": 1,
+ "files": []
+}

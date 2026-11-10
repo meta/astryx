@@ -13,7 +13,7 @@ use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out};
 use crate::cli::format::{code, json_fields, list as list_block, record, records, section, text, Block, Field, Fields};
 use crate::discovery::component_discovery::{discover_components, find_component_readme, resolve_import_path, CORE_PACKAGE};
 use crate::json::Value;
-use api::{Name, Options, Response};
+use api::{Name, Options};
 use format::*;
 use jsv::{s, tpl};
 use std::collections::{HashMap, HashSet};
@@ -132,8 +132,6 @@ fn format_brief_all(core_dir: &Path, zh: bool, lang: Option<&str>, theme: Option
     output.join("\n")
 }
 
-fn summarize_json(_r: &Response) {}
-
 /// The `component` command handler.
 pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
     let run = crate::cli::env::cli_invocation(&inv.cwd);
@@ -177,7 +175,6 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
         Ok(r) => r,
         Err(e) => return out.cli_error(&e.message, ErrorOpts::code(&e.code).suggestions(e.suggestions.unwrap_or_default())),
     };
-    summarize_json(&result);
     if result.kind == "component.batch" && jsv::arr(result.data.get("results")).iter().any(|r| s(r.get("status")) != Some("found")) {
         out.exit_code = 1;
     }

@@ -24,6 +24,8 @@ pub mod v0_7_x;
 pub mod v0_6_0_css;
 #[path = "v0_7_0_theme_surface.rs"]
 pub mod v0_7_0_theme_surface;
+#[path = "v0_6_x_project.rs"]
+pub mod v0_6_x_project;
 
 pub const ALL: &[(&str, TransformFn)] = &[
     ("v0.3.0/migrate-authoring-imports", v0_3_0::migrate_authoring_imports),
@@ -55,4 +57,7 @@ pub const ALL: &[(&str, TransformFn)] = &[
 ];
 
 /// `codemodType: 'project'` transforms, keyed like `ALL`.
-pub const PROJECT: &[(&str, ProjectFn)] = &[];
+pub const PROJECT: &[(&str, ProjectFn)] = &[
+    ("v0.6.4/migrate-theme-catalog-to-descriptors", v0_6_x_project::migrate_theme_catalog_to_descriptors),
+    ("v0.6.7/migrate-copied-themes-to-descriptors", v0_6_x_project::migrate_copied_themes_to_descriptors),
+];

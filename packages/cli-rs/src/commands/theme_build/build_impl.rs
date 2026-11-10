@@ -585,7 +585,7 @@ pub fn theme_build_internal(
     }
     let source = if compact { format!("{rel_source}: ") } else { String::new() };
 
-    let (core, theme_js, theme) = with_live(|s| -> Result<(Core, JsValue, Value), ApiError> {
+    let (core, theme_js, theme, export_name, before) = with_live(|s| -> Result<(Core, JsValue, Value, String, String), ApiError> {
         let core = select_core(s, cwd, cli_root)?;
 
         // Load the theme.
@@ -616,7 +616,7 @@ pub fn theme_build_internal(
         }
         let theme_js: JsValue = loaded.theme.clone().into();
         let theme = s.to_value(&theme_js).map_err(|m| err(m, "ERR_THEME_LOAD"))?;
-        Ok((core, theme_js, theme))
+        Ok((core, theme_js, theme, loaded.export_name, before))
     })?;
     let name_v = theme.get("name");
     if !truthy(name_v) {
@@ -629,11 +629,34 @@ pub fn theme_build_internal(
     };
     sanitize_name(&name).map_err(|m| err(m, "ERR_PATH_TRAVERSAL"))?;
 
+    use super::module::{has_function_entries, icon_entries, slot_values};
+    let id = to_identifier(&name);
+    let function_entries = has_function_entries(icon_entries(Some(&theme))) || has_function_entries(icon_entries(theme.get("extends")));
+    let reserved = |nodes: bool| {
+        let mut v = vec![format!("{id}Theme")];
+        if nodes {
+            v.push(format!("{id}ThemeIconNodes"));
+            v.push(format!("{id}ThemeIconEntries"));
+        }
+        v
+    };
+    let component_icon_names = vec![format!("{id}ThemeComponentIconValues"), format!("{id}ThemeComponentIconView"), format!("{id}ThemeMergeComponentIcons")];
     let has_icons = key_count(theme.get("icons")) > 0 || key_count(theme.get("extends").and_then(|e| e.get("icons"))) > 0;
-    if has_icons {
-        return Err(err("theme build: icon registries are not ported yet", "ERR_THEME_INVALID"));
-    }
-
+    let raw_input = theme.as_object().map(|m| m.contains_key("extends")).unwrap_or(false);
+    let icon_opts = |has: bool, fe: bool, field: &'static str, merge: String, reserved_names: Vec<String>| super::icon_imports::Options {
+        has_icons: has,
+        function_entries: fe,
+        field,
+        merge_name: merge,
+        reserved: reserved_names,
+        raw_input,
+        entry_source: before.clone(),
+    };
+    let mut icon_info = super::icon_imports::resolve_icon_imports(
+        &file_path,
+        Some(&export_name),
+        &icon_opts(has_icons, function_entries, "icons", "mergeComponentIcons".into(), [reserved(function_entries), component_icon_names.clone()].concat()),
+    )?;
     let mut warnings: Vec<String> = Vec::new();
     for w in super::validate::component_override_warnings(&theme, cli_root) {
         log.warn(&format!("  [warn] {source}{w}"));
@@ -671,6 +694,36 @@ pub fn theme_build_internal(
         let resolved = s.to_value(&resolved_js).map_err(|m| err(m, "ERR_THEME_INVALID"))?;
         Ok((resolved_js, resolved))
     })?;
+    if icon_info.is_none() && key_count(resolved.get("icons")) > 0 {
+        let rfe = has_function_entries(icon_entries(Some(&resolved)));
+        icon_info = super::icon_imports::resolve_icon_imports(
+            &file_path,
+            Some(&export_name),
+            &icon_opts(true, rfe, "icons", "mergeComponentIcons".into(), [reserved(rfe), component_icon_names.clone()].concat()),
+        )?;
+    }
+    if icon_info.as_ref().map(|i| i.icons_specifier_local_name.is_none()).unwrap_or(false) && key_count(resolved.get("icons")) == 0 {
+        icon_info = None;
+    }
+    if icon_info.as_ref().map(|i| i.icons_specifier_import_path.is_none()).unwrap_or(false) && opts.icons_specifier.is_some() {
+        return Err(err(
+            "The icon registry is inherited through a theme import. To use --icons-specifier, import the registry directly and set icons to that binding.",
+            "ERR_THEME_INVALID",
+        ));
+    }
+    let mut component_icon_info = None;
+    if has_function_entries(slot_values(Some(&resolved))) {
+        let mut names = [reserved(true), component_icon_names.clone()].concat();
+        if let Some(i) = &icon_info {
+            names.extend(i.imports.iter().map(|b| b.2.clone()));
+            names.push(i.export_name.clone());
+        }
+        component_icon_info = super::icon_imports::resolve_icon_imports(
+            &file_path,
+            Some(&export_name),
+            &icon_opts(true, true, "componentIcons", format!("{id}ThemeMergeComponentIcons"), names),
+        )?;
+    }
     let enrollment = super::validate::adaptation_enrollment_errors(&resolved, cli_root);
     if !enrollment.is_empty() {
         return Err(err(enrollment.join("\n"), "ERR_THEME_INVALID"));
@@ -817,8 +870,8 @@ pub fn theme_build_internal(
     let header = |lang: &str| generated_header(&rel_source, lang, &build_command, &cli_version, &core_version);
     let css_content = header("css") + &css;
     let css_dts_content = header("ts") + "export {};\n";
-    let js_content = header("js") + &super::module::built_module(&resolved, &format_cli_command(cwd, ""))?;
-    let dts_content = header("ts") + &super::module::built_types(&resolved, variants_file.as_deref());
+    let js_content = header("js") + &super::module::built_module(&resolved, &format_cli_command(cwd, ""), icon_info.as_ref(), opts.icons_specifier.as_deref(), component_icon_info.as_ref())?;
+    let dts_content = header("ts") + &super::module::built_types(&resolved, icon_info.as_ref(), variants_file.as_deref());
 
     let mut unloaded = super::fonts::collect_unloaded_fonts(&resolved);
     for v in super::validate::adaptation_rule_values(&resolved) {

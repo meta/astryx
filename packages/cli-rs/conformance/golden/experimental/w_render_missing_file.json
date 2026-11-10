@@ -1,0 +1,13 @@
+{
+ "id": "w_render_missing_file",
+ "args": [
+  "experimental",
+  "render",
+  "nothere.tsx"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: nothere.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

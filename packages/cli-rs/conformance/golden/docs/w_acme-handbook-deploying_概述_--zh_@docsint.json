@@ -1,0 +1,20 @@
+{
+ "id": "w_acme-handbook-deploying_概述_--zh_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook/deploying",
+  "概述",
+  "--zh"
+ ],
+ "fixture": "docsint",
+ "stdout": "package: @acme/docs\n\n## 概述\n\n中文正文\n\n```bash\nnpx astryx docs\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying --index\nNext: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying rollback\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

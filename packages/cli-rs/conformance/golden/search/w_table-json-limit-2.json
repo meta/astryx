@@ -1,0 +1,15 @@
+{
+ "id": "w_table-json-limit-2",
+ "args": [
+  "search",
+  "table",
+  "--json",
+  "--limit",
+  "2"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"table\",\n    \"matchCount\": 552,\n    \"results\": [\n      {\n        \"domain\": \"component\",\n        \"name\": \"Table\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 100,\n        \"reason\": \"exact name\",\n        \"description\": \"Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.\",\n        \"import\": \"@astryxdesign/core/Table\",\n        \"command\": \"astryx component Table\"\n      },\n      {\n        \"domain\": \"template\",\n        \"name\": \"table\",\n        \"package\": \"@astryxdesign/core\",\n        \"score\": 100,\n        \"reason\": \"exact name\",\n        \"description\": \"Flat row collection where columns sort, rows select into a bulk-action toolbar, and each row carries an overflow menu. Sortable but ungrouped, with no detail pane, the baseline shape.\",\n        \"displayName\": \"Simple Table\",\n        \"kind\": \"page\",\n        \"command\": \"astryx template table --type page\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

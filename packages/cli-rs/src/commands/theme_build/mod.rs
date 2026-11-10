@@ -8,6 +8,7 @@ pub mod build_impl;
 pub mod coredocs;
 pub mod fmt;
 pub mod fonts;
+pub mod icon_imports;
 pub mod module;
 pub mod validate;
 pub mod watch;

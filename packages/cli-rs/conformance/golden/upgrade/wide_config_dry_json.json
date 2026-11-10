@@ -1,0 +1,14 @@
+{
+ "id": "wide_config_dry_json",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.1.0",
+  "--json"
+ ],
+ "fixture": "upgrade-config",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.status\",\n  \"data\": {\n    \"status\": \"config_fixable\",\n    \"from\": \"0.1.0\",\n    \"to\": \"0.7.12\",\n    \"configError\": \"astryx.config is invalid: (root): Unrecognized key: \\\"layout\\\"\",\n    \"configCodemods\": [\n      \"migrate-layout-components-to-experimental\"\n    ],\n    \"suggestedCommand\": \"astryx upgrade --from 0.1.0 --codemod migrate-layout-components-to-experimental --apply\",\n    \"message\": \"Your astryx.config currently fails strict validation, but a pending config codemod would repair it. This dry run previewed the fix without writing. Re-run with --apply to apply it, or run just the config codemod(s) now:\",\n    \"note\": \"Integrations are skipped in this preview; they will be processed on the --apply run.\",\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

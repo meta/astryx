@@ -2,7 +2,12 @@
 //! render.mjs` and `api/render/render.mjs` (argument checks, reading the
 //! input, the output's confinement). Rendering itself is not cloned yet.
 
+pub mod charts;
 pub mod css;
+pub mod page;
+pub mod reverse;
+pub mod texts;
+pub mod worker;
 
 use crate::cli::command::{CmdResult, ErrorOpts, Invocation, Out, Suggestion};
 use crate::discovery::nodepath as np;
@@ -20,7 +25,7 @@ pub struct RenderError {
     pub code: &'static str,
 }
 
-fn err(message: impl Into<String>, suggestions: Vec<Suggestion>, code: &'static str) -> RenderError {
+pub(crate) fn err(message: impl Into<String>, suggestions: Vec<Suggestion>, code: &'static str) -> RenderError {
     RenderError { message: message.into(), suggestions, code }
 }
 
@@ -34,9 +39,94 @@ pub fn run(inv: &Invocation, out: &mut Out) -> CmdResult {
         overwrite: inv.flag("overwrite"),
     };
     match render(file, &cwd, &opts) {
-        Ok(()) => Ok(()),
-        Err(e) => out.cli_error(&e.message, ErrorOpts::code(e.code).suggestions(e.suggestions)),
+        Ok((kind, data)) => {
+            if inv.json() {
+                out.json_out(kind, None, data, None);
+            } else {
+                print_result(out, kind, &data, &inv.cwd);
+            }
+            Ok(())
+        }
+        Err(e) => out.cli_error(&e.message, ErrorOpts::code(&e.code).suggestions(e.suggestions)),
     }
+}
+
+fn kb(n: u64) -> String {
+    if n < 1024 {
+        format!("{n} B")
+    } else {
+        format!("{} KB", page::to_fixed1(n as f64 / 1024.0))
+    }
+}
+
+fn print_result(out: &mut Out, kind: &str, d: &crate::json::Value, cwd: &std::path::Path) {
+    use crate::cli::format::{list, record, section, text, Field};
+    let s = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let strs = |k: &str| -> Vec<String> {
+        d.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+    };
+    let n = |k: &str| d.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
+    if kind == "render.page" {
+        let sheets = strs("stylesheets").join(", ");
+        let fields: Vec<(String, Field)> = vec![
+            ("input".into(), Field::Str(s("input"))),
+            ("output".into(), Field::Str(s("output"))),
+            ("bytes".into(), Field::Str(kb(n("bytes")))),
+            ("cssBytes".into(), Field::Str(kb(n("cssBytes")))),
+            ("classes".into(), Field::Str(n("classes").to_string())),
+            ("images".into(), Field::Str(n("images").to_string())),
+            ("files".into(), Field::Str(strs("files").join(", "))),
+            ("stylesheets".into(), Field::Str(if sheets.is_empty() { "none".into() } else { sheets })),
+        ];
+        let mut blocks = vec![section(&format!("Rendered {}", s("input")), None), record(&fields)];
+        let warnings: Vec<String> = d
+            .get("warnings")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().map(|w| w["message"].as_str().unwrap_or("").to_string()).collect())
+            .unwrap_or_default();
+        if !warnings.is_empty() {
+            blocks.push(section("Warnings", None));
+            blocks.push(list(&warnings));
+        }
+        blocks.push(text(&format!(
+            "Give it back: {} experimental render --reverse {}",
+            crate::cli::env::cli_invocation(cwd),
+            s("output")
+        )));
+        out.emit(&blocks);
+        return;
+    }
+    let mode = s("mode");
+    let rebuilt = mode == "rebuilt";
+    let mut fields: Vec<(String, Field)> = vec![
+        ("input".into(), Field::Str(s("input"))),
+        ("mode".into(), Field::Str(mode.clone())),
+        ("exact".into(), Field::Str(d.get("exact").map(crate::cli::format::js_string).unwrap_or_default())),
+        ("output".into(), Field::Str(s("output"))),
+        ("files".into(), Field::Str(strs("files").join(", "))),
+    ];
+    if !strs("missing").is_empty() {
+        fields.push(("missing".into(), Field::Str(strs("missing").join(", "))));
+    }
+    if rebuilt {
+        let comps = strs("components").join(", ");
+        fields.push(("components".into(), Field::Str(if comps.is_empty() { "none".into() } else { comps })));
+        fields.push(("elements".into(), Field::Str(d.get("elements").map(crate::cli::format::js_string).unwrap_or_else(|| "0".into()))));
+        if !strs("omitted").is_empty() {
+            fields.push(("omitted".into(), Field::Str(strs("omitted").join(", "))));
+        }
+        if !strs("unknown").is_empty() {
+            fields.push(("unknown".into(), Field::Str(strs("unknown").join(", "))));
+        }
+    }
+    let mut blocks = vec![
+        section(&if mode == "embedded" { format!("Restored {}", s("output")) } else { format!("Rebuilt {}", s("output")) }, None),
+        record(&fields),
+    ];
+    if rebuilt {
+        blocks.push(text("The file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use."));
+    }
+    out.emit(&blocks);
 }
 
 pub struct RenderOptions {
@@ -65,7 +155,7 @@ pub fn shown(cwd: &str, file: &str) -> String {
     }
 }
 
-fn render(file: &str, cwd: &str, o: &RenderOptions) -> Result<(), RenderError> {
+fn render(file: &str, cwd: &str, o: &RenderOptions) -> Result<(&'static str, crate::json::Value), RenderError> {
     if file.trim().is_empty() {
         return Err(if o.reverse {
             err(
@@ -117,8 +207,7 @@ fn render(file: &str, cwd: &str, o: &RenderOptions) -> Result<(), RenderError> {
                 ));
             }
         }
-        read_input(&input, cwd)?;
-        return Err(not_cloned());
+        return reverse::reverse_to_file(cwd, &input, output.as_deref(), o.overwrite).map(|d| ("render.reverse", d));
     }
     if !page_ext(&input) {
         return Err(if is_html(&input) {
@@ -151,17 +240,114 @@ fn render(file: &str, cwd: &str, o: &RenderOptions) -> Result<(), RenderError> {
         let dot = input.rfind('.').unwrap_or(input.len());
         format!("{}.html", &input[..dot])
     });
-    read_input(&input, cwd)?;
-    confined(&target, cwd, "The output")?;
-    Err(not_cloned())
+    render_to_file(cwd, &input, &target, o.title.as_deref()).map(|d| ("render.page", d))
 }
 
-// TEMP: rendering and reversing are not cloned yet.
-fn not_cloned() -> RenderError {
-    err("experimental render is not cloned yet", vec![], "ERR_UNKNOWN")
+/// `renderToFile({cwd, input, output, title})`.
+fn render_to_file(cwd: &str, input: &str, output: &str, title: Option<&str>) -> Result<crate::json::Value, RenderError> {
+    use crate::json::{Map, Value};
+    read_input(input, cwd)?;
+    confined(output, cwd, "The output")?;
+    let dir = np::dirname(input);
+    let served = if crate::discovery::release::run_choice(&dir).in_project {
+        None
+    } else {
+        crate::discovery::paths::require_core_dir(&dir).ok().map(|d| page::Served { dir: d, integrations: vec![] })
+    };
+    let root = {
+        let mut d = dir.clone();
+        loop {
+            if np::exists(&np::join2(&d, "package.json")) {
+                break d;
+            }
+            let up = np::dirname(&d);
+            if up == d {
+                break dir.clone();
+            }
+            d = up;
+        }
+    };
+    let as_err = |e: page::RenderError| {
+        let suggestions = match (&e.code[..], &e.package) {
+            ("ERR_RENDER_MISSING_DEPENDENCY", Some(p)) => vec![Suggestion::new(format!("npm install {p}"), "install the package the page imports")],
+            _ => vec![],
+        };
+        RenderError { message: e.message, suggestions, code: leak(&e.code) }
+    };
+    let msg = worker::run_worker(input, &root, served.as_ref(), 60_000).map_err(as_err)?;
+    let rendered = page::render_page(input, title, &crate::cli::env::cli_version(), served.as_ref(), msg).map_err(as_err)?;
+    refuse_symlinks(output, cwd)?;
+    if let Ok(m) = std::fs::metadata(output) {
+        if m.is_file() {
+            let head: String = std::fs::read(output).map(|b| String::from_utf8_lossy(&b[..b.len().min(4096 * 4)]).chars().take(4096).collect()).unwrap_or_default();
+            let ok = head.contains("<meta name=\"generator\" content=\"Astryx ") || head.contains("<meta name=\"generator\" content=\"Astryx\"");
+            if !ok {
+                return Err(err(
+                    format!("{} already exists and was not written by a render, so it is not replaced; nothing was written. Choose another --out.", shown(cwd, output)),
+                    vec![],
+                    "ERR_FILE_EXISTS",
+                ));
+            }
+        }
+    }
+    if let Some(parent) = std::path::Path::new(output).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(output, &rendered.html)
+        .map_err(|e| err(format!("Could not write {}: {e}", shown(cwd, output)), vec![], "ERR_WRITE_FAILED"))?;
+    let mut d = Map::new();
+    d.insert("input".into(), Value::String(shown(cwd, input)));
+    d.insert("output".into(), Value::String(shown(cwd, output)));
+    d.insert("bytes".into(), Value::from(rendered.html.len()));
+    d.insert("files".into(), Value::Array(rendered.files.iter().cloned().map(Value::String).collect()));
+    d.insert("stylesheets".into(), Value::Array(rendered.stylesheets.iter().cloned().map(Value::String).collect()));
+    d.insert("classes".into(), Value::from(rendered.classes));
+    d.insert("cssBytes".into(), Value::from(rendered.css_bytes));
+    d.insert("images".into(), Value::from(rendered.images));
+    d.insert(
+        "warnings".into(),
+        Value::Array(
+            rendered
+                .warnings
+                .iter()
+                .map(|w| {
+                    let mut m = Map::new();
+                    m.insert("code".into(), Value::String(w.code.into()));
+                    m.insert("message".into(), Value::String(w.message.clone()));
+                    Value::Object(m)
+                })
+                .collect(),
+        ),
+    );
+    Ok(Value::Object(d))
 }
 
-fn read_input(file: &str, cwd: &str) -> Result<Vec<u8>, RenderError> {
+fn leak(s: &str) -> &'static str {
+    Box::leak(s.to_string().into_boxed_str())
+}
+
+/// The symbolic-link half of `refuseProtected([output], cwd)`.
+pub(crate) fn refuse_symlinks(file: &str, cwd: &str) -> Result<(), RenderError> {
+    let mut current = cwd.to_string();
+    for part in np::relative(cwd, file).split('/') {
+        current = np::join2(&current, part);
+        match std::fs::symlink_metadata(&current) {
+            Err(_) => break,
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err(err(
+                    format!("{} is reached through a symbolic link ({}); nothing was written.", shown(cwd, file), shown(cwd, &current)),
+                    vec![],
+                    "ERR_PATH_TRAVERSAL",
+                ))
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+
+pub(crate) fn read_input(file: &str, cwd: &str) -> Result<Vec<u8>, RenderError> {
     match std::fs::metadata(file) {
         Ok(m) if m.is_file() => {
             std::fs::read(file).map_err(|_| err(format!("{} does not exist", shown(cwd, file)), vec![], "ERR_FILE_NOT_FOUND"))
@@ -171,7 +357,7 @@ fn read_input(file: &str, cwd: &str) -> Result<Vec<u8>, RenderError> {
 }
 
 /// `assertWithin(file, cwd, {allowAbsolute: true})`, symlinks followed.
-fn confined(file: &str, cwd: &str, what: &str) -> Result<String, RenderError> {
+pub(crate) fn confined(file: &str, cwd: &str, what: &str) -> Result<String, RenderError> {
     let outside = || {
         err(
             format!(
@@ -227,6 +413,10 @@ fn canonical(p: &str) -> String {
         }
     }
     p.to_string()
+}
+
+pub(crate) fn runner_picks_up_pub(segments: &[&str]) -> bool {
+    runner_picks_up(segments)
 }
 
 fn runner_picks_up(segments: &[&str]) -> bool {

@@ -1,0 +1,12 @@
+{
+ "id": "w_xyz-tokens",
+ "args": [
+  "docs",
+  "xyz-tokens"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"xyz-tokens\"\n\n  tokens  (docs namespace)\n",
+ "exit": 1,
+ "files": []
+}

@@ -55,6 +55,16 @@ export function ensureDirs() {
     }
   }
   ensureShim();
+  // Scratch folders of runs that died (named <pid>-<n>).
+  for (const name of fs.readdirSync(SCRATCH)) {
+    const pid = Number(name.split('-')[0]);
+    if (!pid || pid === process.pid) continue;
+    try {
+      process.kill(pid, 0);
+    } catch {
+      removeScratchSync(path.join(SCRATCH, name));
+    }
+  }
 }
 
 /** Load cases: {command: [case...]} from cases/*.json. */
@@ -254,7 +264,22 @@ export async function runCase(c, bin) {
   return result;
 }
 
+// overlayfs leaves its workdir/work with mode 000; open it up before removing.
+function openWorkdir(dir) {
+  try {
+    fs.chmodSync(path.join(dir, 'w', 'work'), 0o700);
+  } catch {}
+}
+
+function removeScratchSync(dir) {
+  openWorkdir(dir);
+  try {
+    fs.rmSync(dir, {recursive: true, force: true});
+  } catch {}
+}
+
 function rmrf(dir) {
+  openWorkdir(dir);
   return fs.promises.rm(dir, {recursive: true, force: true}).catch(() => {});
 }
 

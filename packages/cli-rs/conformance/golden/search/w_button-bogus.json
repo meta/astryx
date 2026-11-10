@@ -1,0 +1,13 @@
+{
+ "id": "w_button-bogus",
+ "args": [
+  "search",
+  "button",
+  "--bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "w_tour_@large",
+ "args": [
+  "search",
+  "tour"
+ ],
+ "fixture": "large",
+ "stdout": "Results for \"tour\" (2)\n\nname:        Tour\ndomain:      component\npackage:     @astryxdesign/lab\nimport:      @astryxdesign/lab\ndescription: Use a Tour to introduce a feature or onboard a user through a few key parts of the UI. Compose it from TourStep children, each pointing at an element via targetRef; the Tour advances through them with Next/Back and ends on Done. It is controlled: keep isActive in your own state and persist \"has seen this tour\" yourself (the component only reports dismissal via onDismiss). Built on the existing Popover/Layer anchoring and overlay tokens rather than a bespoke positioning engine.\ncommand:     npx @astryxdesign/cli@0.7.12 component Tour\n\nname:        TourStep\ndomain:      component\npackage:     @astryxdesign/lab\nimport:      @astryxdesign/lab\ndescription: A single spotlight step. Highlights a target element with a ring drawn as a separate overlay (the target is never restyled) and renders a callout anchored to it (via the core Popover), with a heading, body, optional step progress, and back / next / close controls. Registers with the parent Tour on mount and renders its callout only while active.\ncommand:     npx @astryxdesign/cli@0.7.12 component TourStep\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover tour\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

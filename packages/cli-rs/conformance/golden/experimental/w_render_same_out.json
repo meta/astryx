@@ -1,0 +1,15 @@
+{
+ "id": "w_render_same_out",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "basic.tsx"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --out names the input file itself; choose another file\n",
+ "exit": 1,
+ "files": []
+}

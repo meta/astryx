@@ -1,0 +1,12 @@
+{
+ "id": "w_cli-host-entry",
+ "args": [
+  "docs",
+  "cli-host-entry"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"cli-host-entry\"\n\n  cli/host-entry  (Run the Astryx CLI from your own command-line tool: the inputs `runHostedCli` takes, what it returns, and when the process ends instead.)\n",
+ "exit": 1,
+ "files": []
+}

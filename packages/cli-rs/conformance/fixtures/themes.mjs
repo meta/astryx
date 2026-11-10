@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const RUNTIME = ['react', 'react-dom', 'scheduler', '@stylexjs/stylex', 'styleq', 'invariant', 'css-mediaquery'];
+const RUNTIME = ['react', 'react-dom', 'scheduler', '@stylexjs/stylex', 'styleq', 'invariant', 'css-mediaquery', 'lucide-react', '@heroicons/react'];
 
 /** Copy a package the repository installed (real files, no links). */
 function copyInstalled(repo, name, dest) {
@@ -187,4 +187,22 @@ export const reefTheme = defineTheme({
   t('palette/array.json', "[\n  1,\n  2\n]\n");
   t('palette/broken.json', '{"families": [\n  {"id": "x",}\n]}\n');
   t('palette/empty-file.json', '');
+  t('themes/icons/registry.tsx', "import React from 'react';\nexport const appIcons = { check: React.createElement('span', null, 'ok') };\nexport const moreIcons = { close: React.createElement('span', null, 'x') };\nexport const fnIcons = { check: ({size}) => React.createElement('span', null, size) };\nexport default appIcons;\n");
+  t('themes/icons/slots.tsx', "import React from 'react';\nexport const slotFns = { chevron: ({size}) => React.createElement('span', null, size) };\nexport const chevron = slotFns.chevron;\n");
+  t('themes/icons/basic.ts', "import {appIcons} from './registry';\nexport default { name: 'iconic', tokens: { '--color-bg': '#fff' }, icons: appIcons };\n");
+  t('themes/icons/default-import.ts', "import reg from './registry';\nexport default { name: 'iconic-default', tokens: { '--color-bg': '#fff' }, icons: reg };\n");
+  t('themes/icons/namespace.ts', "import * as reg from './registry';\nexport default { name: 'iconic-ns', tokens: { '--color-bg': '#fff' }, icons: reg.appIcons };\n");
+  t('themes/icons/spread.ts', "import {appIcons, moreIcons} from './registry';\nexport default { name: 'iconic-spread', tokens: { '--color-bg': '#fff' }, icons: {...appIcons, ...moreIcons} };\n");
+  t('themes/icons/aliased.ts', "import {appIcons as icons} from './registry';\nconst registry = icons;\nexport const aliasedTheme = { name: 'iconic-alias', tokens: { '--color-bg': '#fff' }, icons: registry };\n");
+  t('themes/icons/inline.ts', "export default { name: 'iconic-inline', tokens: { '--color-bg': '#fff' }, icons: { check: 'x' } };\n");
+  t('themes/icons/mutated.ts', "import {appIcons} from './registry';\nconst mine = appIcons;\nmine.extra = 1;\nexport default { name: 'iconic-mut', tokens: { '--color-bg': '#fff' }, icons: mine };\n");
+  t('themes/icons/child.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport base from './basic';\nexport default defineTheme({ extends: base, name: 'iconic-child', tokens: { '--color-bg': '#000' } });\n");
+  t('themes/icons/child-own.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport base from './basic';\nimport {moreIcons} from './registry';\nexport default defineTheme({ extends: base, name: 'iconic-child-own', tokens: { '--color-bg': '#000' }, icons: moreIcons });\n");
+  t('themes/icons/fn.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {fnIcons} from './registry';\nexport default defineTheme({ name: 'iconic-fn', tokens: { '--color-bg': '#fff' }, icons: fnIcons });\n");
+  t('themes/icons/slots.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {chevron} from './slots';\nexport default defineTheme({ name: 'slotted', tokens: { '--color-bg': '#fff' }, componentIcons: { chevronDown: chevron, close: 'x-mark', spare: null } });\n");
+  t('themes/icons/slots-local.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({ name: 'slotted-local', tokens: { '--color-bg': '#fff' }, componentIcons: { chevronDown: () => null } });\n");
+  t('themes/icons/slots-static.mjs', "export default { name: 'slotted-static', tokens: { '--color-bg': '#fff' }, componentIcons: { chevronDown: 'chevron-down', close: null } };\n");
+  t('themes/icons/slotfns.tsx', "import React from 'react';\nexport const slotFns = { chevron: ({size}) => React.createElement('span', null, size) };\nexport const chevron = slotFns.chevron;\n");
+  t('themes/icons/slotted.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {chevron, slotFns} from './slotfns';\nexport default defineTheme({ name: 'slotted2', tokens: { '--color-bg': '#fff' }, componentIcons: { chevronDown: chevron, close: 'x-mark', spare: null, ...{ more: slotFns.chevron } } });\n");
+  t('themes/icons/slotted-whole.ts', "import {defineTheme} from '@astryxdesign/core/theme';\nimport {slotFns} from './slotfns';\nexport default defineTheme({ name: 'slotted3', tokens: { '--color-bg': '#fff' }, componentIcons: slotFns });\n");
 }

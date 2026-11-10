@@ -577,26 +577,26 @@
  },
  {
   "transform": "v0.7.0/migrate-deprecated-theme-surface",
-  "path": "/tmp/astryx-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css",
   "options": null,
   "source": "a:: { color: red; }\n",
   "output": null,
-  "error": "/tmp/astryx-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-Rae6BD/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
  },
  {
   "transform": "v0.7.0/migrate-deprecated-theme-surface",
-  "path": "/tmp/astryx-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css",
   "options": null,
   "source": "a:: { color: red; }\n",
   "output": null,
-  "error": "/tmp/astryx-rec/.astryx-runner-test-D7817P/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-D7817P/vendor/bundle.css:1:3: Expected a pseudo-class or pseudo-element."
  },
  {
   "transform": "v0.7.0/migrate-deprecated-theme-surface",
-  "path": "/tmp/astryx-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css",
+  "path": "/tmp/astryx-codemod-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css",
   "options": null,
   "source": ".x { color: blue; }\n\n@scope (a::) {\n  b { color: red; }\n}\n",
   "output": null,
-  "error": "/tmp/astryx-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css:3:9: Expected a pseudo-class or pseudo-element."
+  "error": "/tmp/astryx-codemod-rec/.astryx-runner-test-3iIVwt/vendor/bundle.css:3:9: Expected a pseudo-class or pseudo-element."
  }
 ]

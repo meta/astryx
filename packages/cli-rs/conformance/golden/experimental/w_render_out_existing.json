@@ -1,0 +1,15 @@
+{
+ "id": "w_render_out_existing",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "page.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: page.html already exists and was not written by a render, so it is not replaced; nothing was written. Choose another --out.\n",
+ "exit": 1,
+ "files": []
+}

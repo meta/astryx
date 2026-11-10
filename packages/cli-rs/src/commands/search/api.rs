@@ -27,7 +27,7 @@ pub fn gather_values(cwd: &Path, type_: Option<&str>) -> Result<Vec<Value>, Sear
 pub fn gather_candidates(cwd: &Path, type_: Option<&str>) -> Result<Gathered, SearchError> {
     let (all, searched_components, outside, core_skipped, core_skipped_code, components) = gather_raw(cwd, type_)?;
     Ok(Gathered {
-        catalog: Catalog { all: all.iter().map(Candidate::from_json).collect(), searched_components, outside, core_skipped },
+        catalog: Catalog { all: gather::par_map(&all, Candidate::from_json), searched_components, outside, core_skipped },
         core_skipped_code,
         components,
     })

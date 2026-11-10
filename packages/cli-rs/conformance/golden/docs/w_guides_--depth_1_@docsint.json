@@ -1,0 +1,20 @@
+{
+ "id": "w_guides_--depth_1_@docsint",
+ "args": [
+  "docs",
+  "guides",
+  "--depth",
+  "1"
+ ],
+ "fixture": "docsint",
+ "stdout": "Guides\nGuides that stand on their own: getting started, principles, theming, and working with AI. Each topic keeps its own\nname; open one by it.\n\npackage: @astryxdesign/cli\n\nTopics\n\nauthor-a-theme    Create, customize, and build a theme: defineTheme, palette generation, token overrides, component\n                  style overrides, custom variants, responsive adaptations, and production builds.\nbrowser-support   What browsers Astryx targets, which modern platform features it depends on, and how to support older\n                  browsers for your own audience.\ngetting-started   Add the design system to your project and start building.\nis-my-code-good   Check whether a product surface fits its app and uses Astryx well, require evidence for every claim,\n                  and improve it with a repeatable agent review.\nprinciples        Core design principles and rules for building with the design system.\nstyling-overview  How to set up CSS - exact imports for three paths: plain, Tailwind, and StyleX for your own code -\n                  plus the stylesheet each Astryx package ships.\ntheme             How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and\n                  customizing them.\nuse-a-theme       Apply a theme to your app: install, import with the CLI, wire the generated module, switch dark mode,\n                  nest themes, and choose runtime or built for production.\nuse-integrations  Install, discover, and use integration packages that add components, templates, themes, and docs to\n                  your app.\nworking-with-ai   How to set up AI coding tools to generate correct component code.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs <name>\nUp: npx @astryxdesign/cli@0.7.12 docs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

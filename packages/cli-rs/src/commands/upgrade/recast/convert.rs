@@ -90,6 +90,7 @@ pub fn parse(ast: &mut Ast, source: &str, mode: Mode) -> Result<Parsed, ParseErr
                 col += 1;
             }
         }
+        let (msg, line, col) = babel_message(&msg, &src16, o16, line, col);
         return Err(ParseError { message: msg, line, column: col });
     }
     let json_text = ret.program.to_estree_json(true, false);
@@ -905,4 +906,54 @@ pub fn is_ws16(c: u16) -> bool {
 #[allow(dead_code)]
 fn _unused(ctx: &Ctx) -> usize {
     ctx.src16.len()
+}
+
+/// Babel's wording for the parse errors oxc reports differently.
+fn babel_message(msg: &str, src: &[u16], off: usize, line: usize, col: usize) -> (String, usize, usize) {
+    let at = |i: usize| src.get(i).copied().unwrap_or(0);
+    if msg == "Unexpected token" {
+        let mut j = off;
+        while j > 0 && is_ws16(at(j - 1)) {
+            j -= 1;
+        }
+        let rest = &src[off.min(src.len())..];
+        if j > 0 && at(j - 1) == b'>' as u16 && !rest.iter().any(|&c| c == b'<' as u16 || c == b'{' as u16) {
+            return ("Unterminated JSX contents.".into(), line, col);
+        }
+        return (msg.into(), line, col);
+    }
+    if msg.starts_with("Unterminated string") {
+        if at(off) == b'`' as u16 {
+            return ("Unterminated template.".into(), line, col + 1);
+        }
+        return ("Unterminated string constant.".into(), line, col);
+    }
+    if msg.starts_with("Unterminated multiline comment") {
+        return ("Unterminated comment.".into(), line, col);
+    }
+    if msg.starts_with("Unterminated regular expression") {
+        return ("Unterminated regular expression.".into(), line, col + 1);
+    }
+    if msg.starts_with("Expected a semicolon") {
+        return ("Missing semicolon.".into(), line, col);
+    }
+    if let Some(rest) = msg.strip_prefix("Expected corresponding JSX closing tag for '") {
+        let name = rest.trim_end_matches("'.");
+        let mut j = off;
+        let mut c = col;
+        while j >= 2 && !(at(j - 2) == b'<' as u16 && at(j - 1) == b'/' as u16) && c > 0 {
+            j -= 1;
+            c -= 1;
+        }
+        let c = if c >= 2 { c - 2 } else { col };
+        return (format!("Expected corresponding JSX closing tag for <{}>.", name), line, c);
+    }
+    if let Some(rest) = msg.strip_prefix("Expected `") {
+        if msg.ends_with("but found `EOF`") {
+            return ("Unexpected token".into(), line, col);
+        }
+        let tok = rest.split('`').next().unwrap_or("");
+        return (format!("Unexpected token, expected \"{}\"", tok), line, col);
+    }
+    (msg.into(), line, col)
 }

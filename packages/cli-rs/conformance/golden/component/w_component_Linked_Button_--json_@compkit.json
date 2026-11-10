@@ -1,0 +1,14 @@
+{
+ "id": "w_component_Linked_Button_--json_@compkit",
+ "args": [
+  "component",
+  "Linked",
+  "Button",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.batch\",\n  \"data\": {\n    \"count\": 2,\n    \"results\": [\n      {\n        \"selector\": \"Linked\",\n        \"status\": \"found\",\n        \"result\": {\n          \"type\": \"component.detail\",\n          \"package\": \"@comp/kit\",\n          \"data\": {\n            \"type\": \"component\",\n            \"name\": \"Linked\",\n            \"usage\": {\n              \"description\": \"Read `astryx docs kit-guide` first, then `astryx docs theme` and {@link command:component}. Broken: {@link nope:thing} and {@link generic:missing-topic}. Code stays: `{@link generic:kit-guide}`.\",\n              \"bestPractices\": [\n                {\n                  \"guidance\": true,\n                  \"description\": \"Follow `astryx docs kit-guide`.\"\n                }\n              ]\n            },\n            \"props\": [\n              {\n                \"name\": \"tone\",\n                \"type\": \"string\",\n                \"description\": \"See `astryx docs kit-guide`.\"\n              }\n            ],\n            \"package\": \"@comp/kit\",\n            \"import\": \"@comp/kit\",\n            \"sourceAvailable\": true\n          }\n        }\n      },\n      {\n        \"selector\": \"Button\",\n        \"status\": \"ambiguous\",\n        \"code\": \"ERR_AMBIGUOUS_COMPONENT\",\n        \"error\": \"Component \\\"Button\\\" is provided by multiple packages. Re-run with --package <pkg> to choose one.\",\n        \"candidates\": [\n          {\n            \"package\": \"@astryxdesign/core\",\n            \"component\": \"Button\",\n            \"kind\": \"component\",\n            \"installed\": true\n          },\n          {\n            \"package\": \"@comp/kit\",\n            \"component\": \"Button\",\n            \"kind\": \"component\",\n            \"installed\": true\n          }\n        ]\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

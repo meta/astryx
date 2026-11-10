@@ -217,7 +217,7 @@
  },
  {
   "transform": "v0.1.3/migrate-layout-components-to-experimental",
-  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-moPKVL/astryx.config.mjs",
+  "path": "/tmp/astryx-codemod-rec/.astryx-v013-codemod-test-moPKVL/astryx.config.mjs",
   "options": null,
   "source": "export default {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
   "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n",
@@ -225,7 +225,7 @@
  },
  {
   "transform": "v0.1.3/migrate-layout-components-to-experimental",
-  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-odtXI4/astryx.config.mjs",
+  "path": "/tmp/astryx-codemod-rec/.astryx-v013-codemod-test-odtXI4/astryx.config.mjs",
   "options": null,
   "source": "// Generated Astryx config.\nconst config = {\n  integrations: [\"@acme/ui\"],\n  issuesUrl: \"https://example.com/issues\",\n};\n\nexport default config;\n",
   "output": null,
@@ -233,7 +233,7 @@
  },
  {
   "transform": "v0.1.3/migrate-layout-components-to-experimental",
-  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-gZVvAm/astryx.config.mjs",
+  "path": "/tmp/astryx-codemod-rec/.astryx-v013-codemod-test-gZVvAm/astryx.config.mjs",
   "options": null,
   "source": "const config = {};\nconfig.layout = { components: { KpiCard: '@/components/KpiCard' } };\nexport default config;\n",
   "output": null,
@@ -241,7 +241,7 @@
  },
  {
   "transform": "v0.1.3/migrate-layout-components-to-experimental",
-  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-l2xoIT/astryx.config.mjs",
+  "path": "/tmp/astryx-codemod-rec/.astryx-v013-codemod-test-l2xoIT/astryx.config.mjs",
   "options": null,
   "source": "export default {\n  experimental: { xle: { components: {} } },\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
   "output": null,

@@ -1,0 +1,18 @@
+{
+ "id": "w_paginaton",
+ "args": [
+  "search",
+  "paginaton"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"paginaton\" (6)\n\nname:        Pagination\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Pagination\ndescription: Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.\ncommand:     npx @astryxdesign/cli@0.7.12 component Pagination\n\nname:        PaginationDotsCarousel\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Pagination - Dots Carousel\nkind:        block\ndescription: A review carousel using dot pagination to step through testimonial cards. Use the dots variant for carousels, galleries, and any paged content where the total is small and visible position matters more than a page number.\ncommand:     npx @astryxdesign/cli@0.7.12 template PaginationDotsCarousel --type block\n\nname:        PaginationPageSize\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Pagination - Page Size Selector\nkind:        block\ndescription: A transactions table with pagination and a page size dropdown at the bottom. Shows how pagination works as a footer below real content, with adjustable rows per page.\ncommand:     npx @astryxdesign/cli@0.7.12 template PaginationPageSize --type block\n\nname:        InternationalizationProvider03RtlDirection\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InternationalizationProvider - RTL Direction\nkind:        block\ndescription: Toggle text direction with the `dir` prop and watch Astryx components mirror. Pagination flips its prev/next chevrons under RTL. The `dir` prop is passed to both `InternationalizationProvider` (so Astryx components pick it up) and the `VStack` (so the DOM subtree mirrors); both channels stay in sync with no extra wrapper.\ncommand:     npx @astryxdesign/cli@0.7.12 template InternationalizationProvider03RtlDirection --type block\n\nname:        PaginationVariants\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Pagination - Variants\nkind:        block\ndescription: All four display variants stacked: dots, compact, count, and pages. A quick visual reference for choosing the right variant.\ncommand:     npx @astryxdesign/cli@0.7.12 template PaginationVariants --type block\n\nname:        PaginationWithTable\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Pagination - With Table\nkind:        block\ndescription: Pagination below a data table with client-side page slicing. Use the count variant with small size for dense data views where users need to see item ranges.\ncommand:     npx @astryxdesign/cli@0.7.12 template PaginationWithTable --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover paginaton\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

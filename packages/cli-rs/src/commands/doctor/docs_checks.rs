@@ -43,7 +43,7 @@ const AUTHORING_SELF_DOCS: &[&str] = &[
 const CLI_SELF_DOC_DIRS: &[&str] = &["clients/cli/commands", "api", "authoring", "foundation"];
 
 fn walk_docs(dir: &str, root: &str, skip_dot: bool, out: &mut Vec<String>) {
-    let Some(entries) = np::read_dir(dir) else { return };
+    let Some(entries) = crate::commands::doctor::support::read_dir_sorted(dir) else { return };
     for e in entries {
         if e.name == "node_modules" || e.name.starts_with("__") || (skip_dot && e.name.starts_with('.')) {
             continue;

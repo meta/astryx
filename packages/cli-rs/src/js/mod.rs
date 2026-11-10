@@ -17,6 +17,7 @@ mod convert;
 mod engine;
 pub mod live;
 pub mod jsmath;
+pub mod jsonparse;
 mod prune;
 pub mod resolve;
 mod transform;
@@ -76,6 +77,12 @@ pub struct JitiOptions {
     pub aliases: Vec<(String, PathBuf)>,
     /// jiti's `extensions` probe order, with dots (e.g. `".ts"`).
     pub extensions: Option<Vec<String>>,
+    /// jiti `jsx: {runtime: 'automatic'}`: JSX in any file, compiled to
+    /// `react/jsx-runtime` calls.
+    pub jsx_automatic: bool,
+    /// Specifier -> virtual module id (from `Engine::register_virtual`),
+    /// for the whole graph (jiti `virtualModules` with live values).
+    pub virtual_modules: Vec<(String, u64)>,
 }
 
 /// A loaded module's namespace: every export, converted to JSON values with
@@ -116,6 +123,27 @@ pub fn take_output() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests;
+
+/// Start (`true`) or stop (`false`) capturing console calls as
+/// `(level, text)` pairs (`log`, `info`, `debug`, `warn`, `error`, `trace`;
+/// text as `util.format` makes it), returning what was captured so far.
+/// While off (the default), console text goes to stderr.
+pub fn capture_console(on: bool) -> Vec<(String, String)> {
+    engine::set_console_capture(on)
+}
+
+/// Start (`true`) or stop (`false`) recording each module file the engine
+/// loads (ES, CommonJS, JSON), in load order; returns the list so far.
+/// Builtins and modules already cached are not listed.
+pub fn record_loads(on: bool) -> Vec<PathBuf> {
+    engine::set_load_recording(on)
+}
+
+/// When `err` is a module-not-found error from resolution, the specifier as
+/// the importing module wrote it.
+pub fn missing_specifier(err: &JsError) -> Option<String> {
+    engine::missing_specifier(&err.message)
+}
 
 /// A replacement for one `Math` function: takes the call's arguments, each
 /// converted with `ToNumber`, and returns the result.

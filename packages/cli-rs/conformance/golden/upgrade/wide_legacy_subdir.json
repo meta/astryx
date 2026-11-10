@@ -1,0 +1,14 @@
+{
+ "id": "wide_legacy_subdir",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--json"
+ ],
+ "fixture": "upgrade-legacy",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.1\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 74,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 5,\n    \"transformsApplied\": 34,\n    \"modifiedFiles\": [\n      \"../App.tsx\",\n      \"../legacy.jsx\",\n      \"deep/Badge.tsx\",\n      \"../theme.css\",\n      \"../modern.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

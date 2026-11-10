@@ -50,119 +50,10 @@ impl ComponentReplacements {
     }
 }
 
-// TEMP: replace with the discovery lane's integrations/cli-requirement port.
-fn lower_version(text: &str) -> Option<String> {
-    let t = text.trim();
-    let t = t.strip_prefix('v').unwrap_or(t);
-    let core_end = t.find(['-', '+']).unwrap_or(t.len());
-    let (core, rest) = t.split_at(core_end);
-    let valid_tail = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-');
-    if !rest.is_empty() {
-        let mut r = rest;
-        if let Some(x) = r.strip_prefix('-') {
-            let (pre, plus) = match x.find('+') {
-                Some(i) => (&x[..i], Some(&x[i + 1..])),
-                None => (x, None),
-            };
-            if !valid_tail(pre) {
-                return None;
-            }
-            if let Some(p) = plus {
-                if !valid_tail(p) || p.contains('-') && false {
-                    return None;
-                }
-            }
-            r = "";
-        } else if let Some(p) = r.strip_prefix('+') {
-            if !valid_tail(p) {
-                return None;
-            }
-            r = "";
-        }
-        if !r.is_empty() {
-            return None;
-        }
-    }
-    let parts: Vec<&str> = core.split('.').collect();
-    if parts.is_empty() || parts.len() > 3 {
-        return None;
-    }
-    let mut out = Vec::new();
-    for p in &parts {
-        let ok = !p.is_empty() && (p.bytes().all(|c| c.is_ascii_digit()) || matches!(*p, "x" | "X" | "*"));
-        if !ok {
-            return None;
-        }
-        out.push(if matches!(*p, "x" | "X" | "*") { "0".to_string() } else { p.to_string() });
-    }
-    while out.len() < 3 {
-        out.push("0".into());
-    }
-    Some(out.join("."))
-}
-
-fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    let pa: Vec<f64> = a.split('.').map(|x| x.parse().unwrap_or(0.0)).collect();
-    let pb: Vec<f64> = b.split('.').map(|x| x.parse().unwrap_or(0.0)).collect();
-    for i in 0..3 {
-        let (x, y) = (pa.get(i).copied().unwrap_or(0.0), pb.get(i).copied().unwrap_or(0.0));
-        if x != y {
-            return x.partial_cmp(&y).unwrap();
-        }
-    }
-    std::cmp::Ordering::Equal
-}
-
-fn lowest_of_set(set: &str) -> Option<String> {
-    if set.is_empty() || set == "*" || set == "x" || set == "X" {
-        return None;
-    }
-    let ws: Vec<&str> = set.split_whitespace().collect();
-    if ws.len() == 3 && ws[1] == "-" {
-        return lower_version(ws[0]);
-    }
-    let mut lowest: Option<String> = None;
-    for comp in set.split_whitespace() {
-        let rest = comp;
-        let (op, v) = [">=", "<=", ">", "<", "=", "^", "~"]
-            .iter()
-            .find_map(|o| comp.strip_prefix(o).filter(|r| !r.is_empty()).map(|r| (Some(*o), r)))
-            .unwrap_or((None, rest));
-        if v.is_empty() {
-            return None;
-        }
-        if op == Some("<") || op == Some("<=") {
-            continue;
-        }
-        let version = lower_version(v)?;
-        if lowest.as_ref().map_or(true, |l| semver_cmp(&version, l).is_gt()) {
-            lowest = Some(version);
-        }
-    }
-    lowest
-}
-
-fn lowest_admitted(range: &str) -> Option<String> {
-    let mut lowest: Option<String> = None;
-    for alt in range.split("||") {
-        let low = lowest_of_set(alt.trim())?;
-        if lowest.as_ref().map_or(true, |l| semver_cmp(&low, l).is_lt()) {
-            lowest = Some(low);
-        }
-    }
-    lowest
-}
-
 /// `componentReplacementsEnabled(pkg)`: the package's CLI peer range starts
 /// at or after the release that applies replacements.
 pub fn component_replacements_enabled(pkg: &Value) -> bool {
-    let Some(range) = pkg.get("peerDependencies").and_then(|p| p.get(CLI_PACKAGE)).and_then(|r| r.as_str()) else {
-        return false;
-    };
-    match lowest_admitted(range) {
-        Some(l) => !semver_cmp(&l, COMPONENT_REPLACES_CLI).is_lt(),
-        None => false,
-    }
+    crate::discovery::cli_requirement::component_replaces_cli_problem(pkg).is_none()
 }
 
 fn package_json_of(i: &LoadedIntegration) -> Value {
@@ -406,14 +297,3 @@ pub fn resolve_component_replacements(core_dir: Option<&Path>, integrations: &[L
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn ranges() {
-        assert_eq!(lowest_admitted(">=0.6.7").as_deref(), Some("0.6.7"));
-        assert_eq!(lowest_admitted("^0.7.0 || >=0.6.0").as_deref(), Some("0.6.0"));
-        assert_eq!(lowest_admitted("*"), None);
-        assert_eq!(lowest_admitted("1.2.3 - 2"), Some("1.2.3".into()));
-    }
-}

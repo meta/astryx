@@ -27,8 +27,24 @@ export default async function (dir, h) {
     exports: {'.': './index.js', './KitPanel': './components/KitPanel/KitPanel.tsx', './package.json': './package.json'},
   });
   await h.writeFile(path.join(kit, 'index.js'), 'export {};\n');
-  await h.writeFile(path.join(kit, 'astryx.integration.mjs'), "export default {components: './components'};\n");
+  await h.writeFile(path.join(kit, 'astryx.integration.mjs'), "export default {components: './components', docs: './docs'};\n");
   const c = path.join(kit, 'components');
+  await h.writeFile(
+    path.join(kit, 'docs/kit-guide.doc.mjs'),
+    "export default {type: 'generic', name: 'kit-guide', title: 'Kit guide', description: 'How to use the kit.', sections: [{title: 'Intro', content: [{type: 'prose', text: 'Hello.'}]}]};\n",
+  );
+  await h.writeFile(path.join(c, 'Linked.tsx'), 'export function Linked() { return null; }\n');
+  await h.writeFile(
+    path.join(c, 'Linked.doc.mjs'),
+    doc({
+      name: 'Linked',
+      usage: {
+        description: 'Read {@link generic:kit-guide} first, then {@link @astryxdesign/cli:generic:theme} and {@link command:component}. Broken: {@link nope:thing} and {@link generic:missing-topic}. Code stays: `{@link generic:kit-guide}`.',
+        bestPractices: [{guidance: true, description: 'Follow {@link generic:kit-guide}.'}],
+      },
+      props: [{name: 'tone', type: 'string', description: 'See {@link generic:kit-guide}.'}],
+    }),
+  );
   await h.writeFile(path.join(c, 'Button.tsx'), 'export function Button() { return null; }\n');
   await h.writeFile(
     path.join(c, 'Button.doc.mjs'),

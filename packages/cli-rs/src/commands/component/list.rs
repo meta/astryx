@@ -5,7 +5,7 @@ use super::deps;
 use super::jsv::{at, truthy};
 use crate::cli::command::Suggestion;
 use crate::discovery::component_discovery::{
-    discover_components, find_component_readme, find_external_component_doc, resolve_import_path, resolve_integration_import_path,
+    find_component_readme, find_external_component_doc, resolve_import_path, resolve_integration_import_path,
     ImportOwner, CORE_PACKAGE,
 };
 use crate::discovery::component_replacement::{resolve_component_replacements, ActiveReplacement, ComponentReplacements};

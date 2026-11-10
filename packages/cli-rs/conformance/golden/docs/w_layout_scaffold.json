@@ -1,0 +1,19 @@
+{
+ "id": "w_layout_scaffold",
+ "args": [
+  "docs",
+  "layout",
+  "scaffold"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/cli\n\n## Scaffold\n\nPick the shell, budget each region, and choose navigation, before any content exists. Shell and Navigation cover each step; these rules hold for both.\n\n+ Decide the frame, region width budgets, and fill or capped before any content exists\n+ State the reason for the navigation choice, or inherit the template pairing\n+ Reserve raw px for structural widths; interior spacing uses tokens\n\nx Build content-first and wrap each section in a Card, producing a padded scroll column\nx Stretch prose, forms, or lists across a wide region instead of capping with contentWidth\nx SideNav when the nav is really filters or controls, or must hold wide elements like breadcrumbs\nx TopNav when top-slot ownership is unclear, or the hierarchy is deep or still growing\nx Both bars when the ecosystem layer is thin, so the second only wastes space\nx Deviate from the template navigation pairing without a stated reason\n\nUp: npx @astryxdesign/cli@0.7.12 docs layout/scaffold --index\nNext: npx @astryxdesign/cli@0.7.12 docs layout/scaffold shell\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

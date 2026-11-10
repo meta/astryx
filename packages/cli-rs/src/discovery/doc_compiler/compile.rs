@@ -327,3 +327,87 @@ fn reference_view(block: &Value) -> Vec<Value> {
     out.push(prose(format!("From {title}: `{command}`")));
     out
 }
+
+/// One file of a topic: its provider id, its authored doc and the overlay
+/// for the read's language.
+#[derive(Debug, Clone)]
+pub struct TopicSource {
+    pub provider_id: String,
+    pub doc: Value,
+    pub overlay: Option<Value>,
+}
+
+/// `applyOverlay(docs, translation)` with the authored title kept as a mark.
+fn apply_overlay_marked(doc: &Value, translation: &Value) -> Value {
+    use crate::discovery::docs_section_key as dsk;
+    let (out, authored) = apply_overlay(doc, translation);
+    let original = doc.get("sections").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+    let mut m = out.as_object().cloned().unwrap_or_default();
+    let sections: Vec<Value> = out["sections"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(i, s)| {
+            if original.get(i) == Some(&s) {
+                return s;
+            }
+            Value::Object(dsk::with_source_title(s.as_object().cloned().unwrap_or_default(), Some(&Value::from(authored[i].as_str()))))
+        })
+        .collect();
+    m.insert("sections".into(), Value::Array(sections));
+    Value::Object(m)
+}
+
+fn mark_provider(doc: &Value, provider: &str) -> Value {
+    use crate::discovery::docs_section_key as dsk;
+    let mut m = doc.as_object().cloned().unwrap_or_default();
+    let sections: Vec<Value> = doc["sections"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            let st = dsk::source_title(s);
+            let mut sm = dsk::spread(s.as_object().unwrap_or(&Map::new()));
+            sm.insert(dsk::SECTION_PROVIDER.into(), Value::from(provider));
+            Value::Object(dsk::with_source_title(sm, st.as_ref()))
+        })
+        .collect();
+    m.insert("sections".into(), Value::Array(sections));
+    Value::Object(m)
+}
+
+/// `lowerReferenceTopic(input)`: the base file, overlaid, each extension
+/// merged onto it in order, keys stamped.
+pub fn lower_topic(id: &str, base: &TopicSource, extensions: &[TopicSource]) -> Result<Lowered, String> {
+    use crate::discovery::docs_discovery::{merge_topic, without_position};
+    use crate::discovery::docs_section_key as dsk;
+    let read = |s: &TopicSource| match &s.overlay {
+        Some(o) => apply_overlay_marked(&s.doc, o),
+        None => s.doc.clone(),
+    };
+    let mut doc = mark_provider(&read(base), &base.provider_id);
+    for ext in extensions {
+        doc = merge_topic(&doc, &mark_provider(&read(ext), &ext.provider_id));
+        let problems = dsk::section_key_errors(doc["sections"].as_array().map(|a| a.as_slice()).unwrap_or(&[]));
+        if !problems.is_empty() {
+            return Err(format!("extending {id} leaves duplicate authored section IDs: {}", problems.join("; ")));
+        }
+    }
+    let mut m = doc.as_object().cloned().unwrap_or_default();
+    let sections: Vec<Value> = doc["sections"].as_array().cloned().unwrap_or_default().iter().map(without_position).collect();
+    m.insert("sections".into(), Value::Array(sections));
+    let keyed = dsk::with_section_keys(&Value::Object(m));
+    let mut source_titles = Map::new();
+    let mut section_providers = Map::new();
+    for s in keyed["sections"].as_array().cloned().unwrap_or_default() {
+        let id = s.get("id").map(|v| crate::cli::format::js_string(v)).unwrap_or_default();
+        source_titles.insert(id.clone(), dsk::source_title(&s).unwrap_or(Value::Null));
+        section_providers.insert(id, s.get(dsk::SECTION_PROVIDER).cloned().unwrap_or_else(|| Value::from(base.provider_id.as_str())));
+    }
+    let mut doc = keyed;
+    dsk::strip_marks(&mut doc);
+    Ok(Lowered { id: id.to_string(), doc, source_titles, section_providers })
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_acme-handbook_nope_@docsint",
+ "args": [
+  "docs",
+  "acme-handbook",
+  "nope"
+ ],
+ "fixture": "docsint",
+ "stdout": "",
+ "stderr": "Error: Section \"nope\" is not in any guide under \"acme-handbook\". Open one of its guides instead.\n\n  acme-handbook/deploying  (Ship it with `npm install -D @acme/docs`.)\n",
+ "exit": 1,
+ "files": []
+}

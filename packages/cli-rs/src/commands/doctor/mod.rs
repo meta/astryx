@@ -10,6 +10,7 @@ pub mod integration;
 pub mod project;
 pub mod themes;
 pub mod support;
+pub mod jsonerr;
 pub mod util;
 
 use crate::cli::format::{record, records, section, text, Block, Field, Fields};

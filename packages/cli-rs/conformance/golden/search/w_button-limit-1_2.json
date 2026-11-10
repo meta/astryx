@@ -1,0 +1,14 @@
+{
+ "id": "w_button-limit-1_2",
+ "args": [
+  "search",
+  "button",
+  "--limit",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"-1\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

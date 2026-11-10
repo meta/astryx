@@ -54,3 +54,11 @@ pub fn read_json(file: &Path) -> Option<Value> {
     let s = std::fs::read_to_string(file).ok()?;
     serde_json::from_str(&s).ok()
 }
+
+/// `fs.readdirSync(dir, {withFileTypes: true})`: sorted by name bytes, as
+/// libuv sorts a directory listing.
+pub fn read_dir_sorted(dir: &str) -> Option<Vec<crate::discovery::nodepath::Dirent>> {
+    let mut v = crate::discovery::nodepath::read_dir(dir)?;
+    v.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
+    Some(v)
+}

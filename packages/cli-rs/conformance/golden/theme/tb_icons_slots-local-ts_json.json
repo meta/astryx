@@ -1,0 +1,14 @@
+{
+ "id": "tb_icons_slots-local-ts_json",
+ "args": [
+  "--json",
+  "theme",
+  "build",
+  "themes/icons/slots-local.ts"
+ ],
+ "fixture": "themes",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Theme sets componentIcons but the build cannot carry it. The slot function for \\\"chevronDown\\\" is defined in the theme file. A built theme carries names, null, and requests made of static values, constants, or imported bindings, and slot functions imported from their own module.\",\n  \"code\": \"ERR_THEME_INVALID\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

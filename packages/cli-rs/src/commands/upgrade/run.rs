@@ -804,8 +804,11 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     };
     let prot_now = Resolver::new(cwd, Default::default()).ok();
     // loadProjectContext
-    let project = crate::discovery::project::Project::load(&s(cwd));
-    let integrations: Vec<String> = Vec::new();
+    let project = load_project_context(cwd, &opts.integration);
+    let (integrations, hooks, config_path) = match &project {
+        Ok(c) => (c.integrations.clone(), c.hooks.clone(), c.config_path.clone()),
+        Err(_) => (vec![], vec![], None),
+    };
     if let Err(config_err) = project {
         let prot = prot_now.as_ref().unwrap();
         let mut all_protected: Vec<ProtectedRow> = core.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
@@ -873,7 +876,9 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
         }
         return Err(ApiError::new(config_err, "ERR_INVALID_ARGUMENT"));
     }
-    // integrations (TEMP: integration codemods are not discovered yet)
+    if !integrations.is_empty() {
+        ui.log(&format!("Integrations: {}", integrations.join(", ")));
+    }
     super::integration_warn(ui, cwd);
     if manifests.is_empty() {
         let reg = reconcile(ui)?;
@@ -899,13 +904,109 @@ pub fn run(ui: &mut Ui, opts: &Opts, cwd: &Path, origin: Option<&Path>, cli_root
     let merged_files_changed = changed_core.iter().collect::<HashSet<_>>().len();
     let merged_applied = core.as_ref().map(|c| c.total_transforms_applied).unwrap_or(0);
     let mut merged_changed = changed_core.clone();
-    merged_changed.extend(reg_written);
+    merged_changed.extend(reg_written.iter().cloned());
     let merged_errors: Vec<ErrorRow> = core.as_ref().map(|c| c.errors.clone()).unwrap_or_default();
     let initial_protected: Vec<ProtectedRow> = core.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
-    let final_errors0 = merged_errors.clone();
-    let remaining_protected = initial_protected;
-    let remaining_declined: Vec<DeclinedRow> = core.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
-    let final_prot = prot_now.unwrap();
+    let mut final_errors0 = merged_errors.clone();
+    let prot0 = prot_now.unwrap();
+    let generated_blocked = initial_protected.iter().any(|p| p.generated);
+    let reported_regen: Vec<OutcomeRow> = outcomes.iter().filter(|x| x.kind == "regenerate").cloned().collect();
+    let should_run_hooks = !hooks.is_empty() && (merged_files_changed > 0 || !reg_written.is_empty() || generated_blocked || !reported_regen.is_empty());
+    let mut before_hooks: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+    if apply && should_run_hooks {
+        let mut files: Vec<String> = initial_protected.iter().map(|p| p.file.clone()).collect();
+        files.extend(reported_regen.iter().map(|x| x.file.clone()));
+        for f in files {
+            let abs = super::fsutil::resolve_from(cwd, &f);
+            let rel = relative(cwd, &abs);
+            if rel == ".." || rel.starts_with("../") || Path::new(&rel).is_absolute() {
+                continue;
+            }
+            if let Ok(md) = std::fs::symlink_metadata(&abs) {
+                if md.is_file() {
+                    if let Ok(b) = std::fs::read(&abs) {
+                        before_hooks.push((abs, b));
+                    }
+                }
+            }
+        }
+    }
+    let mut hook_modified: Vec<PathBuf> = Vec::new();
+    let mut hook_failure: Option<String> = None;
+    if should_run_hooks {
+        let files: Vec<String> = unique_rel(cwd, &merged_changed);
+        if let Err(herr) = super::hooks::run_post_codemod_hooks(ui, &hooks, config_path.as_deref(), cwd, &files, apply) {
+            let msg = format!("Post-codemod hook failed: {}", herr);
+            ui.error(&msg);
+            let prot_regen = regeneration_protection_rows(&outcomes, &prot0, cwd);
+            if initial_protected.is_empty() && prot_regen.is_empty() {
+                ui.log("Upgrade failed\n");
+                let mut errs = merged_errors.clone();
+                errs.extend(regeneration_errors(&outcomes, &prot0, cwd));
+                errs.push(ErrorRow { file: ".".into(), codemod: "post-codemod-hook".into(), error: msg.clone() });
+                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, merged_changed.clone(), merged_applied, vec![], &outcomes, errs, core.as_ref().map(|c| c.declined.clone()).unwrap_or_default(), "ERR_CODEMOD_FAILED", cbc);
+                attach_registry(&mut stopped, reg);
+                return Err(fail_with_receipt(msg, "ERR_CODEMOD_FAILED", stopped));
+            }
+            final_errors0 = merged_errors.clone();
+            final_errors0.push(ErrorRow { file: ".".into(), codemod: "post-codemod-hook".into(), error: msg.clone() });
+            hook_failure = Some(msg);
+            ui.log("Regeneration failed; protected changes remain\n");
+        }
+        if apply {
+            for (f, before) in &before_hooks {
+                match std::fs::read(f) {
+                    Ok(now) if now == *before => {}
+                    _ => hook_modified.push(f.clone()),
+                }
+            }
+        }
+    }
+    let mut remaining_protected = initial_protected.clone();
+    let mut remaining_declined: Vec<DeclinedRow> = core.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
+    let mut outcomes = outcomes;
+    let mut final_prot = prot0;
+    if apply && should_run_hooks && hook_failure.is_none() {
+        let refreshed = match Resolver::new(cwd, Default::default()) {
+            Ok(r) => r,
+            Err(e) => {
+                ui.error(&e.message);
+                ui.log("Upgrade failed\n");
+                if let Some(c) = &cbc {
+                    log_cli_behind_core(ui, c, &target);
+                }
+                let mut prows = initial_protected.clone();
+                prows.extend(regeneration_protection_rows(&outcomes, &final_prot, cwd));
+                let mut errs = merged_errors.clone();
+                errs.extend(regeneration_errors(&outcomes, &final_prot, cwd));
+                errs.push(ErrorRow { file: ".".into(), codemod: "file-protection".into(), error: e.message.clone() });
+                let mut ch = merged_changed.clone();
+                ch.extend(hook_modified.iter().cloned());
+                let mut stopped = stopped_receipt(ui, &current, &target, total, integrations.clone(), source_found, cwd, ch, merged_applied, prows, &outcomes, errs, core.as_ref().map(|c| c.declined.clone()).unwrap_or_default(), "ERR_CODEMOD_PROTECTION_SOURCE", cbc);
+                attach_registry(&mut stopped, reg);
+                return Err(fail_with_receipt(e.message, "ERR_CODEMOD_PROTECTION_SOURCE", stopped));
+            }
+        };
+        let mut re_outcomes: Vec<OutcomeRow> = Vec::new();
+        let check_opts = RunOptions { apply: false, path: &path_, codemod: opts.codemod.as_deref(), skip: &skip, silent: true, root: cwd, covers_target: true };
+        let check_prot = Resolver::new(cwd, Default::default()).unwrap_or_else(|_| Resolver::new(cwd, Default::default()).unwrap());
+        let checked = match runner::run_codemods(ui.out, &manifests, &check_opts, check_prot, &mut re_outcomes) {
+            RunOutcome::Done(r) => Some(r),
+            RunOutcome::SourceMissing => None,
+        };
+        let mut rechecked: Vec<ProtectedRow> = checked.as_ref().map(|c| c.protected_files.clone()).unwrap_or_default();
+        let rechanged: Vec<String> = checked.as_ref().map(|c| c.changed_files.iter().map(|f| relative(cwd, f)).collect()).unwrap_or_default();
+        for f in rechanged {
+            rechecked.extend(initial_protected.iter().filter(|p| p.file == f).cloned());
+        }
+        remaining_protected = rechecked;
+        remaining_declined = checked.as_ref().map(|c| c.declined.clone()).unwrap_or_default();
+        outcomes = re_outcomes;
+        final_prot = refreshed;
+        final_errors0 = merged_errors.clone();
+        final_errors0.extend(checked.as_ref().map(|c| c.errors.clone()).unwrap_or_default());
+    }
+    merged_changed.extend(hook_modified.iter().cloned());
     let mut prot_rows = remaining_protected.clone();
     prot_rows.extend(regeneration_protection_rows(&outcomes, &final_prot, cwd));
     let protected_files = summarize_protected(&prot_rows);
@@ -1053,4 +1154,45 @@ fn stopped_receipt(
         cli_behind_core: cbc,
     };
     r.to_json()
+}
+
+pub struct ProjectContext {
+    pub integrations: Vec<String>,
+    pub hooks: Vec<Value>,
+    pub config_path: Option<String>,
+}
+
+/// `loadProjectContext(cwd, extraIntegrationSpecs)`: integration names (for
+/// the receipt) and the postCodemod hooks, or the config load error.
+fn load_project_context(cwd: &Path, extra_specs: &[String]) -> Result<ProjectContext, String> {
+    use crate::discovery::integrations as integ;
+    let project = crate::discovery::project::Project::load_with(&s(cwd), true)?;
+    let hooks = project.config.get("hooks").and_then(|h| h.get("postCodemod")).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let configured: HashSet<String> = project.integrations.iter().cloned().collect();
+    let mut names: Vec<String> = Vec::new();
+    let name_of = |r: &integ::Record| integ::s(r, "name").filter(|n| !n.is_empty()).or_else(|| integ::s(r, "__spec")).unwrap_or("").to_string();
+    for r in &project.loaded_integrations {
+        let autolinked = integ::has(r, "__autolinked");
+        let spec = integ::s(r, "__spec").unwrap_or("").to_string();
+        // upgrade's codemod rule: autolinked and local packages are not listed.
+        let keep = !autolinked && configured.contains(&spec);
+        if keep && !integ::has(r, "__providerConflict") {
+            let n = name_of(r);
+            if !names.contains(&n) {
+                names.push(n);
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    let extras: Vec<String> = extra_specs.iter().filter(|x| !x.is_empty() && seen.insert((*x).clone())).filter(|x| !configured.contains(*x)).cloned().collect();
+    if !extras.is_empty() {
+        let loaded = integ::load_integrations(&extras, &s(cwd), false)?;
+        for r in &loaded {
+            let n = name_of(r);
+            if !names.contains(&n) {
+                names.push(n);
+            }
+        }
+    }
+    Ok(ProjectContext { integrations: names, hooks, config_path: project.config_path.clone() })
 }

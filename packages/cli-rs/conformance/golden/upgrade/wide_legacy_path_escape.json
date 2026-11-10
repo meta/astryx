@@ -1,0 +1,15 @@
+{
+ "id": "wide_legacy_path_escape",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.1",
+  "--path",
+  "../.."
+ ],
+ "fixture": "upgrade-legacy",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Invalid source directory \"../..\": resolves outside the project root (/tmp/astryx-conformance/work/upgrade-legacy). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "w_cli_--depth_-1",
+ "args": [
+  "docs",
+  "cli",
+  "--depth",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --depth takes a number of levels (0, 1, 2, ...) or all, not \"-1\".\n",
+ "exit": 1,
+ "files": []
+}

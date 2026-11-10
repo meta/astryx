@@ -23,7 +23,8 @@ if (!binArg) {
   process.exit(2);
 }
 const binPath = path.resolve(binArg);
-const jobs = Number(opt('jobs') ?? Math.max(8, Math.floor(os.cpus().length / 2)));
+// The box is shared by many lanes: keep the default small.
+const jobs = Number(opt('jobs') ?? 16);
 const showDiff = argv.includes('--show-diff');
 const maxDiffs = Number(opt('max-diffs') ?? (showDiff ? 20 : 5));
 const reportFile = path.resolve(opt('report') ?? HERE_REPORT);

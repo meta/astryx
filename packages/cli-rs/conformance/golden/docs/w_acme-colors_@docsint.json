@@ -1,0 +1,18 @@
+{
+ "id": "w_acme-colors_@docsint",
+ "args": [
+  "docs",
+  "acme-colors"
+ ],
+ "fixture": "docsint",
+ "stdout": "package: @acme/docs\n\nreplaces @astryxdesign/cli's color\n\n# Acme colors\n\nOur palette.\n\n## Palette\n\nThe design system uses a 4px base-unit spacing scale, written in rem so gaps and padding grow with the reader's browser font size the way text does: each step is 0.25rem, which is 4px at the default 16px root. Component gap props accept step values that map to these tokens. The scale provides fine-grained control at the small end (2px, 4px, 6px) and consistent rhythm at larger sizes (multiples of 4px).\n\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nNext: npx @astryxdesign/cli@0.7.12 docs elevation\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

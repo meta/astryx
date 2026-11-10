@@ -1,0 +1,19 @@
+{
+ "id": "w_theme_acme-tips_@docsint",
+ "args": [
+  "docs",
+  "theme",
+  "acme-tips"
+ ],
+ "fixture": "docsint",
+ "stdout": "package: @acme/docs\n\n## Acme tips\n\nTip.\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs theme quick-start\nNext: npx @astryxdesign/cli@0.7.12 docs theme creating-a-custom-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

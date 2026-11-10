@@ -1,0 +1,18 @@
+{
+ "id": "w_emoji_@large",
+ "args": [
+  "search",
+  "emoji"
+ ],
+ "fixture": "large",
+ "stdout": "Results for \"emoji\" (7)\n\nname:        EmojiPicker\ndomain:      component\npackage:     @astryxdesign/lab\nimport:      @astryxdesign/lab\ndescription: An emoji picker inserts an emoji into what the viewer is writing, such as a comment or a message. Put it in a Popover opened from an emoji button, or inline where emoji are the content. For a reaction from a short fixed set, offer the set directly.\ncommand:     npx @astryxdesign/cli@0.7.12 component EmojiPicker\n\nname:        Icon\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Icon\ndescription: Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Supports both direct SVG components and semantic icon names that adapt to the active theme.\ncommand:     npx @astryxdesign/cli@0.7.12 component Icon\n\nname:        ChatEmojiPicker\ndomain:      component\npackage:     @astryxdesign/lab\nimport:      @astryxdesign/lab\ndescription: Popover emoji grid wrapping a trigger button: a shortname filter input over an 8-column grid with arrow-key roving focus. Picking an emoji calls onSelect and closes the popover, restoring focus to the trigger. Ships with a small default emoji set; override via emojis.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatEmojiPicker\n\nname:        ChatReactionBar\ndomain:      component\npackage:     @astryxdesign/lab\nimport:      @astryxdesign/lab\ndescription: Row of emoji reaction pills under a chat message. Each pill shows an emoji and count; the current user's own reactions get an accent tint and aria-pressed. Provide onAdd to render a trailing add-reaction button that opens a ChatEmojiPicker popover.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatReactionBar\n\nname:        EmojiPickerInPopover\ndomain:      template\npackage:     @astryxdesign/lab\ndisplayName: In a popover\nkind:        block\ndescription: Open the picker from an emoji button in a Popover with no padding. Leave the Popover's autofocus on: it lands in the search field, so typing searches right away.\ncommand:     npx @astryxdesign/cli@0.7.12 template EmojiPickerInPopover --type block\n\nname:        EmojiPickerShowcase\ndomain:      template\npackage:     @astryxdesign/lab\ndisplayName: Inline picker\nkind:        block\ndescription: An emoji picker inline in a Card: search by name or keyword, move with the arrow keys, and pick; the last pick shows above it.\ncommand:     npx @astryxdesign/cli@0.7.12 template EmojiPickerShowcase --type block\n\nname:        CommentComposerShowcase\ndomain:      template\npackage:     @astryxdesign/lab\ndisplayName: New comment\nkind:        block\ndescription: A comment composer quoting the passage it comments on: type, add an emoji, and post with Enter or Post.\ncommand:     npx @astryxdesign/cli@0.7.12 template CommentComposerShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover emoji\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

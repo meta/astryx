@@ -1,0 +1,14 @@
+{
+ "id": "w_button-limit-abc",
+ "args": [
+  "search",
+  "button",
+  "--limit",
+  "abc"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"NaN\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

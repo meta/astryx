@@ -265,7 +265,7 @@ pub fn score_candidate(t: &Term, c: &Candidate, o: Opts) -> Option<Hit> {
                 consider!(60, format!("name contains \"{}\"", term));
             }
             if o.fuzzy {
-                if let Some(d) = typo_distance(&t.u16, &nw.u16) {
+                if let Some(d) = typo_distance(&t.term, &nw.lower, t.u16.len(), nw.u16.len()) {
                     consider!(
                         if d == 1 {
                             80
@@ -309,7 +309,7 @@ pub fn score_candidate(t: &Term, c: &Candidate, o: Opts) -> Option<Hit> {
             consider!(70, format!("keyword \"{}\"", kw.orig));
         }
         if o.fuzzy {
-            if let Some(d) = typo_distance(&t.u16, &kw.u16) {
+            if let Some(d) = typo_distance(&t.term, &kw.lower, t.u16.len(), kw.u16.len()) {
                 if d <= 2 {
                     consider!(if d == 1 { 70 } else { 30 }, format!("keyword \"{}\" (distance {d})", kw.orig));
                 }

@@ -1,0 +1,15 @@
+{
+ "id": "w_render_out_txt",
+ "args": [
+  "experimental",
+  "render",
+  "basic.tsx",
+  "--out",
+  "notes.txt"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --out must be an .html file\n",
+ "exit": 1,
+ "files": []
+}

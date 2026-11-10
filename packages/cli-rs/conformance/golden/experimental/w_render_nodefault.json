@@ -1,0 +1,15 @@
+{
+ "id": "w_render_nodefault",
+ "args": [
+  "experimental",
+  "render",
+  "nodefault.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page has no default export to render. Export the page component: export default function Page() { … }\n",
+ "exit": 1,
+ "files": []
+}

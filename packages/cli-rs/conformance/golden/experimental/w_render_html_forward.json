@@ -1,0 +1,13 @@
+{
+ "id": "w_render_html_forward",
+ "args": [
+  "experimental",
+  "render",
+  "page.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: page.html is already HTML; pass --reverse to turn it back into a page\n\n  npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html  (turn it back into a page)\n",
+ "exit": 1,
+ "files": []
+}

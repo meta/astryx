@@ -1,0 +1,18 @@
+{
+ "id": "w_deploying_@docsint",
+ "args": [
+  "docs",
+  "deploying"
+ ],
+ "fixture": "docsint",
+ "stdout": "Deploying\nShip it with `npm install -D @acme/docs`.\n\npackage: @acme/docs\n\noverview  Overview - Run `npx @astryxdesign/cli@0.7.12 docs theme` first; see {@link generic:spacing} and {@link\n          command:docs}.\nrollback  Rolling back - one {@link generic:nope}\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying --full\nUp: npx @astryxdesign/cli@0.7.12 docs acme-handbook\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/docsint\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

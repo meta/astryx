@@ -1,0 +1,12 @@
+{
+ "id": "w_use-theme",
+ "args": [
+  "docs",
+  "use-theme"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"use-theme\"\n\n  use-a-theme  (available topic)\n",
+ "exit": 1,
+ "files": []
+}

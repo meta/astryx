@@ -1,0 +1,15 @@
+{
+ "id": "w_render_missing",
+ "args": [
+  "experimental",
+  "render",
+  "missing.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page imports no-such-package, which is not installed\n\n  npm install no-such-package  (install the package the page imports)\n",
+ "exit": 1,
+ "files": []
+}

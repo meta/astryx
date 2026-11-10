@@ -100,9 +100,83 @@ pub fn import_usage(source: &str) -> HashMap<String, Wanted> {
     usage
 }
 
+/// What a module exports: its own names, and the specifiers it re-exports
+/// with `export * from`.
+#[derive(Debug, Clone, Default)]
+pub struct ExportInfo {
+    pub names: BTreeSet<String>,
+    pub stars: Vec<String>,
+}
+
+/// The export names of a module's source (`None` when oxc cannot parse it).
+pub fn export_info(source: &str) -> Option<ExportInfo> {
+    use oxc::ast::ast::Declaration;
+    let allocator = Allocator::default();
+    let ret = Parser::new(&allocator, source, SourceType::mjs()).parse();
+    if !ret.diagnostics.is_empty() {
+        return None;
+    }
+    let mut info = ExportInfo::default();
+    for stmt in &ret.program.body {
+        match stmt {
+            Statement::ExportDefaultDeclaration(_) => {
+                info.names.insert("default".into());
+            }
+            Statement::ExportDeclaration(d) => match &d.declaration {
+                Declaration::VariableDeclaration(v) => {
+                    for decl in &v.declarations {
+                        for id in decl.id.get_binding_identifiers() {
+                            info.names.insert(id.name.to_string());
+                        }
+                    }
+                }
+                Declaration::FunctionDeclaration(f) => {
+                    if let Some(id) = &f.id {
+                        info.names.insert(id.name.to_string());
+                    }
+                }
+                Declaration::ClassDeclaration(c) => {
+                    if let Some(id) = &c.id {
+                        info.names.insert(id.name.to_string());
+                    }
+                }
+                _ => {}
+            },
+            Statement::ExportNamedDeclaration(d) => {
+                for sp in &d.specifiers {
+                    info.names.insert(sp.exported.name().to_string());
+                }
+            }
+            Statement::ExportFromDeclaration(d) => {
+                for sp in &d.specifiers {
+                    info.names.insert(sp.exported.name().to_string());
+                }
+            }
+            Statement::ExportAllDeclaration(d) => match &d.exported {
+                Some(n) => {
+                    info.names.insert(n.name().to_string());
+                }
+                None => info.stars.push(d.source.value.as_str().unwrap_or("").to_string()),
+            },
+            _ => {}
+        }
+    }
+    Some(info)
+}
+
+/// Callbacks [`prune_barrel`] needs about the modules a barrel names.
+pub trait BarrelContext {
+    /// Every name the module at `spec` exports (`export *` followed),
+    /// without `default`; `None` when unknown.
+    fn star_names(&self, spec: &str) -> Option<BTreeSet<String>>;
+    /// Whether the module at `spec` declares side effects (it must still
+    /// load when nothing is taken from it).
+    fn has_side_effects(&self, spec: &str) -> bool;
+}
+
 /// A barrel cut down to `wanted`, or `None` when `source` does more than
 /// import and re-export.
-pub fn prune_barrel(source: &str, wanted: &BTreeSet<String>) -> Option<String> {
+pub fn prune_barrel(source: &str, wanted: &BTreeSet<String>, cx: &dyn BarrelContext) -> Option<String> {
     let allocator = Allocator::default();
     let ret = Parser::new(&allocator, source, SourceType::mjs()).parse();
     if !ret.diagnostics.is_empty() {
@@ -125,6 +199,28 @@ pub fn prune_barrel(source: &str, wanted: &BTreeSet<String>) -> Option<String> {
                 }
             }
             _ => return None,
+        }
+    }
+    // `export *` sources: the wanted names each one supplies. A wanted name
+    // two sources supply is ambiguous; leave such a barrel whole.
+    let mut star_keep: HashMap<String, Option<BTreeSet<String>>> = HashMap::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for stmt in &ret.program.body {
+        if let Statement::ExportAllDeclaration(d) = stmt {
+            if d.exported.is_none() {
+                let spec = d.source.value.as_str().unwrap_or("").to_string();
+                let keep = cx.star_names(&spec).map(|names| {
+                    names.intersection(wanted).cloned().collect::<BTreeSet<String>>()
+                });
+                if let Some(k) = &keep {
+                    for n in k {
+                        if !seen.insert(n.clone()) {
+                            return None;
+                        }
+                    }
+                }
+                star_keep.insert(spec, keep);
+            }
         }
     }
     let mut out = String::new();
@@ -153,16 +249,36 @@ pub fn prune_barrel(source: &str, wanted: &BTreeSet<String>) -> Option<String> {
                     .collect();
                 if !kept.is_empty() {
                     out.push_str(&format!("export {{ {} }} from {};\n", kept.join(", "), text(d.source.span)));
+                } else if cx.has_side_effects(d.source.value.as_str().unwrap_or("")) {
+                    out.push_str(&format!("import {};\n", text(d.source.span)));
                 }
             }
             Statement::ExportAllDeclaration(d) => {
-                let keep = match &d.exported {
-                    Some(name) => wanted.contains(name.name().as_ref() as &str),
-                    None => true,
-                };
-                if keep {
-                    out.push_str(text(d.span));
-                    out.push('\n');
+                let spec = d.source.value.as_str().unwrap_or("");
+                match &d.exported {
+                    Some(name) => {
+                        if wanted.contains(name.name().as_ref() as &str) {
+                            out.push_str(text(d.span));
+                            out.push('\n');
+                        } else if cx.has_side_effects(spec) {
+                            out.push_str(&format!("import {};\n", text(d.source.span)));
+                        }
+                    }
+                    None => match star_keep.get(spec) {
+                        Some(Some(keep)) if !keep.is_empty() => {
+                            let names: Vec<&str> = keep.iter().map(|s| s.as_str()).collect();
+                            out.push_str(&format!("export {{ {} }} from {};\n", names.join(", "), text(d.source.span)));
+                        }
+                        Some(Some(_)) => {
+                            if cx.has_side_effects(spec) {
+                                out.push_str(&format!("import {};\n", text(d.source.span)));
+                            }
+                        }
+                        _ => {
+                            out.push_str(text(d.span));
+                            out.push('\n');
+                        }
+                    },
                 }
             }
             Statement::ExportNamedDeclaration(d) => {
@@ -193,8 +309,25 @@ mod tests {
         assert_eq!(u["y"], Wanted::All);
         assert_eq!(u["z"], Wanted::All);
         let barrel = "\"use strict\";\nimport * as index from './icons/index.mjs';\nexport { index as icons };\nexport { default as X, default as XIcon } from './icons/x.mjs';\nexport { default as Y } from './icons/y.mjs';\n";
+        struct Cx;
+        impl BarrelContext for Cx {
+            fn star_names(&self, spec: &str) -> Option<BTreeSet<String>> {
+                match spec {
+                    "./a.js" => Some(["X".to_string(), "Q".to_string()].into()),
+                    "./b.js" => Some(["Z".to_string()].into()),
+                    _ => None,
+                }
+            }
+            fn has_side_effects(&self, spec: &str) -> bool {
+                spec == "./b.js"
+            }
+        }
         let want: BTreeSet<String> = ["X".to_string()].into();
-        assert_eq!(prune_barrel(barrel, &want).unwrap(), "export { default as X } from './icons/x.mjs';\n");
-        assert_eq!(prune_barrel("export const a = 1;", &want), None);
+        assert_eq!(prune_barrel(barrel, &want, &Cx).unwrap(), "export { default as X } from './icons/x.mjs';\n");
+        assert_eq!(prune_barrel("export const a = 1;", &want, &Cx), None);
+        assert_eq!(
+            prune_barrel("'use client';\nexport * from './a.js';\nexport * from './b.js';\nexport * from './c.js';\n", &want, &Cx).unwrap(),
+            "export { X } from './a.js';\nimport './b.js';\nexport * from './c.js';\n"
+        );
     }
 }

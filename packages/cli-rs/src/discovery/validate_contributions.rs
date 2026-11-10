@@ -251,12 +251,19 @@ fn usable_root<'a>(r: &'a Record, kind: &str) -> Option<&'a str> {
 
 const MANIFEST_BASENAMES: &[&str] = &["astryx.integration.ts", "astryx.integration.mjs", "astryx.integration.js"];
 
+/// `fs.readdirSync`: sorted by name bytes, as libuv sorts a listing.
+fn read_dir_sorted(dir: &str) -> Option<Vec<np::Dirent>> {
+    let mut v = np::read_dir(dir)?;
+    v.sort_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
+    Some(v)
+}
+
 fn check_codemods(r: &Record, out: &mut Vec<Finding>) {
     let Some(root) = usable_root(r, "codemods") else { return };
     let file_re = crate::doctor_re!(r"\.(?:ts|mjs|js)$");
     let test_re = crate::doctor_re!(r"\.(?:test|spec|fixture)\.(?:ts|mjs|js)$", "u");
     let skip: &[&str] = &["node_modules", ".git", "__tests__", "__fixtures__"];
-    let Some(entries) = np::read_dir(root) else { return };
+    let Some(entries) = read_dir_sorted(root) else { return };
     let package_dir = s(r, "__packageDir");
     for e in entries {
         if e.is_file
@@ -282,10 +289,21 @@ fn check_codemods(r: &Record, out: &mut Vec<Finding>) {
             ));
         }
     }
+    if let Err(e) = crate::commands::upgrade::integration_discovery::discover_integration_codemods(std::slice::from_ref(r)) {
+        out.push(err("invalid_codemod", e));
+    }
 }
 
 fn check_templates(r: &Record, out: &mut Vec<Finding>) {
     let Some(root) = usable_root(r, "templates") else { return };
+    let (_, errors) = crate::commands::template::integration::for_one(r);
+    for e in errors {
+        let severity = match e.severity.as_deref() {
+            Some("warning") => "warning",
+            _ => "error",
+        };
+        out.push(Finding { code: e.code.unwrap_or_else(|| "invalid_template".into()), severity, message: e.message, listed: false });
+    }
     let shared = usable_root(r, "components").map(|c| np::resolve1(c) == np::resolve1(root)).unwrap_or(false);
     for file in template_source_only_candidates(root) {
         if shared && file.starts_with(|c: char| c.is_ascii_uppercase()) {
@@ -301,7 +319,7 @@ fn check_templates(r: &Record, out: &mut Vec<Finding>) {
 
 /// `findTemplateSourceOnlyCandidates(root)`.
 pub fn template_source_only_candidates(root: &str) -> Vec<String> {
-    let Some(entries) = np::read_dir(root) else { return vec![] };
+    let Some(entries) = read_dir_sorted(root) else { return vec![] };
     let mut out: Vec<String> = Vec::new();
     for e in entries {
         if !e.is_file && !e.is_symlink {
@@ -324,7 +342,7 @@ pub fn template_source_only_candidates(root: &str) -> Vec<String> {
 
 /// `findSourceOnlyCandidates(root, names)`.
 pub fn source_only_candidates(root: &str, registered: &[String]) -> Vec<String> {
-    let Some(entries) = np::read_dir(root) else { return vec![] };
+    let Some(entries) = read_dir_sorted(root) else { return vec![] };
     let mut out: Vec<String> = Vec::new();
     for e in entries {
         if !e.is_file && !e.is_symlink {
@@ -418,7 +436,17 @@ pub fn all_findings(r: &Record) -> Vec<Finding> {
     check_templates(r, &mut out);
     check_components(r, &mut out);
     check_docs(r, &mut out);
+    check_themes(r, &mut out);
     out
+}
+
+fn check_themes(r: &Record, out: &mut Vec<Finding>) {
+    if usable_root(r, "themes").is_none() {
+        return;
+    }
+    if let Err(e) = crate::commands::theme::discovery::discover_integration_themes(r) {
+        out.push(err("invalid_theme", e));
+    }
 }
 
 fn check_docs(r: &Record, out: &mut Vec<Finding>) {
@@ -443,4 +471,5 @@ fn validator(_p: &Project, r: &Record) -> Result<Vec<(String, String, String)>, 
 pub fn register() {
     let _ = super::project::VALIDATOR.set(validator);
     crate::commands::component::deps::register();
+    crate::commands::template::integration::register();
 }

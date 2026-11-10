@@ -29,6 +29,13 @@ thread_local! {
     static ENGINE: RefCell<Option<std::mem::ManuallyDrop<Engine>>> = const { RefCell::new(None) };
     /// `Some` while output is captured; `None` writes straight to stderr.
     static CAPTURE: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
+    /// `Some` while console calls are captured as (level, text).
+    static CONSOLE: RefCell<Option<Vec<(String, String)>>> = const { RefCell::new(None) };
+    /// Every module file loaded, in load order, while recording.
+    static LOADED: RefCell<Option<Vec<PathBuf>>> = const { RefCell::new(None) };
+    static VIRTUAL_IDS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Resolution failure message -> the specifier that failed.
+    static MISSING: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     /// The code `process.exit` was called with, until the caller reads it.
     static EXIT: std::cell::Cell<Option<i32>> = const { std::cell::Cell::new(None) };
     static EPOCH: std::time::Instant = std::time::Instant::now();
@@ -156,6 +163,46 @@ fn install_math_fn(ctx: &mut Context, name: &'static str, f: super::MathFn) {
     .expect("define Math function");
 }
 
+pub fn set_console_capture(on: bool) -> Vec<(String, String)> {
+    CONSOLE.with(|c| {
+        let mut c = c.borrow_mut();
+        let old = c.take().unwrap_or_default();
+        if on {
+            *c = Some(Vec::new());
+        }
+        old
+    })
+}
+
+pub fn set_load_recording(on: bool) -> Vec<PathBuf> {
+    LOADED.with(|c| {
+        let mut c = c.borrow_mut();
+        let old = c.take().unwrap_or_default();
+        if on {
+            *c = Some(Vec::new());
+        }
+        old
+    })
+}
+
+pub fn missing_specifier(message: &str) -> Option<String> {
+    MISSING.with(|m| m.borrow().get(message).cloned())
+}
+
+fn note_missing(message: &str, spec: &str) {
+    MISSING.with(|m| {
+        m.borrow_mut().insert(message.to_string(), spec.to_string());
+    });
+}
+
+fn record_load(path: &Path) {
+    LOADED.with(|l| {
+        if let Some(v) = l.borrow_mut().as_mut() {
+            v.push(path.to_path_buf());
+        }
+    });
+}
+
 pub fn set_capture(on: bool) -> Vec<u8> {
     CAPTURE.with(|c| {
         let mut c = c.borrow_mut();
@@ -173,6 +220,8 @@ pub struct Flavor {
     pub jsx: bool,
     /// Index of the load's resolution profile (0: the default).
     pub profile: u16,
+    /// JSX compiles for the automatic runtime (`react/jsx-runtime`).
+    pub jsx_auto: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -191,6 +240,10 @@ impl ModInfo {
 #[derive(Default)]
 pub struct Loader {
     files: RefCell<HashMap<(Flavor, PathBuf), Module>>,
+    /// Virtual modules by id.
+    virtuals: RefCell<HashMap<u64, Module>>,
+    /// Export names by module, for barrel pruning.
+    export_cache: RefCell<HashMap<PathBuf, Option<BTreeSet<String>>>>,
     /// Resolution profiles; index 0 is the default.
     profiles: RefCell<Vec<resolve::Profile>>,
     /// Barrels cut down to the names one set of importers takes.
@@ -272,7 +325,7 @@ impl Loader {
             Referrer::Module(m) => self.info.borrow().get(m).cloned(),
             _ => None,
         }
-        .unwrap_or_else(|| ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0 }))
+        .unwrap_or_else(|| ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }))
     }
 
     fn builtin(&self, name: &str, context: &mut Context) -> JsResult<Module> {
@@ -291,7 +344,7 @@ impl Loader {
         let module = Module::parse(Source::from_bytes(src).with_path(&path), None, context)?;
         self.info
             .borrow_mut()
-            .insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0 }));
+            .insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }));
         self.builtins.borrow_mut().insert(name.to_string(), module.clone());
         Ok(module)
     }
@@ -348,7 +401,9 @@ impl Loader {
                     ));
                 }
                 let text = read_source(path, context)?;
-                Module::parse_json(JsString::from(text.as_str()), context)?
+                record_load(path);
+                Module::parse_json(JsString::from(text.as_str()), context)
+                    .map_err(|_| json_module_error(path, &text, context))?
             }
             "mjs" | "js" | "cjs" | "ts" | "mts" | "cts" | "tsx" | "jsx" => {
                 if flavor.mode == Mode::Esm && matches!(ext, "tsx" | "jsx") {
@@ -356,15 +411,17 @@ impl Loader {
                 }
                 let text = read_source(path, context)?;
                 let text = if transform::is_typescript(path) || flavor.jsx || ext == "jsx" {
-                    transform::strip(&text, path, flavor.jsx).map_err(|m| {
+                    transform::strip(&text, path, flavor.jsx, flavor.jsx_auto).map_err(|m| {
                         coded_error("SyntaxError", "", &m, context)
                     })?
                 } else {
                     text
                 };
                 if is_esm_source(path, &text, context) {
+                    record_load(path);
                     if let (Some(w), Some(k)) = (wanted, &pruned_key) {
-                        if let Some(cut) = prune::prune_barrel(&text, w) {
+                        let cx = Barrel { loader: self, from: path, flavor };
+                        if let Some(cut) = prune::prune_barrel(&text, w, &cx) {
                             let usage = Rc::new(prune::import_usage(&cut));
                             let m = Module::parse(Source::from_bytes(cut.as_str()).with_path(path), None, context)?;
                             self.info.borrow_mut().insert(m.clone(), ModInfo { flavor, usage });
@@ -374,6 +431,11 @@ impl Loader {
                     }
                     let text = transform::rewrite_pow(&text, true).unwrap_or(text);
                     let usage = Rc::new(prune::import_usage(&text));
+                    let text = if flavor.mode == Mode::Jiti {
+                        transform::jiti_import_reads(&text).unwrap_or(text)
+                    } else {
+                        text
+                    };
                     let m = Module::parse(Source::from_bytes(text.as_str()).with_path(path), None, context)?;
                     self.info.borrow_mut().insert(m.clone(), ModInfo { flavor, usage });
                     if cache {
@@ -412,7 +474,7 @@ impl Loader {
             None => {
                 let t = read_source(path, context)?;
                 if transform::is_typescript(path) {
-                    transform::strip(&t, path, false)
+                    transform::strip(&t, path, false, false)
                         .map_err(|m| coded_error("SyntaxError", "", &m, context))?
                 } else {
                     t
@@ -421,6 +483,7 @@ impl Loader {
         };
         let text = transform::rewrite_pow(&text, false).unwrap_or(text);
         let text = text.strip_prefix("#!").map(|t| t.split_once('\n').map(|x| x.1).unwrap_or("")).unwrap_or(&text).to_string();
+        record_load(path);
         let file = path.to_string_lossy().into_owned();
         let dir = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
         let exports = JsObject::with_object_proto(context.intrinsics());
@@ -467,12 +530,8 @@ impl Loader {
     fn require(&self, spec: &str, from: &Path, jiti: bool, context: &mut Context) -> JsResult<JsValue> {
         let mode = if jiti { Mode::Jiti } else { Mode::Cjs };
         let resolved = resolve::resolve(spec, from, mode).map_err(|e| {
-            let msg = if e.code == "MODULE_NOT_FOUND" {
-                e.message
-            } else {
-                e.message
-            };
-            coded_error("Error", e.code, &msg, context)
+            note_missing(&e.message, spec);
+            coded_error("Error", e.code, &e.message, context)
         })?;
         match resolved {
             Resolved::Builtin(name) => {
@@ -484,23 +543,28 @@ impl Loader {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                 if ext == "json" {
                     let text = read_source(&path, context)?;
+                    record_load(&path);
                     let json = context.global_object().get(js_string!("JSON"), context)?;
                     let parse = json.as_object().unwrap().get(js_string!("parse"), context)?;
-                    return parse.as_object().unwrap().call(&json, &[JsString::from(text.as_str()).into()], context);
+                    return parse
+                        .as_object()
+                        .unwrap()
+                        .call(&json, &[JsString::from(text.as_str()).into()], context)
+                        .map_err(|_| json_module_error(&path, &text, context));
                 }
                 if self.cjs.borrow().contains_key(&path) {
                     return self.require_cjs(&path, None, jiti, context);
                 }
                 let text = read_source(&path, context)?;
                 let text = if transform::is_typescript(&path) {
-                    transform::strip(&text, &path, false)
+                    transform::strip(&text, &path, false, false)
                         .map_err(|m| coded_error("SyntaxError", "", &m, context))?
                 } else {
                     text
                 };
                 if is_esm_source(&path, &text, context) {
                     // require(esm): the namespace, once evaluated.
-                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile: 0 };
+                    let flavor = Flavor { mode: if jiti { Mode::Jiti } else { Mode::Esm }, jsx: false, profile: 0, jsx_auto: false };
                     let m = self.load_file(&path, flavor, false, true, context)?;
                     evaluate_now(&m, context)?;
                     let ns = m.namespace(context);
@@ -636,6 +700,85 @@ fn cjs_namespace(exports: JsValue, jiti: bool, path: &Path, context: &mut Contex
     ))
 }
 
+/// What pruning a barrel needs to know about the modules it names.
+struct Barrel<'a> {
+    loader: &'a Loader,
+    from: &'a Path,
+    flavor: Flavor,
+}
+
+impl Barrel<'_> {
+    fn resolve(&self, spec: &str) -> Option<PathBuf> {
+        match resolve::resolve_with(spec, self.from, self.flavor.mode, &self.loader.profile(self.flavor.profile)) {
+            Ok(Resolved::File(p)) => Some(p),
+            _ => None,
+        }
+    }
+}
+
+impl prune::BarrelContext for Barrel<'_> {
+    fn star_names(&self, spec: &str) -> Option<BTreeSet<String>> {
+        let p = self.resolve(spec)?;
+        let mut visiting = Vec::new();
+        let mut names = self.loader.export_names(&p, self.flavor, &mut visiting)?;
+        names.remove("default");
+        Some(names)
+    }
+
+    fn has_side_effects(&self, spec: &str) -> bool {
+        self.resolve(spec).map(|p| !resolve::package_is_pure(&p)).unwrap_or(true)
+    }
+}
+
+impl Loader {
+    /// Every name `path` exports, following `export *` (ambiguous star
+    /// names left out, as the spec leaves them out). `None` when a module in
+    /// the chain cannot be read or parsed, or is not an ES module.
+    fn export_names(&self, path: &Path, flavor: Flavor, visiting: &mut Vec<PathBuf>) -> Option<BTreeSet<String>> {
+        if let Some(n) = self.export_cache.borrow().get(path) {
+            return n.clone();
+        }
+        if visiting.iter().any(|v| v == path) {
+            return Some(BTreeSet::new());
+        }
+        visiting.push(path.to_path_buf());
+        let result = (|| {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if !matches!(ext, "js" | "mjs") {
+                return None;
+            }
+            if ext == "js" && !resolve::package_type_is_module(path) {
+                return None;
+            }
+            let text = std::fs::read_to_string(path).ok()?;
+            let info = prune::export_info(&text)?;
+            let mut names = info.names.clone();
+            let mut from_stars: HashMap<String, usize> = HashMap::new();
+            for spec in &info.stars {
+                let p = match resolve::resolve_with(spec, path, flavor.mode, &self.profile(flavor.profile)) {
+                    Ok(Resolved::File(p)) => p,
+                    _ => return None,
+                };
+                let sub = self.export_names(&p, flavor, visiting)?;
+                for n in sub {
+                    if n != "default" {
+                        *from_stars.entry(n).or_default() += 1;
+                    }
+                }
+            }
+            for (n, count) in from_stars {
+                if count == 1 && !names.contains(&n) {
+                    names.insert(n);
+                }
+            }
+            Some(names)
+        })();
+        visiting.pop();
+        self.export_cache.borrow_mut().insert(path.to_path_buf(), result.clone());
+        result
+    }
+}
+
 struct Trace<'a>(&'a Path, std::time::Instant);
 impl Drop for Trace<'_> {
     fn drop(&mut self) {
@@ -643,6 +786,50 @@ impl Drop for Trace<'_> {
             eprintln!("[js] {:>7.2}ms {}", self.1.elapsed().as_secs_f64() * 1000.0, self.0.display());
         }
     }
+}
+
+/// A JSON module that does not parse: Node's SyntaxError, `path: message`
+/// with V8's `JSON.parse` message.
+fn json_module_error(path: &Path, text: &str, context: &mut Context) -> boa_engine::JsError {
+    let message = super::jsonparse::parse(text).err().unwrap_or_else(|| "Unexpected end of JSON input".into());
+    let native = JsNativeError::syntax().with_message(format!("{}: {message}", path.display()));
+    boa_engine::JsError::from_opaque(native.into_opaque(context).into())
+}
+
+/// `JSON.parse` with V8's error messages.
+fn install_json_parse(ctx: &mut Context) {
+    let json = ctx.global_object().get(js_string!("JSON"), ctx).expect("JSON");
+    let json = json.as_object().unwrap();
+    let original = json.get(js_string!("parse"), ctx).expect("parse").as_object().unwrap();
+    let func = boa_engine::object::FunctionObjectBuilder::new(
+        ctx.realm(),
+        NativeFunction::from_copy_closure_with_captures(
+            |this, args, original: &JsObject, ctx| match original.call(this, args, ctx) {
+                Ok(v) => Ok(v),
+                Err(e) => {
+                    let is_syntax = matches!(e.as_native().map(|n| n.kind().clone()), Some(boa_engine::JsNativeErrorKind::Syntax));
+                    if !is_syntax {
+                        return Err(e);
+                    }
+                    let text = args.first().cloned().unwrap_or_default().to_string(ctx)?.to_std_string_lossy();
+                    match super::jsonparse::parse(&text) {
+                        Err(m) => Err(JsNativeError::syntax().with_message(m).into()),
+                        Ok(_) => Err(e),
+                    }
+                }
+            },
+            original,
+        ),
+    )
+    .name(js_string!("parse"))
+    .length(2)
+    .build();
+    json.define_property_or_throw(
+        js_string!("parse"),
+        boa_engine::property::PropertyDescriptor::builder().value(func).writable(true).enumerable(false).configurable(true),
+        ctx,
+    )
+    .expect("define JSON.parse");
 }
 
 fn unknown_extension(ext: &str, path: &Path, context: &mut Context) -> boa_engine::JsError {
@@ -677,11 +864,20 @@ impl ModuleLoader for Loader {
                 Some(Wanted::Names(n)) => Some(n.clone()),
                 _ => None,
             };
+            let profile = self.profile(flavor.profile);
+            if let Some((_, id)) = profile.virtuals.iter().find(|(s, _)| *s == spec) {
+                if let Some(m) = self.virtuals.borrow().get(id) {
+                    return Ok(m.clone());
+                }
+            }
             let pure_entry = wanted.as_ref().and_then(|_| resolve::pure_module_entry(&spec, &from));
             let resolved = match pure_entry {
                 Some(p) => Resolved::File(p),
                 None => resolve::resolve_with(&spec, &from, flavor.mode, &self.profile(flavor.profile))
-                    .map_err(|e| coded_error("Error", e.code, &e.message, ctx))?,
+                    .map_err(|e| {
+                        note_missing(&e.message, &spec);
+                        coded_error("Error", e.code, &e.message, ctx)
+                    })?,
             };
             match resolved {
                 Resolved::Builtin(name) => self.builtin(&name, ctx),
@@ -906,6 +1102,7 @@ impl Engine {
         ctx.runtime_limits_mut().set_recursion_limit(10_000);
         install_host(&mut ctx);
         install_locale_compare(&mut ctx);
+        install_json_parse(&mut ctx);
         install_math_fn(&mut ctx, "pow", |a| super::jsmath::pow(arg(a, 0), arg(a, 1)));
         install_math_fn(&mut ctx, "atan2", |a| super::jsmath::atan2(arg(a, 0), arg(a, 1)));
         install_math_fn(&mut ctx, "cbrt", |a| super::jsmath::cbrt(arg(a, 0)));
@@ -932,6 +1129,9 @@ impl Engine {
 
     /// Node globals that builtin shims provide (`URL`, `URLSearchParams`).
     fn bootstrap(&mut self) {
+        self.ctx
+            .eval(Source::from_bytes(include_str!("inspect.js")))
+            .expect("inspect.js runs");
         let src = BOOTSTRAP;
         let path = PathBuf::from("/node:bootstrap");
         let module = Module::parse(Source::from_bytes(src).with_path(&path), None, &mut self.ctx)
@@ -951,8 +1151,10 @@ impl Engine {
         let profile = self.loader.profile_index(&resolve::Profile {
             aliases: jiti.aliases.clone(),
             extensions: jiti.extensions.clone(),
+            virtuals: jiti.virtual_modules.clone(),
         });
-        Flavor { mode, jsx: opts.jsx && mode == Mode::Jiti, profile }
+        let jsx = (opts.jsx || jiti.jsx_automatic) && mode == Mode::Jiti;
+        Flavor { mode, jsx, profile, jsx_auto: jsx && jiti.jsx_automatic }
     }
 
     /// [`Self::load`] with jiti's options.
@@ -1034,6 +1236,57 @@ impl Engine {
         }
     }
 
+    /// Make a virtual module whose exports are `obj`'s own enumerable keys
+    /// (values read when the module links), plus `default` = `obj` unless
+    /// `obj` has its own `default`. Pass the id in
+    /// `JitiOptions::virtual_modules`.
+    #[allow(dead_code)]
+    pub(super) fn register_virtual(&mut self, obj: JsObject) -> JsResult<u64> {
+        let keys = self.ctx.eval(Source::from_bytes("Object.keys"))?;
+        let keys = keys.as_object().unwrap().call(&JsValue::undefined(), &[obj.clone().into()], &mut self.ctx)?;
+        let keys = JsArray::from_object(keys.as_object().unwrap())?;
+        let mut names: Vec<JsString> = Vec::new();
+        for i in 0..keys.length(&mut self.ctx)? {
+            names.push(keys.get(i, &mut self.ctx)?.to_string(&mut self.ctx)?);
+        }
+        if !names.contains(&js_string!("default")) {
+            names.push(js_string!("default"));
+        }
+        let names_arr = JsArray::new(&mut self.ctx)?;
+        for n in &names {
+            names_arr.push(n.clone(), &mut self.ctx)?;
+        }
+        let module = Module::synthetic(
+            &names,
+            boa_engine::module::SyntheticModuleInitializer::from_copy_closure_with_captures(
+                |m, (obj, names): &(JsObject, JsArray), ctx| {
+                    for i in 0..names.length(ctx)? {
+                        let k = names.get(i, ctx)?.to_string(ctx)?;
+                        let v = if k == js_string!("default") && !obj.has_own_property(k.clone(), ctx)? {
+                            obj.clone().into()
+                        } else {
+                            obj.get(k.clone(), ctx)?
+                        };
+                        m.set_export(&k, v)?;
+                    }
+                    Ok(())
+                },
+                (obj, names_arr),
+            ),
+            None,
+            None,
+            &mut self.ctx,
+        );
+        let id = VIRTUAL_IDS.with(|c| {
+            let v = c.get() + 1;
+            c.set(v);
+            v
+        });
+        self.loader.info.borrow_mut().insert(module.clone(), ModInfo::new(Flavor { mode: Mode::Esm, jsx: false, profile: 0, jsx_auto: false }));
+        self.loader.virtuals.borrow_mut().insert(id, module);
+        Ok(id)
+    }
+
     /// Await `value` when it is a promise (running jobs and timers);
     /// `Err` carries the rejection reason, or `undefined` for a timeout or a
     /// promise nothing can settle.
@@ -1104,7 +1357,7 @@ impl Engine {
         args: &[crate::json::Value],
         opts: &CallOptions,
     ) -> Result<CallResult, CallError> {
-        let (module, flavor, real) = self.load(path, &opts.import).map_err(CallError::Load)?;
+        let (module, flavor, real) = self.load_with(path, &opts.import, &opts.jiti).map_err(CallError::Load)?;
         let ns: JsValue = module.namespace(&mut self.ctx).into();
         let not_fn = || CallError::NotAFunction(export.join("."));
         let mut this = JsValue::undefined();
@@ -1451,6 +1704,25 @@ fn install_host(ctx: &mut Context) {
         )
         .function(
             NativeFunction::from_fn_ptr(|_, args, ctx| {
+                let level = arg_string(args, 0, ctx)?;
+                let text = arg_string(args, 1, ctx)?;
+                let captured = CONSOLE.with(|c| match c.borrow_mut().as_mut() {
+                    Some(lines) => {
+                        lines.push((level.clone(), text.clone()));
+                        true
+                    }
+                    None => false,
+                });
+                if !captured {
+                    write_output(format!("{text}\n").as_bytes());
+                }
+                Ok(JsValue::undefined())
+            }),
+            js_string!("console"),
+            2,
+        )
+        .function(
+            NativeFunction::from_fn_ptr(|_, args, ctx| {
                 let from = arg_string(args, 0, ctx)?;
                 let path = if from.starts_with("file:") {
                     resolve::file_url_to_path(&from).unwrap_or_default()
@@ -1466,19 +1738,7 @@ fn install_host(ctx: &mut Context) {
     ctx.register_global_property(js_string!("__astryx_host"), host, Attribute::WRITABLE | Attribute::CONFIGURABLE)
         .expect("host global");
 
-    let console_fn = NativeFunction::from_fn_ptr(|_, args, ctx| {
-        let mut s = format_args(args, ctx);
-        s.push('\n');
-        write_output(s.as_bytes());
-        Ok(JsValue::undefined())
-    });
-    let mut console = ObjectInitializer::new(ctx);
-    for name in ["log", "info", "warn", "error", "debug", "trace"] {
-        console.function(console_fn.clone(), JsString::from(name), 0);
-    }
-    let console = console.build();
-    ctx.register_global_property(js_string!("console"), console, Attribute::WRITABLE | Attribute::CONFIGURABLE)
-        .expect("console global");
+
 
     let env = ObjectInitializer::new(ctx).build();
     for (k, v) in std::env::vars() {

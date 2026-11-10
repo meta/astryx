@@ -7,7 +7,7 @@ file a run creates, changes or deletes. The goldens come from the JS CLI.
 
 ```sh
 node packages/cli-rs/conformance/run.mjs --bin <worktree>/target/release/astryx \
-  [--command search,docs] [--case <id>[,<id>]] [--jobs 96] [--show-diff] [--max-diffs 50] [--failed]
+  [--command search,docs] [--case <id>[,<id>]] [--jobs 16] [--show-diff] [--max-diffs 50] [--failed]
 ```
 
 - Prints pass/total per command and the first diffs; writes `conformance/report.json`

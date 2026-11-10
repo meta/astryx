@@ -8,7 +8,7 @@
 //! reference blocks; an integration namespace's own `blocks`.
 
 use super::model::{cli_tree_inputs, Variant};
-use crate::discovery::doc_compiler::compile::{index_view, lower_reference_topic, section_view, Lowered, RefTarget};
+use crate::discovery::doc_compiler::compile::{index_view, lower_topic, section_view, Lowered, RefTarget, TopicSource};
 use crate::discovery::doc_compiler::links::{link_blocks, link_fields, parse_link_target, resolve_inline};
 use crate::discovery::doc_compiler::tree::{build_docs_tree, normalize_provider_id, DocInput, DocsTree, NamespaceInput, TopicInput};
 use crate::json::{Map, Value};
@@ -101,210 +101,20 @@ pub fn json_plain(v: &Value) -> Option<Value> {
     }
 }
 
-/// One topic an integration contributes.
-#[derive(Debug, Clone)]
-pub struct TopicRecord {
-    pub name: String,
-    pub package: String,
-    pub provider_id: String,
-    pub path: String,
-    pub doc: Value,
-    pub category: Option<String>,
-    pub replaces: Option<String>,
-    pub extends: Option<String>,
-}
-
-/// One placed guide an integration contributes.
-#[derive(Debug, Clone)]
-pub struct GuideRecord {
-    pub input: DocInput,
-    pub doc: Value,
-}
-
-#[derive(Debug, Default)]
-pub struct IntegrationDocs {
-    pub records: Vec<TopicRecord>,
-    pub namespaces: Vec<NamespaceInput>,
-    pub guides: Vec<GuideRecord>,
-    /// `(package, message)` for each package whose docs did not load.
-    pub issues: Vec<(String, String)>,
-}
-
-impl IntegrationDocs {
-    pub fn is_empty(&self) -> bool {
-        self.records.is_empty() && self.namespaces.is_empty() && self.guides.is_empty() && self.issues.is_empty()
-    }
-}
-
-const SUFFIXES: &[&str] = &[".doc.ts", ".doc.mjs", ".doc.js"];
-
-fn scan(dir: &std::path::Path, out: &mut Vec<String>) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
-    let mut entries: Vec<_> = rd.flatten().collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in entries {
-        let name = e.file_name().to_string_lossy().to_string();
-        if name == "node_modules" || name == "__tests__" {
-            continue;
-        }
-        let p = e.path();
-        if p.is_dir() {
-            scan(&p, out);
-        } else if SUFFIXES.iter().any(|sfx| name.ends_with(sfx)) {
-            out.push(p.to_string_lossy().to_string());
-        }
-    }
-}
-
-fn load_topic_module(file: &str) -> Result<Value, String> {
-    let ns = crate::discovery::docmod::import_doc_module(file).map_err(|e| e.message)?;
-    let pick = |k: &str| ns.get(k).filter(|v| !crate::discovery::docmod::is_undefined(Some(v))).cloned();
-    let raw = pick("docs").or_else(|| pick("default"));
-    match raw {
-        None => Err(format!("{} exports no doc. A topic exports `docs` (or a default export).", std::path::Path::new(file).file_name().unwrap().to_string_lossy())),
-        Some(v) => Ok(v),
-    }
-}
-
-fn is_topic_name(n: &str) -> bool {
-    !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-}
-
-/// TEMP: replace with discovery's `discoverIntegrationDocs(integration)`.
-fn discover_one(name: &str, provider_id: &str, docs_dir: &str, out: &mut IntegrationDocs, rank: i64) {
-    let dir = std::path::Path::new(docs_dir);
-    if !dir.is_dir() {
-        return;
-    }
-    let mut files = Vec::new();
-    scan(dir, &mut files);
-    files.sort();
-    let mut errors: Vec<String> = Vec::new();
-    let mut records = Vec::new();
-    let mut namespaces = Vec::new();
-    let mut guides = Vec::new();
-    let mut seen: HashMap<String, String> = HashMap::new();
-    for file in &files {
-        let relative = file.strip_prefix(&format!("{docs_dir}/")).unwrap_or(file).to_string();
-        let base = std::path::Path::new(file).file_name().unwrap().to_string_lossy().to_string();
-        let doc = match load_topic_module(file).and_then(|raw| crate::discovery::doctypes::parse_readable_doc(&raw, &base)) {
-            Ok(d) => json_plain(&d).unwrap_or(Value::Null),
-            Err(e) => {
-                errors.push(format!("{relative}: {e}"));
-                continue;
-            }
-        };
-        let source = format!("{name}/{relative}");
-        if doc.get("type").and_then(|t| t.as_str()) == Some("namespace") {
-            namespaces.push(NamespaceInput { provider: name.into(), provider_id: provider_id.into(), source, doc, rank });
-            continue;
-        }
-        let topic_name = s(&doc, "name");
-        if topic_name.is_empty() || s(&doc, "title").is_empty() || s(&doc, "description").is_empty() || !is_topic_name(&topic_name) {
-            errors.push(format!("{relative} is not a usable topic"));
-            continue;
-        }
-        let key = topic_name.to_lowercase();
-        if let Some(prev) = seen.get(&key) {
-            errors.push(format!(
-                "{relative} and {prev} both define the topic \"{topic_name}\". Each topic name is a URL and a CLI argument, so they have to be unique."
-            ));
-            continue;
-        }
-        seen.insert(key, relative.clone());
-        let placed = doc.get("placement").map(|p| !p.is_null()).unwrap_or(false);
-        if placed {
-            guides.push(GuideRecord {
-                input: DocInput {
-                    provider: name.into(),
-                    provider_id: provider_id.into(),
-                    source,
-                    kind: "generic".into(),
-                    name: topic_name.clone(),
-                    title: s(&doc, "title"),
-                    summary: s(&doc, "description"),
-                    group: None,
-                    placement: doc.get("placement").cloned(),
-                    topic_file: Some(file.clone()),
-                    self_doc: None,
-                    rank,
-                },
-                doc,
-            });
-            continue;
-        }
-        records.push(TopicRecord {
-            name: topic_name,
-            package: name.into(),
-            provider_id: provider_id.into(),
-            path: file.clone(),
-            category: doc.get("category").and_then(|c| c.as_str()).map(String::from),
-            replaces: doc.get("replaces").and_then(|c| c.as_str()).map(String::from),
-            extends: doc.get("extends").and_then(|c| c.as_str()).map(String::from),
-            doc,
-        });
-    }
-    if !errors.is_empty() {
-        for e in errors {
-            out.issues.push((name.to_string(), e));
-        }
-        return;
-    }
-    out.records.extend(records);
-    out.namespaces.extend(namespaces);
-    out.guides.extend(guides);
-}
-
-/// The docs the project's integrations contribute.
-pub fn discover(cwd: &str) -> IntegrationDocs {
-    let mut out = IntegrationDocs::default();
-    let Ok(project) = crate::discovery::project::Project::load(cwd) else { return out };
-    let mut rank = 0;
-    for r in project.contributing() {
-        rank += 1;
-        let Some(docs_dir) = r.get("docs").and_then(|d| d.as_str()) else { continue };
-        let name = r.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-        let provider_id = r.get("providerId").and_then(|n| n.as_str()).map(String::from).unwrap_or_else(|| name.clone());
-        discover_one(&name, &provider_id, docs_dir, &mut out, rank);
-    }
-    out
-}
-
-fn overlay_path(path: &str, lang: &str) -> String {
-    let p = std::path::Path::new(path);
-    let base = p.file_name().unwrap().to_string_lossy();
-    let stem = base.strip_suffix(".doc.mjs").unwrap_or(&base);
-    p.with_file_name(format!("{stem}.doc.{lang}.mjs")).to_string_lossy().to_string()
-}
-
-fn load_overlay(path: &str, lang: &str) -> Option<Value> {
-    if lang == "en" {
-        return None;
-    }
-    let op = overlay_path(path, lang);
-    if !std::path::Path::new(&op).exists() {
-        return None;
-    }
-    let ns = crate::discovery::docmod::import_doc_module(&op).ok()?;
-    let pick = |k: &str| ns.get(k).filter(|v| !crate::discovery::docmod::is_undefined(Some(v)) && !v.is_null() && *v != &Value::Bool(false)).cloned();
-    pick("docsZh").or_else(|| pick("docsDense")).and_then(|v| json_plain(&v))
-}
-
-// ─── The project's docs, built at run time ─────────────────────────────────
-
-pub struct Built {
-    pub nodes: Vec<Value>,
-    pub topics: Vec<Value>,
-    pub reads: HashMap<String, Value>,
-    pub issues: Vec<(String, String)>,
-}
-
 struct Finder<'a> {
     tree: &'a DocsTree,
     topics: &'a [Value],
 }
 
 impl Finder<'_> {
+    /// `catalog.resolve(name)`: a topic by its name, or a name it took over.
+    fn resolve_topic(&self, name: &str) -> Option<&Value> {
+        let wanted = name.to_lowercase();
+        self.topics.iter().find(|t| s(t, "name").to_lowercase() == wanted).or_else(|| {
+            self.topics.iter().find(|t| t["aliases"].as_array().map(|a| a.iter().any(|x| x.as_str() == Some(wanted.as_str()))).unwrap_or(false))
+        })
+    }
+
     /// `docFinderOver(...)` as far as this port goes: a doc of the tree by
     /// its identity, or a flat topic.
     fn find(&self, target: &str, from_provider: &str) -> Result<Value, String> {
@@ -333,9 +143,11 @@ impl Finder<'_> {
         }
         if parsed.kind == "generic" {
             let wanted = parsed.name.to_lowercase();
-            if let Some(t) = self.topics.iter().find(|t| s(t, "name").to_lowercase() == wanted) {
+            if let Some(t) = self.resolve_topic(&parsed.name) {
                 let tp = t.get("providerId").and_then(|x| x.as_str()).map(String::from).unwrap_or_else(|| s(t, "package"));
-                if normalize_provider_id(&tp).as_deref() == Some(provider.as_str()) {
+                let aliased = t["aliases"].as_array().map(|a| a.iter().any(|x| x.as_str() == Some(wanted.as_str()))).unwrap_or(false)
+                    || t["replaces"].as_str().map(|r| r.to_lowercase() == wanted).unwrap_or(false);
+                if normalize_provider_id(&tp).as_deref() == Some(provider.as_str()) || aliased {
                     let mut l = Map::new();
                     l.insert("target".into(), Value::from(target));
                     l.insert("id".into(), Value::from(crate::discovery::doc_compiler::tree::create_doc_id(&provider, "generic", &parsed.name)));
@@ -385,75 +197,156 @@ fn place_links(tree: &DocsTree, route: &str) -> Value {
     Value::Object(links)
 }
 
-/// Build the project's docs from the model and the integrations' docs.
-pub fn build(variant: &Variant, found: IntegrationDocs) -> Built {
+
+// ─── The project's docs, built at run time ─────────────────────────────────
+
+use crate::discovery::docs_discovery::{project_docs, DocsCatalog, TopicEntry};
+
+const CLI: &str = crate::discovery::doc_compiler::tree::CLI_PROVIDER;
+
+fn integrated(c: &DocsCatalog) -> bool {
+    c.entries().iter().any(|e| e.package != CLI || !e.extensions.is_empty() || e.replaces.is_some()) || !c.tree_inputs.is_empty() || !c.issues.is_empty() || !c.guide_targeters.is_empty()
+}
+
+/// The project's docs catalog, when its integrations change anything.
+pub fn discover(cwd: &str) -> Option<DocsCatalog> {
+    let project = crate::discovery::project::Project::load(cwd).ok()?;
+    let catalog = project_docs(&project);
+    integrated(&catalog).then_some(catalog)
+}
+
+fn plain_doc(v: Option<Value>) -> Option<Value> {
+    v.and_then(|d| json_plain(&d))
+}
+
+fn load(path: &str, lang: &str) -> (Option<Value>, Option<Value>) {
+    let f = crate::discovery::doc_read::load_topic_file(path, if lang == "en" { None } else { Some(lang) });
+    (plain_doc(f.doc), plain_doc(f.overlay))
+}
+
+pub struct Built {
+    pub tree: DocsTree,
+    pub nodes: Vec<Value>,
+    pub topics: Vec<Value>,
+    pub reads: HashMap<String, Value>,
+    pub issues: Vec<(String, String)>,
+}
+
+fn tree_input_namespace(m: &Map<String, Value>) -> NamespaceInput {
+    let v = Value::Object(m.clone());
+    NamespaceInput { provider: s(&v, "provider"), provider_id: s(&v, "providerId"), source: s(&v, "source"), doc: v["doc"].clone(), rank: v["rank"].as_i64().unwrap_or(0) }
+}
+
+fn tree_input_doc(m: &Map<String, Value>) -> DocInput {
+    let v = Value::Object(m.clone());
+    DocInput {
+        provider: s(&v, "provider"),
+        provider_id: s(&v, "providerId"),
+        source: s(&v, "source"),
+        kind: s(&v, "kind"),
+        name: s(&v, "name"),
+        title: s(&v, "title"),
+        summary: s(&v, "summary"),
+        group: v["group"].as_str().map(String::from),
+        placement: if v["placement"].is_null() { None } else { Some(v["placement"].clone()) },
+        topic_file: v["ref"]["topicFile"].as_str().map(String::from),
+        self_doc: None,
+        rank: v["rank"].as_i64().unwrap_or(0),
+    }
+}
+
+/// A topic a read opens at run time: its files and who wrote each.
+struct Unit {
+    key: String,
+    name: String,
+    package: String,
+    provider_id: String,
+    path: String,
+    extensions: Vec<(String, String, String)>,
+    is_guide: bool,
+    replaces: Option<String>,
+    replaced_package: Option<String>,
+}
+
+fn pure_cli(e: &TopicEntry) -> bool {
+    e.package == CLI && e.extensions.is_empty() && e.replaces.is_none()
+}
+
+/// Build the project's docs from the model and the catalog.
+pub fn build(variant: &Variant, catalog: DocsCatalog) -> Built {
     let model_nodes = variant.nodes();
-    let mut topics = variant.topics();
-    let (mut ns, mut docs, mut topic_inputs) = cli_inputs(&cli_tree_inputs(), &model_nodes);
-    ns.extend(found.namespaces.iter().cloned());
-    docs.extend(found.guides.iter().map(|g| g.input.clone()));
-    let mut issues = found.issues.clone();
-    // Each record joins the catalog (TEMP: a new topic only).
-    let mut added: Vec<&TopicRecord> = Vec::new();
-    for r in &found.records {
-        if r.replaces.is_some() || r.extends.is_some() {
-            continue;
-        }
-        if let Some(existing) = topics.iter().find(|t| s(t, "name").to_lowercase() == r.name.to_lowercase()) {
-            issues.push((
-                r.package.clone(),
-                format!("Topic \"{}\" is already provided by {}. Give it another name, or declare `replaces: '{}'` to take its place.", r.name, s(existing, "package"), r.name),
-            ));
-            continue;
-        }
+    let model_topics = variant.topics();
+    let model_by_route: HashMap<String, &Value> = model_nodes.iter().map(|n| (s(n, "route"), n)).collect();
+    let (mut ns, mut docs, _) = cli_inputs(&cli_tree_inputs(), &model_nodes);
+    for inputs in &catalog.tree_inputs {
+        ns.extend(inputs.namespaces.iter().map(tree_input_namespace));
+        docs.extend(inputs.guides.iter().map(tree_input_doc));
+    }
+    let mut topics = Vec::new();
+    let mut topic_inputs = Vec::new();
+    for e in catalog.entries() {
+        let aliases = catalog.aliases_of(e);
+        let model_topic = model_topics.iter().find(|t| s(t, "name") == e.name);
+        let model_node = model_by_route.get(&e.name).filter(|n| n["flatTopic"].as_str() == Some(e.name.as_str()));
         let mut t = Map::new();
-        t.insert("name".into(), Value::from(r.name.as_str()));
-        t.insert("package".into(), Value::from(r.package.as_str()));
-        t.insert("providerId".into(), if r.provider_id == r.package { Value::Null } else { Value::from(r.provider_id.as_str()) });
-        t.insert("title".into(), r.doc.get("title").cloned().unwrap_or(Value::Null));
-        t.insert("description".into(), r.doc.get("description").cloned().unwrap_or(Value::from("")));
+        t.insert("name".into(), Value::from(e.name.as_str()));
+        t.insert("package".into(), Value::from(e.package.as_str()));
+        t.insert("providerId".into(), e.provider_id.clone().map(Value::from).unwrap_or(Value::Null));
+        let (title, description, category) = if e.package == CLI && e.replaces.is_none() {
+            let n = model_node.copied();
+            (
+                n.map(|n| s(n, "title")).unwrap_or_else(|| e.name.clone()),
+                model_topic.map(|t| s(t, "description")).unwrap_or_default(),
+                n.and_then(|n| if n["parent"] == "foundations" { Some("foundations".to_string()) } else { None }),
+            )
+        } else {
+            let file = load(&e.path, "en").0;
+            let pick = |v: &Option<Value>, k: &str| v.as_ref().and_then(|d| d.get(k)).and_then(|x| x.as_str()).map(String::from);
+            (
+                e.title.as_ref().and_then(|x| x.as_str()).map(String::from).or_else(|| pick(&file, "title")).unwrap_or_else(|| e.name.clone()),
+                e.description.as_ref().and_then(|x| x.as_str()).map(String::from).or_else(|| pick(&file, "description")).unwrap_or_default(),
+                e.category.as_ref().and_then(|x| x.as_str()).map(String::from).or_else(|| pick(&file, "category")),
+            )
+        };
+        t.insert("title".into(), Value::from(title.as_str()));
+        t.insert("description".into(), Value::from(description.as_str()));
+        t.insert("aliases".into(), Value::Array(aliases.iter().map(|a| Value::from(a.as_str())).collect()));
+        if let Some(r) = &e.replaces {
+            t.insert("replaces".into(), Value::from(r.as_str()));
+            if let Some(p) = &e.replaced_package {
+                t.insert("replacedPackage".into(), Value::from(p.as_str()));
+            }
+        }
+        t.insert("pure".into(), Value::Bool(pure_cli(e)));
         topics.push(Value::Object(t));
         topic_inputs.push(TopicInput {
-            provider: r.package.clone(),
-            provider_id: r.provider_id.clone(),
-            name: r.name.clone(),
-            title: s(&r.doc, "title"),
-            summary: s(&r.doc, "description"),
-            category: r.category.clone(),
-            source: format!("{}:{}", r.package, r.name),
-            aliases: vec![],
+            provider: e.package.clone(),
+            provider_id: e.provider_id.clone().unwrap_or_else(|| e.package.clone()),
+            name: e.name.clone(),
+            title,
+            summary: description,
+            category,
+            source: format!("{}:{}", e.package, e.name),
+            aliases,
         });
-        added.push(r);
     }
-    // The flat topics read in catalog order: built-ins first, as the model
-    // lists them, then each integration's.
     let mut tree = build_docs_tree(&ns, &docs, &topic_inputs);
-    let model_by_route: HashMap<String, &Value> = model_nodes.iter().map(|n| (s(n, "route"), n)).collect();
     // Summaries: the CLI's as the model rendered them; the rest rendered here.
     let finder_topics = topics.clone();
-    let summaries: Vec<(String, String)> = tree
-        .nodes
-        .iter()
-        .map(|n| {
-            let summary = match model_by_route.get(&n.route) {
-                Some(m) if n.provider == crate::discovery::doc_compiler::tree::CLI_PROVIDER => s(m, "summary"),
-                _ => n.summary.clone(),
-            };
-            (n.route.clone(), summary)
-        })
-        .collect();
     let rendered: Vec<(String, String)> = {
         let finder = Finder { tree: &tree, topics: &finder_topics };
-        summaries
-            .into_iter()
-            .map(|(route, summary)| {
-                let node = tree.get(&route).unwrap();
-                if node.provider == crate::discovery::doc_compiler::tree::CLI_PROVIDER && model_by_route.contains_key(&route) {
-                    return (route, summary);
+        tree.nodes
+            .iter()
+            .map(|n| {
+                let model = model_by_route.get(&n.route).filter(|m| n.provider == CLI && s(m, "provider") == CLI && (n.flat_topic.is_none() || finder_topics.iter().any(|t| s(t, "name") == n.route && t["pure"] == true)));
+                match model {
+                    Some(m) => (n.route.clone(), s(m, "summary")),
+                    None => {
+                        let pid = n.provider_id.clone();
+                        let mut find = |t: &str| finder.find(t, &pid).ok();
+                        (n.route.clone(), resolve_inline(&n.summary, &mut find))
+                    }
                 }
-                let pid = node.provider_id.clone();
-                let mut find = |t: &str| finder.find(t, &pid).ok();
-                (route, resolve_inline(&summary, &mut find))
             })
             .collect()
     };
@@ -462,10 +355,12 @@ pub fn build(variant: &Variant, found: IntegrationDocs) -> Built {
             n.summary = summary;
         }
     }
-    // The topic list's descriptions, linked.
     {
         let finder = Finder { tree: &tree, topics: &finder_topics };
-        for t in topics.iter_mut().skip(variant.topics().len()) {
+        for t in topics.iter_mut() {
+            if t["pure"] == true {
+                continue;
+            }
             let pid = t.get("providerId").and_then(|x| x.as_str()).map(String::from).unwrap_or_else(|| s(t, "package"));
             let d = s(t, "description");
             let mut find = |x: &str| finder.find(x, &pid).ok();
@@ -477,7 +372,7 @@ pub fn build(variant: &Variant, found: IntegrationDocs) -> Built {
         .nodes
         .iter()
         .map(|n| {
-            let m = model_by_route.get(&n.route).filter(|_| n.provider == crate::discovery::doc_compiler::tree::CLI_PROVIDER);
+            let m = model_by_route.get(&n.route).filter(|m| n.provider == CLI && s(m, "provider") == CLI);
             let content = m.map(|m| m["content"].clone()).filter(|c| !c.is_null());
             let content = content.or_else(|| if n.self_doc.is_some() { Some(Value::Array(vec![])) } else { None });
             let related = m.and_then(|m| m["related"].as_array().cloned()).unwrap_or_default().into_iter().filter_map(|r| r.as_str().map(String::from)).collect();
@@ -485,43 +380,90 @@ pub fn build(variant: &Variant, found: IntegrationDocs) -> Built {
         })
         .collect();
 
-    // Topic reads for each integration topic and guide.
+    // Topic reads built here: every topic an integration wrote, replaced or
+    // extended, and every guide an integration placed.
+    let mut units = Vec::new();
+    for e in catalog.entries() {
+        if pure_cli(e) {
+            continue;
+        }
+        units.push(Unit {
+            key: format!("topic:{}", e.name),
+            name: e.name.clone(),
+            package: e.package.clone(),
+            provider_id: e.provider_id.clone().unwrap_or_else(|| e.package.clone()),
+            path: e.path.clone(),
+            extensions: e.extensions.iter().map(|x| (x.package.clone(), x.provider_id.clone().unwrap_or_else(|| x.package.clone()), x.path.clone())).collect(),
+            is_guide: false,
+            replaces: e.replaces.clone(),
+            replaced_package: e.replaced_package.clone(),
+        });
+    }
+    for n in &tree.nodes {
+        if n.kind != "generic" || n.provider == CLI {
+            continue;
+        }
+        let Some(file) = &n.topic_file else { continue };
+        units.push(Unit {
+            key: format!("guide:{}", n.route),
+            name: n.route.clone(),
+            package: n.provider.clone(),
+            provider_id: n.provider_id.clone(),
+            path: file.clone(),
+            extensions: vec![],
+            is_guide: true,
+            replaces: None,
+            replaced_package: None,
+        });
+    }
     let mut reads = HashMap::new();
     let finder = Finder { tree: &tree, topics: &finder_topics };
-    let mut units: Vec<(String, String, String, String, Value, String, bool)> = Vec::new();
-    for r in &added {
-        units.push((format!("topic:{}", r.name), r.name.clone(), r.package.clone(), r.provider_id.clone(), r.doc.clone(), r.path.clone(), false));
-    }
-    for g in &found.guides {
-        let Some(node) = tree.nodes.iter().find(|n| n.topic_file.as_deref() == g.input.topic_file.as_deref() && n.provider == g.input.provider) else { continue };
-        units.push((format!("guide:{}", node.route), node.route.clone(), g.input.provider.clone(), g.input.provider_id.clone(), g.doc.clone(), g.input.topic_file.clone().unwrap_or_default(), true));
-    }
-    for (key, name, package, provider_id, doc, path, is_guide) in units {
-        let links = if is_guide {
-            place_links(&tree, &name)
+    for u in &units {
+        let links = if u.is_guide {
+            place_links(&tree, &u.name)
         } else {
-            match tree.get(&name).filter(|n| n.flat_topic.as_deref() == Some(name.as_str())) {
-                Some(_) => place_links(&tree, &name),
+            match tree.get(&u.name).filter(|n| n.flat_topic.as_deref() == Some(u.name.as_str())) {
+                Some(_) => place_links(&tree, &u.name),
                 None => serde_json::json!({"up": "astryx docs"}),
             }
         };
+        let mut packages: Vec<(String, String)> = vec![(normalize_provider_id(&u.provider_id).unwrap_or_else(|| u.provider_id.clone()), u.package.clone())];
+        for (pkg, pid, _) in &u.extensions {
+            packages.push((normalize_provider_id(pid).unwrap_or_else(|| pid.clone()), pkg.clone()));
+        }
         for lang in ["en", "dense", "zh"] {
-            let overlay = load_overlay(&path, lang);
-            let lowered = lower_reference_topic(&name, &provider_id, &doc, overlay.as_ref());
-            let read = topic_read(&finder, variant, &lowered, &name, &package, &provider_id, is_guide, links.clone(), lang, &added);
-            reads.insert(format!("{key}:{lang}"), read);
+            let (doc, overlay) = load(&u.path, lang);
+            let Some(doc) = doc else { continue };
+            let base = TopicSource { provider_id: u.provider_id.clone(), doc, overlay };
+            let exts: Vec<TopicSource> = u
+                .extensions
+                .iter()
+                .filter_map(|(_, pid, path)| {
+                    let (d, o) = load(path, lang);
+                    d.map(|d| TopicSource { provider_id: pid.clone(), doc: d, overlay: o })
+                })
+                .collect();
+            let Ok(lowered) = lower_topic(&u.name, &base, &exts) else { continue };
+            let package_of = |id: &str| -> String {
+                let p = lowered.section_providers.get(id).and_then(|x| x.as_str()).and_then(normalize_provider_id);
+                p.and_then(|p| packages.iter().rev().find(|(k, _)| *k == p).map(|(_, v)| v.clone())).unwrap_or_else(|| u.package.clone())
+            };
+            let read = topic_read(&finder, variant, &lowered, u, &package_of, links.clone(), lang);
+            reads.insert(format!("{}:{lang}", u.key), read);
         }
     }
-    Built { nodes, topics, reads, issues }
+    drop(finder);
+    Built { tree, nodes, topics, reads, issues: catalog.issues.clone() }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str, package: &str, provider_id: &str, is_guide: bool, links: Value, lang: &str, added: &[&TopicRecord]) -> Value {
-    // Link each section's blocks and the topic's own text fields.
+fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, u: &Unit, package_of: &dyn Fn(&str) -> String, links: Value, lang: &str) -> Value {
+    // Link each section's blocks against the provider that wrote it, and the
+    // topic's own text fields against the topic's.
     let mut sections = Vec::new();
     for sec in lowered.doc["sections"].as_array().cloned().unwrap_or_default() {
-        let mut resolve = |t: &str| finder.find(t, provider_id);
         let id = s(&sec, "id");
+        let pid = lowered.section_providers.get(&id).and_then(|x| x.as_str()).map(String::from).unwrap_or_else(|| u.provider_id.clone());
+        let mut resolve = |t: &str| finder.find(t, &pid);
         let (content, _) = link_blocks(sec["content"].as_array().map(|a| a.as_slice()).unwrap_or(&[]), &mut resolve, Some(&id), None);
         let mut m = sec.as_object().cloned().unwrap_or_default();
         m.insert("content".into(), Value::Array(content));
@@ -534,7 +476,7 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
     if let Some(d) = lowered.doc.get("summary").filter(|d| d.is_string()) {
         fields.insert("summary".into(), d.clone());
     }
-    let mut resolve = |t: &str| finder.find(t, provider_id);
+    let mut resolve = |t: &str| finder.find(t, &u.provider_id);
     let (linked_fields, _) = link_fields(&Value::Object(fields), &mut resolve);
     let mut doc = lowered.doc.as_object().cloned().unwrap_or_default();
     for (k, v) in linked_fields.as_object().cloned().unwrap_or_default() {
@@ -542,17 +484,16 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
     }
     doc.insert("sections".into(), Value::Array(sections.clone()));
     let node = Lowered { id: lowered.id.clone(), doc: Value::Object(doc.clone()), source_titles: lowered.source_titles.clone(), section_providers: lowered.section_providers.clone() };
-    let mut lower_target = |topic: &str| ref_target(variant, topic, lang, added, finder);
+    let mut lower_target = |topic: &str| ref_target(variant, topic, lang, finder);
     let views: Vec<Value> = sections.iter().map(|sec| section_view(&node, sec, &mut lower_target)).collect();
     let mut detail = doc.clone();
-    detail.insert("sections".into(), Value::Array(vec![]));
     let detail_sections: Vec<Value> = views
         .iter()
         .map(|v| {
             let mut m = Map::new();
             m.insert("id".into(), v.get("id").cloned().unwrap_or(Value::Null));
             m.insert("title".into(), v.get("title").cloned().unwrap_or(Value::Null));
-            m.insert("package".into(), Value::from(package));
+            m.insert("package".into(), Value::from(package_of(&s(v, "id"))));
             for (k, x) in v.as_object().cloned().unwrap_or_default() {
                 if k != "id" && k != "title" {
                     m.insert(k, x);
@@ -562,13 +503,25 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
         })
         .collect();
     detail.insert("sections".into(), Value::Array(detail_sections));
-    if is_guide {
-        detail.insert("name".into(), Value::from(name));
+    if u.is_guide {
+        detail.insert("name".into(), Value::from(u.name.as_str()));
+    }
+    if let Some(r) = &u.replaces {
+        detail.insert("replaces".into(), Value::from(r.as_str()));
+        if let Some(p) = &u.replaced_package {
+            detail.insert("replacedPackage".into(), Value::from(p.as_str()));
+        }
     }
     detail.insert("links".into(), links.clone());
     let mut index = index_view(&node.doc).as_object().cloned().unwrap_or_default();
-    if is_guide {
-        index.insert("name".into(), Value::from(name));
+    if u.is_guide {
+        index.insert("name".into(), Value::from(u.name.as_str()));
+    }
+    if let Some(r) = &u.replaces {
+        index.insert("replaces".into(), Value::from(r.as_str()));
+        if let Some(p) = &u.replaced_package {
+            index.insert("replacedPackage".into(), Value::from(p.as_str()));
+        }
     }
     let isecs: Vec<Value> = index
         .get("sections")
@@ -580,7 +533,7 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
             let mut m = Map::new();
             m.insert("id".into(), sec["id"].clone());
             m.insert("title".into(), sec["title"].clone());
-            m.insert("package".into(), Value::from(package));
+            m.insert("package".into(), Value::from(package_of(&s(&sec, "id"))));
             m.insert("summary".into(), sec["summary"].clone());
             Value::Object(m)
         })
@@ -599,13 +552,13 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
             m.insert("key".into(), Value::from(id.as_str()));
             m.insert("title".into(), sec["title"].clone());
             m.insert("sourceTitle".into(), lowered.source_titles.get(&id).cloned().unwrap_or(sec["title"].clone()));
-            m.insert("package".into(), Value::from(package));
+            m.insert("package".into(), Value::from(package_of(&id)));
             m.insert("detailAt".into(), Value::from(i));
             Value::Object(m)
         })
         .collect();
     let mut read = Map::new();
-    read.insert("package".into(), Value::from(package));
+    read.insert("package".into(), Value::from(u.package.as_str()));
     read.insert("detail".into(), Value::Object(detail));
     read.insert("index".into(), Value::Object(index));
     read.insert("reader".into(), Value::Array(reader));
@@ -613,19 +566,41 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, name: &str,
     Value::Object(read)
 }
 
-/// `referenceTargets(catalog, lang)` as far as this port goes.
-fn ref_target(variant: &Variant, topic: &str, lang: &str, added: &[&TopicRecord], finder: &Finder) -> Option<RefTarget> {
-    let wanted = topic.to_lowercase();
-    if let Some(r) = added.iter().find(|r| r.name.to_lowercase() == wanted) {
-        let overlay = load_overlay(&r.path, lang);
-        let l = lower_reference_topic(&r.name, &r.provider_id, &r.doc, overlay.as_ref());
-        return Some(RefTarget { id: l.id.clone(), sections: l.doc["sections"].as_array().cloned().unwrap_or_default(), source_titles: l.source_titles });
-    }
-    let t = finder.topics.iter().find(|t| s(t, "name").to_lowercase() == wanted)?;
-    let read = variant.read(&format!("topic:{}:{lang}", s(t, "name")))?;
+/// `referenceTargets(catalog, lang)` as far as this port goes: a topic of the
+/// catalog, lowered for the same language.
+fn ref_target(variant: &Variant, topic: &str, lang: &str, finder: &Finder) -> Option<RefTarget> {
+    let t = finder.resolve_topic(topic)?;
+    let name = s(t, "name");
+    let read = variant.read(&format!("topic:{name}:{lang}"))?;
     let mut source_titles = Map::new();
     for r in read["reader"].as_array().cloned().unwrap_or_default() {
         source_titles.insert(s(&r, "key"), r["sourceTitle"].clone());
     }
-    Some(RefTarget { id: s(t, "name"), sections: read["childSections"].as_array().cloned().unwrap_or_default(), source_titles })
+    Some(RefTarget { id: name, sections: read["childSections"].as_array().cloned().unwrap_or_default(), source_titles })
+}
+
+/// How a doc's `{@link}` targets resolve in a project (`linkResolver`): the
+/// docs tree's docs by identity, and flat topics. For other commands that
+/// render doc text, such as `component`.
+pub struct LinkResolver {
+    tree: DocsTree,
+    topics: Vec<Value>,
+}
+
+impl LinkResolver {
+    /// The link a target names, or the problem with it, as written in a doc
+    /// of `from_provider`.
+    pub fn resolve(&self, target: &str, from_provider: &str) -> Result<Value, String> {
+        Finder { tree: &self.tree, topics: &self.topics }.find(target, from_provider)
+    }
+}
+
+/// The project's link resolver.
+pub fn link_resolver(cwd: &str) -> LinkResolver {
+    let pm = crate::discovery::package_manager::doc_package_manager(Some(cwd));
+    crate::discovery::doc_compiler::links::set_doc_pm(&pm);
+    let variant = Variant::get(&pm);
+    let catalog = discover(cwd).unwrap_or_else(DocsCatalog::from_builtins);
+    let built = build(&variant, catalog);
+    LinkResolver { tree: built.tree, topics: built.topics }
 }

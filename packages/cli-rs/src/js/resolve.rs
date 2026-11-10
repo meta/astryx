@@ -171,6 +171,8 @@ pub struct Profile {
     pub aliases: Vec<(String, PathBuf)>,
     /// jiti's extension probe order (with the dots), for `Mode::Jiti`.
     pub extensions: Option<Vec<String>>,
+    /// Specifier -> virtual module id (the engine resolves these itself).
+    pub virtuals: Vec<(String, u64)>,
 }
 
 thread_local! {
@@ -678,18 +680,66 @@ mod tests {
     }
 
     #[test]
+    fn globs() {
+        assert!(glob_match("**/*.css", "dist/a/b.css"));
+        assert!(glob_match("**/*.css", "b.css"));
+        assert!(!glob_match("**/*.css", "dist/b.js"));
+        assert!(glob_match("**/*.stylex.js", "dist/theme/tokens.stylex.js"));
+        assert!(!glob_match("*.css", "a/b.css"));
+    }
+
+    #[test]
     fn file_urls() {
         assert_eq!(path_to_file_url(Path::new("/a b/c#d.mjs")), "file:///a%20b/c%23d.mjs");
         assert_eq!(file_url_to_path("file:///a%20b/c.mjs"), Some(PathBuf::from("/a b/c.mjs")));
     }
 }
 
-/// Whether the package that holds `file` declares `"sideEffects": false`.
+/// Whether the package that holds `file` declares that loading `file` has no
+/// side effects: `"sideEffects": false`, or a pattern list that `file` does
+/// not match (bundler semantics: a pattern without `/` matches the base name).
 pub fn package_is_pure(file: &Path) -> bool {
-    file.parent()
-        .and_then(nearest_package_json)
-        .map(|(_, v)| v.get("sideEffects") == Some(&Value::Bool(false)))
-        .unwrap_or(false)
+    let Some((pj_path, pj)) = file.parent().and_then(nearest_package_json) else {
+        return false;
+    };
+    match pj.get("sideEffects") {
+        Some(Value::Bool(false)) => true,
+        Some(Value::Array(patterns)) => {
+            let dir = pj_path.parent().unwrap_or(Path::new("/"));
+            let rel = file.strip_prefix(dir).unwrap_or(file).to_string_lossy().into_owned();
+            let base = file.file_name().map(|b| b.to_string_lossy().into_owned()).unwrap_or_default();
+            !patterns.iter().filter_map(|p| p.as_str()).any(|p| {
+                let p = p.strip_prefix("./").unwrap_or(p);
+                if p.contains('/') { glob_match(p, &rel) } else { glob_match(p, &base) }
+            })
+        }
+        _ => false,
+    }
+}
+
+/// Glob match: `**` spans directories, `*` and `?` stay within one.
+pub fn glob_match(pattern: &str, path: &str) -> bool {
+    fn go(p: &[u8], s: &[u8]) -> bool {
+        if p.is_empty() {
+            return s.is_empty();
+        }
+        if p.starts_with(b"**/") {
+            // Zero or more whole directories.
+            if go(&p[3..], s) {
+                return true;
+            }
+            return s.iter().enumerate().any(|(i, c)| *c == b'/' && go(&p[3..], &s[i + 1..]));
+        }
+        if p.starts_with(b"**") {
+            return (0..=s.len()).any(|i| go(&p[2..], &s[i..]));
+        }
+        match p[0] {
+            b'*' => (0..=s.len()).take_while(|i| *i == 0 || s[i - 1] != b'/').any(|i| go(&p[1..], &s[i..])),
+            b'?' => !s.is_empty() && s[0] != b'/' && go(&p[1..], &s[1..]),
+            c => !s.is_empty() && s[0] == c && go(&p[1..], &s[1..]),
+        }
+    }
+    go(pattern.as_bytes(), path.as_bytes())
 }
 
 /// For a bare import of a package root whose package has no `"exports"`,

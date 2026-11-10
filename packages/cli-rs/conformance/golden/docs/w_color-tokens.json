@@ -1,0 +1,12 @@
+{
+ "id": "w_color-tokens",
+ "args": [
+  "docs",
+  "color-tokens"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown topic \"color-tokens\"\n\n  color  (available topic)\n  tokens  (docs namespace)\n",
+ "exit": 1,
+ "files": []
+}

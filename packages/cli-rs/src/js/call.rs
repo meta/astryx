@@ -3,7 +3,7 @@
 //! it is a promise) comes back as JSON with the marker rules of `convert.rs`.
 
 use super::engine::{self, with_engine};
-use super::{ImportOptions, JsError};
+use super::{ImportOptions, JitiOptions, JsError};
 use crate::json::Value;
 use std::path::Path;
 
@@ -12,6 +12,8 @@ use std::path::Path;
 pub struct CallOptions {
     /// How to import the module.
     pub import: ImportOptions,
+    /// jiti options for the module's whole graph.
+    pub jiti: JitiOptions,
     /// Give up when the call has not settled after this long (wall clock,
     /// counted while the engine waits on timers).
     pub timeout_ms: Option<u64>,

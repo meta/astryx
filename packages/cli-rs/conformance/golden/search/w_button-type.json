@@ -1,0 +1,13 @@
+{
+ "id": "w_button-type",
+ "args": [
+  "search",
+  "button",
+  "--type"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--type <domain>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

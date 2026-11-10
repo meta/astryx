@@ -82,6 +82,16 @@ pub enum OptSource {
     Cli,
 }
 
+impl OptSource {
+    /// Commander's spelling: `"default"` or `"cli"`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OptSource::Default => "default",
+            OptSource::Cli => "cli",
+        }
+    }
+}
+
 /// What the shell parsed for one run of one command.
 #[derive(Debug, Clone)]
 pub struct Invocation {
@@ -102,6 +112,9 @@ pub struct Invocation {
     /// Each ancestor group's own options (`parent.opts()`), root first,
     /// keyed by the ancestor's full name (`""` is the root).
     pub parent_opts: Vec<(String, IndexMap<String, OptValue>)>,
+    /// Where each ancestor's option values came from, keyed like
+    /// `parent_opts`.
+    pub parent_sources: Vec<(String, IndexMap<String, OptSource>)>,
     /// Every operand and unknown argument Commander left in `cmd.args`.
     pub all_args: Vec<String>,
     pub globals: Globals,
@@ -172,6 +185,26 @@ impl Invocation {
         self.parent_opts.iter().find(|(n, _)| n == group).and_then(|(_, m)| m.get(key))
     }
 
+    /// `cmd.getOptionValueSource(key)` for this command's own option:
+    /// `Some("default")`, `Some("cli")`, or `None` when it has no value.
+    pub fn opt_source(&self, key: &str) -> Option<&'static str> {
+        self.opt_sources.get(key).map(|s| s.as_str())
+    }
+
+    /// `program.getOptionValueSource(key)` for a root (global) option such
+    /// as `detail`, `lang`, `json`.
+    pub fn global_opt_source(&self, key: &str) -> Option<&'static str> {
+        self.parent_source("", key)
+    }
+
+    /// An ancestor group's `getOptionValueSource(key)`.
+    pub fn parent_source(&self, group: &str, key: &str) -> Option<&'static str> {
+        if self.name == group {
+            return self.opt_source(key);
+        }
+        self.parent_sources.iter().find(|(n, _)| n == group).and_then(|(_, m)| m.get(key)).map(|s| s.as_str())
+    }
+
     pub fn json(&self) -> bool {
         self.globals.json
     }
@@ -185,6 +218,7 @@ impl Invocation {
             opts: IndexMap::new(),
             opt_sources: IndexMap::new(),
             parent_opts: Vec::new(),
+            parent_sources: Vec::new(),
             all_args: Vec::new(),
             globals: Globals::default(),
             cwd: std::env::current_dir().unwrap_or_default(),

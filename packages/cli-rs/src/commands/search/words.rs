@@ -240,21 +240,6 @@ pub fn same_word(a: &str, b: &str) -> bool {
     forms_list(b).iter().any(|f| forms.contains(f))
 }
 
-fn singulars(w: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let n = jlen(w);
-    if n > 3 && w.ends_with('s') {
-        out.push(w[..w.len() - 1].to_string());
-    }
-    if n > 4 && w.ends_with("es") {
-        out.push(w[..w.len() - 2].to_string());
-    }
-    if n > 4 && w.ends_with("ies") {
-        out.push(format!("{}y", &w[..w.len() - 3]));
-    }
-    out
-}
-
 /// `wordsOf(text)`.
 pub fn words_of(text: &str) -> Vec<String> {
     let s = lower(&split_upper_upper_lower(&split_lower_upper(text)));
@@ -272,45 +257,9 @@ pub fn joined(text: &str) -> String {
     l.chars().filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit()).collect()
 }
 
-/// Levenshtein within a cap, over UTF-16 code units (TEMP: replace with
-/// src/text when the component lane lands foundation/text).
-pub fn distance_within(a: &[u16], b: &[u16], max: usize) -> usize {
-    let over = max + 1;
-    if a.len().abs_diff(b.len()) > max {
-        return over;
-    }
-    let mut previous = vec![over; b.len() + 1];
-    let mut current = vec![over; b.len() + 1];
-    for (j, p) in previous.iter_mut().enumerate().take(b.len().min(max) + 1) {
-        *p = j;
-    }
-    for i in 1..=a.len() {
-        current.iter_mut().for_each(|x| *x = over);
-        let from = 1.max(i.saturating_sub(max));
-        let to = b.len().min(i + max);
-        if i <= max {
-            current[0] = i;
-        }
-        let mut row_min = current[0];
-        for j in from..=to {
-            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            let value = (previous[j - 1] + cost).min(previous[j] + 1).min(current[j - 1] + 1).min(over);
-            current[j] = value;
-            if value < row_min {
-                row_min = value;
-            }
-        }
-        if row_min >= over {
-            return over;
-        }
-        std::mem::swap(&mut previous, &mut current);
-    }
-    previous[b.len()].min(over)
-}
-
 /// `typoDistance(a, b)`.
-pub fn typo_distance(a: &[u16], b: &[u16]) -> Option<usize> {
-    let shorter = a.len().min(b.len());
+pub fn typo_distance(a: &str, b: &str, a_len: usize, b_len: usize) -> Option<usize> {
+    let shorter = a_len.min(b_len);
     let cap = if shorter >= 11 {
         3
     } else if shorter >= 8 {
@@ -323,7 +272,7 @@ pub fn typo_distance(a: &[u16], b: &[u16]) -> Option<usize> {
     if cap == 0 {
         return None;
     }
-    let d = distance_within(a, b, cap);
+    let d = crate::text::levenshtein_within(a, b, cap, false);
     if d >= 1 && d <= cap {
         Some(d)
     } else {

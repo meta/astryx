@@ -354,6 +354,7 @@ fn forced_jiti_wording_and_aliases() {
         force: true,
         aliases: vec![("@astryxdesign/core/theme".into(), d.join("core.mjs"))],
         extensions: Some(vec![".ts".into(), ".mjs".into()]),
+        ..Default::default()
     };
     let ns = import_module_jiti(&d.join("a.mjs"), &ImportOptions::default(), &jiti).unwrap();
     assert_eq!(ns["w"], serde_json::json!(42));
@@ -382,4 +383,99 @@ fn web_globals() {
         crate::json::stringify(&ns["default"], 0),
         r#"[[104,195,169,240,159,152,128],true,"ping","function","1,234.5"]"#
     );
+}
+
+#[test]
+#[ignore]
+fn startup_time() {
+    let d = tmp("startup");
+    fs::write(d.join("s.mjs"), "export default 1;\n").unwrap();
+    let t = std::time::Instant::now();
+    import_module(&d.join("s.mjs"), &ImportOptions::default()).unwrap();
+    eprintln!("first import (engine start) {:?}", t.elapsed());
+}
+
+#[test]
+#[ignore]
+fn call_probe() {
+    let p = std::env::var("JS_CALL").unwrap();
+    let t = std::time::Instant::now();
+    let r = call_export(Path::new(&p), &["go"], &[], &CallOptions::default());
+    eprintln!("call {:?}: {}", t.elapsed(), match r { Ok(r) => crate::json::stringify(&r.value, 0).chars().take(300).collect::<String>(), Err(e) => format!("{e:?}") });
+}
+
+#[test]
+fn console_capture_and_load_records() {
+    let d = tmp("console");
+    fs::write(d.join("dep.json"), "{\"a\": 1}").unwrap();
+    fs::write(
+        d.join("c.mjs"),
+        "import dep from './dep.json' with {type: 'json'};\nconsole.log('n=%d', 42, {a: [1, 2], b: 'x'});\nconsole.warn('w', dep);\nexport default 1;\n",
+    )
+    .unwrap();
+    capture_console(true);
+    record_loads(true);
+    import_module(&d.join("c.mjs"), &ImportOptions::default()).unwrap();
+    let lines = capture_console(false);
+    let loads = record_loads(false);
+    assert_eq!(
+        lines,
+        vec![
+            ("log".to_string(), "n=42 { a: [ 1, 2 ], b: 'x' }".to_string()),
+            ("warn".to_string(), "w { a: 1 }".to_string())
+        ]
+    );
+    let real = fs::canonicalize(&d).unwrap();
+    assert_eq!(loads, vec![real.join("c.mjs"), real.join("dep.json")]);
+}
+
+#[test]
+fn jsx_automatic_and_missing_specifier() {
+    let d = tmp("jsxauto");
+    fs::create_dir_all(d.join("node_modules/react")).unwrap();
+    fs::write(d.join("node_modules/react/package.json"), "{\"name\":\"react\",\"type\":\"module\",\"exports\":{\"./jsx-runtime\":\"./jsx.js\"}}").unwrap();
+    fs::write(d.join("node_modules/react/jsx.js"), "export const jsx = (t, p) => ({t, p}); export const jsxs = jsx;\n").unwrap();
+    fs::write(d.join("p.tsx"), "export default <div className=\"a\">hi</div>;\n").unwrap();
+    let jiti = JitiOptions { jsx_automatic: true, ..Default::default() };
+    let ns = import_module_jiti(&d.join("p.tsx"), &ImportOptions::default(), &jiti).unwrap();
+    assert_eq!(crate::json::stringify(&ns["default"], 0), r#"{"t":"div","p":{"className":"a","children":"hi"}}"#);
+    fs::write(d.join("m.mjs"), "import x from 'not-installed/sub';\nexport default x;\n").unwrap();
+    let e = import_module(&d.join("m.mjs"), &ImportOptions::default()).unwrap_err();
+    assert_eq!(missing_specifier(&e).as_deref(), Some("not-installed/sub"));
+}
+
+#[test]
+fn virtual_modules_from_live_objects() {
+    let d = tmp("virtual");
+    fs::write(d.join("t.mjs"), "import core, {defineTheme} from '@astryxdesign/core/theme';\nexport default [defineTheme({a: 1}), typeof core.defineTheme];\n").unwrap();
+    let id = super::engine::with_engine(|e| {
+        let obj = e.ctx.eval(boa_engine::Source::from_bytes("({defineTheme: (x) => ({wrapped: x})})")).unwrap();
+        e.register_virtual(obj.as_object().unwrap()).unwrap()
+    });
+    let jiti = JitiOptions { force: true, virtual_modules: vec![("@astryxdesign/core/theme".into(), id)], ..Default::default() };
+    let ns = import_module_jiti(&d.join("t.mjs"), &ImportOptions::default(), &jiti).unwrap();
+    assert_eq!(crate::json::stringify(&ns["default"], 0), r#"[{"wrapped":{"a":1}},"function"]"#);
+}
+
+#[test]
+fn json_errors_read_as_v8() {
+    let d = tmp("badjson");
+    fs::write(d.join("bad.json"), "nope{\n").unwrap();
+    fs::write(d.join("j.mjs"), "import x from './bad.json' with {type: 'json'}; export default x;\n").unwrap();
+    fs::write(d.join("p.mjs"), "let m; try { JSON.parse('nope{'); } catch (e) { m = e.name + ': ' + e.message; } export default m;\n").unwrap();
+    let e = import_module(&d.join("j.mjs"), &ImportOptions::default()).unwrap_err();
+    let real = fs::canonicalize(&d).unwrap();
+    assert_eq!(e.name, "SyntaxError");
+    assert_eq!(e.message, format!("{}/bad.json: Unexpected token 'o', \"nope{{\n\" is not valid JSON", real.display()));
+    let ns = import_module(&d.join("p.mjs"), &ImportOptions::default()).unwrap();
+    assert_eq!(ns["default"], serde_json::json!("SyntaxError: Unexpected token 'o', \"nope{\" is not valid JSON"));
+}
+
+#[test]
+fn jiti_missing_named_import_is_undefined() {
+    let d = tmp("selfimport");
+    fs::write(d.join("slots.ts"), "import {chevron} from './slots';\nexport const close = 'x';\nexport default [typeof chevron, close];\n").unwrap();
+    let jiti = JitiOptions { force: true, extensions: Some(vec![".ts".into()]), ..Default::default() };
+    let ns = import_module_jiti(&d.join("slots.ts"), &ImportOptions::default(), &jiti).unwrap();
+    assert_eq!(crate::json::stringify(&ns["default"], 0), r#"["undefined","x"]"#);
 }
