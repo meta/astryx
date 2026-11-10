@@ -35,6 +35,7 @@ import {
   claimContextMenuPress,
   currentGesture,
   currentGestureHasClicked,
+  keepPansFromLightDismissing,
 } from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -1545,6 +1546,7 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
+        keepPansFromLightDismissing(popover);
       }
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
