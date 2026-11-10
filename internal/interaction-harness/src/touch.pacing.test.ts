@@ -499,8 +499,9 @@ describe('touchArrivalsFrom', () => {
     };
     const fault = touchPacingFault(FLICK, touchArrivalsFrom(record));
     expect(fault?.kind).toBe('rest');
-    // Each move's 60 ms of handling held the 76 ms gap after it.
-    expect(fault?.heldByPage).toEqual({gapMs: 76, handlingMs: 60});
+    // The rest reads the lift's 64 ms gap, and the last move's 60 ms of
+    // handling held it.
+    expect(fault?.heldByPage).toEqual({gapMs: 64, handlingMs: 60});
     // The touch events alone read the lift 4 ms after the last move.
     const touchOnly = record.eventTypes
       .map((type, i) => ({type, i}))
@@ -681,6 +682,62 @@ describe('touchPlayError on a starved runner', () => {
     const earlyGap = [0, 70, 86, 102, 118, 134, 150, 166, 182, 198, 214];
     expect(longestFrameGap(earlyGap, lateLift)).toBe(70);
     expect(errorFor(lateLift, earlyGap)).toBeInstanceOf(TouchPacingError);
+  });
+
+  it('names the starved lift gap when the page read a rest, not a page hold on an earlier gap', () => {
+    // The last move's gap ran 40 ms where the script spaces 16 ms, while the
+    // page's listeners took 20 ms on the move before it. Then the lift came
+    // 120 ms after the last move, and the page drew no frame across it.
+    const earlierHeld = at([0, 16, 32, 48, 64, 104, 224]).map((a, i) =>
+      i === 4 ? {...a, handledAt: a.stamp + 20} : a,
+    );
+    const frames = [0, 16, 33, 48, 64, 80, 96, 103, 240];
+    const error = errorFor(earlierHeld, frames);
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect(error.message).toMatch(
+      /the page drew no frame for 137 ms across a 120 ms gap where the script spaces 16 ms, and the page read a resting finger/,
+    );
+  });
+
+  it('names a recorded WebKit run under load by its starved lift gap', () => {
+    // A flick at 120 Hz. The page stamped gaps of 27, 17 and 99 ms where the
+    // script spaces 8, 8 and 2 ms. Its listeners took 9 ms on the event
+    // before the 27 ms gap. It drew no frame for 136 ms around the lift.
+    const finger = (y: number) => ({id: 0, x: 200, y});
+    const ys = [400, 388, 376, 364];
+    const flick: TouchEventStep[] = [0, 8, 16, 24, 26].map((t, i) =>
+      i === 0
+        ? {
+            t,
+            type: 'touchStart',
+            fingers: [finger(ys[0])],
+            changed: [finger(ys[0])],
+          }
+        : i === 4
+          ? {t, type: 'touchEnd', fingers: [], changed: [finger(ys[3])]}
+          : {
+              t,
+              type: 'touchMove',
+              fingers: [finger(ys[i])],
+              changed: [finger(ys[i])],
+            },
+    );
+    const arrivals = [1000, 1008, 1035, 1052, 1151].map((stamp, i) => ({
+      stamp,
+      handledAt: stamp + (i === 1 ? 9 : 0.3),
+    }));
+    const fault = touchPacingFault(flick, arrivals);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    const error = touchPlayError(
+      flick,
+      arrivals,
+      fault,
+      [0, 0, 0, 0, 0],
+      [990, 1007, 1024, 1160, 1177],
+    );
+    expect(error).toBeInstanceOf(TouchStarvationError);
   });
 
   it("keeps a gap the page's listeners held the page's, though the page drew nothing", () => {

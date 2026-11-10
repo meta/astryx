@@ -464,6 +464,11 @@ export interface ReleaseReading {
   readonly strayShare: number;
   /** The events whose gaps the release reads (each gap ends at one). */
   readonly span: readonly number[];
+  /**
+   * The event of the page's last moved sample. A rest is decided by the gaps
+   * after it: the finger rested there.
+   */
+  readonly restFrom: number;
 }
 
 /** One sample of the lifting finger: its position and when it was read. */
@@ -629,6 +634,7 @@ export function readRelease(
         ? Math.hypot(page.x - script.x, page.y - script.y) / scriptPxPerS
         : 0,
     span: Array.from({length: lift - first}, (_, k) => first + 1 + k),
+    restFrom: page.moved.at(-1)?.index ?? first,
   };
 }
 
@@ -691,9 +697,16 @@ export function touchPacingFault(
       : Array.from({length: steps.length - 1}, (_, k) => k + 1);
   const gapsMs = span.map(i => arrivals[i].stamp - arrivals[i - 1].stamp);
   const scriptedGapsMs = span.map(i => steps[i].t - steps[i - 1].t);
+  // Only the gaps after the page's last move decide a rest. A cause on an
+  // earlier gap did not make the finger rest.
+  const rests = releaseFault && reading?.rests === true;
+  const decides = (i: number) => !rests || i > (reading?.restFrom ?? 0);
   let heldByPage: TouchPacingFault['heldByPage'] = null;
   let waited: TouchPacingFault['waited'] = null;
   span.forEach((i, k) => {
+    if (!decides(i)) {
+      return;
+    }
     const holds = (ms: number) =>
       Number.isFinite(ms) &&
       ms > scriptedGapsMs[k] &&
@@ -732,10 +745,13 @@ export function touchPacingFault(
       }
     }
   });
-  const lateK = gapsMs.reduce(
-    (best, gap, k) =>
-      gap - scriptedGapsMs[k] > gapsMs[best] - scriptedGapsMs[best] ? k : best,
-    0,
+  const deciding = span.flatMap((i, k) => (decides(i) ? [k] : []));
+  const lateK = deciding.reduce(
+    (best, k) =>
+      gapsMs[k] - scriptedGapsMs[k] > gapsMs[best] - scriptedGapsMs[best]
+        ? k
+        : best,
+    deciding[0] ?? 0,
   );
   const late =
     span.length > 0

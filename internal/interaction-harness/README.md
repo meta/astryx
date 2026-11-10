@@ -707,7 +707,8 @@ gesture the same way, and the play fails with `TouchPacingError`. When the
 page also drew no frame for longer than `FRAME_STARVATION_MS` across that
 gap, and no page work held the event, it fails with `TouchStarvationError`:
 the runner starved the page, so judge the proof from a run with CI's CPU
-limits. A play whose
+limits. A resting finger takes its cause from the gaps after its last move,
+the ones that made it rest. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
 

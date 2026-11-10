@@ -54,6 +54,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import type {CastFrame} from './frames';
+import {TouchStarvationError} from './touch';
 import {
   advanceFrozenPage,
   ANSWER_SLACK_MS,
@@ -780,6 +781,17 @@ test.describe('touch input', () => {
       () => 'resolved',
       (error: unknown) => error,
     );
+    // A loaded runner can deliver the last moves so late that the page reads
+    // no rest. The lift stall then decides nothing, so the run fails by the
+    // name the play gave its fault. A rest named otherwise still fails here.
+    if (
+      (outcome instanceof TouchPacingError ||
+        outcome instanceof TouchStarvationError ||
+        outcome instanceof TouchPageStallError) &&
+      outcome.fault.kind !== 'rest'
+    ) {
+      throw outcome;
+    }
     expect(outcome).toBeInstanceOf(TouchLiftStallError);
     expect(String(outcome)).toMatch(
       /the lift reached the page \d+ ms after its finger's last move, where the script spaces \d+ ms: .* onEvent ran \d+ ms in that gap/,
