@@ -25,7 +25,12 @@ import {pathToFileURL} from 'node:url';
 const REPO = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(REPO, 'package.json'));
 const esbuild = require('esbuild');
-const {gzipBytes} = require('./.github/scripts/lib/component-size.js');
+const {
+  eagerText,
+  gzipBytes,
+  reachableChunks,
+  sizeBuildOptions,
+} = require('./.github/scripts/lib/component-size.js');
 
 const RECORD = 'docs/architecture/component-import-boundaries.md';
 const CORE_SRC = 'packages/core/src';
@@ -193,16 +198,17 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
         kind === 'dynamic-import' && isSurface(moduleName(target)),
     );
 
-  // A module with no code of its own counts when it re-exports one that has.
+  // A re-export-only module puts no bytes in any chunk. It counts when a
+  // module it re-exports puts bytes in the build, whatever its name. A module
+  // whose code sits only in a lazy chunk is not a re-export, so the eager
+  // walk does not pass through it.
   const passThrough = new Map();
   function isLive(modulePath, bytesKey, seen = new Set()) {
     const info = modules[modulePath];
     if (info === undefined) return false;
     const bytes = info[bytesKey];
     if (bytes === undefined || bytes > 0) return true;
-    if (!/\/index\.[cm]?[jt]sx?$/.test(modulePath) || seen.has(modulePath)) {
-      return false;
-    }
+    if ((info.bytes ?? bytes) > 0 || seen.has(modulePath)) return false;
     const memoKey = `${bytesKey}:${modulePath}`;
     if (!passThrough.has(memoKey)) {
       seen.add(modulePath);
@@ -315,19 +321,13 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
   return {crossings, dynamicViolations};
 }
 
-/** The size report's build of an import, with React and StyleX external. */
+/**
+ * The size report's build of an import (`sizeBuildOptions`), with React,
+ * React DOM, and StyleX external.
+ */
 function buildOptions(root) {
   return {
-    absWorkingDir: root,
-    // Never written: it only names the outputs.
-    outdir: path.join(root, 'node_modules/.cache/astryx-import-boundaries'),
-    bundle: true,
-    splitting: true,
-    minify: true,
-    format: 'esm',
-    platform: 'browser',
-    define: {'process.env.NODE_ENV': '"production"'},
-    loader: {'.css': 'empty'},
+    ...sizeBuildOptions(root),
     // esbuild reads no tsconfig for a file under node_modules, where the base
     // source sits, so the JSX transform is set here as the tsconfig sets it.
     jsx: 'automatic',
@@ -338,9 +338,6 @@ function buildOptions(root) {
       'react-dom/*',
       '@stylexjs/stylex',
     ],
-    metafile: true,
-    write: false,
-    logLevel: 'silent',
   };
 }
 
@@ -416,18 +413,9 @@ export async function measureEntry(
   if (entryOutput === undefined) {
     throw new Error(`No output for the ${entry.name} entry`);
   }
-  const eagerOutputs = new Set();
-  const pending = [entryOutput];
-  while (pending.length > 0) {
-    const key = pending.pop();
-    if (eagerOutputs.has(key)) continue;
-    eagerOutputs.add(key);
-    for (const {path: imported, kind} of outputs[key].imports) {
-      if (kind === 'import-statement' && outputs[imported]) {
-        pending.push(imported);
-      }
-    }
-  }
+  const eagerOutputs = reachableChunks(outputs, entryOutput, [
+    'import-statement',
+  ]);
   const eagerBytes = new Map();
   const bytes = new Map();
   for (const [key, output] of Object.entries(outputs)) {
@@ -452,8 +440,6 @@ export async function measureEntry(
       file.text,
     ]),
   );
-  let eagerText = '';
-  for (const key of eagerOutputs) eagerText += textByPath.get(key) ?? '';
   return {
     entryName: entry.name,
     ...findBoundaryViolations({
@@ -461,7 +447,7 @@ export async function measureEntry(
       graph: {entry: entryPath, modules},
       boundaries,
     }),
-    eagerGzipBytes: gzipBytes(eagerText),
+    eagerGzipBytes: gzipBytes(eagerText(outputs, textByPath, entryOutput)),
   };
 }
 

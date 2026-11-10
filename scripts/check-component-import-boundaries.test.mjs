@@ -6,7 +6,8 @@
  *   metafile, fixture source trees built with the check's own build, and the
  *   import-boundaries record's allowlist
  * @output Pins the check's verdicts: an unlisted crossing fails and names its
- *   import chain, a listed crossing passes, a stale row fails, an import() of
+ *   import chain, also through a re-export-only module of any name, a listed
+ *   crossing passes, a stale row fails, an import() of
  *   a surface whose graph reaches touch modules passes, and an import() of a
  *   touch module or of a capability module fails
  * @position Node test beside scripts/check-component-import-boundaries.mjs
@@ -134,6 +135,40 @@ describe('a static import from an entry', () => {
       'Tooltip/Tooltip.tsx': {bytes: 0},
     });
     expect(violationsOf('Text', graph).crossings).toEqual([]);
+  });
+
+  it('fails when it crosses through a re-export-only module that is not a folder index', () => {
+    const graph = graphOf('Button/__entry__.mjs', {
+      'Button/__entry__.mjs': {imports: [['Button/Button.tsx']]},
+      'Button/Button.tsx': {imports: [['internal/tooltipExports.ts']]},
+      'internal/tooltipExports.ts': {
+        bytes: 0,
+        imports: [['Tooltip/useTooltip.tsx']],
+      },
+      'Tooltip/useTooltip.tsx': {},
+    });
+    expect(violationsOf('Button', graph).crossings).toEqual([
+      expect.objectContaining({
+        from: 'internal/tooltipExports',
+        to: 'Tooltip/useTooltip',
+        invariant: 'INV1',
+        chain:
+          'Button → Button/Button → internal/tooltipExports → Tooltip/useTooltip',
+      }),
+    ]);
+  });
+
+  it('passes for a module with no bytes whose imports carry no bytes either', () => {
+    const graph = graphOf('Button/__entry__.mjs', {
+      'Button/__entry__.mjs': {imports: [['Button/Button.tsx']]},
+      'Button/Button.tsx': {imports: [['internal/tooltipExports.ts']]},
+      'internal/tooltipExports.ts': {
+        bytes: 0,
+        imports: [['Tooltip/useTooltip.tsx']],
+      },
+      'Tooltip/useTooltip.tsx': {bytes: 0},
+    });
+    expect(violationsOf('Button', graph).crossings).toEqual([]);
   });
 
   it('passes for a base module that lives in a surface folder', () => {
@@ -392,6 +427,14 @@ describe('the build', () => {
     );
     write('gestures/tap.ts', 'export const track = name => name.length;\n');
     write(
+      'Card/Card.ts',
+      "import {showTip} from '../internal/tipExports';\nexport const Card = () => showTip('card');\n",
+    );
+    write(
+      'internal/tipExports.ts',
+      "export {showTip} from '../Tooltip/Tooltip';\n",
+    );
+    write(
       'Chip/Chip.ts',
       "export const Chip = () => import('../Tooltip/Tooltip').then(m => m.showTip('chip'));\n",
     );
@@ -420,6 +463,16 @@ describe('the build', () => {
     });
     expect(crossings.map(({chain}) => chain)).toEqual([
       'Badge → Badge/Badge → Tooltip/Tooltip',
+    ]);
+  });
+
+  it('finds a static surface import through a re-export-only module in a real build', async () => {
+    const {crossings} = await measureEntry(entry('Card', 'Card/Card.ts'), {
+      root,
+      boundaries: BOUNDARIES,
+    });
+    expect(crossings.map(({chain}) => chain)).toEqual([
+      'Card → Card/Card → internal/tipExports → Tooltip/Tooltip',
     ]);
   });
 
