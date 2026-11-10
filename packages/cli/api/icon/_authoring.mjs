@@ -691,6 +691,7 @@ async function redeclareIconSet(
     );
     result.data.icons = set.data.icons.length;
     result.data.updated = true;
+    if (where.moduleUpdate) result.data.moduleUpdate = where.moduleUpdate;
     // A look the icons' own library draws comes from that library, so its
     // command runs as printed; any other look comes from a module the
     // author names.
@@ -1388,6 +1389,7 @@ async function refreshIconSet(
     );
     result.data.icons = icons.length;
     result.data.refreshed = true;
+    if (where.moduleUpdate) result.data.moduleUpdate = where.moduleUpdate;
     // Every entry an exact name gives, kept or new, so a refresh lists
     // them for review again.
     const byName = Object.fromEntries(
@@ -1542,7 +1544,7 @@ export async function addIconDefinition(name, options) {
         throw error;
       }
     }
-    return receipt(
+    const result = receipt(
       'icon-definition',
       doc.name,
       {
@@ -1559,5 +1561,10 @@ export async function addIconDefinition(name, options) {
       files,
       dryRun,
     );
+    // Only a new definition with an icon writes the data file.
+    if (icon != null && where.moduleUpdate) {
+      result.data.moduleUpdate = where.moduleUpdate;
+    }
+    return result;
   });
 }

@@ -154,6 +154,13 @@ function markFollowing(el: Element, locked: boolean): void {
   }
 }
 
+// The page's scroll fires at the document. The root's box moves up by that
+// scroll.
+function scrollsPage(el: HTMLElement): boolean {
+  const doc = el.ownerDocument;
+  return el === doc.scrollingElement || el === doc.documentElement;
+}
+
 export function useChatStreamScroll({
   scrollRef,
   enabled = true,
@@ -307,9 +314,12 @@ export function useChatStreamScroll({
       if (!container) {
         return;
       }
-      const containerRect = container.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      const offset = elRect.top - containerRect.top + container.scrollTop;
+      // The page's visible area starts at the viewport's top, not at the
+      // root's box.
+      const top = scrollsPage(container)
+        ? 0
+        : container.getBoundingClientRect().top;
+      const offset = el.getBoundingClientRect().top - top + container.scrollTop;
       container.scrollTo({top: offset, behavior: 'instant'});
       lastScrollTopRef.current = container.scrollTop;
     },
@@ -376,11 +386,10 @@ export function useChatStreamScroll({
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
     const doc = el.ownerDocument;
-    const scrollsPage =
-      el === doc.scrollingElement || el === doc.documentElement;
+    const isPage = scrollsPage(el);
     // The root's offsetHeight is the page's height. Its clientHeight is the
     // viewport's, which is what the reader sees.
-    const shownHeight = () => (scrollsPage ? el.clientHeight : el.offsetHeight);
+    const shownHeight = () => (isPage ? el.clientHeight : el.offsetHeight);
 
     const onScroll = () => {
       const {scrollTop, scrollHeight} = el;
@@ -412,7 +421,7 @@ export function useChatStreamScroll({
     };
 
     // A scroll of the page fires at the document, not at its root element.
-    const view = scrollsPage ? doc.defaultView : null;
+    const view = isPage ? doc.defaultView : null;
     const stopPageListeners: (() => void)[] = [];
     if (view != null) {
       const atDocument = (listener: () => void) => (event: Event) => {
