@@ -571,6 +571,16 @@ const glideMs = async (page: Page) =>
   });
 
 /**
+ * The property each part of the expand animates itself. A watch also reports
+ * runs inside its element, such as the group's rows' glides.
+ */
+const OWN_MOTION = {
+  group: 'opacity',
+  below: 'translate',
+  chevron: 'transform',
+} as const;
+
+/**
  * Watches the expand's parts before a tap, so the durations of the motion it
  * starts are read even once it has ended. Await it before the tap, and await
  * what it returns after.
@@ -592,7 +602,14 @@ async function watchStartedDurations(
       await Promise.all(
         watches.map(
           async ([name, watch]) =>
-            [name, (await watch.started()).map(run => run.durationMs)] as const,
+            [
+              name,
+              (await watch.started())
+                .filter(run =>
+                  run.keyframes.some(frame => OWN_MOTION[name] in frame),
+                )
+                .map(run => run.durationMs),
+            ] as const,
         ),
       ),
     ) as Partial<Record<'group' | 'below' | 'chevron', number[]>>;
