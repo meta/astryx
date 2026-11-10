@@ -842,6 +842,7 @@ describe('stable and canary publication authority', () => {
     );
     for (const command of [
       'git show origin/main:scripts/release/active-release.mjs',
+      'git show origin/main:scripts/release/release-paths.mjs',
       'git show origin/main:scripts/lib/workspace-globs.mjs',
       'validate-merge-back',
       '--base HEAD^1',

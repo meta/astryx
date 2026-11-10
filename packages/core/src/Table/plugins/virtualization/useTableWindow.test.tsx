@@ -15,7 +15,7 @@ import {
   type TableWindowGeometry,
   type TableWindowGeometrySource,
 } from './useTableWindow';
-import type {ListWindowSegment} from '../../../utils/listWindow';
+import type {ListWindowSegment} from '../../../virtualization/listWindow';
 
 interface Item extends Record<string, unknown> {
   id: string;
@@ -29,7 +29,7 @@ const keys = data.map(item => item.id);
 const seed: TableWindowGeometry = Object.freeze({
   viewportHeight: 0,
   scrollTop: 0,
-  bodyOffset: 0,
+  startOffset: 0,
   isMeasured: false,
 });
 function source(initial: TableWindowGeometry = seed) {
@@ -95,7 +95,7 @@ describe('private Table shared-geometry controller', () => {
           useTableWindow({
             capability: useTableRowsVirtualization({
               rowHeight: 20,
-              viewportHeight: 100,
+              initialViewportHeight: 100,
             }),
             data: items,
             keys: rowKeys,
@@ -138,7 +138,7 @@ describe('private Table shared-geometry controller', () => {
     const {result, rerender, unmount} = renderHook(() => {
       const capability = useTableRowsVirtualization({
         rowHeight: 20,
-        viewportHeight: 100,
+        initialViewportHeight: 100,
       });
       return useTableWindow({
         capability,
@@ -158,7 +158,7 @@ describe('private Table shared-geometry controller', () => {
       geometry.publish({
         viewportHeight: 100,
         scrollTop: 210,
-        bodyOffset: 0,
+        startOffset: 0,
         isMeasured: true,
       }),
     );
@@ -170,7 +170,7 @@ describe('private Table shared-geometry controller', () => {
       geometry.publish({
         viewportHeight: 100,
         scrollTop: 211,
-        bodyOffset: 0,
+        startOffset: 0,
         isMeasured: true,
       }),
     );
@@ -187,7 +187,7 @@ describe('private Table shared-geometry controller', () => {
     const geometry = source({
       viewportHeight: 100,
       scrollTop: 400,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
     });
     const refs = {
@@ -199,7 +199,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -224,7 +224,7 @@ describe('private Table shared-geometry controller', () => {
     const geometry = source({
       viewportHeight: 100,
       scrollTop: 210,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
     });
     const refs = {
@@ -237,7 +237,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -262,7 +262,7 @@ describe('private Table shared-geometry controller', () => {
       geometry.publish({
         viewportHeight: 100,
         scrollTop: 230,
-        bodyOffset: 0,
+        startOffset: 0,
         isMeasured: true,
       }),
     );
@@ -274,7 +274,7 @@ describe('private Table shared-geometry controller', () => {
       const measured: TableWindowGeometry = Object.freeze({
         viewportHeight: 100,
         scrollTop: 210,
-        bodyOffset: 0,
+        startOffset: 0,
         isMeasured: true,
       });
       const geometry = source(measured);
@@ -292,7 +292,7 @@ describe('private Table shared-geometry controller', () => {
           useTableWindow({
             capability: useTableRowsVirtualization({
               rowHeight: 20,
-              viewportHeight: 100,
+              initialViewportHeight: 100,
             }),
             data: items,
             keys: rowKeys,
@@ -349,7 +349,7 @@ describe('private Table shared-geometry controller', () => {
     const measured: TableWindowGeometry = Object.freeze({
       viewportHeight: 100,
       scrollTop: 250,
-      bodyOffset: 40,
+      startOffset: 40,
       isMeasured: true,
     });
     const geometry = source(measured);
@@ -365,7 +365,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -421,7 +421,7 @@ describe('private Table shared-geometry controller', () => {
     const measured: TableWindowGeometry = Object.freeze({
       viewportHeight: 100,
       scrollTop: 210,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
     });
     const geometry = source(measured);
@@ -438,7 +438,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -471,7 +471,7 @@ describe('private Table shared-geometry controller', () => {
       Object.freeze({
         viewportHeight: 400,
         scrollTop: 1935,
-        bodyOffset: 38,
+        startOffset: 38,
         isMeasured: true,
         scrollHeight: 2335,
       }),
@@ -484,7 +484,7 @@ describe('private Table shared-geometry controller', () => {
         return useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 56,
-            viewportHeight: 400,
+            initialViewportHeight: 400,
           }),
           data: items,
           keys,
@@ -515,7 +515,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 0,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -550,7 +550,7 @@ describe('private Table shared-geometry controller', () => {
       const geometry = source({
         viewportHeight: 100,
         scrollTop: 0,
-        bodyOffset: 0,
+        startOffset: 0,
         isMeasured: true,
       });
       const refs = {
@@ -562,7 +562,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -578,7 +578,7 @@ describe('private Table shared-geometry controller', () => {
           geometry.publish({
             viewportHeight: 100,
             scrollTop,
-            bodyOffset: 0,
+            startOffset: 0,
             isMeasured: true,
           }),
         );
@@ -617,7 +617,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -671,7 +671,7 @@ describe('private Table shared-geometry controller', () => {
     const geometry = source({
       viewportHeight: 100,
       scrollTop: 0,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
     });
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -685,7 +685,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -726,7 +726,7 @@ describe('private Table shared-geometry controller', () => {
       .mockImplementation(() => ({height: 20}) as DOMRect);
     const measured = {
       viewportHeight: 100,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
     };
     const geometry = source({
@@ -739,7 +739,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -815,7 +815,7 @@ describe('private Table shared-geometry controller', () => {
     const numberRect = vi.spyOn(number, 'getBoundingClientRect');
     const cellWrites = vi.spyOn(cell, 'append');
     const positions = new Set([0]);
-    const measured = {viewportHeight: 100, bodyOffset: 0, isMeasured: true};
+    const measured = {viewportHeight: 100, startOffset: 0, isMeasured: true};
     const geometry = source({
       ...measured,
       scrollTop: 0,
@@ -826,7 +826,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -901,7 +901,7 @@ describe('private Table shared-geometry controller', () => {
     const positions = new Set([0]);
     const geometry = source({
       viewportHeight: 100,
-      bodyOffset: 0,
+      startOffset: 0,
       isMeasured: true,
       scrollTop: 0,
       revision: 1,
@@ -911,7 +911,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -940,7 +940,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data,
           keys,

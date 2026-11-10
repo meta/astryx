@@ -55,7 +55,7 @@ describe('Table parent compatibility regressions', () => {
     function Fixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table
@@ -78,7 +78,7 @@ describe('Table parent compatibility regressions', () => {
     function Fixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table
