@@ -32,6 +32,7 @@
 
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
+import {sharedState} from './sharedRealm';
 import {
   flushMutations,
   observeContent,
@@ -351,6 +352,8 @@ interface Watch {
   readonly onInsets: (insets: HitInsets) => void;
   isVisible: boolean;
   last: HitInsets;
+  /** The ancestor animations the watch waits out before a pass reads it. */
+  readonly heldBy: Set<Animation>;
 }
 
 /** Each watched element: its watches, and what observes it while coarse. */
@@ -382,12 +385,17 @@ let isCoarse = false;
 let interactive: Set<Element> | null = null;
 let interactiveDocument: Document | null = null;
 let stopInteractiveWatch: (() => void) | null = null;
-/** Whether the page is scrolling: from a scroll to its end or a still beat. */
-let isScrolling = false;
-let scrollTimer: ReturnType<typeof setTimeout> | undefined;
-let stopScrollWatch: (() => void) | null = null;
-/** The watches that each running ancestor animation holds back. */
-const heldByAnimation = new Map<Animation, Set<Watch>>();
+/**
+ * The page's scroll gate, one for every copy of Core. It knows whether the
+ * page is scrolling, from a scroll to its end or a still beat. Each copy that
+ * observes adds what it runs as the scroll ends.
+ */
+const scrollGate = sharedState('utils/hit-area/scroll-gate', 1, () => ({
+  isScrolling: false,
+  timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  stop: null as (() => void) | null,
+  onEnd: new Set<() => void>(),
+}));
 
 function stopWatchingInteractive(): void {
   stopInteractiveWatch?.();
@@ -764,31 +772,23 @@ function isHeldBack(watch: Watch, settling: ReadonlyArray<Animation>): boolean {
       continue;
     }
     isHeld = true;
-    let watches = heldByAnimation.get(animation);
-    if (watches == null) {
-      watches = new Set();
-      heldByAnimation.set(animation, watches);
-      whenSettled([animation], () => releaseHeld(animation));
+    if (!watch.heldBy.has(animation)) {
+      watch.heldBy.add(animation);
+      whenSettled([animation], () => {
+        watch.heldBy.delete(animation);
+        if (watch.isVisible && watched.get(watch.element)?.watches.has(watch)) {
+          schedule(watch);
+        }
+      });
     }
-    watches.add(watch);
   }
   return isHeld;
-}
-
-function releaseHeld(animation: Animation): void {
-  const watches = heldByAnimation.get(animation);
-  heldByAnimation.delete(animation);
-  watches?.forEach(watch => {
-    if (watch.isVisible && watched.get(watch.element)?.watches.has(watch)) {
-      schedule(watch);
-    }
-  });
 }
 
 /** One pass: every pending control's reads, then every write. */
 function measure(): void {
   frame = null;
-  if (isScrolling) {
+  if (scrollGate.isScrolling) {
     // The pending watches wait: the scroll's end asks for the frame.
     return;
   }
@@ -829,7 +829,7 @@ function measure(): void {
 function requestFrame(): void {
   if (
     frame == null &&
-    !isScrolling &&
+    !scrollGate.isScrolling &&
     typeof requestAnimationFrame === 'function'
   ) {
     frame = requestAnimationFrame(measure);
@@ -837,22 +837,29 @@ function requestFrame(): void {
 }
 
 function onScroll(): void {
-  isScrolling = true;
-  if (scrollTimer !== undefined) {
-    clearTimeout(scrollTimer);
+  scrollGate.isScrolling = true;
+  if (scrollGate.timer !== undefined) {
+    clearTimeout(scrollGate.timer);
   }
-  scrollTimer = setTimeout(endScroll, SCROLL_STILL_MS);
+  scrollGate.timer = setTimeout(endScroll, SCROLL_STILL_MS);
 }
 
 function endScroll(): void {
-  if (scrollTimer !== undefined) {
-    clearTimeout(scrollTimer);
-    scrollTimer = undefined;
+  if (scrollGate.timer !== undefined) {
+    clearTimeout(scrollGate.timer);
+    scrollGate.timer = undefined;
   }
-  if (!isScrolling) {
+  if (!scrollGate.isScrolling) {
     return;
   }
-  isScrolling = false;
+  scrollGate.isScrolling = false;
+  for (const resume of [...scrollGate.onEnd]) {
+    resume();
+  }
+}
+
+/** This copy's pass, once the page's scroll ends. */
+function resumeAfterScroll(): void {
   if (pending.size > 0) {
     requestFrame();
   }
@@ -1093,12 +1100,16 @@ function startObserving(): void {
     return;
   }
   view.addEventListener('resize', scheduleAll);
-  const stopScroll = subscribeInput(view, 'scroll', onScroll);
-  const stopScrollEnd = subscribeInput(view, 'scrollend', endScroll);
-  stopScrollWatch = () => {
-    stopScroll();
-    stopScrollEnd();
-  };
+  // The first copy to observe listens for the page; the others share it.
+  if (scrollGate.stop == null) {
+    const stopScroll = subscribeInput(view, 'scroll', onScroll);
+    const stopScrollEnd = subscribeInput(view, 'scrollend', endScroll);
+    scrollGate.stop = () => {
+      stopScroll();
+      stopScrollEnd();
+    };
+  }
+  scrollGate.onEnd.add(resumeAfterScroll);
   pressDocument = view.document;
   pressDocument.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
   if (typeof IntersectionObserver === 'function') {
@@ -1156,14 +1167,17 @@ function stopObserving(): void {
     entry.release = null;
   }
   view?.removeEventListener('resize', scheduleAll);
-  stopScrollWatch?.();
-  stopScrollWatch = null;
-  if (scrollTimer !== undefined) {
-    clearTimeout(scrollTimer);
-    scrollTimer = undefined;
+  scrollGate.onEnd.delete(resumeAfterScroll);
+  // The last copy to stop observing ends the page's listening.
+  if (scrollGate.onEnd.size === 0) {
+    scrollGate.stop?.();
+    scrollGate.stop = null;
+    if (scrollGate.timer !== undefined) {
+      clearTimeout(scrollGate.timer);
+      scrollGate.timer = undefined;
+    }
+    scrollGate.isScrolling = false;
   }
-  isScrolling = false;
-  heldByAnimation.clear();
   // The listener leaves the document it went on. A window can close first, as
   // a removed iframe's, and then it has no document to read.
   pressDocument?.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
@@ -1291,6 +1305,7 @@ export function watchHitArea(
     onInsets,
     isVisible: isCoarse && visibility == null,
     last: NO_HIT_INSETS,
+    heldBy: new Set(),
   };
   let entry = watched.get(element);
   if (entry == null) {
