@@ -344,6 +344,10 @@ presentation.
   disabled, focus, or dismissal semantics.
 - **AR3 — Focus stability.** Existing focus/refocus behavior survives add,
   remove, clear, overflow expansion/collapse, and related-surface open/close.
+  Exception: when the field isn't focused, a finger tap on a token's remove
+  button removes the token and leaves focus where it was, so the on-screen
+  keyboard stays down; a mouse or keyboard removal keeps the focus behavior
+  above.
 - **AR4 — No visible placement error.** A person MUST NOT see a surface first
   paint at an outer-start or stale position and then jump to its resolved edge.
   Invalid identity falls back before show rather than flashing or showing wrong.
