@@ -475,9 +475,9 @@ owns all of it: the package's `navigation` entry holds the router, the
 platform's `navigation` capability holds the native stack and tab containers
 with their transitions and gestures, the core holds safe-area insets, and
 every bar, header, button, and search field is the system's, through the
-platform's hosts, or drawn by the library. The packages take no third-party
-navigation dependency outside one deprecated entry, and apps, and the projects the Astryx app previews,
-run no third-party native code for navigation.
+platform's hosts, or drawn by the library. The packages take no third-party navigation dependency outside one
+deprecated entry, and an app that navigates with Astryx's router runs no
+third-party native code for navigation.
 
 Rejected: building on React Navigation, react-native-screens, and
 react-native-safe-area-context, because their gesture handling couples to the
