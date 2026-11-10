@@ -951,6 +951,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Set when a pick kept the menu open; the open after the commit then
   // reloads a listbox or lets a dialog take focus.
   const pickKeptOpenRef = useRef(false);
+  // Set when a pick kept the focus list open. Holds the committed-choices key
+  // from before the pick. The reload for that commit keeps the list that the
+  // pick's render already filtered, and does not ask the source again.
+  const keptFocusListPickRef = useRef<{key: string | undefined} | null>(null);
+  // True while a list that a pick kept open is shown. That list closes when
+  // the field becomes disabled.
+  const isFocusListKeptRef = useRef(false);
   const isDialogMenu = menu?.role === 'dialog';
 
   // Layer for dropdown. The list is a manual popover (see usePopover below):
@@ -1027,6 +1034,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
+    isFocusListKeptRef.current = false;
     openerAtRequestRef.current = null;
     outsidePress.stop();
     onOpenChange?.(false);
@@ -1087,7 +1095,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       loadingRef.current = false;
       onLoadingChangeRef.current?.(false);
     }
-  }, [isDisabled]);
+    if (isFocusListKeptRef.current) {
+      hideList();
+    }
+  }, [isDisabled, hideList]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current || isDialogMenuRef.current) {
       return;
@@ -1381,6 +1392,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   //   an empty or failed answer closes (FR15);
   // - a focus list with focus entries off: close.
   const reloadForCommittedChoices = useCallback(() => {
+    const keptFocusListPick = keptFocusListPickRef.current;
+    keptFocusListPickRef.current = null;
     // A search waiting for its debounce would use the source from before the
     // commit, so the reload replaces it.
     const hadPendingSearch = searchTimeoutRef.current != null;
@@ -1393,6 +1406,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
     if (isAtCommitLimit) {
       hideList();
+      return;
+    }
+    if (keptFocusListPick != null) {
+      // The pick's render already removed the picked choice from the list.
+      if (results.length === 0) {
+        hideList();
+      }
       return;
     }
     if (!isShowingRef.current && !hadPendingSearch) {
@@ -1428,6 +1448,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const reloadedKeyRef = useRef(committedChoicesKey);
   useIsomorphicLayoutEffect(() => {
     if (reloadedKeyRef.current === committedChoicesKey) {
+      // A pick the caller did not commit changes no committed value, so no
+      // reload reads the mark.
+      if (keptFocusListPickRef.current?.key === committedChoicesKey) {
+        keptFocusListPickRef.current = null;
+      }
       return;
     }
     reloadedKeyRef.current = committedChoicesKey;
@@ -1444,6 +1469,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle query change
   const handleQueryChange = useCallback(
     (newQuery: string) => {
+      isFocusListKeptRef.current = false;
       setQuery(newQuery);
       onChangeQuery?.(newQuery);
 
@@ -1534,6 +1560,39 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (isDisabled) {
         return;
       }
+      // A pick from the settled focus list of a field with committed choices
+      // keeps the input focused and the list open while another loaded choice
+      // remains. The next choice in the shown order becomes active, or the
+      // one before it when the pick was last. The list keeps its rows, so a
+      // press elsewhere or Tab still closes it as usual.
+      const pickedIndex = displayedResults.findIndex(
+        other => other.id === item.id,
+      );
+      const nextIndex =
+        pickedIndex + 1 < displayedResults.length
+          ? pickedIndex + 1
+          : pickedIndex - 1;
+      const keepsFocusList =
+        committedChoices != null &&
+        !isAtCommitLimit &&
+        hasEntriesOnFocus &&
+        query === '' &&
+        !isLoading &&
+        !isDialogMenu &&
+        popover.isOpen &&
+        resultsGenRef.current === searchGenRef.current &&
+        pickedIndex >= 0 &&
+        nextIndex >= 0;
+      if (keepsFocusList) {
+        keptFocusListPickRef.current = {key: committedChoicesKey};
+        isFocusListKeptRef.current = true;
+        openRequestedRef.current = false;
+        onChange(item);
+        openRequestedRef.current = false;
+        setHighlightedIndex(nextIndex);
+        inputRef.current?.focus();
+        return;
+      }
       // Bump generation to invalidate any in-flight async searches
       searchGenRef.current++;
       if (searchTimeoutRef.current) {
@@ -1570,6 +1629,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     },
     [
       isDisabled,
+      displayedResults,
+      committedChoices,
+      committedChoicesKey,
+      isAtCommitLimit,
+      hasEntriesOnFocus,
+      isLoading,
+      isDialogMenu,
       onChange,
       onChangeQuery,
       query,
