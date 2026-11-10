@@ -162,8 +162,8 @@ const PUBLIC_READ_REQUEST: IconRequest<never> = {size: 'md'};
 // Global Registry
 // =============================================================================
 
-// One registry per React for every copy of Core: entries are React elements
-// and components, so an icon registered on one React never renders on another.
+// Every copy of Core on one React shares this registry. Entries are React
+// elements, so a second React keeps its own.
 const registry = sharedForReact('icon/global-icon-registry/state', 1, () => ({
   entries: {} as Record<string, StoredIconEntry>,
 }));

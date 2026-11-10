@@ -9,9 +9,8 @@
  * @position Shared runtime state for values that hold React components or
  *   elements; no client directive, so server modules can use it
  *
- * The server and client builds of React are separate module instances, so a
- * value a server module registers and a value a client module registers live
- * in separate stores, as each module's own state did before.
+ * Server and client React builds are separate instances, so each keeps its
+ * own value.
  */
 
 import {createElement} from 'react';

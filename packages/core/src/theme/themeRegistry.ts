@@ -14,9 +14,8 @@
 import type {DefinedTheme} from './defineTheme';
 import {sharedForReact} from '../utils/sharedForReact';
 
-// One registry per React for every copy of Core: a theme can carry React
-// elements (its icons), so a theme registered on one React never reaches
-// another.
+// Every copy of Core on one React shares this registry. A theme can hold React
+// elements (its icons), so a second React keeps its own.
 const themeRegistry = sharedForReact(
   'theme/theme-registry/themes',
   1,
