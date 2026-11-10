@@ -80,7 +80,7 @@ describe('release-specs (changed)', () => {
     expect(scope.with['outside-pull-request']).toBe('skip');
   });
 
-  it("uses the gating release check's runner, workers and config", () => {
+  it("uses the gating release check's runner and config, on one worker", () => {
     // The release check runs its contracts on 4-core-ubuntu when a person or
     // the release tooling dispatches it.
     expect(contracts['runs-on']).toContain("'4-core-ubuntu'");
@@ -89,8 +89,11 @@ describe('release-specs (changed)', () => {
     const release = contracts.steps.find(
       each => each.name === 'Run accessibility spec-test contracts',
     );
-    expect(run.env.A11Y_CONTRACT_WORKERS).toBe(
-      release.env.A11Y_CONTRACT_WORKERS,
+    // A release spec judges timing: it runs alone, on one worker, as the
+    // release check runs it.
+    expect(run.env.A11Y_CONTRACT_WORKERS).toBeUndefined();
+    expect(run.run).toMatch(
+      /playwright test "\$\{SPECS\[@\]\}" .*--workers=1$/m,
     );
     expect(run.run).toContain(
       '--config playwright.config.ts --project chromium',

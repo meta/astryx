@@ -4772,8 +4772,9 @@ jobs:
           retention-days: 7
 
   # Release specs a pull request adds or changes (`*.release.*.spec.ts`) run
-  # here, each in full, with the runner, Playwright workers and config of the
-  # release check's spec-test contracts: a changed spec always runs
+  # here, each in full, with the runner and config of the release check's
+  # spec-test contracts and one Playwright worker, as the release check runs
+  # its timing specs: a changed spec always runs
   # (spec:AST-030 FR26, FR31). The touched check above caps its run at eight
   # minutes and reports a release spec that does not fit as not run; this job
   # has no budget, and a failing spec fails it. merge-guard waits for it by
@@ -4894,7 +4895,6 @@ jobs:
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
-          A11Y_CONTRACT_WORKERS: 4
         run: |
           set -euo pipefail
           mapfile -t CANDIDATES < "$SPECS_PATH"
@@ -4911,7 +4911,9 @@ jobs:
             for (const file of outside) console.log("::error file=" + file + "::" + file + " is a release spec outside playwright.config.ts, so no release check runs it.");
             process.exitCode = outside.length > 0 ? 1 : 0;
           ' "${SPECS[@]}"
-          pnpm exec playwright test "${SPECS[@]}" --config playwright.config.ts --project chromium
+          # One worker: a release spec judges timing, and the release check runs
+          # it alone on its runner, so the pull request does too.
+          pnpm exec playwright test "${SPECS[@]}" --config playwright.config.ts --project chromium --workers=1
 
   # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
   # that component's own `audit` specs, and a change to a shared primitive that
