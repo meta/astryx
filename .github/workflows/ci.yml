@@ -1645,7 +1645,12 @@ jobs:
                   git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
                 done
                 # The CLI publishes declarations generated from its JSDoc.
-                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
+                # The head build always writes them, and the CLI report also
+                # reads Core, so the base writes them on every pull request,
+                # not only when the CLI changes. Without them the CLI base
+                # report falls back to the committed one. Keep apostrophes
+                # out of these comments: the script is single-quoted.
+                pnpm -F @astryxdesign/cli sync:api-types
               } || echo "Building the published packages of the merge base failed; those packages compare with its committed reports."
             fi
             touch ../base-build.done
