@@ -379,7 +379,11 @@ describe('parseDateInput', () => {
       try {
         expect(parseDateInput('Dec 31, 2000 20:00 GMT')).not.toBeNull();
       } finally {
-        process.env.TZ = originalTZ;
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
       }
     });
 
