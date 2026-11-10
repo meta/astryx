@@ -627,12 +627,12 @@ works on is `spec:AST-040` FR9's.
     cannot load, naming why; inside a project, it lists the ones `discover`
     lists as available, with the project's install command.
 
-- **FR13 — The repository may ship one plugin skill.** The repository MAY
-  ship one plugin skill for coding agents, separate from the computer-level
-  file (FR8). The skill is a shortened form of the CLI's guidance that
-  `renderComputerAgentText` renders. It is generated from that renderer, and
-  a `--check` run MUST fail when the committed file differs from the
-  generated skill.
+- **FR13 — The repository may ship one Claude Code plugin skill.** The
+  repository MAY ship one Claude Code plugin skill, separate from the
+  computer-level file (FR8). The skill is a shortened form of the CLI's
+  guidance that `renderComputerAgentText` renders. It is generated from that
+  renderer, and a `--check` run MUST fail when the committed file differs
+  from the generated skill.
 
 ### Computer-level agent files
 
