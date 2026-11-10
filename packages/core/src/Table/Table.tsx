@@ -131,8 +131,23 @@ const tableStyles = stylex.create({
 });
 
 const scrollWrapperStyles = stylex.create({
-  // A windowed table scrolls inside the height its parent gives it.
-  blockViewport: {height: '100%', minHeight: 0},
+  // A windowed table scrolls inside the height its parent gives it. As its
+  // container's first or last child, the region bleeds over that block edge's
+  // padding (containerBleed), so its height adds that padding back and it
+  // ends at the same edge.
+  blockViewport: {
+    '--_table-bleed-block-start': {
+      default: '0px',
+      ':first-child': 'var(--container-padding-block-start, 0px)',
+    },
+    '--_table-bleed-block-end': {
+      default: '0px',
+      ':last-child': 'var(--container-padding-block-end, 0px)',
+    },
+    height:
+      'calc(100% + var(--_table-bleed-block-start) + var(--_table-bleed-block-end))',
+    minHeight: 0,
+  },
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',

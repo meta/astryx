@@ -25,7 +25,8 @@ export default function RowsVirtualizationHookUsage() {
     rowHeight: 56,
     initialViewportHeight: 320,
   });
-  // The Table scrolls inside the height its parent gives it;
+  // Give the Table's parent a height, fixed or relative, or a flex child, so
+  // windowing can bound the rows; with no height every row renders.
   // initialViewportHeight only sizes the first window.
   return (
     <VStack height={320}>

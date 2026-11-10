@@ -1,6 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import type {Meta, StoryObj} from '@storybook/react-vite';
-import {Table, VStack, useTableRowsVirtualization} from '@astryxdesign/core';
+import {
+  Card,
+  Table,
+  VStack,
+  useTableRowsVirtualization,
+} from '@astryxdesign/core';
 const rows = Array.from({length: 2000}, (_, index) => ({
   id: String(index),
   name: `Product ${index + 1}`,
@@ -35,4 +40,28 @@ function Example() {
 }
 export const FixedHeightWindowing: StoryObj = {
   render: () => <Example />,
+};
+
+function InCard() {
+  const virtualization = useTableRowsVirtualization({
+    rowHeight: 56,
+    initialViewportHeight: 400,
+  });
+  // A 400px Card is the Table's parent; the Table bleeds to its edges.
+  return (
+    <Card height={400}>
+      <Table
+        data={rows}
+        columns={[
+          {key: 'name', header: 'Product'},
+          {key: 'status', header: 'Status'},
+        ]}
+        idKey="id"
+        virtualization={virtualization}
+      />
+    </Card>
+  );
+}
+export const InSizedCard: StoryObj = {
+  render: () => <InCard />,
 };

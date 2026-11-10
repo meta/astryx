@@ -138,7 +138,7 @@ describe('actual Table virtualization', () => {
     const viewport = screen.getByRole('table').closest('[role="group"]');
     expect(viewport).not.toBeNull();
     expect(viewport?.getAttribute('style') ?? '').not.toContain('240px');
-    expect(getComputedStyle(viewport as Element).height).toBe('100%');
+    expect(getComputedStyle(viewport as Element).height).toContain('100%');
     cleanup();
   });
   it('takes its height from its parent: a sized parent windows, and a parent with no height renders every row', async () => {

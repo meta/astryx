@@ -91,7 +91,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 The hook returns an opaque `TableVirtualizationCapability` from `rowHeight` and
 `initialViewportHeight`, never data or identity. The initial height only
 seeds the first window; it sizes no element. The Table's scroll area takes its
-height from its parent, and after mount the measured viewport sets the window. Table consumes it with its existing
+height from its parent, and after mount the measured viewport sets the window. The hook reads the measured height of the Table's scroll area and never defines it. Table consumes it with its existing
 `data`, `columns`, `idKey` and `plugins` and owns types/runtime admission.
 
 | Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                             | Stability          |
