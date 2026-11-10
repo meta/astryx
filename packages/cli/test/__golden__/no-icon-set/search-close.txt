@@ -4,6 +4,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
+name:        DrawerHeader
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Drawer
+command:     pnpm exec astryx component DrawerHeader
 name:        BottomSheet
 domain:      component
 package:     @astryxdesign/core
@@ -24,11 +29,6 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Drawer
 command:     pnpm exec astryx component Drawer
-name:        DrawerHeader
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Drawer
-command:     pnpm exec astryx component DrawerHeader
 name:        DropdownMenuSubMenu
 domain:      component
 package:     @astryxdesign/core

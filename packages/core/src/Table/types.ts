@@ -22,6 +22,7 @@ import type {
 } from 'react';
 import type {StyleXStyles} from '../theme/types';
 import type {BaseProps} from '../BaseProps';
+import type {TableVirtualizationCapability} from './plugins/virtualization/useTableRowsVirtualization';
 import type {TableFilterFieldRef} from './plugins/filtering/useTableFiltering';
 
 // =============================================================================
@@ -616,6 +617,8 @@ export interface BaseTableProps<
   T extends Record<string, unknown>,
 > extends BaseProps<HTMLTableElement> {
   ref?: React.Ref<HTMLTableElement>;
+  /** Geometry-only, fixed-height capability; Styled Table owns its coordinated viewport. */
+  virtualization?: TableVirtualizationCapability;
   /** Array of data items to render as rows */
   data?: T[];
   /** Column definitions. If omitted, auto-generated from data keys. */

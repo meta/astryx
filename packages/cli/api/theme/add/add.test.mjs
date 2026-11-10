@@ -9,6 +9,7 @@ import {
   THEME_MODULE_MARKER,
   parseThemeModuleRecord,
 } from '../../../foundation/config/theme-state.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -110,7 +111,7 @@ function installBuiltThemePackage(slug) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-add-app-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-add-app-'));
   fs.mkdirSync(path.join(tmpDir, 'src'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),

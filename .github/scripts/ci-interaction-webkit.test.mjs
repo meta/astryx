@@ -85,9 +85,16 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
-    expect(webkit.if).toBe(chromium.if);
+    // The Chromium proofs also run for main's nightly full run; the WebKit
+    // proofs run for the weekly full run on main (spec:AST-030 DEC-24).
+    const nightly =
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()";
+    const weekly =
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()";
+    expect(chromium.if).toContain(nightly);
+    expect(webkit.if).toBe(chromium.if.replace(nightly, weekly));
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(webkit.needs).toEqual([
@@ -95,6 +102,8 @@ describe('WebKit interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
+      'webkit-weekly-request',
     ]);
   });
 
@@ -113,7 +122,8 @@ describe('WebKit interaction proof routing', () => {
     );
     expect(webkit.steps.indexOf(decide(webkit))).toBe(1);
     expect(decide(webkit).with).toMatchObject({
-      'outside-pull-request': 'skip',
+      'outside-pull-request':
+        "${{ inputs.operation == 'webkit-weekly' && 'run' || 'skip' }}",
       'requires-head-file': 'playwright.interaction.config.ts',
     });
     expect(step(webkit, 'Skip the WebKit proofs outside their scope').if).toBe(
@@ -126,6 +136,7 @@ describe('WebKit interaction proof routing', () => {
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
       'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -150,16 +161,20 @@ describe('WebKit interaction proof routing', () => {
     expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
     );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(webkit, 'Require a leg for every share').if).toBe(
+      "steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total",
+    );
   });
 
-  it('runs the interaction config in WebKit against the exact PR head', () => {
+  it('runs the interaction config in WebKit against the exact PR head, or main on the weekly run', () => {
     const checkout = webkit.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&
         candidate.with?.path === undefined,
     );
     expect(checkout?.with?.ref).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     // The image already holds WebKit and its system libraries: no apt step.
     expect(step(webkit, 'Install Playwright WebKit').run).toBe(
