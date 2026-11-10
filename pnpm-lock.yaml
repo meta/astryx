@@ -677,6 +677,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.3.2
         version: 4.3.2
+      axe-core:
+        specifier: ^4.12.1
+        version: 4.12.1
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -689,6 +692,9 @@ importers:
       lucide-react:
         specifier: ^1.66.0
         version: 1.67.0(@types/react@19.3.0)(react@19.3.1)
+      playwright-core:
+        specifier: ^1.61.1
+        version: 1.61.1
       postcss:
         specifier: ^8.5.23
         version: 8.5.25

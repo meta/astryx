@@ -1,0 +1,160 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Grades one workspace: type check, build, then the task probe in Chromium.
+ * @input a workspace, its arm, its task, and a shared browser
+ * @output a pass or fail with the reason, probe steps, screenshots, axe counts
+ * @position Called by the runner after each agent run, and by self-test
+ */
+
+import fs from 'node:fs';
+import http from 'node:http';
+import {createRequire} from 'node:module';
+import path from 'node:path';
+import {loadProbe} from './tasks.mjs';
+import {run, tscErrorsIn} from './workspace.mjs';
+import {runSteps} from './probe-kit.mjs';
+
+const require = createRequire(import.meta.url);
+
+const VIEWPORTS = {
+  desktop: {viewport: {width: 1280, height: 800}},
+  mobile: {viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
+};
+
+const CONTENT_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.png': 'image/png',
+};
+
+export async function launchBrowser() {
+  const {chromium} = await import('playwright-core');
+  const executablePath = process.env.VIBE_EVAL_CHROMIUM || undefined;
+  return chromium.launch({executablePath, args: ['--no-sandbox']});
+}
+
+/** Serves a built app from 127.0.0.1 only; unknown paths get index.html. */
+export function serveStatic(root) {
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    let file = path.join(root, decodeURIComponent(url.pathname));
+    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      file = path.join(root, 'index.html');
+    }
+    response.setHeader('content-type', CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream');
+    fs.createReadStream(file).pipe(response);
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      const {port} = server.address();
+      resolve({url: `http://127.0.0.1:${port}/`, close: () => new Promise(done => server.close(done))});
+    });
+  });
+}
+
+async function axeCounts(page) {
+  const source = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+  await page.addScriptTag({content: source});
+  return page.evaluate(async () => {
+    const result = await window.axe.run(document, {runOnly: ['wcag2a', 'wcag2aa']});
+    const counts = {critical: 0, serious: 0, moderate: 0, minor: 0};
+    for (const violation of result.violations) {
+      counts[violation.impact ?? 'minor'] += violation.nodes.length;
+    }
+    return {counts, rules: result.violations.map(violation => violation.id)};
+  });
+}
+
+/** Blocks every request that leaves the local server. */
+async function localOnly(context, origin) {
+  await context.route('**/*', route =>
+    route.request().url().startsWith(origin) ? route.continue() : route.abort(),
+  );
+}
+
+async function probeInBrowser({browser, url, task, outDir}) {
+  const steps = await loadProbe(task);
+  const screenshots = {};
+  const pageErrors = [];
+  const consoleErrors = [];
+
+  const desktop = await browser.newContext(VIEWPORTS.desktop);
+  await localOnly(desktop, url);
+  const page = await desktop.newPage();
+  page.on('pageerror', error => pageErrors.push(String(error.message ?? error)));
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 500));
+  });
+  await page.goto(url, {waitUntil: 'load'});
+  await page.waitForTimeout(300);
+  screenshots.desktopInitial = path.join(outDir, 'desktop-initial.png');
+  await page.screenshot({path: screenshots.desktopInitial, fullPage: true});
+  const axe = await axeCounts(page).catch(error => ({error: String(error)}));
+  const probe = await runSteps(steps(page));
+  screenshots.desktopFinal = path.join(outDir, 'desktop-final.png');
+  await page.screenshot({path: screenshots.desktopFinal, fullPage: true});
+  await desktop.close();
+
+  const mobile = await browser.newContext(VIEWPORTS.mobile);
+  await localOnly(mobile, url);
+  const phone = await mobile.newPage();
+  await phone.goto(url, {waitUntil: 'load'});
+  await phone.waitForTimeout(300);
+  screenshots.mobileInitial = path.join(outDir, 'mobile-initial.png');
+  await phone.screenshot({path: screenshots.mobileInitial, fullPage: true});
+  await mobile.close();
+
+  return {probe, axe, pageErrors, consoleErrors, screenshots};
+}
+
+/**
+ * Pass means: the type check and the build exit 0, every probe step passes,
+ * and the page throws no uncaught error. The arm's own commands decide the
+ * first two, so a broken config cannot pass by printing nothing.
+ */
+export async function gradeWorkspace({workspace, arm, task, browser, outDir}) {
+  fs.mkdirSync(outDir, {recursive: true});
+  const grade = {passed: false, failure: null};
+
+  const typecheck = await run(arm.typecheck, {cwd: workspace, timeoutMs: 180_000});
+  grade.typecheck = {
+    exitCode: typecheck.code,
+    timedOut: typecheck.timedOut,
+    errors: tscErrorsIn(typecheck.output, '.ts').length,
+    tail: typecheck.output.slice(-3000),
+  };
+  const build = await run(arm.build, {cwd: workspace, timeoutMs: 300_000});
+  const dist = path.join(workspace, 'dist');
+  grade.build = {
+    exitCode: build.code,
+    timedOut: build.timedOut,
+    tail: build.output.slice(-3000),
+  };
+
+  if (typecheck.code !== 0) grade.failure = 'typecheck';
+  if (build.code !== 0 || !fs.existsSync(path.join(dist, 'index.html'))) {
+    grade.failure ??= 'build';
+    return grade;
+  }
+
+  const server = await serveStatic(dist);
+  try {
+    Object.assign(grade, await probeInBrowser({browser, url: server.url, task, outDir}));
+  } catch (error) {
+    grade.failure ??= 'browser';
+    grade.browserError = String(error);
+    return grade;
+  } finally {
+    await server.close();
+  }
+  if (!grade.probe.passed) grade.failure ??= 'probe';
+  if (grade.pageErrors.length > 0) grade.failure ??= 'page-error';
+  grade.passed = grade.failure === null;
+  return grade;
+}
