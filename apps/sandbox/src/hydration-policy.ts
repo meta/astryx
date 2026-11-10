@@ -5,8 +5,8 @@
  * @input Route and URL search string.
  * @output Whether React can safely hydrate instead of client-rendering.
  * @position Prevents mismatches for iframe themes and for pages whose first
- *   render reads URL controls (Shell Lab, Perf Scenes, Chat Layout,
- *   AlertDialog Cases, List Reorder Cases, NavigationStack Edge).
+ *   render reads URL controls. Those pages are Shell Lab, Perf Scenes, Chat
+ *   Layout, AlertDialog Cases, List Reorder Cases and NavigationStack Edge.
  */
 
 /** Pages whose first render reads the query string. */

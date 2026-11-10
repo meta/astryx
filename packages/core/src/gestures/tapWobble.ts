@@ -11,7 +11,7 @@
 
 /**
  * A tap's wobble, px. WebKit ends a touch's click when one of its moves is
- * cancelled, so a pan or a pull leaves moves inside this distance to the
+ * cancelled. So a pan or a pull leaves moves inside this distance to the
  * browser. Mobile Safari commits its native pan on a kept move this long, so
  * the hold starts at it.
  * @source measured: Mobile Safari, iOS 26.2 simulator (iPhone 17 Pro), HID
