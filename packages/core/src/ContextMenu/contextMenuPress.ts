@@ -30,6 +30,12 @@ const {commitMs, menuDisplayMs, allowableMovement} = contextMenu.press;
 const LATE_MOVE_GAP_MS = 50;
 
 /**
+ * The page counts as behind its input when an input or a timer runs this long
+ * after its own time. In ms: two frames at 60 Hz.
+ */
+const LATE_INPUT_MS = 33;
+
+/**
  * The foundation's own press timer, which this recognizer never lets fire:
  * the hold below commits instead. It is longer than any hold, and under the
  * window timer's 2^31 - 1 ms limit.
@@ -95,7 +101,6 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   private holdStart = 0;
   /** The menu's moment passed while the finger's moves still came late. */
   private isMenuWaiting = false;
-  private moveWait: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: ContextMenuPressRecognizerOptions = {}) {
     super({
@@ -142,14 +147,6 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
     const touch = touches.find(each => each.id === this.pressTouchId);
     if (touch != null) {
       this.latestMove = {time: touch.inputTime, arrivedAt: performance.now()};
-      // A move from the menu's moment on: the finger stayed inside the
-      // tolerance until then, so the menu shows, and it moves freely after.
-      if (
-        this.isMenuWaiting &&
-        touch.inputTime >= this.holdStart + menuDisplayMs
-      ) {
-        this.showMenu();
-      }
     }
     const hasDrifted = touch != null && !this.followHold(touch);
     if (hasDrifted && this.state === 'possible') {
@@ -164,22 +161,31 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   }
 
   /**
-   * Follows the finger during its hold. A drift past `allowableMovement` on
-   * either axis ends the hold. Returns whether the hold still runs.
+   * Follows the finger during its hold, through each sample of the move at
+   * the time it came with. A sample from the menu's moment on shows a
+   * waiting menu: the finger stayed inside the tolerance until then, and it
+   * moves freely after. A drift past `allowableMovement` on either axis ends
+   * the hold. Returns whether the hold still runs.
    */
   private followHold(touch: GestureTouch): boolean {
-    const from = this.holdFrom;
-    if (from == null) {
-      return false;
+    const moment = this.holdStart + menuDisplayMs;
+    for (const sample of touch.inputSamples) {
+      const from = this.holdFrom;
+      if (from == null) {
+        return false;
+      }
+      if (this.isMenuWaiting && sample.time >= moment) {
+        this.presentMenu();
+      }
+      if (
+        Math.abs(sample.x - from.x) > allowableMovement ||
+        Math.abs(sample.y - from.y) > allowableMovement
+      ) {
+        this.endHold();
+        return false;
+      }
     }
-    if (
-      Math.abs(touch.x - from.x) > allowableMovement ||
-      Math.abs(touch.y - from.y) > allowableMovement
-    ) {
-      this.endHold();
-      return false;
-    }
-    return true;
+    return this.holdFrom != null;
   }
 
   private endHold(): void {
@@ -189,10 +195,9 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   }
 
   private stopMoveWait(): void {
-    this.isMenuWaiting = false;
-    if (this.moveWait != null) {
-      clearTimeout(this.moveWait);
-      this.moveWait = null;
+    if (this.isMenuWaiting) {
+      this.isMenuWaiting = false;
+      this.clearTimer();
     }
   }
 
@@ -215,28 +220,47 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   }
 
   /**
-   * The finger is still down at the menu's moment: the menu is due. Under
-   * load, the finger's moves can reach the page after that moment, though
-   * they came before it. While they still come, the menu waits for them, so
-   * a drift in them still ends the hold.
+   * The finger is still down at the menu's moment: the menu is due. When the
+   * page is behind its input, the finger's moves can reach it after that
+   * moment, though they came before it. While they still come, the menu
+   * waits for them, so a drift in them still ends the hold.
    */
   private showMenu(): void {
     this.stopMoveWait();
-    if (this.holdFrom == null || !isActive(this.state)) {
+    if (this.holdFrom == null || !isActive(this.state) || this.isMenuDue) {
       return;
     }
-    const move = this.latestMove;
-    if (
-      move != null &&
-      move.time < this.holdStart + menuDisplayMs &&
-      performance.now() - move.arrivedAt < LATE_MOVE_GAP_MS
-    ) {
+    if (this.isBehindInput()) {
       this.isMenuWaiting = true;
-      this.moveWait = setTimeout(() => this.showMenu(), LATE_MOVE_GAP_MS);
+      // On the arena's clock, like the hold's own deadlines.
+      this.setTimer(this.now() + LATE_MOVE_GAP_MS, () => this.showMenu());
       return;
     }
+    this.presentMenu();
+  }
+
+  private presentMenu(): void {
+    this.stopMoveWait();
     this.isMenuDue = true;
     this.setState('changed');
+  }
+
+  /**
+   * Whether the page may still hold moves from before the menu's moment. A
+   * move from before it reached the page in the last `LATE_MOVE_GAP_MS`, and
+   * that move or the moment's timer ran more than `LATE_INPUT_MS` late.
+   */
+  private isBehindInput(): boolean {
+    const move = this.latestMove;
+    const moment = this.holdStart + menuDisplayMs;
+    const now = performance.now();
+    return (
+      move != null &&
+      move.time < moment &&
+      now - move.arrivedAt < LATE_MOVE_GAP_MS &&
+      (move.arrivedAt - move.time > LATE_INPUT_MS ||
+        now - moment > LATE_INPUT_MS)
+    );
   }
 
   protected override reset(): void {

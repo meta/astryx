@@ -34,12 +34,12 @@ function setup(
 }
 
 /**
- * Runs `body` with the page's clock (`performance.now()`) and window timers
- * faked. `at(time)` moves the page's clock to when the page gets the next
- * input, which may be after the time the input came with.
+ * Runs `body` with the page's clock (`performance.now()`) faked. `at(time)`
+ * moves it to when the page gets the next input, which may be after the time
+ * the input came with.
  */
 function withPageClock(body: (at: (time: number) => void) => void): void {
-  vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+  vi.useFakeTimers({toFake: ['performance']});
   try {
     body(time => vi.advanceTimersByTime(time - performance.now()));
   } finally {
@@ -209,9 +209,12 @@ describe('ContextMenuPressRecognizer', () => {
       at(DISPLAY);
       harness.advance(DISPLAY);
       expect(press.isMenuDue).toBe(false);
-      vi.advanceTimersByTime(49);
+      // The wait runs on the arena's clock.
+      at(DISPLAY + 49);
+      harness.advance(DISPLAY + 49);
       expect(press.isMenuDue).toBe(false);
-      vi.advanceTimersByTime(1);
+      at(DISPLAY + 50);
+      harness.advance(DISPLAY + 50);
       expect(press.isMenuDue).toBe(true);
       finger.up(DISPLAY + 300);
     });
@@ -248,7 +251,9 @@ describe('ContextMenuPressRecognizer', () => {
       at(DISPLAY + 40);
       harness.advance(DISPLAY);
       expect(press.isMenuDue).toBe(false);
-      vi.advanceTimersByTime(50);
+      // No more moves came: the wait ends 50 ms on, on the arena's clock.
+      at(DISPLAY + 90);
+      harness.advance(DISPLAY + 50);
       expect(press.isMenuDue).toBe(true);
       finger.up(DISPLAY + 300);
     });
