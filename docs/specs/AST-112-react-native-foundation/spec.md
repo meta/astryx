@@ -95,20 +95,15 @@ shared icon names under FR17.
     which the platform uses at the version the repository's release gives
     every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
     never depend on them (`spec:AST-082/FR14`).
-  - No package of the set depends on react-native-screens,
-    react-native-safe-area-context, or a navigation package that ships native
-    code or requires either of them (DEC-9).
-  - React Navigation's JavaScript core (`@react-navigation/core`, which ships
-    no native code) holds the routing state. The library's `navigation`
-    entry provides navigators over the platform's `navigation` hosts. Astryx
-    owns everything else in navigation: the native stack and tab
-    containers, transitions, gestures, insets, and every bar, header,
-    button, and search field, rendered by the system through the
-    platform's hosts or drawn by the library. No third-party package draws
-    any part of navigation.
-  - `@react-navigation/core` is an optional peer dependency of the library,
-    needed only by its `navigation` entry: an optional integration under
-    `spec:AST-082/FR13`. The platform never depends on it.
+  - The Astryx router (the library's `navigation` entry) holds the routing
+    state and drives the platform's `navigation` hosts. Astryx also owns the
+    native stack and tab containers, transitions, gestures, insets, and every
+    bar, header, button, and search field, rendered by the system through the
+    platform's hosts or drawn by the library (DEC-9).
+  - The packages of the set take no third-party navigation dependency, a
+    router included: their only third-party peer dependencies are React and
+    React Native. A React Navigation adapter may exist as a separate optional
+    package, never as a dependency of the set.
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -130,9 +125,7 @@ shared icon names under FR17.
     writes every permission the app needs (FR4).
 - **FR4 — Native code lives only in the platform.**
   - The library contains no native code and has no runtime dependency beyond
-    `react`, `react-native`, and the platform, apart from the optional
-    `@react-navigation/core` peer that only its `navigation` entry uses
-    (FR2).
+    `react`, `react-native`, and the platform.
   - An app holds no hand-written native code. Its iOS and Android projects are
     generated from the app's configuration. The platform ships one
     configuration plugin. It always writes the core's host declarations (on
@@ -161,8 +154,8 @@ shared icon names under FR17.
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
-  - On the library, `.` holds no navigator, and `./navigation` holds the
-    navigators (FR2).
+  - On the library, `.` holds no router, and `./navigation` holds the Astryx
+    router and its navigators (FR2).
   - On the platform, `.` is the core and exports no capability's objects or
     views; `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and `./navigation` are the capabilities' entries.
   - `./host` holds the plumbing the library and the capabilities need, such
@@ -334,14 +327,14 @@ shared icon names under FR17.
   code lives in the platform package of `spec:AST-112` (FR4), and
   `@astryxdesign/native` stays the single cross-platform contracts package.
 - The package-boundary check gains the FR2 rules: no import from the library in
-  the platform, no import of a capability from the platform's core outside its loader or from another capability, no dependency on react-native-screens, react-native-safe-area-context, or a navigation package that ships native code or requires either, and no dependency on these packages from core or the CLI.
+  the platform, no import of a capability from the platform's core outside its loader or from another capability, no dependency on a third-party navigation package, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                                                            | Representative states                                                                                                                                            | Mutation or failure expectation                                                                                                                                                                                                                                                                               |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Package manifest check of names and entries; the canary release's package list                                                                                                          | each package in the public set; each capability entry                                                                                                            | A package missing from the set, a set package missing from the canary release, or a capability without its entry                                                                                                                                                                                              |
-| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the core and each capability; each package's dependencies                                                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, or a dependency on react-native-screens, react-native-safe-area-context, or a navigation package that ships native code or requires either                                    |
+| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the core and each capability; each package's dependencies                                                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, or a dependency on a third-party navigation package                                                                                                                           |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason    | a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list | An app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module` |
 | FR4      | `npm pack` file lists; a generated sample app's project from configuration with a capability list                                                                                       | the library's files; the sample's iOS and Android projects; a default and an overridden usage description                                                        | The library ships native code, the package manifests declare a permission, the sample needs a manual native edit, the generated project lacks the core's declarations, or it writes a usage description other than the default or the app's override                                                          |
 | FR5      | `exports` map and public-entry name check; package-boundary check of `./host` imports                                                                                                   | `.`, `./testing`, `./host`, `./app.plugin.js`                                                                                                                    | A private name on `.`, a deep import resolving, or an app importing `./host`                                                                                                                                                                                                                                  |
@@ -450,24 +443,24 @@ The library and the platform change together, so they share
 one version and release together. They stay on the canary channel until a
 platform is supported under `spec:AST-082/FR15`.
 
-### DEC-9 — Astryx owns navigation except routing state
+### DEC-9 — Astryx owns navigation, routing included
 
 **Reference:** `spec:AST-112/DEC-9`
 **Decider:** imdreamrunner, 2026-11-09
 
-Gestures, bars, and safe areas meet in the native stack, so Astryx owns
-everything in navigation except routing state: the `navigation` capability
-holds the native stack and tab containers with their transitions and
-gestures, the core holds safe-area insets, and every bar, header, button,
-and search field is the system's, through the platform's hosts, or drawn by
-the library. React Navigation's JavaScript core holds only the routing state, and the
-library's `navigation` entry provides navigators over the platform's hosts.
-Apps, and the projects the Astryx app previews, then run no third-party
-native code for navigation.
+Gestures, bars, safe areas, and routing meet in the native stack, so Astryx
+owns all of it: the library's `navigation` entry holds the router, the
+platform's `navigation` capability holds the native stack and tab containers
+with their transitions and gestures, the core holds safe-area insets, and
+every bar, header, button, and search field is the system's, through the
+platform's hosts, or drawn by the library. The packages take no third-party
+navigation dependency, and apps, and the projects the Astryx app previews,
+run no third-party native code for navigation.
 
-Rejected: building on react-native-screens and react-native-safe-area-context,
-because their gesture handling couples to the platform's and the Astryx app
-would serve their native code to the projects it previews.
+Rejected: building on React Navigation, react-native-screens, and
+react-native-safe-area-context, because their gesture handling couples to the
+platform's, their state model would bound Astryx's, and the Astryx app would
+serve their native code to the projects it previews.
 
 ## Open questions
 
