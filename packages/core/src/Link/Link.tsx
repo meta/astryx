@@ -462,9 +462,10 @@ export function Link({
   } else if (isDisabled) {
     // A disabled link renders as an <a> with no href, so nothing can navigate
     // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it. The router LinkComponent is deliberately skipped — a disabled
-    // link performs no navigation, and custom router links may require a live
-    // href. target/rel are omitted with the href.
+    // role so keyboard and screen-reader users still find it. The router
+    // LinkComponent is deliberately skipped — a disabled link performs no
+    // navigation, and custom router links may require a live href. target/rel
+    // are omitted with the href.
     linkElement = (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}

@@ -517,7 +517,7 @@ for (const item of cases) {
         );
       }
       if (item.story === 'truncated-in-constrained-line') {
-        // MaxLines stops the Link at its line and draws an ellipsis.
+        // The `maxLines` prop stops the Link at its line and draws an ellipsis.
         observed.links.forEach((link, index) => {
           check(
             link.box.right <= link.lineBox.right + 0.5 &&
