@@ -86,6 +86,40 @@ describe('firstStrongDirection', () => {
     expect(firstStrongDirection('\u{1EE01}')).toBe('rtl');
   });
 
+  it('tells a digit that is strong from one that is weak', () => {
+    // Most scripts' digits are Bidi_Class L, so they decide a direction.
+    expect(firstStrongDirection('\u0966\u0967 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'ltr',
+    ); // Devanagari
+    expect(firstStrongDirection('\u09E6\u09E7 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'ltr',
+    ); // Bengali
+    expect(firstStrongDirection('\u0BE6\u0BE7 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'ltr',
+    ); // Tamil
+    expect(firstStrongDirection('\u0E50\u0E51 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'ltr',
+    ); // Thai
+    expect(firstStrongDirection('\u0966')).toBe('ltr');
+
+    // The European ones are EN and the Arabic-Indic ones AN: both weak, so
+    // the Hebrew after them decides instead.
+    expect(firstStrongDirection('12 \u05e9\u05dc\u05d5\u05dd')).toBe('rtl');
+    expect(firstStrongDirection('\uFF11\uFF12 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'rtl',
+    );
+    expect(firstStrongDirection('\u0661\u0662 \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'rtl',
+    );
+    expect(firstStrongDirection('\u{1D7CE} \u05e9\u05dc\u05d5\u05dd')).toBe(
+      'rtl',
+    );
+
+    // NKo and Adlam digits are R, so they are strong the other way.
+    expect(firstStrongDirection('\u07c0\u07c1 Annual')).toBe('rtl');
+    expect(firstStrongDirection('\u{1E950}\u{1E951} Annual')).toBe('rtl');
+  });
+
   it('passes over the weak characters inside the right-to-left planes', () => {
     // The two supplementary ranges in STRONG_RTL are drawn around whole
     // planes, so they sweep up each script's digits and punctuation as well
