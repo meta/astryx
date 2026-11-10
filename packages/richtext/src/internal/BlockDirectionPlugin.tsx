@@ -106,7 +106,7 @@ function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
  *
  * Lexical puts a nested list in an item of its own after the item it hangs
  * from. That holder shows no text and is not a block a reader sees: it
- * belongs to the item above it, and FR5 anchors a nested list on its parent
+ * belongs to the item above it, and a nested list is anchored on its parent
  * item's text start. So it takes that item's direction, not the direction of
  * the list inside it. Reading its own contents instead would anchor the
  * nested list on whichever language its first item happened to use, which
