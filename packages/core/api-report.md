@@ -6266,8 +6266,8 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
 interface UseTableRowsVirtualizationConfig
+  initialViewportHeight: number
   rowHeight: number
-  viewportHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
