@@ -50,20 +50,33 @@ async function mount(page: Page, story: string) {
 /**
  * Waits until the open menu has finished entering. Under a finger, input that
  * lands during the entrance is held, as UIMenu takes none until it is shown.
- * The entrance runs on the surface, the layer's child.
+ * The entrance runs on the surface, the layer's child. A finger's grow starts
+ * a frame after the open, or once its code arrives, and the surface stays
+ * clear until then. So the menu is in after three frames in a row with
+ * neither.
  */
 async function presented(page: Page) {
   const layer = page.locator('[popover]:has([role="menu"])').first();
-  await expect
-    .poll(async () =>
-      layer.evaluate(
-        element =>
-          [element, element.firstElementChild]
-            .flatMap(node => node?.getAnimations() ?? [])
-            .filter(animation => animation.playState === 'running').length,
-      ),
-    )
-    .toBe(0);
+  await layer.evaluate(async element => {
+    const surface =
+      element.firstElementChild instanceof HTMLElement
+        ? element.firstElementChild
+        : null;
+    const isEntering = () =>
+      surface?.style.opacity === '0' ||
+      [element, surface]
+        .flatMap(node => node?.getAnimations() ?? [])
+        .some(animation => animation.playState === 'running');
+    const deadline = performance.now() + 5_000;
+    let stillFrames = 0;
+    while (stillFrames < 3) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      stillFrames = isEntering() ? 0 : stillFrames + 1;
+      if (performance.now() > deadline) {
+        throw new Error('the menu is still entering after 5 s');
+      }
+    }
+  });
 }
 
 /** The story items log `<label> clicked`; that line is the activation. */
