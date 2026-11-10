@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AspectRatioWithSkeleton-src-page.ts_template_AspectRatioWithSkeleton_src-page.tsx_--overwrite_@large",
+ "args": [
+  "template",
+  "AspectRatioWithSkeleton",
+  "src/page.tsx",
+  "--overwrite"
+ ],
+ "fixture": "large",
+ "stdout": "Copied template to src/page.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AspectRatio} from '@astryxdesign/core/AspectRatio';\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\nimport {Center} from '@astryxdesign/core/Center';\n\nexport default function AspectRatioWithSkeleton() {\n  return (\n    <Center width={600}>\n      <AspectRatio ratio={16 / 9}>\n        <Skeleton width=\"100%\" height=\"100%\" />\n      </AspectRatio>\n    </Center>\n  );\n}\n"
+  }
+ ]
+}

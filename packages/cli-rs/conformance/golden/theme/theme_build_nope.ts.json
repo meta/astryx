@@ -1,0 +1,13 @@
+{
+ "id": "theme_build_nope.ts",
+ "args": [
+  "theme",
+  "build",
+  "nope.ts"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/nope.ts\n",
+ "exit": 1,
+ "files": []
+}

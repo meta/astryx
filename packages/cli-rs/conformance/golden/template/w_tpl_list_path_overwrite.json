@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_list_path_overwrite",
+ "args": [
+  "template",
+  "--list",
+  "--overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--list` cannot be combined with --overwrite: it lists templates and does not scaffold.\n",
+ "exit": 1,
+ "files": []
+}

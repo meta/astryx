@@ -1,0 +1,19 @@
+{
+ "id": "component_OverflowList_--zh_@large",
+ "args": [
+  "component",
+  "OverflowList",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# OverflowList\n\nA horizontal list that automatically hides items when they exceed the available width. Use OverflowList for breadcrumbs, toolbars, tag lists, or any row that needs to collapse gracefully at smaller sizes.\n\n**Import:** `import {OverflowList} from '@astryxdesign/core/OverflowList';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| List | Yes | Visible horizontal list container for the currently shown content. |\n| Items | Yes | Caller-supplied items selected for visible display by the current width and count limits. |\n| Overflow indicator | No | Optional caller-rendered indicator for items collapsed by width or count limits. |\n\n## Best Practices\n\n- **Do:** Provide a meaningful overflowRenderer: a \"+N more\" badge, a dropdown, or a count indicator.\n- **Do:** When the row already has its own menu, use onOverflowChange to feed the collapsed items into it instead of adding a second anchor with overflowRenderer.\n- **Do:** Set minVisibleItems to keep key items visible, and maxVisibleItems to cap the row at a fixed count regardless of available width.\n- **Do:** Use maxRows to let items wrap onto a bounded number of rows (e.g. a two-row tag cloud) before collapsing the rest into the indicator.\n- **Don't:** Use OverflowList for a vertical stack; horizontal multi-row wrap is supported via maxRows, but items still flow left-to-right, not top-to-bottom.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 要渲染的项目，每个子元素应为单一元素。 **(required)** |\n| `overflowRenderer` | `(overflowItems: OverflowItem[]) => ReactNode` | - | 溢出指示器的渲染函数。接收隐藏项目列表（每项包含 child 和 index）。仅在有溢出项时调用。 |\n| `onOverflowChange` | `(overflowItems: OverflowItem[]) => void` | - | 折叠项集合变化时调用：发生折叠时传入折叠项，行重新变宽、全部放得下时传入空数组。没有溢出时（包括挂载时）不会调用。用于将折叠项交给周围界面已有的菜单，避免列表再挂载一个自己的指示器。 |\n| `gap` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `2` | 项目间距，使用间距步进值（0、0.5、1、1.5、2、3、4、5、6、8、10）。 |\n| `minVisibleItems` | `number` | `0` | 溢出时始终显示的最小项目数。 |\n| `maxVisibleItems` | `number` | `undefined（无上限）` | 始终显示的最大项目数（即使全部都能放下）。它是 minVisibleItems 的上限伙伴；多余项目会折叠进溢出指示器。若小于 minVisibleItems，则以下限为准。 |\n| `maxRows` | `number` | `undefined（单行）` | 在将其余项目折叠进溢出指示器之前，允许项目换行到的最大行数。是数字而非布尔值。留空（或设为 1）表示单行。假定行高一致。 |\n| `collapseFrom` | `'start' \\| 'end'` | `'end'` | 溢出时从哪一端开始折叠项目。 |\n| `behavior` | `'observeSelf' \\| 'observeParent'` | `'observeSelf'` | 控制测量可用宽度的元素。'observeSelf' 使用容器自身宽度；'observeParent' 观察父元素，适用于需要内容尺寸但仍检测可用空间的场景。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式（外边距、定位、尺寸）。必须使用 stylex.create() 的值，而非内联样式对象。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-overflow-list` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'overflow-list': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

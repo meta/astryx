@@ -1,0 +1,16 @@
+{
+ "id": "ex_theme_palette_generate_themes-ocean-palette.config.json_--out_themes-ocean-tokens-ocean.palette.ts_@integration",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "themes/ocean/palette.config.json",
+  "--out",
+  "themes/ocean/tokens/ocean.palette.ts"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: themes/ocean/palette.config.json\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,250 @@
+[
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      KpiCard: '@/components/KpiCard',\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      KpiCard: '@/components/KpiCard',\n      Banner: '@/components/Banner',\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        },\n\n        Banner: {\n          from: \"@/components/Banner\"\n        }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      Chart: { from: '@/c/Chart', default: true },\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        Chart: { from: '@/c/Chart', default: true }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      Chart: { from: '@/c/Chart', description: 'A chart' },\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        Chart: { from: '@/c/Chart', description: 'A chart' }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      Chart: { from: '@/c/Chart', description: 'A chart', default: true },\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        Chart: { from: '@/c/Chart', description: 'A chart', default: true }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: {\n      KpiCard: '@/components/KpiCard',\n      Chart: { from: '@/c/Chart', default: true },\n    },\n  },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        },\n\n        Chart: { from: '@/c/Chart', default: true }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "import { createConfig } from '@astryxdesign/cli';\n\nexport default createConfig({\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n});\n",
+  "output": "import { createConfig } from '@astryxdesign/cli';\n\nexport default createConfig({\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n});\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "// Generated Astryx config.\nconst config = {\n  integrations: [\"@acme/ui\"],\n  issuesUrl: \"https://example.com/issues\",\n};\n\nexport default config;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n\nexport default config;\n",
+  "output": "const config = {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n\nexport default config;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "import { createConfig } from '@astryxdesign/cli';\n\nconst config = createConfig({\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n});\n\nexport default config;\n",
+  "output": "import { createConfig } from '@astryxdesign/cli';\n\nconst config = createConfig({\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n});\n\nexport default config;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  experimental: { foo: true },\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
+  "output": "export default {\n  experimental: {\n    foo: true,\n\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default { theme: 'dark' };\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default { layout: { foo: 1 } };\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  experimental: { xle: { components: { KpiCard: { from: '@/components/KpiCard' } } } },\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  experimental: { xle: { components: {} } },\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
+  "output": null,
+  "error": "astryx config already defines `experimental.xle`; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: {\n    components: { KpiCard: '@/components/KpiCard' },\n    spacing: 8,\n  },\n};\n",
+  "output": null,
+  "error": "astryx config `layout` has keys other than `components`; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const Kpi = '@/components/KpiCard';\nexport default {\n  layout: { components: { KpiCard: Kpi } },\n};\n",
+  "output": null,
+  "error": "astryx config `layout.components` entry is neither a string nor an object literal and cannot be safely migrated; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: { components: { KpiCard: resolve('@/components/KpiCard') } },\n};\n",
+  "output": null,
+  "error": "astryx config `layout.components` entry is neither a string nor an object literal and cannot be safely migrated; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "import config from './base-config.mjs';\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {};\nconfig.layout = { components: { KpiCard: '@/components/KpiCard' } };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {};\nObject.assign(config, { layout: { components: { KpiCard: '@/components/KpiCard' } } });\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {};\nconst alias = config;\nalias.layout = { components: { KpiCard: '@/components/KpiCard' } };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "export const config = {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\nexport { config };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "const config = {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\nexport { config as baseConfig };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "astryx.config.mjs",
+  "options": null,
+  "source": "let config = { layout: { components: { KpiCard: '@/components/KpiCard' } } };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-moPKVL/astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
+  "output": "export default {\n  experimental: {\n    xle: {\n      components: {\n        KpiCard: {\n          from: \"@/components/KpiCard\"\n        }\n      }\n    }\n  }\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-odtXI4/astryx.config.mjs",
+  "options": null,
+  "source": "// Generated Astryx config.\nconst config = {\n  integrations: [\"@acme/ui\"],\n  issuesUrl: \"https://example.com/issues\",\n};\n\nexport default config;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-gZVvAm/astryx.config.mjs",
+  "options": null,
+  "source": "const config = {};\nconfig.layout = { components: { KpiCard: '@/components/KpiCard' } };\nexport default config;\n",
+  "output": null,
+  "error": "could not statically analyze astryx config; migrate layout.components to experimental.xle.components manually"
+ },
+ {
+  "transform": "v0.1.3/migrate-layout-components-to-experimental",
+  "path": "/tmp/astryx-rec/.astryx-v013-codemod-test-l2xoIT/astryx.config.mjs",
+  "options": null,
+  "source": "export default {\n  experimental: { xle: { components: {} } },\n  layout: { components: { KpiCard: '@/components/KpiCard' } },\n};\n",
+  "output": null,
+  "error": "astryx config already defines `experimental.xle`; migrate layout.components to experimental.xle.components manually"
+ }
+]

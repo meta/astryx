@@ -1,0 +1,9 @@
+const k = 'docs';
+export default {
+  [k]: './x',
+  ['agentDocs']: {append: []},
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

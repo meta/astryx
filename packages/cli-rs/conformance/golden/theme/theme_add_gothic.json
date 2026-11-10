@@ -1,0 +1,13 @@
+{
+ "id": "theme_add_gothic",
+ "args": [
+  "theme",
+  "add",
+  "gothic"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-gothic\" is not installed. Run `npm install @astryxdesign/theme-gothic` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add gothic`.\n",
+ "exit": 1,
+ "files": []
+}

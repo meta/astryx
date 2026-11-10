@@ -1,0 +1,13 @@
+{
+ "id": "template_RadioListPricingTier_--json_@large",
+ "args": [
+  "template",
+  "RadioListPricingTier",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"RadioListPricingTier\",\n    \"description\": \"Radio list with pricing info in end content for plan selection.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"RadioList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function RadioListPricingTier() {\\n  const [value, setValue] = useState('');\\n\\n  return (\\n    <RadioList label=\\\"Plan\\\" value={value} onChange={setValue}>\\n      <RadioListItem\\n        label=\\\"Free\\\"\\n        value=\\\"free\\\"\\n        endContent={\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            $0/mo\\n          </Text>\\n        }\\n      />\\n      <RadioListItem\\n        label=\\\"Pro\\\"\\n        value=\\\"pro\\\"\\n        endContent={\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            $9/mo\\n          </Text>\\n        }\\n      />\\n      <RadioListItem\\n        label=\\\"Enterprise\\\"\\n        value=\\\"enterprise\\\"\\n        endContent={\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            Custom\\n          </Text>\\n        }\\n      />\\n    </RadioList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "experimental_nosuchsub",
+ "args": [
+  "experimental",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'experimental nosuchsub'\n\n  icon  (available subcommand)\n  render  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

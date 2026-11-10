@@ -1,0 +1,13 @@
+{
+ "id": "template_CollapsibleHookUsage_--json_@large",
+ "args": [
+  "template",
+  "CollapsibleHookUsage",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CollapsibleHookUsage\",\n    \"description\": \"Custom disclosure UI built directly with useCollapsible for headless open/close state.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useId} from 'react';\\nimport {useCollapsible} from '@astryxdesign/core/Collapsible';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function CollapsibleHookUsage() {\\n  const detailsId = useId();\\n  const disclosure = useCollapsible({\\n    isCollapsible: {defaultIsOpen: true},\\n    value: 'release-notes',\\n  });\\n\\n  return (\\n    <Card width={360} padding={4}>\\n      <VStack gap={3}>\\n        <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n          Release checklist\\n        </Text>\\n        <Button\\n          label={disclosure.isOpen ? 'Hide details' : 'Show details'}\\n          variant=\\\"secondary\\\"\\n          aria-controls={detailsId}\\n          aria-expanded={disclosure.isOpen}\\n          onClick={disclosure.toggle}\\n        />\\n        {disclosure.isOpen && (\\n          <div\\n            id={detailsId}\\n            role=\\\"region\\\"\\n            aria-label=\\\"Release checklist details\\\">\\n            <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n              Review docs, run visual checks, and confirm keyboard behavior\\n              before shipping the component update.\\n            </Text>\\n          </div>\\n        )}\\n      </VStack>\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

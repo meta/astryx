@@ -1,0 +1,12 @@
+{
+ "id": "w_chart_@integration",
+ "args": [
+  "discover",
+  "chart"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: \"chart\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_LayoutFooter_--detail_compact_@large",
+ "args": [
+  "component",
+  "LayoutFooter",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# LayoutFooter\n\nBottom bar for action bars, pagination, and status bars.\n\n## Import\n\n```tsx\nimport { LayoutFooter } from '@astryxdesign/core/Layout';\n```\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Footer content. |\n| `hasDivider` | `boolean` | `false` | Border at top edge. When unset, the parent Layout's defaultHasDividers decides. |\n| `height` | `SizeValue` | - | Footer height. Numbers are treated as pixels, strings are used as-is. |\n| `label` | `string` | - | Accessible label for the landmark element. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Internal padding on every edge, using the spacing scale. Replaces the inset from the layout; 0 is full bleed. |\n| `role` | `AriaRole` | - | ARIA landmark role. |\n| `ref` | `React.Ref<HTMLDivElement>` | - | Ref forwarded to the footer element. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

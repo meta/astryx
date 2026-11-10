@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector value=\"a\" onChange={fn} onChangeAction={asyncFn} />",
+  "output": "<XDSSelector value=\"a\" onChange={fn} changeAction={asyncFn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Go\" onClickAction={asyncFn} />",
+  "output": "<XDSButton label=\"Go\" clickAction={asyncFn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSToggleButton onPressedChangeAction={asyncFn} />",
+  "output": "<XDSToggleButton pressedChangeAction={asyncFn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSChatMessageList onScrollToTopAction={loadMore} />",
+  "output": "<XDSChatMessageList scrollToTopAction={loadMore} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTextInput onChange={fn} onChangeAction={asyncFn} />",
+  "output": "<XDSTextInput onChange={fn} changeAction={asyncFn} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "createConfig({ onChangeAction: async () => {} });",
+  "output": "createConfig({ changeAction: async () => {} });",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function MyInput({ onChangeAction, onChange }) { return null; }",
+  "output": "function MyInput({ changeAction, onChange }) { return null; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "function MyInput({ onChangeAction: handler }) { return null; }",
+  "output": "function MyInput({ changeAction: handler }) { return null; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "interface Props { onChangeAction?: (v: string) => Promise<void>; }",
+  "output": "interface Props { changeAction?: (v: string) => Promise<void>; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector value=\"a\" changeAction={fn} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSelector value=\"a\" onChange={fn} onClick={fn2} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAlertDialog title=\"Delete?\" onAction={asyncFn} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-action-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { XDSSelector } from '@xds/core/Selector';\n\ninterface MyProps {\n  onChangeAction?: (value: string) => Promise<void>;\n}\n\nfunction MySelector({ onChangeAction }: MyProps) {\n  return (\n    <XDSSelector\n      value=\"a\"\n      onChange={fn}\n      onChangeAction={onChangeAction}\n    />\n  );\n}",
+  "output": "import { XDSSelector } from '@xds/core/Selector';\n\ninterface MyProps {\n  changeAction?: (value: string) => Promise<void>;\n}\n\nfunction MySelector({ changeAction }: MyProps) {\n  return (\n    <XDSSelector\n      value=\"a\"\n      onChange={fn}\n      changeAction={changeAction}\n    />\n  );\n}",
+  "error": null
+ }
+]

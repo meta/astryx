@@ -1,0 +1,19 @@
+{
+ "id": "docs_color_overview_@large",
+ "args": [
+  "docs",
+  "color",
+  "overview"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Overview\n\nColors are semantic: tokens describe purpose, not appearance. Every color adapts automatically between light and dark modes via CSS light-dark(). Themes override the resolved values, so your code never references raw hex colors.\n\nUp: npx @astryxdesign/cli@0.7.12 docs color --index\nNext: npx @astryxdesign/cli@0.7.12 docs color surface-colors\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "build_date-picker_--type_hook",
+ "args": [
+  "build",
+  "date picker",
+  "--type",
+  "hook"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"date picker\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useCalendarDays\npackage:     @astryxdesign/core\ndescription: Builds the day grid for one month: every date to show, including the previous and next months' days that fill the first and last weeks, grouped into weeks, plus localized weekday header names that start on weekStartsOn.\n\nname:        useCalendarConstraints\npackage:     @astryxdesign/core\ndescription: Provides date constraint validation for calendar views and custom range pickers.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n\nFEW MATCHES\nFew matches. This is keyword search, not semantic - try other wordings.\nBrowse instead:\nnpx @astryxdesign/cli@0.7.12 component --list\nnpx @astryxdesign/cli@0.7.12 template --list\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

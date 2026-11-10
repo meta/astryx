@@ -1,0 +1,18 @@
+{
+ "id": "template_useInteractiveRoleHookUsage_@large",
+ "args": [
+  "template",
+  "useInteractiveRoleHookUsage"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useInteractiveRole} from '@astryxdesign/core/hooks';\nimport {Link} from '@astryxdesign/core/Link';\nimport {Popover} from '@astryxdesign/core/Popover';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Text} from '@astryxdesign/core/Text';\nimport {VStack} from '@astryxdesign/core/Layout';\n\n// A polymorphic Tile: the hook alone decides what it renders as — href wins,\n// then onClick, then a trigger context (Popover), then inert.\nfunction Tile({\n  href,\n  onClick,\n  children,\n}: {\n  href?: string;\n  onClick?: () => void;\n  children: React.ReactNode;\n}) {\n  const role = useInteractiveRole({href, onClick});\n  const body = (\n    <Card padding={3} width={200}>\n      <Text type=\"body\">{children}</Text>\n    </Card>\n  );\n  switch (role) {\n    case 'link':\n      return <Link href={href}>{body}</Link>;\n    case 'button':\n      return <button onClick={onClick}>{body}</button>;\n    default:\n      return body;\n  }\n}\n\nexport default function UseInteractiveRoleHookUsage() {\n  return (\n    <VStack gap={3} hAlign=\"center\" style={{width: '100%'}}>\n      <Tile href=\"https://example.com/docs\">Renders as a link</Tile>\n      <Tile onClick={() => {}}>Renders as a button</Tile>\n      <Popover\n        label=\"Tile details\"\n        content={\n          <Card padding={3}>\n            <Text type=\"body\">Opened through the tile's context role</Text>\n          </Card>\n        }>\n        <Tile>Trigger via context</Tile>\n      </Popover>\n      <Tile>Plain content</Tile>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

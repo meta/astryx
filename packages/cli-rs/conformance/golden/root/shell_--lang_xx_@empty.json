@@ -1,0 +1,12 @@
+{
+ "id": "shell_--lang_xx_@empty",
+ "args": [
+  "--lang",
+  "xx"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: option '--lang <locale>' argument 'xx' is invalid. Allowed choices are en, zh, dense.\n",
+ "exit": 1,
+ "files": []
+}

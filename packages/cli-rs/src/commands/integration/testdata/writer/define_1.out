@@ -1,0 +1,6 @@
+import {defineIntegration} from '@astryxdesign/cli/authoring';
+
+export default defineIntegration({
+  components: './src/components',
+  docs: './docs'
+});

@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_templates_badjson",
+ "args": [
+  "doctor",
+  "integration",
+  "templates"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Checking integration templates: (local package)\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_package_json\nmessage:  Could not parse /tmp/astryx-conformance/work/doctor-author/badjson/package.json: Expected double-quoted property name in JSON at position 19 (line 1 column 20)\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "component_GridSpan_--dense_@large",
+ "args": [
+  "component",
+  "GridSpan",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# GridSpan\n\nGrid item spanning multiple columns/rows.\n\n**Import:** `import {GridSpan} from '@astryxdesign/core/Grid';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `columns` | `number \\| 'full'` | - | Columns to span; 'full' spans all explicit columns. |\n| `rows` | `number` | - | Rows to span. |\n| `children` | `ReactNode` | - | Content. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles on the span wrapper; stylex.create() value only. |\n| `className` | `string` | - | CSS class on the span wrapper. |\n| `style` | `React.CSSProperties` | - | inline styles on the span wrapper; a set columns/rows replaces its grid-column/grid-row. |\n| `ref` | `React.Ref<HTMLDivElement>` | - | ref to the span wrapper div. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

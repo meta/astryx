@@ -1,0 +1,13 @@
+{
+ "id": "template_ListItemShowcase_--json_@large",
+ "args": [
+  "template",
+  "ListItemShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ListItemShowcase\",\n    \"description\": \"List items with icons, descriptions, and end content slots demonstrating the full ListItem API.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"List\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {List, ListItem} from '@astryxdesign/core/List';\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Icon} from '@astryxdesign/core/Icon';\\n\\nexport default function ListItemShowcase() {\\n  return (\\n    <List header=\\\"Settings\\\" hasDividers>\\n      <ListItem\\n        label=\\\"Notifications\\\"\\n        description=\\\"Push, email, and SMS alerts\\\"\\n        startContent={<Icon icon=\\\"info\\\" />}\\n        endContent={<Badge label=\\\"3 new\\\" variant=\\\"blue\\\" />}\\n        onClick={() => {}}\\n      />\\n      <ListItem\\n        label=\\\"Privacy\\\"\\n        description=\\\"Manage data sharing preferences\\\"\\n        startContent={<Icon icon=\\\"eyeSlash\\\" />}\\n        onClick={() => {}}\\n      />\\n      <ListItem\\n        label=\\\"Appearance\\\"\\n        description=\\\"Theme, font size, and display\\\"\\n        startContent={<Icon icon=\\\"wrench\\\" />}\\n        onClick={() => {}}\\n      />\\n      <ListItem\\n        label=\\\"Billing\\\"\\n        description=\\\"Plans and payment methods\\\"\\n        startContent={<Icon icon=\\\"copy\\\" />}\\n        endContent={<Badge label=\\\"Pro\\\" variant=\\\"purple\\\" />}\\n        onClick={() => {}}\\n      />\\n    </List>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

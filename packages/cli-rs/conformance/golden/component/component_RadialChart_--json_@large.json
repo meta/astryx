@@ -1,0 +1,13 @@
+{
+ "id": "component_RadialChart_--json_@large",
+ "args": [
+  "component",
+  "RadialChart",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": {\n    \"name\": \"RadialChart\",\n    \"displayName\": \"Radial Chart\",\n    \"group\": \"Radial\",\n    \"category\": \"Data Visualization\",\n    \"usage\": {\n      \"description\": \"\"\n    },\n    \"props\": [],\n    \"package\": \"@astryxdesign/lab\",\n    \"import\": \"@astryxdesign/lab\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

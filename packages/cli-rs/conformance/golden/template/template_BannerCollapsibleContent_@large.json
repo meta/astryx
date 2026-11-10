@@ -1,0 +1,18 @@
+{
+ "id": "template_BannerCollapsibleContent_@large",
+ "args": [
+  "template",
+  "BannerCollapsibleContent"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {Button} from '@astryxdesign/core/Button';\nimport {List, ListItem} from '@astryxdesign/core/List';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function BannerCollapsibleContent() {\n  return (\n    <Banner\n      status=\"warning\"\n      title=\"Configuration changes detected\"\n      description=\"Review the changes before they take effect.\"\n      endContent={<Button label=\"Review\" variant=\"secondary\" size=\"sm\" />}\n      isDismissable\n      collapsible={{defaultIsOpen: true}}>\n      <Stack direction=\"vertical\" gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Changed settings:\n        </Text>\n        <List density=\"compact\">\n          <ListItem label=\"Authentication method updated\" />\n          <ListItem label=\"Rate limits modified\" />\n        </List>\n      </Stack>\n    </Banner>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

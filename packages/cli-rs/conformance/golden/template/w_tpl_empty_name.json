@@ -1,0 +1,12 @@
+{
+ "id": "w_tpl_empty_name",
+ "args": [
+  "template",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Argument <name> is an empty string. An empty argument is not the same as an omitted one, and ignoring it would silently discard the rest of the command: pass a value, or leave <name> out of `astryx template` entirely.\n",
+ "exit": 1,
+ "files": []
+}

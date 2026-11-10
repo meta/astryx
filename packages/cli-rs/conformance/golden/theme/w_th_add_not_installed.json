@@ -1,0 +1,13 @@
+{
+ "id": "w_th_add_not_installed",
+ "args": [
+  "theme",
+  "add",
+  "butter"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-butter\" is not installed. Run `npm install @astryxdesign/theme-butter` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add butter`.\n",
+ "exit": 1,
+ "files": []
+}

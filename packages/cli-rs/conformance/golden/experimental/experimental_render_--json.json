@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_--json",
+ "args": [
+  "experimental",
+  "render",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"A page file is required\",\n  \"code\": \"ERR_MISSING_ARGUMENT\",\n  \"suggestions\": [\n    {\n      \"name\": \"astryx experimental render page.tsx\",\n      \"reason\": \"render a page to one HTML file\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

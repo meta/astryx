@@ -1,0 +1,21 @@
+{
+ "id": "integration_add_agent-doc_Thing_--json_@author",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "Thing",
+  "--json"
+ ],
+ "fixture": "author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"agent-doc\",\n    \"name\": \"Thing\",\n    \"root\": null,\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n\n  agentDocs: {\n    append: ['Thing']\n  }\n};\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_..-inputs-page.tsx",
+ "args": [
+  "experimental",
+  "render",
+  "../inputs/page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: The output /tmp/astryx-conformance/work/inputs/page.html is outside the current folder; nothing was written. Write inside the folder you run the command from.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "build_Heading",
+ "args": [
+  "build",
+  "Heading"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"Heading\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: blank (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        HeadingPageLayout\npackage:     @astryxdesign/core\ndescription: Real-world page layout demonstrating heading levels h1 through h3 with supporting text\n\nname:    HeadingShowcase\npackage: @astryxdesign/core\n\nname:        TextHeadingLevels\npackage:     @astryxdesign/core\ndescription: All 6 heading levels (h1 through h6) rendered with Heading to show the full type scale.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useOutlineFromMarkdown\npackage:     @astryxdesign/core\ndescription: Extracts the headings of a Markdown string for an Outline next to the rendered document.\n\nname:        SideNavHeading\npackage:     @astryxdesign/core\ndescription: Product/suite/account heading with smart interaction boundary logic for links and a menu popover.\n\nname:        TopNavHeading\npackage:     @astryxdesign/core\ndescription: Product/suite/account heading for the TopNav heading slot.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

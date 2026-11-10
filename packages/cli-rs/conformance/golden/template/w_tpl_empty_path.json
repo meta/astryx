@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_empty_path",
+ "args": [
+  "template",
+  "login",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Argument <path> is an empty string. An empty argument is not the same as an omitted one, and ignoring it would silently discard the rest of the command: pass a value, or leave <path> out of `astryx template` entirely.\n",
+ "exit": 1,
+ "files": []
+}

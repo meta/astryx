@@ -1,0 +1,13 @@
+{
+ "id": "w_AcmeCrad---json_@integration",
+ "args": [
+  "discover",
+  "AcmeCrad",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"AcmeCrad\",\n    \"matches\": [\n      {\n        \"package\": \"@acme/kit\",\n        \"component\": \"AcmeCard\",\n        \"kind\": \"component\",\n        \"installed\": true\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

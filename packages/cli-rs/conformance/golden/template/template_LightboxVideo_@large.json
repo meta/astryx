@@ -1,0 +1,18 @@
+{
+ "id": "template_LightboxVideo_@large",
+ "args": [
+  "template",
+  "LightboxVideo"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Lightbox} from '@astryxdesign/core/Lightbox';\nimport {Button} from '@astryxdesign/core/Button';\n\nexport default function LightboxVideo() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <>\n      <Button label=\"Play video\" onClick={() => setIsOpen(true)} />\n      <Lightbox\n        isOpen={isOpen}\n        onOpenChange={setIsOpen}\n        media={{\n          src: '',\n          alt: 'Flower blooming in time-lapse',\n          type: 'video',\n          caption: 'A flower blooming in time-lapse',\n        }}\n      />\n    </>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\nReplaced 1 Astryx demo media reference: images now show a neutral placeholder and videos have an empty source. Supply your own media there.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "build_--limit",
+ "args": [
+  "build",
+  "--limit"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--limit <n>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

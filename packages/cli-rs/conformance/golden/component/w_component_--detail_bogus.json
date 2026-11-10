@@ -1,0 +1,13 @@
+{
+ "id": "w_component_--detail_bogus",
+ "args": [
+  "component",
+  "--detail",
+  "bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--detail <level>' argument 'bogus' is invalid. Allowed choices are full, compact, brief.\n",
+ "exit": 1,
+ "files": []
+}

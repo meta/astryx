@@ -1,0 +1,18 @@
+{
+ "id": "build_ChatMessage",
+ "args": [
+  "build",
+  "ChatMessage"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"ChatMessage\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `ai-chat`, `messaging-shell`, `theme-showcase` only loosely, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: ai-chat (@astryxdesign/core), messaging-shell (@astryxdesign/core), theme-showcase (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        ChatMessageAvatarName\npackage:     @astryxdesign/core\ndescription: Messages with avatars and sender names.\n\nname:        ChatMessageBubbleCustomContent\npackage:     @astryxdesign/core\ndescription: Custom in-message content aligned to the bubble text column.\n\nname:        ChatMessageShowcase\npackage:     @astryxdesign/core\ndescription: A user multi-bubble group with delivery status and an assistant...\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        ChatMessage\npackage:     @astryxdesign/core\ndescription: Sender context wrapper: handles avatar, name, metadata, and alignment based on sender role.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

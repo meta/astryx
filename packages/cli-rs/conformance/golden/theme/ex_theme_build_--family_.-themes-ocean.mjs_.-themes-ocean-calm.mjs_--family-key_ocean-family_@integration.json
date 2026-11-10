@@ -1,0 +1,17 @@
+{
+ "id": "ex_theme_build_--family_.-themes-ocean.mjs_.-themes-ocean-calm.mjs_--family-key_ocean-family_@integration",
+ "args": [
+  "theme",
+  "build",
+  "--family",
+  "./themes/ocean.mjs",
+  "./themes/ocean-calm.mjs",
+  "--family-key",
+  "ocean-family"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/integration/themes/ocean.mjs\n",
+ "exit": 1,
+ "files": []
+}

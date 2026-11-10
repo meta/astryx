@@ -1,0 +1,18 @@
+{
+ "id": "template_NavHeadingMenuShowcase_@large",
+ "args": [
+  "template",
+  "NavHeadingMenuShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {SideNav, SideNavHeading} from '@astryxdesign/core/SideNav';\nimport {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';\n\nfunction AppIcon() {\n  return (\n    <svg\n      width=\"20\"\n      height=\"20\"\n      viewBox=\"0 0 24 24\"\n      fill=\"none\"\n      stroke=\"currentColor\"\n      strokeWidth=\"1.5\">\n      <path\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n        d=\"M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z\"\n      />\n    </svg>\n  );\n}\n\nexport default function NavHeadingMenuShowcase() {\n  return (\n    <div style={{height: 100}}>\n      <SideNav\n        header={\n          <SideNavHeading\n            heading=\"Acme Platform\"\n            icon={<AppIcon />}\n            menu={\n              <NavHeadingMenu size=\"lg\">\n                <NavHeadingMenuItem label=\"Dashboard\" href=\"/dashboard\" />\n                <NavHeadingMenuItem label=\"Analytics\" href=\"/analytics\" />\n                <NavHeadingMenuItem label=\"Settings\" href=\"/settings\" />\n              </NavHeadingMenu>\n            }\n          />\n        }>\n        {null}\n      </SideNav>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

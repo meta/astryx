@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatSendButton_--props_@large",
+ "args": [
+  "component",
+  "ChatSendButton",
+  "--props"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `isStopShown` | `boolean` | - | Whether the stop button is shown. Defaults to context value. |\n| `isDisabled` | `boolean` | - | Whether the send button is disabled. Defaults to !canSend from context. |\n| `onSend` | `() => void` | - | Called when the user clicks send. Defaults to context onSubmit. |\n| `onStop` | `() => void` | - | Called when the user clicks stop during streaming. Defaults to context onStop. |\n| `sendIcon` | `ReactNode` | - | Custom icon for the send state. Defaults to arrowUp from icon registry. |\n| `stopIcon` | `ReactNode` | - | Custom icon for the stop state. Defaults to stop from icon registry. |\n| `size` | `'sm' \\| 'md'` | `'md'` | Button size. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

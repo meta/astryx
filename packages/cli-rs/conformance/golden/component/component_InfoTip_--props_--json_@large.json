@@ -1,0 +1,14 @@
+{
+ "id": "component_InfoTip_--props_--json_@large",
+ "args": [
+  "component",
+  "InfoTip",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"content\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content to display in the tooltip. Typically short, non-interactive text. Mirrors Tooltip's content prop.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible name for the trigger button. Defaults to the translated \\\"More information\\\".\",\n      \"default\": \"'More information'\"\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'xsm' | 'sm' | 'md' | 'lg'\",\n      \"description\": \"Size of the info icon (12px, 16px, 20px, 24px). Maps 1:1 to Icon sizes.\",\n      \"default\": \"'sm'\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

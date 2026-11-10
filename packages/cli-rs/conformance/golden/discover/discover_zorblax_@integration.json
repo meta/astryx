@@ -1,0 +1,12 @@
+{
+ "id": "discover_zorblax_@integration",
+ "args": [
+  "discover",
+  "zorblax"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: \"zorblax\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

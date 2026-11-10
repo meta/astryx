@@ -1,0 +1,13 @@
+{
+ "id": "template_FieldStatusBasic_--json_@large",
+ "args": [
+  "template",
+  "FieldStatusBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"FieldStatusBasic\",\n    \"description\": \"Detached error and success messages for validation feedback. Use below checkboxes, switches, or custom controls where an attached status would overlap.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"FieldStatus\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {FieldStatus} from '@astryxdesign/core/FieldStatus';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function FieldStatusBasic() {\\n  return (\\n    <VStack gap={4}>\\n      <FieldStatus\\n        type=\\\"error\\\"\\n        message=\\\"This field is required\\\"\\n        variant=\\\"detached\\\"\\n      />\\n      <FieldStatus\\n        type=\\\"success\\\"\\n        message=\\\"Your changes have been saved\\\"\\n        variant=\\\"detached\\\"\\n      />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

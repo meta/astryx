@@ -1,0 +1,13 @@
+{
+ "id": "template_PopoverSettingsPanel_--json_@large",
+ "args": [
+  "template",
+  "PopoverSettingsPanel",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"PopoverSettingsPanel\",\n    \"description\": \"Popover with toggle switches for managing user preferences like notifications, dark mode, and sounds.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Divider\",\n      \"Popover\",\n      \"Switch\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Popover} from '@astryxdesign/core/Popover';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Heading} from '@astryxdesign/core/Text';\\nimport {Switch} from '@astryxdesign/core/Switch';\\nimport {Divider} from '@astryxdesign/core/Divider';\\nexport default function PopoverSettingsPanel() {\\n  const [notifications, setNotifications] = useState(true);\\n  const [darkMode, setDarkMode] = useState(false);\\n  const [sounds, setSounds] = useState(true);\\n\\n  return (\\n    <Popover\\n      placement=\\\"below\\\"\\n      label=\\\"Settings\\\"\\n      width={280}\\n      content={\\n        <VStack gap={3}>\\n          <Heading level={4}>Settings</Heading>\\n          <Divider />\\n          <Switch\\n            label=\\\"Notifications\\\"\\n            description=\\\"Receive push notifications\\\"\\n            value={notifications}\\n            onChange={setNotifications}\\n          />\\n          <Switch\\n            label=\\\"Dark mode\\\"\\n            description=\\\"Use dark color theme\\\"\\n            value={darkMode}\\n            onChange={setDarkMode}\\n          />\\n          <Switch\\n            label=\\\"Sounds\\\"\\n            description=\\\"Play sounds for actions\\\"\\n            value={sounds}\\n            onChange={setSounds}\\n          />\\n        </VStack>\\n      }>\\n      <Button label=\\\"Settings\\\">Settings</Button>\\n    </Popover>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

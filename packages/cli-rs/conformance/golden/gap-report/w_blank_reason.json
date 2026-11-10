@@ -1,0 +1,16 @@
+{
+ "id": "w_blank_reason",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "other",
+  "--reason",
+  "   "
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: reason is required.\n",
+ "exit": 1,
+ "files": []
+}

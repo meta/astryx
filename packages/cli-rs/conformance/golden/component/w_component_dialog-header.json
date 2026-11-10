@@ -1,0 +1,12 @@
+{
+ "id": "w_component_dialog-header",
+ "args": [
+  "component",
+  "dialog-header"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"dialog-header\"\n\n  DialogHeader  (same name)\n",
+ "exit": 1,
+ "files": []
+}

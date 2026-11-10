@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-bounded-missing-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/bounded-missing.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Bounded anchor at stop 50 requires a non-negative maxDeltaE.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNav isCollapsible>Content</XDSSideNav>",
+  "output": "<XDSSideNav collapsible>Content</XDSSideNav>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNav isCollapsible defaultIsCollapsed>Content</XDSSideNav>",
+  "output": "<XDSSideNav\n  collapsible={{\n    defaultIsCollapsed: true\n  }}>Content</XDSSideNav>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNav isCollapsible isCollapsed={collapsed} onCollapsedChange={setCollapsed}>Content</XDSSideNav>",
+  "output": "<XDSSideNav\n  collapsible={{\n    isCollapsed: collapsed,\n    onCollapsedChange: setCollapsed\n  }}>Content</XDSSideNav>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNav isCollapsible hasCollapseButton={false}>Content</XDSSideNav>",
+  "output": "<XDSSideNav\n  collapsible={{\n    hasButton: false\n  }}>Content</XDSSideNav>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAppShell isSideNavCollapsed={collapsed} onSideNavCollapsedChange={setCollapsed} defaultIsSideNavCollapsed={true}><Content /></XDSAppShell>",
+  "output": "<XDSAppShell><Content /></XDSAppShell>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNav collapsible>Content</XDSSideNav>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-collapse-to-collapsible",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isCollapsible>Content</XDSCard>",
+  "output": null,
+  "error": null
+ }
+]

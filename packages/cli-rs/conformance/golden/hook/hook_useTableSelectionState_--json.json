@@ -1,0 +1,13 @@
+{
+ "id": "hook_useTableSelectionState_--json",
+ "args": [
+  "hook",
+  "useTableSelectionState",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableSelectionState\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableSelectionState\",\n    \"description\": \"State management companion for useTableSelection. Returns selectionConfig for the behaviour plugin plus selectionState for selection-aware UI such as TableSelectionToolbar. Handles disabled/selectable row filtering for select-all automatically: disabled rows are frozen (preserved across select-all/deselect-all), non-selectable rows are excluded.\",\n    \"props\": [\n      {\n        \"name\": \"data\",\n        \"type\": \"T[]\",\n        \"description\": \"The full data array rendered in the table.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"idKey\",\n        \"type\": \"(keyof T & string) | ((item: T) => string)\",\n        \"description\": \"Key extractor: property name or function returning a unique string ID.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"selectedKeys\",\n        \"type\": \"Set<string>\",\n        \"description\": \"Controlled set of selected item IDs.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"setSelectedKeys\",\n        \"type\": \"Dispatch<SetStateAction<Set<string>>>\",\n        \"description\": \"Setter for the controlled selected keys.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"getIsItemSelectable\",\n        \"type\": \"(item: T) => boolean\",\n        \"description\": \"Should this row show a checkbox? Non-selectable rows are excluded from select-all.\",\n        \"default\": \"() => true\"\n      },\n      {\n        \"name\": \"getIsItemEnabled\",\n        \"type\": \"(item: T) => boolean\",\n        \"description\": \"Is this row checkbox interactive? Disabled rows are frozen: select-all preserves their state.\",\n        \"default\": \"() => true\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

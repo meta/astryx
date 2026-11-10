@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-kit-Acme_@integration",
+ "args": [
+  "discover",
+  "@acme/kit/Acme"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Component \"Acme\" not found in @acme/kit\n\n  AcmeCard  (similar name)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "theme_palette_generate_--bogus-flag",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

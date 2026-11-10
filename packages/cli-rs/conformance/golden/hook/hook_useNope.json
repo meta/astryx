@@ -1,0 +1,12 @@
+{
+ "id": "hook_useNope",
+ "args": [
+  "hook",
+  "useNope"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No hook named \"useNope\"\n\n  useLayer  (similar name (distance 4))\n  usePopover  (similar name (distance 4))\n  useToast  (similar name (distance 4))\n  useIcon  (similar name (distance 4))\n  useLocale  (similar name (distance 4))\n",
+ "exit": 1,
+ "files": []
+}

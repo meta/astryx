@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_--bogus-flag",
+ "args": [
+  "swizzle",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

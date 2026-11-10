@@ -1,0 +1,18 @@
+{
+ "id": "template_OutlineDensity_@large",
+ "args": [
+  "template",
+  "OutlineDensity"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Outline} from '@astryxdesign/core/Outline';\nimport type {OutlineItem} from '@astryxdesign/core/Outline';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst items: OutlineItem[] = [\n  {id: 'density-getting-started', label: 'Getting started', level: 2},\n  {id: 'density-configuration', label: 'Configuration', level: 2},\n  {id: 'density-api', label: 'API reference', level: 3},\n  {id: 'density-examples', label: 'Examples', level: 3},\n  {id: 'density-faq', label: 'FAQ', level: 2},\n];\n\nexport default function OutlineDensity() {\n  return (\n    <HStack gap={10} vAlign=\"start\">\n      <VStack gap={3} style={{width: 200}}>\n        <Text type=\"supporting\" color=\"secondary\" weight=\"medium\">\n          Default\n        </Text>\n        <Outline\n          items={items}\n          density=\"default\"\n          activeId=\"density-configuration\"\n        />\n      </VStack>\n      <VStack gap={3} style={{width: 200}}>\n        <Text type=\"supporting\" color=\"secondary\" weight=\"medium\">\n          Compact\n        </Text>\n        <Outline\n          items={items}\n          density=\"compact\"\n          activeId=\"density-configuration\"\n        />\n      </VStack>\n    </HStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

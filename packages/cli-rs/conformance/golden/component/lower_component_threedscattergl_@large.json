@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_threedscattergl_@large",
+ "args": [
+  "component",
+  "threedscattergl"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"threedscattergl\"\n",
+ "exit": 1,
+ "files": []
+}

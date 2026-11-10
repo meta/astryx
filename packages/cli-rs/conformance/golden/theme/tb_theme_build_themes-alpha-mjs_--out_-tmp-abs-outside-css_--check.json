@@ -1,0 +1,16 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_--out_-tmp-abs-outside-css_--check",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "--out",
+  "/tmp/abs-outside.css",
+  "--check"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from themes/alpha.mjs...\n",
+ "stderr": "\n[fail] 3 theme output(s) are out of date with themes/alpha.mjs:\n  missing: ../../../abs-outside.css\n  missing: ../../../alpha.js\n  missing: ../../../alpha.d.ts\n\n  These outputs are outside the working directory, so a build here refuses them, and each output records the directory it was built from. Build and check them from a directory that contains them:\n    cd /tmp\n    npx @astryxdesign/cli@0.7.12 theme build astryx-conformance/work/themes/themes/alpha.mjs --out abs-outside.css\n    npx @astryxdesign/cli@0.7.12 theme build astryx-conformance/work/themes/themes/alpha.mjs --out abs-outside.css --check\n",
+ "exit": 1,
+ "files": []
+}

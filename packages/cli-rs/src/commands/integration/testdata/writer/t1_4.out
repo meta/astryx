@@ -1,0 +1,19 @@
+// header
+import {x} from 'y';
+
+/** doc */
+export default {
+    // lead comment
+    name: 'acme', // trailing line
+    /* block */ themes: './themes',
+    agentDocs: {
+        append: ['one', 'It\'s "quoted" \\ back'],
+    },
+    nested: {a: 1,
+      b: 2},
+    /**
+     * jsdoc
+     */
+    last: true, /* tb */
+    // dangling end
+} satisfies Foo;

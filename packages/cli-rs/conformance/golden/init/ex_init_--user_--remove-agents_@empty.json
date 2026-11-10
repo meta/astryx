@@ -1,0 +1,19 @@
+{
+ "id": "ex_init_--user_--remove-agents_@empty",
+ "args": [
+  "init",
+  "--user",
+  "--remove-agents"
+ ],
+ "fixture": "empty",
+ "stdout": "[ok] Nothing to remove: ~/.agents/skills/astryx/SKILL.md\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/settings.json",
+   "status": "created",
+   "text": "{\n  \"computerAgentText\": {\n    \"install\": false,\n    \"links\": []\n  }\n}\n"
+  }
+ ]
+}

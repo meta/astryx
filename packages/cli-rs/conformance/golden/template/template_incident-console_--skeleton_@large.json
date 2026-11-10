@@ -1,0 +1,19 @@
+{
+ "id": "template_incident-console_--skeleton_@large",
+ "args": [
+  "template",
+  "incident-console",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# incident-console - Dense row queue with an inspector: severity-coded rows grouped by status, a saved-search filter bar, a segmented status control, and a resizable detail pane for the selected row. Rows, not cards, sized for scanning volume.\n# Components: Divider, EmptyState, Layout, List, MetadataList, PowerSearch, ResizeHandle, SegmentedControl, StatusDot, Timestamp, Token\n\n<Layout hasDivider height=\"fill\">\n  /* header: */\n  <LayoutHeader hasDivider>\n    <HStack gap={3}>\n      <StackItem />\n      <HStack gap={2}>\n        <Heading />\n        <Text />\n      </HStack>\n      <SegmentedControl />\n      <SegmentedControlItem />\n      <SegmentedControlItem />\n      <SegmentedControlItem />\n      <SegmentedControlItem />\n      <Button />\n    </HStack>\n  </LayoutHeader>\n  /* content: */\n  <LayoutContent padding={0}>\n    <VStack gap={0}>\n      <StackItem />\n      <PowerSearch />\n      <StackItem />\n      <IncidentRows />\n    </VStack>\n  </LayoutContent>\n  /* end: */\n  <ResizeHandle hasDivider />\n  <LayoutPanel padding={0} width={inspectorPanel.size}>\n    <IncidentInspector />\n    <EmptyState />\n  </LayoutPanel>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

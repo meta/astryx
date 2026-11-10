@@ -1,0 +1,20 @@
+{
+ "id": "build_chart_--type_component",
+ "args": [
+  "build",
+  "chart",
+  "--type",
+  "component"
+ ],
+ "fixture": "app",
+ "stdout": "No matches for \"chart\".\n\nTry a broader term, or browse: npx @astryxdesign/cli@0.7.12 component --list\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

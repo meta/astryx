@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_table-scroll-wrapper_--json",
+ "args": [
+  "theme",
+  "targets",
+  "table-scroll-wrapper",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"table-scroll-wrapper\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"table-scroll-wrapper\",\n        \"className\": \"astryx-table-scroll-wrapper\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--from",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--from"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--from <theme>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

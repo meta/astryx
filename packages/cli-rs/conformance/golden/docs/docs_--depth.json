@@ -1,0 +1,12 @@
+{
+ "id": "docs_--depth",
+ "args": [
+  "docs",
+  "--depth"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--depth <levels>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

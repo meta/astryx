@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-bad-id-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/bad-id.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Family 0 id must use lower-kebab-case characters.\n",
+ "exit": 1,
+ "files": []
+}

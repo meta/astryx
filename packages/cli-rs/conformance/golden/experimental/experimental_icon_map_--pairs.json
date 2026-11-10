@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_map_--pairs",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--pairs"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--pairs <list>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

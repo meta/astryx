@@ -1,0 +1,4 @@
+const d = {};
+export default {
+  agentDocs: d,
+};

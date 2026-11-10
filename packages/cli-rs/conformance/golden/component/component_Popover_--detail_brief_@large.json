@@ -1,0 +1,20 @@
+{
+ "id": "component_Popover_--detail_brief_@large",
+ "args": [
+  "component",
+  "Popover",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nPopover(placement: above|below|start|end, alignment: start|center|end, width: number|string, role: dialog|none, presentation: popover|bottom-sheet|adaptive)  <- from '@astryxdesign/core/Popover'\n  A click-triggered popover for displaying interactive content anchored to a tr...\n  Derived: borderRadius -> --_popover-radius\n  Targets: astryx-popover\n  content: ReactNode, children, anchorRef, isOpen, onOpenChange, isEnabled, padding, label, isModal, hasCloseButton, closeButtonLabel, hasAutoFocus, hasLightDismiss, hasEscapeDismiss, xstyle\n  <Popover\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

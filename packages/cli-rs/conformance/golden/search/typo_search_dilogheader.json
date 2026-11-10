@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_dilogheader",
+ "args": [
+  "search",
+  "dilogheader"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"dilogheader\" (4)\n\nname:        DialogHeader\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Dialog\ndescription: Use DialogHeader to give a dialog a labelled title area and optional close control.\ncommand:     npx @astryxdesign/cli@0.7.12 component DialogHeader\n\nname:        DialogHeaderBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DialogHeader - Basic\nkind:        block\ndescription: A DialogHeader with a title, subtitle, and close button, placed in the header slot of a Dialog Layout. Pass onOpenChange to render the close button.\ncommand:     npx @astryxdesign/cli@0.7.12 template DialogHeaderBasic --type block\n\nname:        DialogHeaderShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DialogHeader\nkind:        block\ndescription: DialogHeader provides a structured header for dialogs with slots for title, subtitle, close button, and optional start or end content.\ncommand:     npx @astryxdesign/cli@0.7.12 template DialogHeaderShowcase --type block\n\nname:        DialogAdaptivePresentation\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Dialog - Adaptive presentation\nkind:        block\ndescription: Opt-in recipe for an AdaptiveDialog wrapper: Dialog remains the default everywhere, while touchPresentation=\"bottom-sheet\" switches only at lg and below when pointer is coarse and hover is unavailable. Includes a deterministic presentation override for tests/unusual environments and notes that BottomSheet purpose controls swipe and scrim dismissal. Usage examples: touchPresentation=\"dialog\" keeps Dialog, \"fullscreen\" chooses fullscreen Dialog, and \"bottom-sheet\" chooses BottomSheet only for the touch-oriented range. Keep presentation as the deterministic override. Do not use this by default for AlertDialog or destructive confirmations.\ncommand:     npx @astryxdesign/cli@0.7.12 template DialogAdaptivePresentation --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover dilogheader\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

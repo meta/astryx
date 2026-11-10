@@ -1,0 +1,15 @@
+{
+ "id": "w_template_page_dry_author",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "acme-dashboard",
+  "--dry-run"
+ ],
+ "fixture": "author",
+ "stdout": "template contribution plan\n\n[plan] acme-dashboard\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dashboard.doc.mjs\n- templates/acme-dashboard.tsx\n- astryx.integration.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "component_Timer_--props_--json_@large",
+ "args": [
+  "component",
+  "Timer",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"startTime\",\n      \"type\": \"number\",\n      \"description\": \"Unix time in milliseconds when the measured operation began. Omit it to start from this Timer's mount.\"\n    },\n    {\n      \"name\": \"format\",\n      \"type\": \"'elapsed' | 'clock'\",\n      \"description\": \"Standard duration representation. Elapsed uses compact units and drops seconds after one hour; clock uses m:ss or h:mm:ss.\",\n      \"default\": \"'elapsed'\"\n    },\n    {\n      \"name\": \"type\",\n      \"type\": \"'body' | 'large' | 'label' | 'supporting' | 'code' | 'display-1' | 'display-2' | 'display-3' | 'inherit'\",\n      \"description\": \"Semantic text type. Uses the same typography behavior as Timestamp.\",\n      \"default\": \"'supporting'\"\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'4xs' | '3xs' | '2xs' | 'xsm' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl'\",\n      \"description\": \"Explicit font size override. Overrides the size from type.\"\n    },\n    {\n      \"name\": \"color\",\n      \"type\": \"'primary' | 'secondary' | 'disabled' | 'placeholder' | 'accent' | 'inherit'\",\n      \"description\": \"Text color.\",\n      \"default\": \"'secondary'\"\n    },\n    {\n      \"name\": \"weight\",\n      \"type\": \"'normal' | 'medium' | 'semibold' | 'bold'\",\n      \"description\": \"Font weight override.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for the Text wrapper. Must be a stylex.create() value.\"\n    },\n    {\n      \"name\": \"className\",\n      \"type\": \"string\",\n      \"description\": \"CSS class name for the Text wrapper. Prefer xstyle for styling.\"\n    },\n    {\n      \"name\": \"style\",\n      \"type\": \"CSSProperties\",\n      \"description\": \"Inline styles for the Text wrapper. Prefer xstyle for styling.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

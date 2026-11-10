@@ -1,0 +1,26 @@
+{
+ "id": "integration_add_component_Thing_--json_@author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "Thing",
+  "--json"
+ ],
+ "fixture": "author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"component\",\n    \"name\": \"Thing\",\n    \"root\": {\n      \"path\": \"./src/components\",\n      \"created\": false\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"src/components/Thing.doc.mjs\",\n      \"src/components/Thing.tsx\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/src/components/Thing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Thing',\n  displayName: 'Thing',\n  import: \"@acme/widgets/src/components/Thing\",\n  usage: {description: 'Thing component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/Thing.tsx",
+   "status": "created",
+   "text": "export function Thing() {\n  return <div>Thing</div>;\n}\n"
+  }
+ ]
+}

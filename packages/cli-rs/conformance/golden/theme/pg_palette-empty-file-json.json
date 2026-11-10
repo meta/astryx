@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-empty-file-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/empty-file.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Could not parse palette config: Unexpected end of JSON input\n",
+ "exit": 1,
+ "files": []
+}

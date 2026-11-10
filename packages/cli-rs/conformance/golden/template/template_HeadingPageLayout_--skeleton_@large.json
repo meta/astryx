@@ -1,0 +1,19 @@
+{
+ "id": "template_HeadingPageLayout_--skeleton_@large",
+ "args": [
+  "template",
+  "HeadingPageLayout",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# HeadingPageLayout - Real-world page layout demonstrating heading levels h1 through h3 with supporting text\n# Components: \n\n<VStack gap={6} width=\"100%\">\n  <Heading />\n  <Text />\n</VStack>\n<Heading />\n<Text />\n<Heading />\n<Text />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

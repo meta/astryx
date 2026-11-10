@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_components_dotdot-x_broken",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "../x"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Checking integration components: ../x\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_package_spec\nmessage:  Invalid integration package name \"../x\". Use a bare package name (no path segments).\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

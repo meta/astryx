@@ -1,0 +1,20 @@
+{
+ "id": "component_InputGroup_--detail_compact_@large",
+ "args": [
+  "component",
+  "InputGroup",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# InputGroup\n\nInputGroup connects an input with prefix/suffix addons in a single visual unit. Use it for URL fields, currency inputs, search fields with action buttons, or any input that needs contextual decorations.\n\nAnatomy: Label, Prefix addon (optional), Input, Suffix addon (optional), Status message (optional)\n\n## Import\n\n```tsx\nimport { InputGroup } from '@astryxdesign/core/InputGroup';\n```\n\n## Best Practices\n\n- **Do:** Use text addons to show units, prefixes, or suffixes that clarify the input format (e.g., \"$\", \"kg\", \"https://\").\n- **Do:** Use InputGroupText for static prefixes/suffixes like \"$\", \"kg\", or \"https://\".\n- **Do:** Use Button for an action attached to the input; InputGroup connects its corners automatically.\n- **Do:** Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, and MultiSelector.\n- **Do:** Keep each inner input's label specific; grouped inputs automatically combine the group label with their own label and inherit the group description/status context.\n- **Don't:** Don't put multiple text inputs in one group; use separate fields instead.\n- **Don't:** Don't use InputGroup for unrelated inputs; it's for a single input with decorations.\n- **Don't:** Don't use InputGroup with TextArea, Slider, Switch, CheckboxInput, or RadioList.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | InputGroupText, Button addons, and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, or MultiSelector. **(required)** |\n| `label` | `string` | - | Accessible label for the group. **(required)** |\n| `isLabelHidden` | `boolean` | `false` | Visually hide the label. |\n| `description` | `string` | - | Helper text between label and input group. |\n| `isDisabled` | `boolean` | `false` | Disable the entire group. |\n| `isOptional` | `boolean` | `false` | Show the \"Optional\" indicator after the label. |\n| `isRequired` | `boolean` | `false` | Mark the field as required. |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | Default size for inputs in the group. |\n| `status` | `{type: 'warning' \\| 'error' \\| 'success', message?: string}` | - | Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`. |\n| `labelTooltip` | `string` | - | Tooltip text at the end of the label. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. |\n| `data-testid` | `string` | - | Test selector. |\n\n### InputGroupText\n\nSee `npx @astryxdesign/cli@0.7.12 component InputGroupText` for props and usage.\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

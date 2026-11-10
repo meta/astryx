@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-theme-gothic-goth_@large",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-gothic/goth"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"goth\" not found in @astryxdesign/theme-gothic\n\n  @astryxdesign/theme-gothic/gothic  (similar name)\n",
+ "exit": 1,
+ "files": []
+}

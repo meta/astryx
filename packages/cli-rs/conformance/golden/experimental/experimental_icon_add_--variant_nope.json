@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_add_--variant_nope",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--variant",
+  "nope"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

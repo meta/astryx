@@ -1,0 +1,122 @@
+[
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DateInput, DateTimeInput} from '@astryxdesign/core';\nconst a = <DateInput label=\"d\" nativePicker=\"touch\" />;\nconst b = <DateInput label=\"d\" nativePicker=\"always\" />;\nconst c = <DateTimeInput label=\"dt\" nativePicker=\"never\" />;",
+  "output": "import {DateInput, DateTimeInput} from '@astryxdesign/core';\nconst a = <DateInput label=\"d\" presentation='adaptive-native' />;\nconst b = <DateInput label=\"d\" presentation='native' />;\nconst c = <DateTimeInput label=\"dt\" presentation='adaptive-bottom-sheet' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TimeInput} from '@astryxdesign/core';\nconst a = <TimeInput label=\"t\" nativePicker=\"never\" />;\nconst b = <TimeInput label=\"t\" nativePicker={'touch'} />;",
+  "output": "import {TimeInput} from '@astryxdesign/core';\nconst a = <TimeInput label=\"t\" presentation='text-input' />;\nconst b = <TimeInput label=\"t\" presentation={'adaptive-native'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DateInput} from '@astryxdesign/core';\nconst a = <DateInput label=\"d\" presentation=\"popover\" nativePicker=\"always\" />;",
+  "output": "import {DateInput} from '@astryxdesign/core';\nconst a = <DateInput label=\"d\" presentation=\"popover\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {DateInput, Selector} from '@astryxdesign/core';\nconst a = <DateInput label=\"d\" nativePicker={mode} />;\nconst b = <Selector nativePicker=\"never\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TimeInput} from '@astryxdesign/core';\nconst a = <TimeInput label=\"t\" nativePicker=\"touch\" />;\nconst b = <TimeInput label=\"t\" nativePicker={flag ? 'always' : mode} />;",
+  "output": "import {TimeInput} from '@astryxdesign/core';\nconst a = <TimeInput label=\"t\" presentation='adaptive-native' />;\nconst b = <TimeInput label=\"t\" nativePicker={flag ? 'always' : mode} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-pZfH26/astryx.integration.mjs",
+  "options": null,
+  "source": "export default {themes: './themes'};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-pZfH26/themes/deep-sea/deepSeaTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const deepSeaTheme = defineTheme({\n  name: 'deep-sea',\n});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-pZfH26/themes/ocean/oceanTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  name: 'ocean',\n});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-X3T8yE/astryx.integration.mjs",
+  "options": null,
+  "source": "export default {themes: './themes'};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-X3T8yE/themes/ocean/oceanTheme.doc.mjs",
+  "options": null,
+  "source": "export default {type: 'theme', name: 'ocean', displayName: 'Mine', description: '', maintained: true};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-X3T8yE/themes/ocean/oceanTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  name: 'ocean',\n});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-X3T8yE/themes/reef/reefTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const reefTheme = defineTheme({\n  name: 'reef',\n});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-oPtZnR/astryx.integration.mjs",
+  "options": null,
+  "source": "export default {themes: './themes'};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-oPtZnR/themes/nested/src/nestedTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const nestedTheme = defineTheme({\n  name: 'nested',\n});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.4/migrate-native-picker-to-presentation",
+  "path": "/tmp/astryx-theme-catalog-oPtZnR/themes/sea/seaTheme.ts",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanBlue = defineTheme({\n  name: 'sea',\n});\n",
+  "output": null,
+  "error": null
+ }
+]

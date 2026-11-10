@@ -1,0 +1,13 @@
+{
+ "id": "template_BannerSectionVariant_--json_@large",
+ "args": [
+  "template",
+  "BannerSectionVariant",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BannerSectionVariant\",\n    \"description\": \"A full-width banner with no border radius for page-level notifications. Use at the top of a page for site-wide announcements or maintenance alerts.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Banner\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Banner} from '@astryxdesign/core/Banner';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Stack} from '@astryxdesign/core/Layout';\\n\\nexport default function BannerSectionVariant() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={3}>\\n      <Banner\\n        status=\\\"warning\\\"\\n        title=\\\"Scheduled downtime\\\"\\n        description=\\\"All services will be unavailable on Sunday from 2:00–4:00 AM.\\\"\\n        container=\\\"section\\\"\\n        isDismissable\\n      />\\n      <Banner\\n        status=\\\"info\\\"\\n        title=\\\"Welcome to the new dashboard\\\"\\n        description=\\\"We have redesigned the layout based on your feedback.\\\"\\n        container=\\\"section\\\"\\n        endContent={\\n          <Button label=\\\"Take a tour\\\" variant=\\\"secondary\\\" size=\\\"sm\\\" />\\n        }\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

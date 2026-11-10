@@ -1,0 +1,19 @@
+{
+ "id": "component_ClickableCard_--dense_@large",
+ "args": [
+  "component",
+  "ClickableCard",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ClickableCard\n\nInteractive card for navigation/action targets. Nested interactive elements work independently.\n\n**Import:** `import {ClickableCard} from '@astryxdesign/core/ClickableCard';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Container | Yes | Interactive div with hover/focus/active states. |\n| Content | Yes | Children, which may include nested interactive elements. |\n\n## Best Practices\n\n- **Do:** Use for cards navigating to detail page or triggering single action.\n- **Do:** Nest buttons/links freely inside; they handle own events.\n- **Don't:** Use for toggling selection; use SelectableCard instead.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | accessibility label **(required)** |\n| `onClick` | `(event: MouseEvent) => void` | - | click handler: fires on card surface only |\n| `href` | `string` | - | navigation URL; every activation follows the shared navigation rule (see Link href) |\n| `target` | `string` | `'_self'` | link target |\n| `isDisabled` | `boolean` | `false` | disables card, removes link destination, keeps tab stop |\n| `children` | `ReactNode` | - | Card content. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `4` | inner padding |\n| `variant` | `'default' \\| 'transparent' \\| 'muted' \\| 'blue' \\| 'cyan' \\| 'gray' \\| 'green' \\| 'orange' \\| 'pink' \\| 'purple' \\| 'red' \\| 'teal' \\| 'yellow'` | `'default'` | background color variant |\n| `elevation` | `'none' \\| 'low' \\| 'med' \\| 'high'` | `'none'` | resting shadow depth: none\\|low\\|med\\|high; often raised to signal clickability |\n| `width` | `SizeValue` | - | card width |\n| `height` | `SizeValue` | - | card height |\n| `maxWidth` | `SizeValue` | - | max card width |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-clickable-card` | `data-variant` | default, transparent, muted, blue, cyan, gray, green, orange, pink, purple, red, teal, yellow | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'clickable-card': {\n    base: { /* CSS properties */ },\n    'variant:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "upgrade_--codemod_migrate-badge-dot-to-statusdot_--apply",
+ "args": [
+  "upgrade",
+  "--codemod",
+  "migrate-badge-dot-to-statusdot",
+  "--apply"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-set_useClipboard_--exclude",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--exclude"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--exclude <names>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

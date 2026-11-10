@@ -1,0 +1,21 @@
+{
+ "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._--json",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "Run acme verify before finishing.",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"agent-doc\",\n    \"name\": \"Run acme verify before finishing.\",\n    \"root\": null,\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  agentDocs: {\n    append: ['Run acme verify before finishing.']\n  }\n};\n"
+  }
+ ]
+}

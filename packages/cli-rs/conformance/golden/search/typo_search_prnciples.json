@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_prnciples",
+ "args": [
+  "search",
+  "prnciples"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"prnciples\" (2)\n\nname:        cli/api/functions/docs\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › API › Functions › docs()\ndescription: Read the reference docs: list every topic, one topic's sections, one section, or a whole topic.\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/api/functions/docs\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/api/functions\n\nname:        principles\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Principles\ndescription: Core design principles and rules for building with the design system.\ncommand:     npx @astryxdesign/cli@0.7.12 docs principles --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover prnciples\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

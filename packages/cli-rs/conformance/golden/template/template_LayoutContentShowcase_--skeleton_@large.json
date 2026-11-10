@@ -1,0 +1,19 @@
+{
+ "id": "template_LayoutContentShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "LayoutContentShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# LayoutContentShowcase - LayoutContent is the scrollable main content area within a Layout, providing automatic padding and scroll containment between the header and footer.\n# Components: Card, Center, Layout\n\n<Center width={500}>\n  <Layout hasDivider height=\"fill\">\n    /* header: */\n    <LayoutHeader hasDivider>\n      <Card variant=\"muted\" />\n    </LayoutHeader>\n    /* start: */\n    <LayoutPanel hasDivider width={140}>\n      <Card variant=\"muted\" />\n    </LayoutPanel>\n    /* content: */\n    <LayoutContent role=\"main\">\n      <VStack gap={3}>\n        <Heading />\n        <Text />\n        <Text />\n      </VStack>\n    </LayoutContent>\n    /* footer: */\n    <LayoutFooter hasDivider>\n      <Card variant=\"muted\" />\n    </LayoutFooter>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

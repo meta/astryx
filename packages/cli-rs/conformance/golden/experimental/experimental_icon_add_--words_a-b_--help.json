@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_add_--words_a-b_--help",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--words",
+  "a,b",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx experimental icon add [options] [export]\n\n[experimental] Register one icon you chose from a library in your icon set\n\nOptions:\n  --from <module>          The module the icon is exported from: a package, a subpath, or a ./ path to a file inside this package\n  --definition <name>      Map the icon to this icon definition\n  --new-definition <name>  Add your set's own definition, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words\n  --description <text>     With --new-definition: what the icon is for\n  --words <list>           With --new-definition: comma-separated words people search for\n  --default                The module's default export is the icon; your set's module must re-export it under <export>\n  --variant <name>         Add the export as this variant of an existing icon: one of the set's declared variants, such as solid\n  --all                    With --variant and --from, and no export: add that variant for every icon whose id the module exports, in one run\n  --id <id>                The icon's id, instead of the one its name gives\n  --set <name>             The set to edit, when the package ships several\n  -h, --help               display help for command\n\nExit codes:\n  0  the icon is added, already present, or the matching definitions are listed\n  1  the export is missing or is data, the definition is unknown, the id is taken, or the variant is not one the set declares\n\nExamples:\n  # Which definitions fit\n  npx @astryxdesign/cli@0.7.12 experimental icon add Bin --from @acme/glyph-library\n  # Add and map\n  npx @astryxdesign/cli@0.7.12 experimental icon add Bin --from @acme/glyph-library --definition delete\n  # Add the solid variant of every icon\n  npx @astryxdesign/cli@0.7.12 experimental icon add --variant solid --from @heroicons/react/24/solid --all\n  # Add your own definition\n  npx @astryxdesign/cli@0.7.12 experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance\n  # Add a solid variant\n  npx @astryxdesign/cli@0.7.12 experimental icon add Bin --from @acme/glyph-library/solid --id bin --variant solid\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon-add\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

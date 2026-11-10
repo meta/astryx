@@ -1,0 +1,13 @@
+{
+ "id": "init_--agent_bogus",
+ "args": [
+  "init",
+  "--agent",
+  "bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown agent \"bogus\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
+ "exit": 1,
+ "files": []
+}

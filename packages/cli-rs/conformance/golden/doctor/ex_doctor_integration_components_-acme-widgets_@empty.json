@@ -1,0 +1,14 @@
+{
+ "id": "ex_doctor_integration_components_-acme-widgets_@empty",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "@acme/widgets"
+ ],
+ "fixture": "empty",
+ "stdout": "Checking integration components: @acme/widgets\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"@acme/widgets\" at /tmp/astryx-conformance/work/empty/node_modules/@acme/widgets/package.json. Install it first.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "template_AspectRatioWidescreen_--cdn_cdn-index.html_@large",
+ "args": [
+  "template",
+  "AspectRatioWidescreen",
+  "--cdn",
+  "cdn/index.html"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: `--cdn` cannot be combined with <name>: the CDN starter does not use templates.\n",
+ "exit": 1,
+ "files": []
+}

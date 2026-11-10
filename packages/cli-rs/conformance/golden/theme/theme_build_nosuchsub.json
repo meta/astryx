@@ -1,0 +1,13 @@
+{
+ "id": "theme_build_nosuchsub",
+ "args": [
+  "theme",
+  "build",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/nosuchsub\n",
+ "exit": 1,
+ "files": []
+}

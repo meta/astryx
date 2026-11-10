@@ -1,0 +1,13 @@
+{
+ "id": "docs_acme-guide_nope_@integration",
+ "args": [
+  "docs",
+  "acme-guide",
+  "nope"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Section \"nope\" not found in \"acme-guide\"\n\n  Start  (available section)\n  Colors  (available section)\n",
+ "exit": 1,
+ "files": []
+}

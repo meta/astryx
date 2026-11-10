@@ -1,0 +1,11 @@
+{
+ "id": "shell_--json=1_@empty",
+ "args": [
+  "--json=1"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown option '--json=1'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "theme_targets_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "targets",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No theming target matches \"extra1\". Run `theme targets` with no filter for the whole list.\n",
+ "exit": 1,
+ "files": []
+}

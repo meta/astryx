@@ -1,0 +1,20 @@
+{
+ "id": "search_empty-state_--limit_3",
+ "args": [
+  "search",
+  "empty state",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"empty state\" (3 of 201)\n\nname:        EmptyState\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/EmptyState\ndescription: EmptyState shows a placeholder when a content area has no data. Use it for empty lists, zero search results, first-time setups, or cleared inboxes. Always include a title and a next step so the user is not stuck.\ncommand:     npx @astryxdesign/cli@0.7.12 component EmptyState\n\nname:        illustrations\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Illustrations\ndescription: Illustration guidelines for empty states, onboarding flows, and feature highlights.\ncommand:     npx @astryxdesign/cli@0.7.12 docs illustrations --index\nparent:      npx @astryxdesign/cli@0.7.12 docs foundations\n\nname:        EmptyStateActions\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: EmptyState - Actions\nkind:        block\ndescription: Full empty state with icon, message, and action buttons. Use when a search returns no results, a filter clears all items, or a list has been emptied. The buttons give the user a way forward: go back, clear filters, or try a different query.\ncommand:     npx @astryxdesign/cli@0.7.12 template EmptyStateActions --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'empty state'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

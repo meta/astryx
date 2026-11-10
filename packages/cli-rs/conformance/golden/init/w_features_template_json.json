@@ -1,0 +1,14 @@
+{
+ "id": "w_features_template_json",
+ "args": [
+  "--json",
+  "init",
+  "--features",
+  "template"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.run\",\n  \"data\": {\n    \"mode\": \"features\",\n    \"features\": [\n      \"template\"\n    ],\n    \"docsWritten\": [],\n    \"docsError\": null,\n    \"theme\": false,\n    \"themeTemplate\": null,\n    \"themeTemplatePath\": null,\n    \"template\": \"workflow\",\n    \"templatePath\": null,\n    \"nextSteps\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

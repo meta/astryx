@@ -1,0 +1,12 @@
+{
+ "id": "hook_nosuchsub",
+ "args": [
+  "hook",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No hook named \"nosuchsub\"\n",
+ "exit": 1,
+ "files": []
+}

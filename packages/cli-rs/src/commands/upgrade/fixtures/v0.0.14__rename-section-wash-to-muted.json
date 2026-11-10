@@ -1,0 +1,119 @@
+[
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSSection variant=\"wash\">content</XDSSection>",
+  "output": "<XDSSection variant='muted'>content</XDSSection>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSToolbar label=\"Actions\" variant=\"wash\" />",
+  "output": "<XDSToolbar label=\"Actions\" variant='muted' />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSSection variant={'wash'}>content</XDSSection>",
+  "output": "<XDSSection variant={'muted'}>content</XDSSection>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSSection variant=\"default\">content</XDSSection>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSCard variant=\"wash\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<XDSSection padding=\"lg\">content</XDSSection>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSSection} from '@xds/core/Section';\nconst meta = { args: { variant: 'wash' } };",
+  "output": "import {XDSSection} from '@xds/core/Section';\nconst meta = { args: { variant: 'muted' } };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst meta = { args: { variant: 'wash' } };",
+  "output": "import {XDSToolbar} from '@xds/core/Toolbar';\nconst meta = { args: { variant: 'muted' } };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "const x = { variant: 'wash' };",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSSection} from '@xds/core/Section';\nconst meta = { argTypes: { variant: { control: 'select', options: ['section', 'transparent', 'wash'] } } };",
+  "output": "import {XDSSection} from '@xds/core/Section';\nconst meta = { argTypes: { variant: { control: 'select', options: ['section', 'transparent', 'muted'] } } };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "import {XDSSection} from '@xds/core/Section';\nconst App = () => <h4>wash</h4>;",
+  "output": "import {XDSSection} from '@xds/core/Section';\nconst App = () => <h4>muted</h4>;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "const App = () => <h4>wash</h4>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-section-wash-to-muted",
+  "options": {
+   "parser": "tsx"
+  },
+  "source": "<div>\n  <XDSSection variant=\"wash\">section</XDSSection>\n  <XDSToolbar variant=\"wash\" label=\"bar\" />\n</div>",
+  "output": "<div>\n  <XDSSection variant='muted'>section</XDSSection>\n  <XDSToolbar variant='muted' label=\"bar\" />\n</div>",
+  "error": null
+ }
+]

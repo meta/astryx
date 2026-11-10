@@ -1,0 +1,19 @@
+{
+ "id": "hook_useLongPress_--dense",
+ "args": [
+  "hook",
+  "useLongPress",
+  "--dense"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useLongPress\n\nDetects a single-finger press-and-hold and reports where it happened, so touch users can reach affordances that a pointer gets from right-click. iOS Safari never synthesizes a contextmenu event on long-press, which makes this the only touch route into a cursor-positioned surface such as ContextMenu. The press cancels on movement, lift, multi-touch or unmount. The hold is timed on the touch events’ own timestamps: when a busy page handles the lift late, a finger held for the full delay still reports its long press, before the lift acts.\n\n## Best Practices\n\n- **Do:** Use the reported point to position the surface you open, so it appears under the finger.\n- **Do:** Pair it with the pointer contextmenu handler rather than replacing it; this hook only covers touch.\n- **Don't:** Use it for the primary action of a control; press-and-hold is undiscoverable as the only way to do something.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseLongPressOptions` | - | Configuration object. **(required)** |\n| `options.onLongPress` | `(point: {x: number; y: number}) => void` | - | Fired with the touch start point once the press is held for delayMs. **(required)** |\n| `options.disabled` | `boolean` | `false` | When true, the returned touch handlers are inert. |\n| `options.delayMs` | `number` | `500` | Hold duration before the press fires, in milliseconds. |\n| `options.moveCancelPx` | `number` | `10` | Movement past this distance on either axis cancels the press, treating it as a scroll or drag. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `handlers` | `UseLongPressHandlers` | onTouchStart, onTouchMove, onTouchEnd and onTouchCancel to spread onto the target element. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for ContextMenu\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

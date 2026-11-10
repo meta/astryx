@@ -1,0 +1,20 @@
+{
+ "id": "pg_palette-custom-stops-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/custom-stops.json"
+ ],
+ "fixture": "themes",
+ "stdout": "Palette candidate\n1 families, 8 stops, light\n\n{\n  \"schemaVersion\": 1,\n  \"status\": \"candidate\",\n  \"recipe\": \"astryx-oklch-v1\",\n  \"black\": \"#000000\",\n  \"white\": \"#ffffff\",\n  \"stops\": [\n    0,\n    2.5,\n    10,\n    33.3,\n    50,\n    72.5,\n    97.5,\n    100\n  ],\n  \"palette\": {\n    \"teal\": {\n      \"name\": \"teal\",\n      \"light\": {\n        \"0\": \"#000000\",\n        \"2.5\": \"#000d0d\",\n        \"10\": \"#002221\",\n        \"33.3\": \"#005b59\",\n        \"50\": \"#008986\",\n        \"72.5\": \"#59c6c3\",\n        \"97.5\": \"#e1fffd\",\n        \"100\": \"#ffffff\"\n      }\n    }\n  }\n}\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/themes\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

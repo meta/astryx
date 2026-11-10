@@ -1,0 +1,14 @@
+{
+ "id": "search_form-validation_--limit_x",
+ "args": [
+  "search",
+  "form validation",
+  "--limit",
+  "x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"NaN\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

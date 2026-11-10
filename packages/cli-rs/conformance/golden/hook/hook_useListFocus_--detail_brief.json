@@ -1,0 +1,20 @@
+{
+ "id": "hook_useListFocus_--detail_brief",
+ "args": [
+  "hook",
+  "useListFocus",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseListFocus(options?: UseListFocusOptions): { listRef, handleKeyDown, handleFocus, focusItem, focusFirst, focusLast, ownsEvent, getItems }  <- from '@astryxdesign/core/hooks'\n  Manages keyboard navigation within a linear list following WAI-ARIA menu/list...\n  Related: TabMenu, Toolbar\n  options\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for TabMenu, Toolbar\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

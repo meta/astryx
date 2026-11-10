@@ -1,0 +1,20 @@
+{
+ "id": "component_AppShell_--detail_brief_@large",
+ "args": [
+  "component",
+  "AppShell",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nAppShell(height: fill|auto, variant: wash|surface|section|elevated)  <- from '@astryxdesign/core/AppShell'\n  AppShell is the page shell for an application. It provides slots for top navi...\n  Targets: astryx-app-shell preferred attrs: data-variant variants: variant | astryx-app-shell-header preferred attrs: data-variant variants: variant | astryx-app-shell-sidenav preferred attrs: data-variant variants: variant\n  children, contentPadding, topNav, sideNav, mobileNav, banner, xstyle\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

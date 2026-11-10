@@ -1,0 +1,14 @@
+{
+ "id": "search_table_--limit_1.5",
+ "args": [
+  "search",
+  "table",
+  "--limit",
+  "1.5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"1.5\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

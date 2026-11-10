@@ -1,0 +1,13 @@
+{
+ "id": "template_ToolbarCardHeader_--json_@large",
+ "args": [
+  "template",
+  "ToolbarCardHeader",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ToolbarCardHeader\",\n    \"description\": \"A toolbar as a card header with a left-aligned title and icon actions on the right. Use Toolbar instead of LayoutHeader when your card header has interactive actions; Toolbar adds start/end slot layout, keyboard navigation, and automatic size cascading. If the header is just a title with no actions, a LayoutHeader or Section is enough.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Section\",\n      \"Toolbar\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Toolbar} from '@astryxdesign/core/Toolbar';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {Heading} from '@astryxdesign/core/Text';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Section} from '@astryxdesign/core/Section';\\nimport {FunnelIcon, PlusIcon} from '@heroicons/react/24/outline';\\n\\nexport default function ToolbarCardHeader() {\\n  return (\\n    <Card style={{width: 500, height: '100%', marginTop: 260}}>\\n      <Toolbar\\n        label=\\\"User list actions\\\"\\n        size=\\\"sm\\\"\\n        dividers={['bottom']}\\n        startContent={<Heading level={4}>Card title</Heading>}\\n        endContent={\\n          <>\\n            <Button\\n              label=\\\"Filter\\\"\\n              variant=\\\"ghost\\\"\\n              icon={<Icon icon={FunnelIcon} />}\\n              isIconOnly\\n            />\\n            <Button\\n              label=\\\"Add user\\\"\\n              icon={<Icon icon={PlusIcon} />}\\n              isIconOnly\\n            />\\n          </>\\n        }\\n      />\\n      <Section />\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

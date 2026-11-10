@@ -1,0 +1,20 @@
+{
+ "id": "component_Carousel_--detail_brief_@large",
+ "args": [
+  "component",
+  "Carousel",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nCarousel(gap: 0|0.5|1|1.5|2|3|4, hasSnap: boolean|SnapPaging)  <- from '@astryxdesign/core/Carousel'\n  Carousel scrolls a row of items horizontally when they overflow the available...\n  Targets: astryx-carousel | astryx-carousel-scroller preferred attrs: data-gap, data-padding, data-snap, data-edge-fade variants: gap, padding, snap, edgeFade\n  children: ReactNode, hasButtons, hasEdgeFade, hasLoop, padding, aria-label, ref, handleRef, xstyle, className, style, data-testid\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

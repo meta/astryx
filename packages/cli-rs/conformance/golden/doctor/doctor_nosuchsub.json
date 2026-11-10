@@ -1,0 +1,12 @@
+{
+ "id": "doctor_nosuchsub",
+ "args": [
+  "doctor",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor nosuchsub'\n\n  integration  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

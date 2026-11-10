@@ -1,0 +1,18 @@
+{
+ "id": "template_useTableColumnSettingsStateHookUsage_@large",
+ "args": [
+  "template",
+  "useTableColumnSettingsStateHookUsage"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Button} from '@astryxdesign/core/Button';\nimport {CheckboxInput} from '@astryxdesign/core/CheckboxInput';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Popover} from '@astryxdesign/core/Popover';\nimport {\n  Table,\n  useTableColumnSettings,\n  useTableColumnSettingsState,\n} from '@astryxdesign/core/Table';\nimport type {TableColumn} from '@astryxdesign/core/Table';\n\ninterface Member extends Record<string, unknown> {\n  id: string;\n  name: string;\n  email: string;\n  role: string;\n}\n\nconst members: Member[] = [\n  {id: '1', name: 'Alice', email: 'alice@example.com', role: 'Engineer'},\n  {id: '2', name: 'Bob', email: 'bob@example.com', role: 'Designer'},\n  {id: '3', name: 'Charlie', email: 'charlie@example.com', role: 'Manager'},\n];\n\nconst allColumns: TableColumn<Member>[] = [\n  {key: 'name', header: 'Name'},\n  {key: 'email', header: 'Email'},\n  {key: 'role', header: 'Role'},\n];\n\nconst columnOptions = [\n  {key: 'name' as const, label: 'Name', isAlwaysVisible: true},\n  {key: 'email' as const, label: 'Email'},\n  {key: 'role' as const, label: 'Role'},\n];\n\nconst defaultKeys = ['name', 'email', 'role'];\n\nexport default function UseTableColumnSettingsStateHookUsage() {\n  const [activeKeys, setActiveKeys] =\n    useState<ReadonlyArray<string>>(defaultKeys);\n\n  const state = useTableColumnSettingsState({\n    columns: columnOptions,\n    activeColumnKeys: activeKeys,\n    onChangeActiveColumnKeys: setActiveKeys,\n    defaultColumnKeys: defaultKeys,\n  });\n\n  const plugin = useTableColumnSettings<Member>(state.columnSettingsConfig);\n\n  return (\n    <VStack gap={3}>\n      <HStack hAlign=\"start\">\n        <Popover\n          placement=\"below\"\n          label=\"Column settings\"\n          width={200}\n          content={\n            <VStack gap={2}>\n              {columnOptions.map(col => (\n                <CheckboxInput\n                  key={col.key}\n                  label={col.label}\n                  value={state.isColumnActive(col.key)}\n                  isDisabled={!state.isColumnToggleable(col.key)}\n                  onChange={() => state.toggleColumn(col.key)}\n                />\n              ))}\n              <Button\n                label=\"Reset\"\n                size=\"sm\"\n                variant=\"secondary\"\n                onClick={state.resetToDefault}>\n                Reset\n              </Button>\n            </VStack>\n          }>\n          <Button label=\"Columns\" size=\"sm\">\n            Columns\n          </Button>\n        </Popover>\n      </HStack>\n      <Table\n        data={members}\n        columns={allColumns}\n        idKey=\"id\"\n        plugins={{columnSettings: plugin}}\n      />\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

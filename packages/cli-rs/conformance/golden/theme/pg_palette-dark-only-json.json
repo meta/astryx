@@ -1,0 +1,20 @@
+{
+ "id": "pg_palette-dark-only-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/dark-only.json"
+ ],
+ "fixture": "themes",
+ "stdout": "Palette candidate\n2 families, 21 stops, dark\n\n{\n  \"schemaVersion\": 1,\n  \"status\": \"candidate\",\n  \"recipe\": \"astryx-oklch-v1\",\n  \"black\": \"#000000\",\n  \"white\": \"#ffffff\",\n  \"stops\": [\n    0,\n    5,\n    10,\n    15,\n    20,\n    25,\n    30,\n    35,\n    40,\n    45,\n    50,\n    55,\n    60,\n    65,\n    70,\n    75,\n    80,\n    85,\n    90,\n    95,\n    100\n  ],\n  \"palette\": {\n    \"red\": {\n      \"name\": \"red\",\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"5\": \"#2c0000\",\n        \"10\": \"#3e0000\",\n        \"15\": \"#500001\",\n        \"20\": \"#620002\",\n        \"25\": \"#760004\",\n        \"30\": \"#8a0006\",\n        \"35\": \"#9f0009\",\n        \"40\": \"#b4000c\",\n        \"45\": \"#c80914\",\n        \"50\": \"#d82524\",\n        \"55\": \"#e73933\",\n        \"60\": \"#f64c42\",\n        \"65\": \"#ff6357\",\n        \"70\": \"#ff8072\",\n        \"75\": \"#ff988c\",\n        \"80\": \"#ffafa4\",\n        \"85\": \"#ffc4bc\",\n        \"90\": \"#ffd8d2\",\n        \"95\": \"#ffece9\",\n        \"100\": \"#ffffff\"\n      }\n    },\n    \"warm\": {\n      \"name\": \"warm\",\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"5\": \"#13100c\",\n        \"10\": \"#1f1b16\",\n        \"15\": \"#2a251f\",\n        \"20\": \"#352f28\",\n        \"25\": \"#403a32\",\n        \"30\": \"#4c463d\",\n        \"35\": \"#585148\",\n        \"40\": \"#655d53\",\n        \"45\": \"#71695f\",\n        \"50\": \"#7e766b\",\n        \"55\": \"#8a8278\",\n        \"60\": \"#978f85\",\n        \"65\": \"#a59d92\",\n        \"70\": \"#b2aaa0\",\n        \"75\": \"#bfb8ae\",\n        \"80\": \"#ccc5bc\",\n        \"85\": \"#dad3cb\",\n        \"90\": \"#e7e2da\",\n        \"95\": \"#f5f0ea\",\n        \"100\": \"#ffffff\"\n      }\n    }\n  }\n}\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/themes\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

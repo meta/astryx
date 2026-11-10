@@ -1,0 +1,18 @@
+{
+ "id": "template_TimeInputConstrained_@large",
+ "args": [
+  "template",
+  "TimeInputConstrained"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TimeInput} from '@astryxdesign/core/TimeInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function TimeInputConstrained() {\n  const [evening, setEvening] = useState(undefined);\n\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <TimeInput\n        label=\"Dinner reservation\"\n        min={'17:00' as never}\n        max={'22:00' as never}\n        description=\"Evening seating: 5 PM – 10 PM\"\n        placeholder=\"Select reservation time\"\n        presentation=\"adaptive-bottom-sheet\"\n        value={evening as never}\n        onChange={setEvening as never}\n        hasClear\n      />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

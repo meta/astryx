@@ -1,0 +1,13 @@
+{
+ "id": "template_ai-chat_..-outside.tsx",
+ "args": [
+  "template",
+  "ai-chat",
+  "../outside.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid template target path \"../outside.tsx\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,146 @@
+[
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {BaseTypeahead, Tokenizer, Typeahead} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"People\" emptySearchResultsText=\"Nobody found\" />;\nconst b = <Typeahead label=\"Fruit\" emptySearchResultsText={copy.empty} />;\nconst c = <BaseTypeahead emptySearchResultsText={'None'} />;",
+  "output": "import {BaseTypeahead, Tokenizer, Typeahead} from '@astryxdesign/core';\nconst a = <Tokenizer label=\"People\" emptySearchText=\"Nobody found\" />;\nconst b = <Typeahead label=\"Fruit\" emptySearchText={copy.empty} />;\nconst c = <BaseTypeahead emptySearchText={'None'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer as People} from '@astryxdesign/core';\nimport * as Astryx from '@astryxdesign/core';\nimport Typeahead from '@astryxdesign/core/Typeahead';\nconst a = <People emptySearchResultsText=\"x\" />;\nconst b = <Astryx.BaseTypeahead emptySearchResultsText=\"y\" />;\nconst c = <Typeahead emptySearchResultsText=\"z\" />;",
+  "output": "import {Tokenizer as People} from '@astryxdesign/core';\nimport * as Astryx from '@astryxdesign/core';\nimport Typeahead from '@astryxdesign/core/Typeahead';\nconst a = <People emptySearchText=\"x\" />;\nconst b = <Astryx.BaseTypeahead emptySearchText=\"y\" />;\nconst c = <Typeahead emptySearchText=\"z\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer emptySearchResultsText={compact ? 'None' : 'No matches'} />;\nconst b = <Tokenizer emptySearchResultsText={props.text ?? null} />;\nconst c = <Tokenizer {...props} emptySearchResultsText=\"After a spread\" />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer emptySearchText={compact ? 'None' : 'No matches'} />;\nconst b = <Tokenizer emptySearchText={props.text ?? null} />;\nconst c = <Tokenizer {...props} /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\nemptySearchResultsText=\"After a spread\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Typeahead} from '@astryxdesign/core';\nconst a = <Typeahead emptySearchResultsText=\"Old copy\" emptySearchText=\"New copy\" />;",
+  "output": "import {Typeahead} from '@astryxdesign/core';\nconst a = <Typeahead /* TODO(astryx upgrade): emptySearchResultsText was removed and emptySearchText is already set here; delete the old one if the new value is what you want. */\nemptySearchResultsText=\"Old copy\" emptySearchText=\"New copy\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Typeahead} from '@astryxdesign/core';\nconst a = <Typeahead /* TODO(astryx upgrade): emptySearchResultsText was removed and emptySearchText is already set here; delete the old one if the new value is what you want. */\nemptySearchResultsText=\"Old copy\" emptySearchText=\"New copy\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {MobileTokenizer} from '@astryxdesign/lab';\nimport {Selector} from '@astryxdesign/core';\nimport {Tokenizer} from './my-tokenizer';\nconst a = <MobileTokenizer emptySearchResultsText=\"kept\" />;\nconst b = <Selector emptySearchResultsText=\"kept\" />;\nconst c = <Tokenizer emptySearchResultsText=\"kept\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer emptySearchResultsText=\"Nobody found\" />;",
+  "output": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer emptySearchText=\"Nobody found\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer} from '@astryxdesign/core';\nconst a = <Tokenizer emptySearchText=\"Nobody found\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = (\n  <ChatComposerInput\n    triggers={[\n      {char: '@', searchSource, onSelect, emptySearchResultsText: 'Nobody found'},\n      {char: '#', emptySearchResultsText: 'No tags'} as ChatComposerTrigger,\n    ]}\n  />\n);\nconst b = <ChatComposerInput triggers={{char: '/', emptySearchResultsText: 'No commands'}} />;",
+  "output": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = (\n  <ChatComposerInput\n    triggers={[\n      {char: '@', searchSource, onSelect, emptySearchText: 'Nobody found'},\n      {char: '#', emptySearchText: 'No tags'} as ChatComposerTrigger,\n    ]}\n  />\n);\nconst b = <ChatComposerInput triggers={{char: '/', emptySearchText: 'No commands'}} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = (\n  <ChatComposerInput\n    triggers={[\n      {...base, emptySearchResultsText: 'Nobody'},\n      {[key]: 1, emptySearchResultsText: 'Nobody'},\n      {char: '@', emptySearchText: 'New', emptySearchResultsText: 'Old'},\n    ]}\n  />\n);",
+  "output": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = (\n  <ChatComposerInput\n    triggers={[\n      {...base, /* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n      emptySearchResultsText: 'Nobody'},\n      {[key]: 1, /* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n      emptySearchResultsText: 'Nobody'},\n      {char: '@', emptySearchText: 'New', /* TODO(astryx upgrade): emptySearchResultsText was removed and emptySearchText is already set here; delete the old one if the new value is what you want. */\n      emptySearchResultsText: 'Old'},\n    ]}\n  />\n);",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = (\n  <ChatComposerInput\n    triggers={[\n      {...base, /* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n      emptySearchResultsText: 'Nobody'},\n      {[key]: 1, /* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n      emptySearchResultsText: 'Nobody'},\n      {char: '@', emptySearchText: 'New', /* TODO(astryx upgrade): emptySearchResultsText was removed and emptySearchText is already set here; delete the old one if the new value is what you want. */\n      emptySearchResultsText: 'Old'},\n    ]}\n  />\n);",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nimport {mentionTrigger} from './triggers';\nconst local = {char: '@', emptySearchResultsText: 'Nobody'};\nconst a = <ChatComposerInput triggers={[local, mentionTrigger]} />;\nconst b = <ChatComposerInput triggers={buildTriggers()} />;\nconst c = <ChatComposerInput triggers={useMemo(() => [t], [t])} />;\nconst d = <ChatComposerInput {...props} triggers={[{char: '#', emptySearchResultsText: 'No tags'}]} />;",
+  "output": "import {ChatComposerInput} from '@astryxdesign/core';\nimport {mentionTrigger} from './triggers';\nconst local = {char: '@', emptySearchResultsText: 'Nobody'};\nconst a = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={[local, mentionTrigger]} />;\nconst b = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={buildTriggers()} />;\nconst c = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={useMemo(() => [t], [t])} />;\nconst d = <ChatComposerInput {...props} /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={[{char: '#', emptySearchText: 'No tags'}]} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nimport {mentionTrigger} from './triggers';\nconst local = {char: '@', emptySearchResultsText: 'Nobody'};\nconst a = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={[local, mentionTrigger]} />;\nconst b = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={buildTriggers()} />;\nconst c = <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={useMemo(() => [t], [t])} />;\nconst d = <ChatComposerInput {...props} /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\ntriggers={[{char: '#', emptySearchText: 'No tags'}]} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer, Typeahead, ChatComposerInput} from '@astryxdesign/core';\nimport {Selector} from '@astryxdesign/core';\nconst people = {emptySearchResultsText: 'No people match'};\nexport function Wrappers(props) {\n  return (\n    <>\n      <Tokenizer {...people} />\n      <Typeahead {...{emptySearchResultsText: 'Inline'}} />\n      <Tokenizer {...props} label=\"x\" />\n      <ChatComposerInput {...props} />\n      <Selector {...props} />\n      <Tokenizer {...props} emptySearchText=\"already new\" />\n    </>\n  );\n}",
+  "output": "import {Tokenizer, Typeahead, ChatComposerInput} from '@astryxdesign/core';\nimport {Selector} from '@astryxdesign/core';\nconst people = {emptySearchResultsText: 'No people match'};\nexport function Wrappers(props) {\n  return (\n    <>\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...people} />\n      <Typeahead /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...{emptySearchResultsText: 'Inline'}} />\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...props} label=\"x\" />\n      <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\n      {...props} />\n      <Selector {...props} />\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...props} emptySearchText=\"already new\" />\n    </>\n  );\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Tokenizer, Typeahead, ChatComposerInput} from '@astryxdesign/core';\nimport {Selector} from '@astryxdesign/core';\nconst people = {emptySearchResultsText: 'No people match'};\nexport function Wrappers(props) {\n  return (\n    <>\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...people} />\n      <Typeahead /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...{emptySearchResultsText: 'Inline'}} />\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...props} label=\"x\" />\n      <ChatComposerInput /* TODO(astryx upgrade): emptySearchResultsText was removed. These triggers are built elsewhere; rename the key to emptySearchText where they are built. */\n      {...props} />\n      <Selector {...props} />\n      <Tokenizer /* TODO(astryx upgrade): emptySearchResultsText was removed. This element spreads props that may carry either name; rename to emptySearchText where the props are built and delete the old one. */\n      {...props} emptySearchText=\"already new\" />\n    </>\n  );\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = <ChatComposerInput triggers={[{...baseMention, onSelect}, {[key]: 1, onSelect}]} />;",
+  "output": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = <ChatComposerInput triggers={[{/* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n...baseMention, onSelect}, {/* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n[key]: 1, onSelect}]} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatComposerInput} from '@astryxdesign/core';\nconst a = <ChatComposerInput triggers={[{/* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n...baseMention, onSelect}, {/* TODO(astryx upgrade): emptySearchResultsText was removed. Rename it to emptySearchText by hand; this object has a spread or computed key. */\n[key]: 1, onSelect}]} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/rename-empty-search-results-text",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {MobileTokenizer} from '@astryxdesign/lab';\nconst copy = {emptySearchResultsText: 'kept'};\nconst a = <MobileTokenizer {...copy} />;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_link_@large",
+ "args": [
+  "component",
+  "link"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"link\"\n\n  Link  (same name)\n  ClickableCard  (keyword \"link\")\n",
+ "exit": 1,
+ "files": []
+}

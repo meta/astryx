@@ -1,0 +1,14 @@
+{
+ "id": "w_template_bad_name",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "Acme_Dash"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid template name \"Acme_Dash\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

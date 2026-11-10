@@ -1,0 +1,18 @@
+{
+ "id": "template_TabListTabsWithActions_@large",
+ "args": [
+  "template",
+  "TabListTabsWithActions"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TabList, Tab} from '@astryxdesign/core/TabList';\nimport {Button} from '@astryxdesign/core/Button';\n\nconst FilterIcon = (\n  <svg\n    viewBox=\"0 0 24 24\"\n    fill=\"none\"\n    stroke=\"currentColor\"\n    strokeWidth={2}\n    width=\"100%\"\n    height=\"100%\">\n    <path\n      strokeLinecap=\"round\"\n      strokeLinejoin=\"round\"\n      d=\"M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z\"\n    />\n  </svg>\n);\n\nconst PlusIcon = (\n  <svg\n    viewBox=\"0 0 24 24\"\n    fill=\"none\"\n    stroke=\"currentColor\"\n    strokeWidth={2}\n    width=\"100%\"\n    height=\"100%\">\n    <path\n      strokeLinecap=\"round\"\n      strokeLinejoin=\"round\"\n      d=\"M12 4.5v15m7.5-7.5h-15\"\n    />\n  </svg>\n);\n\nexport default function TabListTabsWithActions() {\n  const [value, setValue] = useState('all');\n  return (\n    <TabList value={value} onChange={setValue} size=\"lg\" hasDivider>\n      <Tab value=\"all\" label=\"All items\" />\n      <Tab value=\"active\" label=\"Active\" />\n      <Tab value=\"archived\" label=\"Archived\" />\n      <div\n        style={{\n          marginInlineStart: 'auto',\n          display: 'flex',\n          alignItems: 'center',\n          gap: 4,\n        }}>\n        <Button\n          label=\"Filter\"\n          variant=\"ghost\"\n          size=\"lg\"\n          icon={FilterIcon}\n          isIconOnly\n        />\n        <Button label=\"New item\" variant=\"primary\" size=\"lg\" icon={PlusIcon} />\n      </div>\n    </TabList>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

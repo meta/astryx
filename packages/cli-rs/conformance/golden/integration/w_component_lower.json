@@ -1,0 +1,14 @@
+{
+ "id": "w_component_lower",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "acmeWidget"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"acmeWidget\": use PascalCase starting with an uppercase letter (e.g. MyWidget).\n",
+ "exit": 1,
+ "files": []
+}

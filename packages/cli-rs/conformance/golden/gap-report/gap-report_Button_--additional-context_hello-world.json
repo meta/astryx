@@ -1,0 +1,14 @@
+{
+ "id": "gap-report_Button_--additional-context_hello-world",
+ "args": [
+  "gap-report",
+  "Button",
+  "--additional-context",
+  "hello world"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

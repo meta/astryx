@@ -1,0 +1,18 @@
+{
+ "id": "build_Item",
+ "args": [
+  "build",
+  "Item"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"Item\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        work-item-detail\npackage:     @astryxdesign/core\ndescription: Single work-item detail in two columns: a title with a status selector, a description, a subtask checklist with progress, an attachments block, and a comment and activity feed in the main column, plus a property rail with assignee, dates, labels, and linked items.\ncommand:     npx @astryxdesign/cli@0.7.12 template work-item-detail --type page <path>\n\nKeyword search matched these page templates: work-item-detail (@astryxdesign/core), canvas-editor (@astryxdesign/core), table-filter (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        useComboboxHookUsage\npackage:     @astryxdesign/core\ndescription: An \"Assign to\" TextInput and a list of Item rows, with the field, listbox and option props from...\n\nname:        useMultiComboboxHookUsage\npackage:     @astryxdesign/core\ndescription: A Labels field built on...\n\nname:        ItemWithMetadata\npackage:     @astryxdesign/core\ndescription: Status rows with an...\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Item\npackage:     @astryxdesign/core\ndescription: A single, flexible item primitive that unifies the \"start content + label + description + end content\" pattern across Astryx.\n\nname:        List\npackage:     @astryxdesign/core\ndescription: A vertical collection of items with consistent spacing, dividers, and optional markers.\n\nname:        ListItem\npackage:     @astryxdesign/core\ndescription: List item with label, description, start/end content slots, and interactive patterns.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

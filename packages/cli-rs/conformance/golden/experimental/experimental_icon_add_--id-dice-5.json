@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--id-dice-5",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--id=dice-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

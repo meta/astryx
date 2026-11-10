@@ -1,0 +1,14 @@
+{
+ "id": "docs_motion_theme-motion_--json_@large",
+ "args": [
+  "docs",
+  "motion",
+  "theme-motion",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"theme-motion\",\n    \"title\": \"Tune motion from the theme\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens, and `tempo` also times the springs of touch motion; those springs don't follow `character` yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.\"\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"unordered\",\n        \"items\": [\n          \"`tempo` scales every motion duration: 1 is Astryx's own, 0.75 the quickest and 1.5 the slowest (values outside are clamped).\",\n          \"`character` sets how lively motion is: `'crisp'` decelerates without overshoot, `'standard'` is Astryx's own, and `'expressive'` overshoots slightly on entrances and moves. Exits and fades never overshoot.\"\n        ]\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"ts\",\n        \"code\": \"export const brandTheme = defineTheme({\\n  name: 'brand',\\n  motion: {tempo: 0.85, character: 'crisp'},\\n});\",\n        \"label\": \"A quicker, crisper theme\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Some motion never follows the knobs, because it tracks a finger or the system: finger tracking, momentum and the rubber band, the on-screen keyboard, the press model's onset delay, cancel distance and tap flash (its release fade follows tempo), hover-intent delays, gesture thresholds, the loops of busy indicators such as Spinner and Skeleton, and the 200 ms Reduce Motion cross-fade.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Precedence, lowest to highest: the knobs, then a duration scale (`fast`, `medium`, `slow`, `ratio`) for the durations it sets, then explicit `tokens`. A theme with no `motion` renders exactly as before.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs motion --index\",\n      \"previous\": \"astryx docs motion usage\",\n      \"next\": \"astryx docs motion best-practices\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_list_name",
+ "args": [
+  "template",
+  "login",
+  "--list"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--list` cannot be combined with <name>: it lists templates and does not scaffold.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "discover_--type",
+ "args": [
+  "discover",
+  "--type"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--type <kind>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

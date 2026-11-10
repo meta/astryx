@@ -1,0 +1,18 @@
+{
+ "id": "search_DropdownMenuSubMenu",
+ "args": [
+  "search",
+  "DropdownMenuSubMenu"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"DropdownMenuSubMenu\" (3)\n\nname:        DropdownMenuSubMenu\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: A single menu row that reveals a nested flyout of its own items. The row adopts DropdownMenuItem semantics (label / icon / description / isDisabled); its children become the flyout content. Opens inline-end with viewport auto-flip; Right/Enter/Space opens and focuses the first item, Left/Escape closes and returns focus to the trigger (Right/Left swap in RTL). On a phone (a coarse pointer, decided when the menu opened) the row drills in instead: its rows replace the menu's rows in the same box, led by a Back row named \"Back to <parent>\", and Back, Escape or ArrowLeft return to the row. Host attributes and DOM event handlers (aria-*, data-*, id) reach the trigger row, the element carrying role=\"menuitem\" and aria-haspopup=\"menu\"; a caller's handlers run after the row's own, except for the keys that open the flyout (the open arrow, Enter, Space) and a click on a disabled row. For data-driven menus, give a menu item a nested `items` array instead of using this component directly.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuSubMenu\n\nname:        canvas-editor\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Canvas Editor\nkind:        page\ndescription: Layered artboard workspace: document tabs over a layer rail, a fixed-size frame you zoom on a muted backdrop, and an inspector of position, type, and filter fields that retargets to the selected layer. Objects hold a coordinate rather than reflowing, so moving one never moves another.\ncommand:     npx @astryxdesign/cli@0.7.12 template canvas-editor --type page\n\nname:        useMenuPress\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: The press model of macOS and iOS menus, for any pointer: the row under the pointer when it is RELEASED is the row that acts, the highlight follows the pointer while it is held, a mouse opens the menu on press and can drag straight into it, and a finger held on the trigger opens it with the finger still down. The pointer is tracked at document level by pointerId, so a finger that slid off the row it landed on is still followed; the click the browser reports at the end of a touch, aimed at the row where the touch began, is swallowed so nothing acts twice. DropdownMenu, ContextMenu, DropdownMenuSubMenu, Selector and the menu bottom sheet already mount it; reach for it directly only when building a menu-like surface of your own.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useMenuPress\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover DropdownMenuSubMenu\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

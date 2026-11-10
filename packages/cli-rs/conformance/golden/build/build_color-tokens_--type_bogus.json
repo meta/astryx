@@ -1,0 +1,14 @@
+{
+ "id": "build_color-tokens_--type_bogus",
+ "args": [
+  "build",
+  "color tokens",
+  "--type",
+  "bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown --type \"bogus\"\n\n  component  (valid type)\n  hook  (valid type)\n  doc  (valid type)\n  template  (valid type)\n  theme  (valid type)\n",
+ "exit": 1,
+ "files": []
+}

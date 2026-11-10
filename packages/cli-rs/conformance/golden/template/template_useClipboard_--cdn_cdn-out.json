@@ -1,0 +1,14 @@
+{
+ "id": "template_useClipboard_--cdn_cdn-out",
+ "args": [
+  "template",
+  "useClipboard",
+  "--cdn",
+  "cdn-out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--cdn` cannot be combined with <name>: the CDN starter does not use templates.\n",
+ "exit": 1,
+ "files": []
+}

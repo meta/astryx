@@ -1,0 +1,13 @@
+{
+ "id": "theme_palette_nosuchsub",
+ "args": [
+  "theme",
+  "palette",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette nosuchsub'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

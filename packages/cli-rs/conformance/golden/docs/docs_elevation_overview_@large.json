@@ -1,0 +1,19 @@
+{
+ "id": "docs_elevation_overview_@large",
+ "args": [
+  "docs",
+  "elevation",
+  "overview"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Overview\n\nElevation tokens create depth through box-shadow. Three levels (low, med, high) establish a visual hierarchy for floating elements. Inset shadows provide focus and selection rings for interactive components.\n\nUp: npx @astryxdesign/cli@0.7.12 docs elevation --index\nNext: npx @astryxdesign/cli@0.7.12 docs elevation elevation-scale\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_component_button",
+ "args": [
+  "component",
+  "button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"button\"\n\n  Button  (same name)\n  IconButton  (keyword \"button\")\n",
+ "exit": 1,
+ "files": []
+}

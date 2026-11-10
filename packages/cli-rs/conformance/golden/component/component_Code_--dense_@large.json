@@ -1,0 +1,19 @@
+{
+ "id": "component_Code_--dense_@large",
+ "args": [
+  "component",
+  "Code",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Code\n\nUse for short function names, variables, paths, and CLI flags inside prose. Use CodeBlock for standalone or multi-line snippets.\n\n**Import:** `import {Code} from '@astryxdesign/core/Code';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Container | Yes | The semantic code element that contains the inline code content and paints the background, typography, padding, and radius. |\n\n## Best Practices\n\n- **Do:** Use for short technical references inside prose.\n- **Do:** Set size='inherit' to match surrounding text size and line height.\n- **Don't:** Use for multi-line or standalone snippets; use CodeBlock instead.\n- **Don't:** Use as an interactive control; pair with Button or Link for actions.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | inline code content. **(required)** |\n| `color` | `'primary' \\| 'secondary' \\| 'inherit'` | `'primary'` | text color: primary, secondary, or inherited from surrounding text. |\n| `size` | `'inherit'` | - | set to 'inherit' to take the surrounding font size and line height. |\n| `ref` | `React.Ref<HTMLElement>` | - | ref forwarded to the semantic code element. |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles; must be a stylex.create() value, not an inline style object. |\n| `className` | `string` | - | CSS class for the root; prefer xstyle. |\n| `style` | `CSSProperties` | - | inline styles for the root; prefer xstyle. |\n| `data-testid` | `string` | - | test selector for automated testing frameworks. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-code` | `data-color`, `data-size` | color, size | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'code': {\n    base: { /* CSS properties */ },\n    'color:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

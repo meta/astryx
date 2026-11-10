@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_card_--json",
+ "args": [
+  "theme",
+  "targets",
+  "card",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"card\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"card\",\n        \"className\": \"astryx-card\",\n        \"component\": \"Card\",\n        \"props\": [\n          \"variant\",\n          \"elevation\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_stat_@large",
+ "args": [
+  "component",
+  "stat"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"stat\"\n\n  StatusDot  (keyword \"status\")\n  Badge  (keyword \"status\")\n  Banner  (keyword \"status\")\n  Toast  (keyword \"status\")\n  CheckboxInput  (keyword \"tristate\")\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_CheckboxListSelectAllPattern_@large",
+ "args": [
+  "template",
+  "CheckboxListSelectAllPattern"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';\n\nconst DOCUMENTS = [\n  {id: 'transactions', label: 'Transaction history'},\n  {id: 'statements', label: 'Account statements'},\n  {id: 'tax', label: 'Tax documents'},\n  {id: 'invoices', label: 'Invoices'},\n];\n\nconst ALL_IDS = DOCUMENTS.map(d => d.id);\n\nexport default function CheckboxListSelectAllPattern() {\n  const [selected, setSelected] = useState<string[]>(['transactions']);\n\n  const allChecked = ALL_IDS.every(id => selected.includes(id));\n  const noneChecked = selected.length === 0;\n  const selectAllState = allChecked\n    ? true\n    : noneChecked\n      ? false\n      : ('indeterminate' as const);\n\n  return (\n    <CheckboxList label=\"Include in export\" hasDividers>\n      <CheckboxListItem\n        label=\"Select all\"\n        isChecked={selectAllState}\n        onCheck={checked => {\n          setSelected(checked ? [...ALL_IDS] : []);\n        }}\n      />\n      {DOCUMENTS.map(doc => (\n        <CheckboxListItem\n          key={doc.id}\n          label={doc.label}\n          isChecked={selected.includes(doc.id)}\n          onCheck={checked => {\n            setSelected(prev =>\n              checked ? [...prev, doc.id] : prev.filter(v => v !== doc.id),\n            );\n          }}\n        />\n      ))}\n    </CheckboxList>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

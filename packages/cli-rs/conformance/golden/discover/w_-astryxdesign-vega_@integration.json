@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-vega_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/vega"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/vega\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

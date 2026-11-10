@@ -1,0 +1,18 @@
+{
+ "id": "template_ToolbarBulkActions_@large",
+ "args": [
+  "template",
+  "ToolbarBulkActions"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Toolbar} from '@astryxdesign/core/Toolbar';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Table} from '@astryxdesign/core/Table';\nimport {\n  useTableSelection,\n  useTableSelectionState,\n} from '@astryxdesign/core/Table';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {TrashIcon, ArchiveBoxIcon} from '@heroicons/react/24/outline';\n\nconst DATA = [\n  {id: '1', name: 'Alex Johnson', status: 'Active', role: 'Admin'},\n  {id: '2', name: 'Sam Rivera', status: 'Active', role: 'Editor'},\n  {id: '3', name: 'Jordan Lee', status: 'Invited', role: 'Viewer'},\n  {id: '4', name: 'Taylor Kim', status: 'Active', role: 'Editor'},\n  {id: '5', name: 'Casey Park', status: 'Active', role: 'Viewer'},\n];\n\nexport default function ToolbarBulkActions() {\n  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(\n    () => new Set(['1', '3', '5']),\n  );\n\n  const {selectionConfig} = useTableSelectionState({\n    data: DATA,\n    idKey: 'id',\n    selectedKeys,\n    setSelectedKeys,\n  });\n\n  const selectionPlugin = useTableSelection(selectionConfig);\n\n  return (\n    <Stack direction=\"vertical\">\n      {selectedKeys.size > 0 && (\n        <Toolbar\n          label=\"Bulk actions\"\n          size=\"sm\"\n          variant=\"muted\"\n          dividers={['bottom']}\n          startContent={\n            <>\n              <Badge label={`${selectedKeys.size} selected`} />\n              <Button\n                label=\"Delete\"\n                variant=\"ghost\"\n                icon={<Icon icon={TrashIcon} />}\n                isIconOnly\n              />\n              <Button\n                label=\"Archive\"\n                variant=\"ghost\"\n                icon={<Icon icon={ArchiveBoxIcon} />}\n                isIconOnly\n              />\n            </>\n          }\n          endContent={\n            <Button\n              label=\"Deselect all\"\n              variant=\"ghost\"\n              onClick={() => setSelectedKeys(new Set())}\n            />\n          }\n        />\n      )}\n      <Table\n        idKey=\"id\"\n        columns={[\n          {key: 'name', header: 'Name'},\n          {key: 'status', header: 'Status'},\n          {key: 'role', header: 'Role'},\n        ]}\n        data={DATA}\n        plugins={{selection: selectionPlugin}}\n      />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

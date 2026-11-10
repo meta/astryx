@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatTokenizedText_--blocks_@large",
+ "args": [
+  "component",
+  "ChatTokenizedText",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nExamples\n\nname:        ChatTokenizedTextBasic\ndescription: A message with @mention tokens. Each matching pattern is replaced with its display name badge.\n\nname:        ChatTokenizedTextColors\ndescription: Tokens with different color variants to distinguish mentions, bugs, and features. Use variant colors to create a visual taxonomy: blue for people, red for bugs, green for features.\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

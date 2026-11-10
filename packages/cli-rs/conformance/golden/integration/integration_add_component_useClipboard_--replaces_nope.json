@@ -1,0 +1,16 @@
+{
+ "id": "integration_add_component_useClipboard_--replaces_nope",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--replaces",
+  "nope"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"replaces\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "global_--version_component",
+ "args": [
+  "--version",
+  "component"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

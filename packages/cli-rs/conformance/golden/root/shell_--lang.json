@@ -1,0 +1,11 @@
+{
+ "id": "shell_--lang",
+ "args": [
+  "--lang"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--lang <locale>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

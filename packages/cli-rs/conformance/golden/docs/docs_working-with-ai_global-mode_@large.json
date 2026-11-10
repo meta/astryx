@@ -1,0 +1,19 @@
+{
+ "id": "docs_working-with-ai_global-mode_@large",
+ "args": [
+  "docs",
+  "working-with-ai",
+  "global-mode"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## In global mode\n\nIn global mode: your global install keeps one Astryx skill in your home folder, linked into the folders agent tools read, so agents outside any project know Astryx is there; inside a project, its own agent docs come first. See `npx @astryxdesign/cli@0.7.12 docs global` and `npx @astryxdesign/cli@0.7.12 docs global/computer-agent-guide`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai mcp-server\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

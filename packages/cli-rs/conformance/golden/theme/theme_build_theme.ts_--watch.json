@@ -1,0 +1,14 @@
+{
+ "id": "theme_build_theme.ts_--watch",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--watch"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/theme.ts\n",
+ "exit": 1,
+ "files": []
+}

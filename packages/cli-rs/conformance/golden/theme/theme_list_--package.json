@@ -1,0 +1,13 @@
+{
+ "id": "theme_list_--package",
+ "args": [
+  "theme",
+  "list",
+  "--package"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--package <package>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

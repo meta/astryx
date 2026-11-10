@@ -1,0 +1,14 @@
+{
+ "id": "theme_palette_generate_..-inputs-not-json.json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/not-json.json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid palette config path \"../inputs/not-json.json\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

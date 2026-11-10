@@ -1,0 +1,13 @@
+{
+ "id": "template_ToastDismiss_--json_@large",
+ "args": [
+  "template",
+  "ToastDismiss",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ToastDismiss\",\n    \"description\": \"Show a persistent toast and dismiss it programmatically using the function returned by useToast. Use for long-running operations that need manual cleanup.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Toast\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\n// In production, use useToast() hook for proper positioning, stacking, and lifecycle.\\n\\nimport {useRef} from 'react';\\nimport {Toast} from '@astryxdesign/core/Toast';\\nimport {useToast} from '@astryxdesign/core/Toast';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {VStack, HStack} from '@astryxdesign/core/Layout';\\n\\nexport default function ToastDismiss() {\\n  const toast = useToast();\\n  const dismissRef = useRef<(() => void) | null>(null);\\n\\n  return (\\n    <VStack gap={3}>\\n      <Toast\\n        type=\\\"info\\\"\\n        body=\\\"Uploading file…\\\"\\n        isAutoHide={false}\\n        autoHideDuration={5000}\\n        isExiting={false}\\n        onDismiss={() => {}}\\n      />\\n      <HStack gap={3} vAlign=\\\"center\\\">\\n        <Button\\n          label=\\\"Show toast\\\"\\n          variant=\\\"secondary\\\"\\n          size=\\\"sm\\\"\\n          onClick={() => {\\n            dismissRef.current = toast({\\n              body: 'Uploading file…',\\n              isAutoHide: false,\\n            });\\n          }}\\n        />\\n        <Button\\n          label=\\\"Dismiss via code\\\"\\n          variant=\\\"ghost\\\"\\n          size=\\\"sm\\\"\\n          onClick={() => {\\n            dismissRef.current?.();\\n            dismissRef.current = null;\\n          }}\\n        />\\n      </HStack>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

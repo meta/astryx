@@ -1,0 +1,19 @@
+{
+ "id": "docs_styling-overview_other-packages_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "other-packages"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Other Astryx packages\n\nEvery Astryx package whose components carry styles ships its own prebuilt stylesheet. Import it after `astryx.css` for each package you use. All of them place their rules in the same `astryx-base` layer, so your theme overrides win over every package.\n\nglobals.css:\n```css\n@import \"@astryxdesign/core/reset.css\";\n@import \"@astryxdesign/core/astryx.css\";\n@import \"@astryxdesign/richtext/richtext.css\"; /* Rich Text */\n@import \"@astryxdesign/lab/lab.css\"; /* Lab */\n@import \"@astryxdesign/charts/charts.css\"; /* Charts */\n@import \"@astryxdesign/theme-neutral/theme.css\";\n```\n\nPackage                | Stylesheet                         \n---------------------- | -----------------------------------\n@astryxdesign/core     | @astryxdesign/core/astryx.css      \n@astryxdesign/richtext | @astryxdesign/richtext/richtext.css\n@astryxdesign/lab      | @astryxdesign/lab/lab.css          \n@astryxdesign/charts   | @astryxdesign/charts/charts.css    \n\nUp: npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview stylex-own-code\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview what-each-file-does\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

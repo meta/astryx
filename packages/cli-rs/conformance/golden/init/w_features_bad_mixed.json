@@ -1,0 +1,13 @@
+{
+ "id": "w_features_bad_mixed",
+ "args": [
+  "init",
+  "--features",
+  "agents,nope,x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown features: nope, x. Valid features: agents, theme, template\n",
+ "exit": 1,
+ "files": []
+}

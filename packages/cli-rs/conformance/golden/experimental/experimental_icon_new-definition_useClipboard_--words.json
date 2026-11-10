@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-definition_useClipboard_--words",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "useClipboard",
+  "--words"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--words <list>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

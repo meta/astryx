@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatEmojiPicker_--dense_@large",
+ "args": [
+  "component",
+  "ChatEmojiPicker",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatEmojiPicker\n\npopover emoji grid on a trigger button; shortname filter + 8-col arrow-key nav; onSelect closes + restores focus; DEFAULT_CHAT_EMOJIS overridable\n\n**Import:** `import {ChatEmojiPicker} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `onSelect` | `(emoji: string) => void` | - | (emoji)=>void; closes popover **(required)** |\n| `emojis` | `readonly {emoji: string; name: string}[]` | `DEFAULT_CHAT_EMOJIS` | {emoji,name}[] grid options, 8/row; name drives filter + aria |\n| `label` | `string` | `'Pick an emoji'` | popover dialog aria label |\n| `searchLabel` | `string` | `'Search emoji'` | filter input placeholder + hidden label |\n| `children` | `ReactNode` | - | trigger element containing a button **(required)** |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

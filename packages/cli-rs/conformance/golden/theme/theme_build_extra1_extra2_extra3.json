@@ -1,0 +1,15 @@
+{
+ "id": "theme_build_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "build",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/extra1\n",
+ "exit": 1,
+ "files": []
+}

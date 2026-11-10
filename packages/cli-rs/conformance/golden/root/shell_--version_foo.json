@@ -1,0 +1,12 @@
+{
+ "id": "shell_--version_foo",
+ "args": [
+  "--version",
+  "foo"
+ ],
+ "fixture": "app",
+ "stdout": "0.7.12\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

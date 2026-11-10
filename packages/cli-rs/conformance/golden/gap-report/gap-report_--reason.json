@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--reason",
+ "args": [
+  "gap-report",
+  "--reason"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--reason <reason>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

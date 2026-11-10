@@ -1,0 +1,18 @@
+{
+ "id": "build_Markdown",
+ "args": [
+  "build",
+  "Markdown"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"Markdown\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: ai-chat (@astryxdesign/core), table-tree (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        MarkdownCompactAIResponse\npackage:     @astryxdesign/core\ndescription: Compact markdown styled for AI responses with shifted heading levels\n\nname:        MarkdownShowcase\npackage:     @astryxdesign/core\ndescription: Rich markdown content with headings, lists, and formatting.\n\nname:        MarkdownRichContent\npackage:     @astryxdesign/core\ndescription: Markdown with headings, lists, code blocks, tables, blockquotes, and task lists\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Markdown\npackage:     @astryxdesign/core\ndescription: Renders a markdown string as Astryx-styled components.\n\nname:        useOutlineFromMarkdown\npackage:     @astryxdesign/core\ndescription: Extracts the headings of a Markdown string for an Outline next to the rendered document.\n\nname:        useStreamingText\npackage:     @astryxdesign/core\ndescription: Smooths bursty streamed text into a steady character-by-character reveal using requestAnimationFrame.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

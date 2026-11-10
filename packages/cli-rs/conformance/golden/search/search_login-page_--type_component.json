@@ -1,0 +1,20 @@
+{
+ "id": "search_login-page_--type_component",
+ "args": [
+  "search",
+  "login page",
+  "--type",
+  "component"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"login page\" (4)\n\nname:        Center\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Center\ndescription: Center aligns content to the middle of its container. Use it for empty states, loading screens, login forms, or any content that should sit in the center of the available space.\ncommand:     npx @astryxdesign/cli@0.7.12 component Center\n\nname:        SideNavHeading\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/SideNav\ndescription: Product/suite/account heading with smart interaction boundary logic for links and a menu popover.\ncommand:     npx @astryxdesign/cli@0.7.12 component SideNavHeading\n\nname:        TopNavHeading\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: Product/suite/account heading for the TopNav heading slot. Supports smart interaction boundary logic: logo, heading text, superheading/subheading with independent links, and an optional menu popover with automatic chevron indicator.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavHeading\n\nname:        Button\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Button\ndescription: Button triggers an action when clicked. Use it for form submissions, confirmations, navigation, or any interaction that needs a clear call to action.\ncommand:     npx @astryxdesign/cli@0.7.12 component Button\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'login page'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

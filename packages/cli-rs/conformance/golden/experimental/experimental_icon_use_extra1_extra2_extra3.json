@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_use_extra1_extra2_extra3",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"extra1\"\n",
+ "exit": 1,
+ "files": []
+}

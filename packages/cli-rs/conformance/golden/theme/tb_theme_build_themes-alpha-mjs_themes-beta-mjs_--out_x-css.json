@@ -1,0 +1,16 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_--out_x-css",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "themes/beta.mjs",
+  "--out",
+  "x.css"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: --out takes a single output path and 2 theme files were given. Build them without --out (each theme writes <name>.css next to its source), or run one invocation per theme.\n",
+ "exit": 1,
+ "files": []
+}

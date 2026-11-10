@@ -1,0 +1,14 @@
+{
+ "id": "swizzle_Button_--output_-tmp-astryx-conformance-work-app-abs-out",
+ "args": [
+  "swizzle",
+  "Button",
+  "--output",
+  "/tmp/astryx-conformance/work/app/abs-out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid output directory \"/tmp/astryx-conformance/work/app/abs-out\": absolute paths are not allowed. Use a path relative to the project root.\n",
+ "exit": 1,
+ "files": []
+}

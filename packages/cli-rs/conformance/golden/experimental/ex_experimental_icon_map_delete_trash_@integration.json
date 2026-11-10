@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_icon_map_delete_trash_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "delete",
+  "trash"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

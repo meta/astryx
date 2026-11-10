@@ -1,0 +1,20 @@
+{
+ "id": "component_DropdownMenuItem_--detail_compact_@large",
+ "args": [
+  "component",
+  "DropdownMenuItem",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# DropdownMenuItem\n\nUse DropdownMenuItem inside DropdownMenu compound mode for one action or destination. Keep label, description, icon, and endContent non-interactive; controls belong in separate rows or the menu header/footer.\n\nAnatomy: Row, Content\n\n## Import\n\n```tsx\nimport { DropdownMenuItem } from '@astryxdesign/core/DropdownMenu';\n```\n\n## Best Practices\n\n- **Do:** Use href for a destination so LinkProvider, modified clicks, middle clicks, and browser link affordances remain available.\n- **Do:** Use hasCloseOnSelect=false only when activation reports a result in place on the same row.\n- **Don't:** Put buttons, links, or other focusable controls inside label, description, or endContent. Each menu row is one interactive target.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `icon` | `IconType` | - | Icon to display before the label. See `astryx docs icons` for valid semantic names. |\n| `label` | `ReactNode` | - | Primary label text. **(required)** |\n| `description` | `ReactNode` | - | Secondary description text displayed below the label. |\n| `onClick` | `(event: MouseEvent) => void` | - | Callback when the item is selected. A keyboard activation arrives as a synthesized click carrying the key's modifiers. On a row with `href` it runs before the browser navigates and is skipped for a modified click (⌘, Ctrl, Shift, Alt, middle button), which is left to the browser. |\n| `href` | `string` | - | Address the row navigates to. The row then renders as a real anchor with role=\"menuitem\" (through LinkProvider), so a modified click or a middle click keeps the browser's meaning — a new tab — instead of running onClick. |\n| `target` | `'_blank' \\| '_self'` | - | Link target. Only used with href. |\n| `rel` | `string` | - | Link relationship. noopener noreferrer is added for target=\"_blank\". Only used with href. |\n| `isDisabled` | `boolean` | `false` | Whether the row is unavailable. Disabled rows expose aria-disabled, remove link destinations, and suppress activation. |\n| `endContent` | `ReactNode` | - | Non-interactive content rendered after the label and description. |\n| `hasCloseOnSelect` | `boolean` | `true` | Whether activating the item closes the menu. Set false for an action that reports its result on the item itself. |\n| `variant` | `'default' \\| 'destructive'` | `'default'` | Visual variant. 'destructive' renders the label, description, and icon in the error color for dangerous actions (e.g. Delete). |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}. |\n| `ref` | `React.Ref<HTMLElement>` | - | Ref forwarded to the row root, the element carrying role=\"menuitem\". Register the row with an element-keyed observer or overlay. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

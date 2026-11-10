@@ -1,0 +1,14 @@
+{
+ "id": "ex_experimental_icon_use_outline_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "outline"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon use works only in a project. Run it in the app project.\n",
+ "exit": 1,
+ "files": []
+}

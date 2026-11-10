@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_templates_noname",
+ "args": [
+  "doctor",
+  "integration",
+  "templates"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Checking integration templates: (local package)\n\n[ok] No template ids conflict with Core.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_validate_nope-absent_configured",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "@nope/absent"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Validating integration: @nope/absent\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"@nope/absent\" at /tmp/astryx-conformance/work/doctor-integrations/configured/node_modules/@nope/absent/package.json. Install it first.\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

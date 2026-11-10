@@ -1,0 +1,17 @@
+{
+ "id": "doctor_integration_validate_extra1_extra2_extra3_--json",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"extra1\",\n    \"version\": null,\n    \"issues\": [\n      {\n        \"code\": \"package_not_found\",\n        \"severity\": \"error\",\n        \"message\": \"Could not find installed integration package \\\"extra1\\\" at /tmp/astryx-conformance/work/app/node_modules/extra1/package.json. Install it first.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "search_@integration",
+ "args": [
+  "search"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'query'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "build_--type",
+ "args": [
+  "build",
+  "--type"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--type <domain>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

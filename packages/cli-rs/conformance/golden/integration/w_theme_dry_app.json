@@ -1,0 +1,21 @@
+{
+ "id": "w_theme_dry_app",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "ocean",
+  "--dry-run"
+ ],
+ "fixture": "app",
+ "stdout": "theme contribution plan\n\n[plan] ocean\n\nDeclare theme root ./themes in astryx.integration.mjs.\n\n- themes/ocean/oceanTheme.ts\n- themes/ocean/oceanTheme.doc.mjs\n- package.json\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "d_app_init_then_remove",
+ "args": [
+  "init",
+  "--remove-agents"
+ ],
+ "fixture": "app",
+ "stdout": "[ok] Removed empty AGENTS.md\n[ok] Removed empty GEMINI.md\n[ok] AI agent docs removed.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

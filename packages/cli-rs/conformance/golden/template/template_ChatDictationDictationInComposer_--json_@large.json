@@ -1,0 +1,13 @@
+{
+ "id": "template_ChatDictationDictationInComposer_--json_@large",
+ "args": [
+  "template",
+  "ChatDictationDictationInComposer",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatDictationDictationInComposer\",\n    \"description\": \"Dictation button placed in the sendActions slot of a chat composer. Shows the recommended integration point for voice input alongside the send button.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatComposer\",\n      \"ChatDictationButton\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ChatDictationButton, ChatComposer} from '@astryxdesign/core/Chat';\\nimport type {UseSpeechRecognitionReturn} from '@astryxdesign/core/Chat';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst noop = () => {};\\n\\nconst idleDictation: UseSpeechRecognitionReturn = {\\n  volume: 0,\\n  rawBands: [0, 0, 0, 0, 0],\\n  bands: [0, 0, 0, 0, 0],\\n  isSupported: true,\\n  isListening: false,\\n  isSpeaking: false,\\n  interimTranscript: '',\\n  start: noop,\\n  stop: noop,\\n  abort: noop,\\n  toggle: noop,\\n};\\n\\nexport default function ChatDictationDictationInComposer() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={3} style={{width: '100%', maxWidth: 450}}>\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Dictation button in the sendActions slot\\n      </Text>\\n      <ChatComposer\\n        onSubmit={() => {}}\\n        placeholder=\\\"Type or tap the mic to dictate...\\\"\\n        sendActions={<ChatDictationButton dictation={idleDictation} />}\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

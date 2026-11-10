@@ -1,0 +1,29 @@
+{
+ "id": "w_all_IconButton",
+ "args": [
+  "swizzle",
+  "IconButton",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"swizzle.copy\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"component\": \"IconButton\",\n    \"package\": \"@astryxdesign/core\",\n    \"outputDir\": \"components/astryx/IconButton\",\n    \"filesCopied\": 2,\n    \"files\": [\n      \"index.ts\",\n      \"IconButton.tsx\"\n    ],\n    \"usesStyleX\": false,\n    \"dependencies\": {\n      \"react\": \">=19.0.0\"\n    },\n    \"marker\": {\n      \"path\": \"components/astryx/astryx-swizzle.json\",\n      \"written\": true\n    },\n    \"feedback\": {\n      \"issuesUrl\": \"https://github.com/meta/astryx/issues/new\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/components/astryx/IconButton/IconButton.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file IconButton.tsx\n * @input Uses Button, ButtonProps\n * @output Exports IconButton component, IconButtonProps type\n * @position Composition wrapper over Button for icon-only buttons\n *\n * SYNC: When modified, update these files to stay in sync:\n * - /packages/core/src/IconButton/IconButton.doc.mjs (props table, features)\n * - /packages/core/src/IconButton/IconButton.test.tsx (tests)\n * - /packages/core/src/IconButton/index.ts (exports if types change)\n * - /apps/storybook/stories/IconButton.stories.tsx (storybook stories)\n * - /packages/cli/assets/templates/blocks/components/IconButton/ (showcase blocks)\n */\n\nimport type {ReactNode} from 'react';\nimport {Button} from '@astryxdesign/core/Button';\nimport type {ButtonProps} from '@astryxdesign/core/Button';\n\n/**\n * Props for IconButton.\n *\n * Omits `isIconOnly` (always true), `children` and `endContent` (not applicable\n * for icon-only buttons). `icon` is required.\n */\nexport interface IconButtonProps extends Omit<\n  ButtonProps,\n  'isIconOnly' | 'children' | 'endContent'\n> {\n  /** Icon element rendered inside the button (required). */\n  icon: ReactNode;\n}\n\n/**\n * An icon-only button — a thin wrapper around Button with `isIconOnly`\n * always set to true.\n *\n * Use this instead of `<Button isIconOnly>` for explicit, greppable,\n * and codemod-safe icon-only button usage.\n *\n * @example\n * ```\n * <IconButton label=\"Settings\" icon={<GearIcon />} variant=\"ghost\" />\n * <IconButton label=\"Delete\" icon={<TrashIcon />} variant=\"destructive\" />\n * <IconButton label=\"Emoji\" icon={<span>🚀</span>} variant=\"ghost\" size=\"sm\" />\n * ```\n */\nexport function IconButton({icon, ...props}: IconButtonProps): ReactNode {\n  return <Button {...props} icon={icon} isIconOnly />;\n}\n\nIconButton.displayName = 'IconButton';\n"
+  },
+  {
+   "path": "app/components/astryx/IconButton/index.ts",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @file index.ts\n * @input Imports IconButton component and types from IconButton.tsx\n * @output Exports IconButton, IconButtonProps\n * @position Component entry point; re-exported by /packages/core/src/index.ts\n *\n * SYNC: When modified, update this header and /packages/core/src/IconButton/IconButton.doc.mjs\n */\n\nexport {IconButton} from './IconButton';\nexport type {IconButtonProps} from './IconButton';\n"
+  },
+  {
+   "path": "app/components/astryx/astryx-swizzle.json",
+   "status": "created",
+   "text": "{\n  \"packages\": {\n    \"@astryxdesign/core\": \"0.7.12\"\n  }\n}\n"
+  }
+ ]
+}

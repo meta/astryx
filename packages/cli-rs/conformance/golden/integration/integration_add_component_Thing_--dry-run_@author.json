@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_Thing_--dry-run_@author",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "Thing",
+  "--dry-run"
+ ],
+ "fixture": "author",
+ "stdout": "component contribution plan\n\n[plan] Thing\n\nUse component root ./src/components in astryx.integration.mjs.\n\n- src/components/Thing.doc.mjs\n- src/components/Thing.tsx\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

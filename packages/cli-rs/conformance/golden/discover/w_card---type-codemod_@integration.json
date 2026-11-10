@@ -1,0 +1,14 @@
+{
+ "id": "w_card---type-codemod_@integration",
+ "args": [
+  "discover",
+  "card",
+  "--type",
+  "codemod"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: \"card\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

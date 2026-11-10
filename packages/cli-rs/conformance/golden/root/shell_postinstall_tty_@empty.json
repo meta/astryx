@@ -1,0 +1,11 @@
+{
+ "id": "shell_postinstall_tty_@empty",
+ "args": [
+  "postinstall"
+ ],
+ "fixture": "empty",
+ "stdout": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\r\n\r\n  ╭───────────────────────────────────────────────────╮\r\n  │                                                  │\r\n  │   Design system installed!                       │\r\n  │                                                  │\r\n  │   Get started:                                   │\r\n  │     npx @astryxdesign/cli@0.7.12 init          Setup + AI agent docs│\r\n  │     npx @astryxdesign/cli@0.7.12 --help        See all commands│\r\n  │                                                  │\r\n  │   Or run directly:                               │\r\n  │     npx @astryxdesign/cli@0.7.12 init           Setup + AI agent docs│\r\n  │     npx @astryxdesign/cli@0.7.12 component     Browse component docs│\r\n  │     npx @astryxdesign/cli@0.7.12 hook          Browse hook docs│\r\n  │     npx @astryxdesign/cli@0.7.12 docs          Design system reference│\r\n  │     npx @astryxdesign/cli@0.7.12 swizzle       Customize a component│\r\n  │     npx @astryxdesign/cli@0.7.12 template      Add a page template│\r\n  │                                                  │\r\n  ╰───────────────────────────────────────────────────╯\r\n\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

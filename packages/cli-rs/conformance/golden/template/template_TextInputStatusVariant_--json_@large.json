@@ -1,0 +1,13 @@
+{
+ "id": "template_TextInputStatusVariant_--json_@large",
+ "args": [
+  "template",
+  "TextInputStatusVariant",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TextInputStatusVariant\",\n    \"description\": \"The statusVariant prop controls whether the status message is attached to the bordered input (default, overlapping directly below) or detached from it (floating below as a separate element with spacing).\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"TextInput\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {TextInput} from '@astryxdesign/core/TextInput';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function TextInputStatusVariant() {\\n  const [attached, setAttached] = useState('sarah@');\\n  const [detached, setDetached] = useState('sarah@');\\n\\n  return (\\n    <div style={{width: 640}}>\\n      <Stack direction=\\\"horizontal\\\" gap={5}>\\n        <Stack direction=\\\"vertical\\\" gap={2}>\\n          <Text type=\\\"label\\\">attached (default)</Text>\\n          <TextInput\\n            label=\\\"Email\\\"\\n            value={attached}\\n            onChange={setAttached}\\n            placeholder=\\\"you@example.com\\\"\\n            statusVariant=\\\"attached\\\"\\n            status={{\\n              type: 'error',\\n              message: 'Please enter a valid email address.',\\n            }}\\n          />\\n          <Text type=\\\"supporting\\\">\\n            Message overlaps directly below the input.\\n          </Text>\\n        </Stack>\\n        <Stack direction=\\\"vertical\\\" gap={2}>\\n          <Text type=\\\"label\\\">detached</Text>\\n          <TextInput\\n            label=\\\"Email\\\"\\n            value={detached}\\n            onChange={setDetached}\\n            placeholder=\\\"you@example.com\\\"\\n            statusVariant=\\\"detached\\\"\\n            status={{\\n              type: 'error',\\n              message: 'Please enter a valid email address.',\\n            }}\\n          />\\n          <Text type=\\\"supporting\\\">\\n            Message floats below as a separate element with spacing.\\n          </Text>\\n        </Stack>\\n      </Stack>\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

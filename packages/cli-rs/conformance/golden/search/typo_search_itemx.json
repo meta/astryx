@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_itemx",
+ "args": [
+  "search",
+  "itemx"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"itemx\" (1)\n\nname:        List\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/List\ndescription: A vertical collection of items with consistent spacing, dividers, and optional markers. Supports headers, icons, avatars, badges, and interactive items with click or link behavior. Use it to display ordered or unordered groups of related content.\ncommand:     npx @astryxdesign/cli@0.7.12 component List\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover itemx\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

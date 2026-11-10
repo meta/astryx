@@ -1,0 +1,18 @@
+{
+ "id": "template_ChatSystemMessageStatusUpdates_@large",
+ "args": [
+  "template",
+  "ChatSystemMessageStatusUpdates"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatMessageList, ChatSystemMessage} from '@astryxdesign/core/Chat';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {\n  CheckCircleIcon,\n  UserMinusIcon,\n  UserPlusIcon,\n} from '@heroicons/react/24/outline';\n\nexport default function ChatSystemMessageStatusUpdates() {\n  return (\n    <ChatMessageList>\n      <ChatSystemMessage variant=\"divider\">March 14, 2026</ChatSystemMessage>\n      <ChatSystemMessage icon={<Icon icon={UserPlusIcon} />}>\n        Sarah Chen joined the conversation\n      </ChatSystemMessage>\n      <ChatSystemMessage>\n        Topic changed to \"Q2 Launch Planning\"\n      </ChatSystemMessage>\n      <ChatSystemMessage variant=\"divider\">March 15, 2026</ChatSystemMessage>\n      <ChatSystemMessage icon={<Icon icon={UserMinusIcon} />}>\n        Alex Rivera left the conversation\n      </ChatSystemMessage>\n      <ChatSystemMessage variant=\"divider\">Today</ChatSystemMessage>\n      <ChatSystemMessage icon={<Icon icon={CheckCircleIcon} />}>\n        Conversation marked as resolved\n      </ChatSystemMessage>\n    </ChatMessageList>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

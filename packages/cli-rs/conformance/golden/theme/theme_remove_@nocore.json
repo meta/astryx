@@ -1,0 +1,12 @@
+{
+ "id": "theme_remove_@nocore",
+ "args": [
+  "theme",
+  "remove"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+export default {
+  name: 'x',
+
+  transform() {
+    return 1;
+  },
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

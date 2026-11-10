@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_us-a-theme",
+ "args": [
+  "search",
+  "us-a-theme"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"us-a-theme\" (1)\n\nname:        use-a-theme\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Use a theme\ndescription: Apply a theme to your app: install, import with the CLI, wire the generated module, switch dark mode, nest themes, and choose runtime or built for production.\ncommand:     npx @astryxdesign/cli@0.7.12 docs use-a-theme --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover us-a-theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

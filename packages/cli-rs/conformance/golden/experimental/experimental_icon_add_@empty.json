@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_add_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "add"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon add works only in a project. Run it in the icon-set package.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Messages\" endSlot={<XDSBadge label={3} />} />",
+  "output": "<XDSButton label=\"Messages\" endContent={<XDSBadge label={3} />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Edit\" endSlot={badge} />",
+  "output": "<XDSButton label=\"Edit\" endContent={badge} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Edit\" icon={<PencilIcon />} endSlot={<XDSBadge label=\"New\" />}>Edit</XDSButton>",
+  "output": "<XDSButton label=\"Edit\" icon={<PencilIcon />} endContent={<XDSBadge label=\"New\" />}>Edit</XDSButton>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Messages\" endContent={<XDSBadge label={3} />} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenu button={{ label: \"Actions\", endSlot: <XDSBadge label={3} /> }} items={[]} />",
+  "output": "<XDSDropdownMenu button={{ label: \"Actions\", endContent: <XDSBadge label={3} /> }} items={[]} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const props = { label: \"Test\", endSlot: badge };",
+  "output": "const props = { label: \"Test\", endContent: badge };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const { label, endSlot } = props;",
+  "output": "const { label, endContent } = props;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const { endSlot: mySlot } = props;",
+  "output": "const { endContent: mySlot } = props;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/rename-endslot-to-endcontent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<MyButton endSlot={<Icon />} />",
+  "output": "<MyButton endContent={<Icon />} />",
+  "error": null
+ }
+]

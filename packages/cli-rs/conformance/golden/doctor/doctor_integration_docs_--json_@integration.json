@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_docs_--json_@integration",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.doc-conflicts\",\n  \"data\": {\n    \"validated\": false,\n    \"name\": null,\n    \"version\": null,\n    \"findings\": [],\n    \"copiedPassages\": [],\n    \"fluff\": [],\n    \"strayPointers\": [],\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-set_useClipboard_--from",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--from"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--from <module>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

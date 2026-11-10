@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_layout-panel_--json",
+ "args": [
+  "theme",
+  "targets",
+  "layout-panel",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"layout-panel\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"layout-panel\",\n        \"className\": \"astryx-layout-panel\",\n        \"component\": \"Layout\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

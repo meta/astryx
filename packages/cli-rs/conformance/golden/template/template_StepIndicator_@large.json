@@ -1,0 +1,18 @@
+{
+ "id": "template_StepIndicator_@large",
+ "args": [
+  "template",
+  "StepIndicator"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Stepper, Step} from '@astryxdesign/core/Stepper';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Spinner} from '@astryxdesign/core/Spinner';\n\nexport default function StepIndicator() {\n  // The first four steps are all completed — same progress, so the indicator\n  // prop is the only difference between them. `auto` is the one that reacts to\n  // progress: a numbered badge until the step is reached, then a check. The\n  // last step is in progress instead, because the node it passes to `indicator`\n  // is a spinner and a spinner only makes sense on work that is running.\n  return (\n    <div style={{display: 'flex', flexWrap: 'wrap', gap: 24}}>\n      <div style={{width: 190}}>\n        <Text type=\"label\">auto (default)</Text>\n        <Stepper activeStep={1} orientation=\"vertical\">\n          <Step step={0} label=\"Verify email\" />\n        </Stepper>\n      </div>\n      <div style={{width: 190}}>\n        <Text type=\"label\">number</Text>\n        <Stepper activeStep={1} orientation=\"vertical\">\n          <Step step={0} label=\"Verify email\" indicator=\"number\" />\n        </Stepper>\n      </div>\n      <div style={{width: 190}}>\n        <Text type=\"label\">Custom node</Text>\n        <Stepper activeStep={1} orientation=\"vertical\">\n          <Step\n            step={0}\n            label=\"Verify email\"\n            indicator={<Icon icon=\"wrench\" size=\"sm\" />}\n          />\n        </Stepper>\n      </div>\n      <div style={{width: 190}}>\n        <Text type=\"label\">none</Text>\n        <Stepper activeStep={1} orientation=\"vertical\">\n          <Step step={0} label=\"Verify email\" indicator=\"none\" />\n        </Stepper>\n      </div>\n      <div style={{width: 190}}>\n        <Text type=\"label\">Spinner (in progress)</Text>\n        <Stepper activeStep={0} orientation=\"vertical\">\n          <Step\n            step={0}\n            label=\"Verify email\"\n            // `inherit` picks up the indicator's own tint, so the spinner is\n            // colored by the step's progress and status like any other glyph.\n            indicator={<Spinner size=\"md\" shade=\"inherit\" />}\n          />\n        </Stepper>\n      </div>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

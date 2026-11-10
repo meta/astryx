@@ -1,0 +1,14 @@
+{
+ "id": "component_ChatLayoutScrollButton_--props_--json_@large",
+ "args": [
+  "component",
+  "ChatLayoutScrollButton",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"isVisible\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether the button is visible. Bind to a scroll-position check so the button only appears when the user has scrolled up.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Optional label that expands the button (e.g. \\\"New messages\\\"). Use to signal unread content below the fold.\"\n    },\n    {\n      \"name\": \"onClick\",\n      \"type\": \"() => void\",\n      \"description\": \"Click handler: typically scrolls to bottom and dismisses the new message indicator.\",\n      \"required\": true\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

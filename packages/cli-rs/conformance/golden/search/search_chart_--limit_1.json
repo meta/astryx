@@ -1,0 +1,20 @@
+{
+ "id": "search_chart_--limit_1",
+ "args": [
+  "search",
+  "chart",
+  "--limit",
+  "1"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"chart\" (1 of 22)\n\nname:        useTheme\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/theme\ndescription: Programmatic access to theme tokens for non-CSS consumers like SVG, canvas, Vega, D3, maps, or chart libraries that need values in JavaScript instead of CSS custom property references.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useTheme\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover chart\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

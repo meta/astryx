@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"warning\" shape=\"dot\" label=\"Away\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"warning\" label=\"Away\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"success\" shape=\"dot\" label=\"Online\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"positive\" label=\"Online\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"error\" shape=\"dot\" label=\"Offline\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"negative\" label=\"Offline\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"error\" label=\"3\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"success\" shape=\"dot\" label=\"Active\" icon={checkIcon} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"neutral\" shape=\"dot\" label=\"Idle\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"neutral\" label=\"Idle\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"info\" shape=\"dot\" label=\"Info\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"info\" label=\"Info\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<div>\n  <XDSBadge variant=\"error\" shape=\"dot\" label=\"Unread\" />\n  <XDSBadge variant=\"success\" label=\"5\" />\n</div>",
+  "output": "import {XDSBadge} from '@xds/core/Badge';\nimport { XDSStatusDot } from \"@xds/core/StatusDot\";\n<div>\n  <XDSStatusDot variant=\"negative\" label=\"Unread\" />\n  <XDSBadge variant=\"success\" label=\"5\" />\n</div>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Badge variant=\"error\" shape=\"dot\" label=\"x\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton>Click</XDSButton>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"error\" shape=\"dot\" label=\"Status\" xstyle={styles.dot} className=\"my-badge\" data-testid=\"status-dot\" ref={badgeRef} />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot\n  variant=\"negative\"\n  label=\"Status\"\n  xstyle={styles.dot}\n  className=\"my-badge\"\n  data-testid=\"status-dot\"\n  ref={badgeRef} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge shape=\"dot\" label=\"Unknown\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"neutral\" label=\"Unknown\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-badge-dot-to-statusdot",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSBadge} from '@xds/core/Badge';\n<XDSBadge variant=\"error\" shape=\"dot\" label=\"Unread\" />",
+  "output": "import { XDSStatusDot } from \"@xds/core/StatusDot\";\n<XDSStatusDot variant=\"negative\" label=\"Unread\" />",
+  "error": null
+ }
+]

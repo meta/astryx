@@ -1,0 +1,18 @@
+{
+ "id": "component_TypeaheadItem_@large",
+ "args": [
+  "component",
+  "TypeaheadItem"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TypeaheadItem\n\nDefault dropdown item renderer for typeahead results. Shows label with optional icon, description, and avatar. Exported for use in custom renderItem implementations.\n\n**Import:** `import {TypeaheadItem} from '@astryxdesign/core/Typeahead';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `item` | `SearchableItem` | - | The search result item to render. **(required)** |\n| `icon` | `ReactNode` | - | Icon or avatar to display before the label. |\n| `description` | `string` | - | Description text displayed below the label. |\n| `isDisabled` | `boolean` | `false` | Whether this item is visually disabled. |\n| `group` | `string` | - | This prop has no effect. Set `item.auxiliaryData.group` on search-source items to group results in Typeahead or BaseTypeahead. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

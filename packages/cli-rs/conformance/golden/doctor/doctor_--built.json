@@ -1,0 +1,12 @@
+{
+ "id": "doctor_--built",
+ "args": [
+  "doctor",
+  "--built"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--built <path>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

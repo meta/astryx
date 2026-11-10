@@ -1,0 +1,18 @@
+{
+ "id": "template_CollapsibleGroupShowcase_@large",
+ "args": [
+  "template",
+  "CollapsibleGroupShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Stack} from '@astryxdesign/core/Stack';\n\n/**\n * The whole point of the group: open one section and the others close\n * themselves. Nothing here tracks that — no state, no handlers — the group\n * owns which `value` is open and the children only declare their own.\n *\n * One Collapsible per Card, so each trigger keeps its own `large` type: it is\n * the heading of its surface, not a row in a list. Compare the FAQ block,\n * where the questions share a surface and step down to body-semibold.\n */\nexport default function CollapsibleGroupShowcase() {\n  return (\n    <CollapsibleGroup type=\"single\" defaultValue=\"shipping\">\n      <Stack gap={2} width=\"100%\" maxWidth={420}>\n        <Card>\n          <Collapsible trigger=\"Shipping\" value=\"shipping\">\n            <Text type=\"body\" color=\"secondary\">\n              Standard delivery takes 3–5 business days and is free over $50.\n              Express is next business day if you order before 2pm.\n            </Text>\n          </Collapsible>\n        </Card>\n\n        <Card>\n          <Collapsible trigger=\"Returns\" value=\"returns\">\n            <Text type=\"body\" color=\"secondary\">\n              30 days from delivery, unused and in the original packaging.\n              Return shipping is on us for anything that arrived damaged or was\n              not what you ordered.\n            </Text>\n          </Collapsible>\n        </Card>\n\n        <Card>\n          <Collapsible trigger=\"Payment\" value=\"payment\">\n            <Text type=\"body\" color=\"secondary\">\n              All major cards, PayPal, and bank transfer. Cards are charged when\n              the order ships, not when it is placed.\n            </Text>\n          </Collapsible>\n        </Card>\n      </Stack>\n    </CollapsibleGroup>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

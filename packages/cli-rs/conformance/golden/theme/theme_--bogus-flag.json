@@ -1,0 +1,12 @@
+{
+ "id": "theme_--bogus-flag",
+ "args": [
+  "theme",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

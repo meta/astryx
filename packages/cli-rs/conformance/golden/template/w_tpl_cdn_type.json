@@ -1,0 +1,14 @@
+{
+ "id": "w_tpl_cdn_type",
+ "args": [
+  "template",
+  "--cdn",
+  "--type",
+  "page"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--cdn` cannot be combined with --type: the CDN starter does not use templates.\n",
+ "exit": 1,
+ "files": []
+}

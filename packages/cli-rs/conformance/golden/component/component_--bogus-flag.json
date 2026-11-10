@@ -1,0 +1,12 @@
+{
+ "id": "component_--bogus-flag",
+ "args": [
+  "component",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

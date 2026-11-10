@@ -1,0 +1,19 @@
+{
+ "id": "search_kanban_board",
+ "args": [
+  "search",
+  "kanban",
+  "board"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"kanban board\" (4)\n\nname:        kanban-board\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Kanban Board\nkind:        page\ndescription: Horizontal lanes of draggable cards where the column itself is the status, so drag and drop between lanes is the state change. Fixed columns, variable-height cards.\ncommand:     npx @astryxdesign/cli@0.7.12 template kanban-board --type page\n\nname:        layout/scaffold\nsection:     shell\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Layout › Scaffold › Shell\ndescription: Pick the shell and budget its regions before any content exists. Structural widths are the one place raw px belongs; everything inside them uses the spacing scale.\ncommand:     npx @astryxdesign/cli@0.7.12 docs layout/scaffold shell\nparent:      npx @astryxdesign/cli@0.7.12 docs layout/scaffold --index\n\nname:        ScrollableAreaTwoAxisBoard\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ScrollableArea - Two-Axis Board\nkind:        block\ndescription: axis=\"both\" gives the content box max-content inline sizing, so a board wider and taller than its panel scrolls on both axes from one viewport.\ncommand:     npx @astryxdesign/cli@0.7.12 template ScrollableAreaTwoAxisBoard --type block\n\nname:        SegmentedControlItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SegmentedControlItem - Basic\nkind:        block\ndescription: A row of label-only options that switches between a few views, here Board, List, and Timeline. Each item declares a value; the parent control holds the selected value and change handler.\ncommand:     npx @astryxdesign/cli@0.7.12 template SegmentedControlItemBasic --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'kanban board'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

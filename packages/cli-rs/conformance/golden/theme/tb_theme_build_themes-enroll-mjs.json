@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_themes-enroll-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/enroll.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Adaptation rule enrolls the custom value \"button.variant:brandNew\". A value that is valid only because a theme enrolls it generates unconditional type augmentation, so it must be declared on the root theme first; a rule may then restyle it under a condition.\n",
+ "exit": 1,
+ "files": []
+}

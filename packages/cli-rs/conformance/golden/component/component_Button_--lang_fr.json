@@ -1,0 +1,14 @@
+{
+ "id": "component_Button_--lang_fr",
+ "args": [
+  "component",
+  "Button",
+  "--lang",
+  "fr"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--lang <locale>' argument 'fr' is invalid. Allowed choices are en, zh, dense.\n",
+ "exit": 1,
+ "files": []
+}

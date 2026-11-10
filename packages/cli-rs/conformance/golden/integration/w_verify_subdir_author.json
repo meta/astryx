@@ -1,0 +1,12 @@
+{
+ "id": "w_verify_subdir_author",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "author",
+ "stdout": "Integration package check failed\n\n[fail] @acme/widgets@0.1.0\n\n5 packed files; 4/4 required files present.\n\n- [fail] Component \"WidgetCard\" advertises import \"@acme/widgets\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

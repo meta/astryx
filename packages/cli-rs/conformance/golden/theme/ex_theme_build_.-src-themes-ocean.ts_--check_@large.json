@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--check_@large",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--check"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/large/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

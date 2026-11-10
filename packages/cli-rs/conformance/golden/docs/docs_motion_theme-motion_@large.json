@@ -1,0 +1,19 @@
+{
+ "id": "docs_motion_theme-motion_@large",
+ "args": [
+  "docs",
+  "motion",
+  "theme-motion"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Tune motion from the theme\n\nA theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens, and `tempo` also times the springs of touch motion; those springs don't follow `character` yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.\n\n- `tempo` scales every motion duration: 1 is Astryx's own, 0.75 the quickest and 1.5 the slowest (values outside are clamped).\n- `character` sets how lively motion is: `'crisp'` decelerates without overshoot, `'standard'` is Astryx's own, and `'expressive'` overshoots slightly on entrances and moves. Exits and fades never overshoot.\n\nA quicker, crisper theme:\n```ts\nexport const brandTheme = defineTheme({\n  name: 'brand',\n  motion: {tempo: 0.85, character: 'crisp'},\n});\n```\n\nSome motion never follows the knobs, because it tracks a finger or the system: finger tracking, momentum and the rubber band, the on-screen keyboard, the press model's onset delay, cancel distance and tap flash (its release fade follows tempo), hover-intent delays, gesture thresholds, the loops of busy indicators such as Spinner and Skeleton, and the 200 ms Reduce Motion cross-fade.\n\nPrecedence, lowest to highest: the knobs, then a duration scale (`fast`, `medium`, `slow`, `ratio`) for the durations it sets, then explicit `tokens`. A theme with no `motion` renders exactly as before.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion usage\nNext: npx @astryxdesign/cli@0.7.12 docs motion best-practices\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

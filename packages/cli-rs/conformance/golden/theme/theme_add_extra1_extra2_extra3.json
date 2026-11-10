@@ -1,0 +1,15 @@
+{
+ "id": "theme_add_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "add",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'add'. Expected 1 argument but got 3.\n",
+ "exit": 1,
+ "files": []
+}

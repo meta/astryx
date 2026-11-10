@@ -1,0 +1,15 @@
+{
+ "id": "theme_palette_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "palette",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme palette extra1'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

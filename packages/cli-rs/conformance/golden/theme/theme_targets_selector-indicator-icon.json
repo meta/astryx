@@ -1,0 +1,19 @@
+{
+ "id": "theme_targets_selector-indicator-icon",
+ "args": [
+  "theme",
+  "targets",
+  "selector-indicator-icon"
+ ],
+ "fixture": "app",
+ "stdout": "Theming targets\n3 across 3 components\n(key - component - props - states - className)\n\ncomplex-selector-indicator-icon  ComplexSelector - state - astryx-complex-selector-indicator-icon\nmulti-selector-indicator-icon    MultiSelector - state - astryx-multi-selector-indicator-icon\nselector-indicator-icon          Selector - state - astryx-selector-indicator-icon\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

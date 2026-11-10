@@ -1,0 +1,4001 @@
+[
+ {
+  "id": "integration_--help_@author",
+  "args": [
+   "integration",
+   "--help"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_@author",
+  "args": [
+   "integration"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@author",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_--help_@integration",
+  "args": [
+   "integration",
+   "--help"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_@integration",
+  "args": [
+   "integration"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@integration",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_-h",
+  "args": [
+   "integration",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_integration",
+  "args": [
+   "help",
+   "integration"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_--bogus-flag",
+  "args": [
+   "integration",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_--bogus-flag_--json",
+  "args": [
+   "integration",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_extra1_extra2_extra3",
+  "args": [
+   "integration",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_extra1_extra2_extra3_--json",
+  "args": [
+   "integration",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_@empty",
+  "args": [
+   "integration"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@empty",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_@nocore",
+  "args": [
+   "integration"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@nocore",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_@brokencore",
+  "args": [
+   "integration"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@brokencore",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_@plain",
+  "args": [
+   "integration"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@plain",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_@large",
+  "args": [
+   "integration"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_--json_@large",
+  "args": [
+   "integration",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_@author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_@integration",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_@empty",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_@large",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_check_--strict_@author",
+  "args": [
+   "integration",
+   "check",
+   "--strict"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_check_--strict_@integration",
+  "args": [
+   "integration",
+   "check",
+   "--strict"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_check_--strict_@empty",
+  "args": [
+   "integration",
+   "check",
+   "--strict"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_check_--strict_@large",
+  "args": [
+   "integration",
+   "check",
+   "--strict"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_check_--strict_--json",
+  "args": [
+   "integration",
+   "check",
+   "--strict",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_verify_@author",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_verify_@integration",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_verify_@empty",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_verify_@large",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_verify_--json",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--help_@author",
+  "args": [
+   "integration",
+   "add",
+   "--help"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@author",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--help_@integration",
+  "args": [
+   "integration",
+   "add",
+   "--help"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@integration",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@integration",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_add_-h",
+  "args": [
+   "integration",
+   "add",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_integration_add",
+  "args": [
+   "help",
+   "integration",
+   "add"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--bogus-flag",
+  "args": [
+   "integration",
+   "add",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--bogus-flag_--json",
+  "args": [
+   "integration",
+   "add",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_extra1_extra2_extra3",
+  "args": [
+   "integration",
+   "add",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_extra1_extra2_extra3_--json",
+  "args": [
+   "integration",
+   "add",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@empty",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@empty",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@nocore",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@nocore",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@brokencore",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@brokencore",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@plain",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@plain",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_add_@large",
+  "args": [
+   "integration",
+   "add"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_add_--json_@large",
+  "args": [
+   "integration",
+   "add",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_--dry-run_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_--dry-run_--json_@integration",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_--dry-run_--json_@empty",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_component_AcmeWidget_--dry-run_--json_@large",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_deploying_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "deploying"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_deploying_@integration",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "deploying"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_deploying_@empty",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "deploying"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_deploying_@large",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "deploying"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_deploying_--json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "deploying",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_acme-dashboard_@author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_acme-dashboard_@integration",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_acme-dashboard_@empty",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_acme-dashboard_@large",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_acme-dashboard_--json",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_account-card_--type_block_@author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_account-card_--type_block_@integration",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_account-card_--type_block_@empty",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_account-card_--type_block_@large",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_template_account-card_--type_block_--json",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-getting-started_--replaces_getting-started_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-getting-started",
+   "--replaces",
+   "getting-started"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-getting-started_--replaces_getting-started_@integration",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-getting-started",
+   "--replaces",
+   "getting-started"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-getting-started_--replaces_getting-started_@empty",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-getting-started",
+   "--replaces",
+   "getting-started"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-getting-started_--replaces_getting-started_@large",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-getting-started",
+   "--replaces",
+   "getting-started"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-getting-started_--replaces_getting-started_--json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-getting-started",
+   "--replaces",
+   "getting-started",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-theming_--extends_theme_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-theming",
+   "--extends",
+   "theme"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-theming_--extends_theme_@integration",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-theming",
+   "--extends",
+   "theme"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-theming_--extends_theme_@empty",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-theming",
+   "--extends",
+   "theme"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-theming_--extends_theme_@large",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-theming",
+   "--extends",
+   "theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_acme-theming_--extends_theme_--json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "acme-theming",
+   "--extends",
+   "theme",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_releasing_--parent_acme_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_releasing_--parent_acme_@integration",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_releasing_--parent_acme_@empty",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_releasing_--parent_acme_@large",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_doc_releasing_--parent_acme_--json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@author",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@integration",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@empty",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@large",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_--json",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._@author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._@integration",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._@empty",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._@large",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_agent-doc_Run-acme-verify-before-finishing._--json",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing.",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_@author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_@integration",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_@empty",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_@large",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--from_neutral_@author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--from_neutral_@integration",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--from_neutral_@empty",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--from_neutral_@large",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_add_theme_ocean_--from_neutral_--json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "neutral",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--dry-run",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--dry-run"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--dry-run_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--dry-run_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--dry-run",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_page",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "page"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_page_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "page",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type-page",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type=page"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_block",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "block"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_block_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "block",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type-block",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type=block"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_bogus",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_bogus_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "bogus",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type-bogus",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type=bogus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--type_page_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--type",
+   "page",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_principles_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "principles",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces-principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces=principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_nope_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "nope",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces-nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces=nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--replaces_principles_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--replaces",
+   "principles",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_principles_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "principles",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends-principles",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends=principles"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_nope_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "nope",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends-nope",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends=nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--extends_principles_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--extends",
+   "principles",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent_acme",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "acme"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent_acme_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "acme",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent-acme",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent=acme"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--parent_acme_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--parent",
+   "acme",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from_neutral",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "neutral"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from_neutral_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "neutral",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from-neutral",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from=neutral"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--from_neutral_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--from",
+   "neutral",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_0.6.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.6.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_0.6.0_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.6.0",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to-0.6.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to=0.6.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_0.1.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.1.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_0.1.0_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.1.0",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to-0.1.0",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to=0.1.0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_not-a-version",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "not-a-version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_not-a-version_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "not-a-version",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to-not-a-version",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to=not-a-version"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_--json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_useClipboard_--to_0.6.0_--help",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "useClipboard",
+   "--to",
+   "0.6.0",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_nosuchsub",
+  "args": [
+   "integration",
+   "add",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--help_@author",
+  "args": [
+   "integration",
+   "check",
+   "--help"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@author",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--help_@integration",
+  "args": [
+   "integration",
+   "check",
+   "--help"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@integration",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@integration",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_check_-h",
+  "args": [
+   "integration",
+   "check",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_integration_check",
+  "args": [
+   "help",
+   "integration",
+   "check"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--bogus-flag",
+  "args": [
+   "integration",
+   "check",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--bogus-flag_--json",
+  "args": [
+   "integration",
+   "check",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_extra1_extra2_extra3",
+  "args": [
+   "integration",
+   "check",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_extra1_extra2_extra3_--json",
+  "args": [
+   "integration",
+   "check",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@empty",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@empty",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@nocore",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@nocore",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@brokencore",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@brokencore",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@plain",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@plain",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_check_@large",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json_@large",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--strict",
+  "args": [
+   "integration",
+   "check",
+   "--strict"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--strict_--help",
+  "args": [
+   "integration",
+   "check",
+   "--strict",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--next",
+  "args": [
+   "integration",
+   "check",
+   "--next"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--next_--json",
+  "args": [
+   "integration",
+   "check",
+   "--next",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--next_--help",
+  "args": [
+   "integration",
+   "check",
+   "--next",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_check_nosuchsub",
+  "args": [
+   "integration",
+   "check",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--help_@author",
+  "args": [
+   "integration",
+   "pack",
+   "--help"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@author",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@author",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--help_@integration",
+  "args": [
+   "integration",
+   "pack",
+   "--help"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@integration",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@integration",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_-h",
+  "args": [
+   "integration",
+   "pack",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_integration_pack",
+  "args": [
+   "help",
+   "integration",
+   "pack"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--bogus-flag",
+  "args": [
+   "integration",
+   "pack",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--bogus-flag_--json",
+  "args": [
+   "integration",
+   "pack",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_extra1_extra2_extra3",
+  "args": [
+   "integration",
+   "pack",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_extra1_extra2_extra3_--json",
+  "args": [
+   "integration",
+   "pack",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@empty",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@empty",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@nocore",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@nocore",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@brokencore",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@brokencore",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@plain",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@plain",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_@large",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--json_@large",
+  "args": [
+   "integration",
+   "pack",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_pack_--check_@author",
+  "args": [
+   "integration",
+   "pack",
+   "--check"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_pack_--check_@integration",
+  "args": [
+   "integration",
+   "pack",
+   "--check"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_pack_--check_@empty",
+  "args": [
+   "integration",
+   "pack",
+   "--check"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_pack_--check_@large",
+  "args": [
+   "integration",
+   "pack",
+   "--check"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_integration_pack_--check_--json",
+  "args": [
+   "integration",
+   "pack",
+   "--check",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--check",
+  "args": [
+   "integration",
+   "pack",
+   "--check"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_--check_--help",
+  "args": [
+   "integration",
+   "pack",
+   "--check",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack_nosuchsub",
+  "args": [
+   "integration",
+   "pack",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--help_@author",
+  "args": [
+   "integration",
+   "verify",
+   "--help"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@author",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--help_@integration",
+  "args": [
+   "integration",
+   "verify",
+   "--help"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@integration",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_-h",
+  "args": [
+   "integration",
+   "verify",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_integration_verify",
+  "args": [
+   "help",
+   "integration",
+   "verify"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--bogus-flag",
+  "args": [
+   "integration",
+   "verify",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--bogus-flag_--json",
+  "args": [
+   "integration",
+   "verify",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_extra1_extra2_extra3",
+  "args": [
+   "integration",
+   "verify",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_extra1_extra2_extra3_--json",
+  "args": [
+   "integration",
+   "verify",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@empty",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_@nocore",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@nocore",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_@brokencore",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@brokencore",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_@plain",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@plain",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_--json_@large",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "integration_verify_nosuchsub",
+  "args": [
+   "integration",
+   "verify",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_nosuchsub",
+  "args": [
+   "integration",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_component_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "component_after-integration-add-component-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "component",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_template_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_template_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_template_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "template_after-integration-add-template-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "template",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_block_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "block",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_block_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "block",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_block_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "block",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "block_after-integration-add-block-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "block",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_doc_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_doc_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_doc_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "doc_after-integration-add-doc-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "doc",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_theme_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_theme_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_theme_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "theme_after-integration-add-theme-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "theme",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_hook_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "hook",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_hook_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "hook",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_hook_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "hook",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "hook_after-integration-add-hook-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "hook",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_agent-doc_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_agent-doc_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_agent-doc_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "agent-doc_after-integration-add-agent-doc-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "agent-doc",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_icon-set_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "icon-set",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_icon-set_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "icon-set",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_icon-set_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "icon-set",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "icon-set_after-integration-add-icon-set-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "icon-set",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_add_bogus_Thing_@author",
+  "args": [
+   "integration",
+   "add",
+   "bogus",
+   "Thing"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_bogus_Thing_--dry-run_@author",
+  "args": [
+   "integration",
+   "add",
+   "bogus",
+   "Thing",
+   "--dry-run"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_add_bogus_Thing_--json_@author",
+  "args": [
+   "integration",
+   "add",
+   "bogus",
+   "Thing",
+   "--json"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "bogus_after-integration-add-bogus-Thing_integration_check_@author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "gen": true,
+  "pre": [
+   [
+    "integration",
+    "add",
+    "bogus",
+    "Thing"
+   ]
+  ]
+ },
+ {
+  "id": "integration_check_--next_@author",
+  "args": [
+   "integration",
+   "check",
+   "--next"
+  ],
+  "fixture": "author",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--next_@empty",
+  "args": [
+   "integration",
+   "check",
+   "--next"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--next_@integration",
+  "args": [
+   "integration",
+   "check",
+   "--next"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "integration_check_--json",
+  "args": [
+   "integration",
+   "check",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_pack",
+  "args": [
+   "integration",
+   "pack"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "integration_verify",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "w_agent_doc_author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_long_author",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_quotes_author_json",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Use the team's \"acme\" CLI \\ wrapper.",
+   "--json"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_template_block_author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_template_page_dry_author",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard",
+   "--dry-run"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_theme_author_json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--json"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_theme_dry_author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--dry-run"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_doc_parent_author_json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme",
+   "--json"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_codemod_author",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0-beta.1"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_component_author_dry",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_app",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Run acme verify before finishing."
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_agent_doc_long_app",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_agent_doc_quotes_app_json",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "Use the team's \"acme\" CLI \\ wrapper.",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_template_block_app",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "account-card",
+   "--type",
+   "block"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_template_page_dry_app",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dashboard",
+   "--dry-run"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_app_json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_dry_app",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--dry-run"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_parent_app_json",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "releasing",
+   "--parent",
+   "acme",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_codemod_app",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2.0-beta.1"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_component_app_dry",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--dry-run"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_component_exists_author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "WidgetCard"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_component_exists_author_json",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "WidgetCard",
+   "--json"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_doc_exists_author",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "widgets"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_component_from_subdir_author",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "author",
+  "cwd": "author/src"
+ },
+ {
+  "id": "w_component_from_subdir_app",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget"
+  ],
+  "fixture": "app",
+  "cwd": "app/src"
+ },
+ {
+  "id": "w_agent_doc_twice_marker",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "<!-- ASTRYX:START -->"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_blank",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "   "
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_padded",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   " padded "
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_agent_doc_toolong",
+  "args": [
+   "integration",
+   "add",
+   "agent-doc",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_component_lower",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "acmeWidget"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_component_bad_chars",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "Acme-Widget",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_template_bad_name",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "Acme_Dash"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_template_bad_type_json",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme",
+   "--type",
+   "grid",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_bad_name",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "my doc"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_both",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "topic",
+   "--replaces",
+   "a",
+   "--extends",
+   "b"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_parent_and_replaces",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "topic",
+   "--parent",
+   "acme",
+   "--replaces",
+   "a"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_parent_bad",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "topic",
+   "--parent",
+   "Acme"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_doc_replaces_bad",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "topic",
+   "--replaces",
+   "a b"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_codemod_no_to",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_codemod_bad_to",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "rename-widget",
+   "--to",
+   "1.2"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_codemod_bad_name",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "Rename",
+   "--to",
+   "1.0.0"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_bad_name",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "Ocean"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_from_self",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "ocean"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_from_unknown",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "nope"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_from_unknown_json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean",
+   "--from",
+   "nope",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_from_stone_author",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "sea-glass",
+   "--from",
+   "stone"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_theme_from_y2k_json",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "retro",
+   "--from",
+   "y2k",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_theme_y2k_name",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "y2k-neon",
+   "--dry-run",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_kind_unknown",
+  "args": [
+   "integration",
+   "add",
+   "widget",
+   "Foo"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_kind_unknown_json",
+  "args": [
+   "integration",
+   "add",
+   "widget",
+   "Foo",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_opt_wrong_kind_to",
+  "args": [
+   "integration",
+   "add",
+   "doc",
+   "topic",
+   "--to",
+   "1.0.0"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_opt_wrong_kind_from",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "Foo",
+   "--from",
+   "neutral",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_opt_wrong_kind_type",
+  "args": [
+   "integration",
+   "add",
+   "codemod",
+   "x",
+   "--type",
+   "page"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_empty_dir_theme",
+  "args": [
+   "integration",
+   "add",
+   "theme",
+   "ocean"
+  ],
+  "fixture": "empty"
+ },
+ {
+  "id": "w_plain_component",
+  "args": [
+   "integration",
+   "add",
+   "component",
+   "AcmeWidget",
+   "--json"
+  ],
+  "fixture": "plain"
+ },
+ {
+  "id": "w_integration_template",
+  "args": [
+   "integration",
+   "add",
+   "template",
+   "acme-dash"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_check_strict_next_author",
+  "args": [
+   "integration",
+   "check",
+   "--strict",
+   "--next"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_check_next_author_json",
+  "args": [
+   "integration",
+   "check",
+   "--next",
+   "--json"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_check_strict_json_app",
+  "args": [
+   "integration",
+   "check",
+   "--strict",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_check_subdir_author",
+  "args": [
+   "integration",
+   "check"
+  ],
+  "fixture": "author",
+  "cwd": "author/src"
+ },
+ {
+  "id": "w_verify_subdir_author",
+  "args": [
+   "integration",
+   "verify"
+  ],
+  "fixture": "author",
+  "cwd": "author/src"
+ },
+ {
+  "id": "w_verify_plain_json",
+  "args": [
+   "integration",
+   "verify",
+   "--json"
+  ],
+  "fixture": "plain"
+ },
+ {
+  "id": "w_pack_check_json_author",
+  "args": [
+   "integration",
+   "pack",
+   "--check",
+   "--json"
+  ],
+  "fixture": "author"
+ }
+]

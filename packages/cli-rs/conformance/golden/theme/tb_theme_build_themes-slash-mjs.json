@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_themes-slash-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/slash.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Invalid theme name \"a/b\": must not contain path separators ('/' or '\\\\').\n",
+ "exit": 1,
+ "files": []
+}

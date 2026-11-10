@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--codemod-nope",
+ "args": [
+  "upgrade",
+  "--codemod=nope"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

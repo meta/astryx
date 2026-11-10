@@ -1,0 +1,12 @@
+{
+ "id": "template_--type",
+ "args": [
+  "template",
+  "--type"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--type <type>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

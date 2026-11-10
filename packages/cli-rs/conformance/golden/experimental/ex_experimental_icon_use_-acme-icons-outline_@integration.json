@@ -1,0 +1,14 @@
+{
+ "id": "ex_experimental_icon_use_-acme-icons-outline_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "@acme/icons/outline"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"@acme/icons/outline\"\n",
+ "exit": 1,
+ "files": []
+}

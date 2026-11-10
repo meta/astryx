@@ -1,0 +1,12 @@
+{
+ "id": "w_component_Xyzzy",
+ "args": [
+  "component",
+  "Xyzzy"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"Xyzzy\"\n",
+ "exit": 1,
+ "files": []
+}

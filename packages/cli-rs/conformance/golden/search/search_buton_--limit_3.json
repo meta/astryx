@@ -1,0 +1,20 @@
+{
+ "id": "search_buton_--limit_3",
+ "args": [
+  "search",
+  "buton",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"buton\" (3 of 155)\n\nname:        Button\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Button\ndescription: Button triggers an action when clicked. Use it for form submissions, confirmations, navigation, or any interaction that needs a clear call to action.\ncommand:     npx @astryxdesign/cli@0.7.12 component Button\n\nname:        IconButton\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/IconButton\ndescription: A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood.\ncommand:     npx @astryxdesign/cli@0.7.12 component IconButton\n\nname:        useClickableContainer\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Makes a container element clickable while preserving nested interactive element behavior. Solves the \"nested interactive elements\" problem: when a card is clickable but contains buttons/links, clicking those should NOT trigger the card's action. Detects interactive ancestors between the click target and the container, and ignores text selections. Supports href navigation (including middle-click and Ctrl/Cmd+click for new tabs).\ncommand:     npx @astryxdesign/cli@0.7.12 hook useClickableContainer\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover buton\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

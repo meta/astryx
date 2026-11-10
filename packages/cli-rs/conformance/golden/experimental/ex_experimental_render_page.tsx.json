@@ -1,0 +1,13 @@
+{
+ "id": "ex_experimental_render_page.tsx",
+ "args": [
+  "experimental",
+  "render",
+  "page.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

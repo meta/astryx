@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--type",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--type"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--type <type>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

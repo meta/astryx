@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_thumbnail_@large",
+ "args": [
+  "component",
+  "thumbnail"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"thumbnail\"\n\n  Thumbnail  (same name)\n  Avatar  (keyword \"thumbnail\")\n  AspectRatio  (keyword \"thumbnail\")\n",
+ "exit": 1,
+ "files": []
+}

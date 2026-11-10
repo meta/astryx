@@ -1,0 +1,13 @@
+{
+ "id": "w_component_Nope_--source",
+ "args": [
+  "component",
+  "Nope",
+  "--source"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Source for \"Nope\" not found\n",
+ "exit": 1,
+ "files": []
+}

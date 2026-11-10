@@ -1,0 +1,15 @@
+{
+ "id": "w_theme---type-theme---installed_@large",
+ "args": [
+  "discover",
+  "theme",
+  "--type",
+  "theme",
+  "--installed"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"theme\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_command-palette-group-heading_--json",
+ "args": [
+  "theme",
+  "targets",
+  "command-palette-group-heading",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"command-palette-group-heading\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"command-palette-group-heading\",\n        \"className\": \"astryx-command-palette-group-heading\",\n        \"component\": \"CommandPalette\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_checkout-wizard_--skeleton_@large",
+ "args": [
+  "template",
+  "checkout-wizard",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# checkout-wizard - Multi-step checkout, cart, order, and payment wizard with a running summary that recalculates as answers change. It adapts to its host width, renders the summary first on narrow surfaces, validates every forward path, and completes locally without sending payment.\n# Components: Badge, Banner, Card, CheckboxInput, Collapsible, Divider, FieldStatus, FormLayout, Layout, NumberInput, RadioList, Selector, Stack, Step, Stepper, TextArea, TextInput, Thumbnail\n\n<VStack gap={2}>\n  <Text />\n  <Text />\n  <Text />\n  <Text />\n  <Text />\n  <Text />\n  <Text />\n  <Text />\n  <Divider />\n  <Text />\n  <Text />\n</VStack>\n<VStack gap={4}>\n  <VStack gap={3}>\n    <HStack gap={3}>\n      <Thumbnail />\n      <StackItem />\n      <VStack gap={0.5}>\n        <HStack gap={2}>\n          <Text />\n          <Text />\n        </HStack>\n        <Text />\n      </VStack>\n    </HStack>\n  </VStack>\n  <Divider />\n  <Banner />\n</VStack>\n<Card padding={5}>\n  <Collapsible />\n  <VStack gap={4}>\n    <HStack gap={2}>\n      <Text />\n      ...\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

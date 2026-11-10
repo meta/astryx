@@ -1,0 +1,13 @@
+{
+ "id": "theme_use_nosuchsub",
+ "args": [
+  "theme",
+  "use",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme \"nosuchsub\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add nosuchsub` first.\n",
+ "exit": 1,
+ "files": []
+}

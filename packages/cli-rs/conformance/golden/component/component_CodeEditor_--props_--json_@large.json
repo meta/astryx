@@ -1,0 +1,14 @@
+{
+ "id": "component_CodeEditor_--props_--json_@large",
+ "args": [
+  "component",
+  "CodeEditor",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"value\",\n      \"type\": \"string\",\n      \"description\": \"Controlled string value for the editor.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"onChange\",\n      \"type\": \"(value: string) => void\",\n      \"description\": \"Callback fired when the code content changes.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the editable region (aria-label).\",\n      \"required\": true\n    },\n    {\n      \"name\": \"language\",\n      \"type\": \"string\",\n      \"description\": \"Programming language for syntax highlighting.\",\n      \"default\": \"'plaintext'\"\n    },\n    {\n      \"name\": \"hasLineNumbers\",\n      \"type\": \"boolean\",\n      \"description\": \"Display line number gutter on the left.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"isReadOnly\",\n      \"type\": \"boolean\",\n      \"description\": \"Renders the editor in a read-only state.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"placeholder\",\n      \"type\": \"string\",\n      \"description\": \"Placeholder text displayed when value is empty.\"\n    },\n    {\n      \"name\": \"maxHeight\",\n      \"type\": \"number | string\",\n      \"description\": \"Maximum container height before internal scrolling.\"\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'sm' | 'md'\",\n      \"description\": \"Font size variant for the code text.\",\n      \"default\": \"'md'\"\n    },\n    {\n      \"name\": \"tokenizer\",\n      \"type\": \"(code: string, language: string) => TokenLine[]\",\n      \"description\": \"Custom tokenizer function override for language parsing.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

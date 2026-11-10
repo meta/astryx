@@ -1,0 +1,38 @@
+Gap report categories
+
+value: missing_component
+label: Missing component
+
+value: missing_variant
+label: Missing variant or prop
+
+value: layout_gap
+label: Layout gap
+
+value: styling_gap
+label: Styling gap
+
+value: a11y_gap
+label: Accessibility gap
+
+value: api_friction
+label: API friction
+
+value: docs_gap
+label: Documentation gap
+
+value: other
+label: Other
+Destinations
+
+default: true
+
+to:        @astryxdesign/charts
+default:   false
+issuesUrl: https://github.com/meta/astryx/issues
+
+to:        @astryxdesign/lab
+default:   false
+issuesUrl: https://github.com/meta/astryx/issues
+
+Ask the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.

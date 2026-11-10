@@ -1,0 +1,11 @@
+{
+ "id": "shell_Theme_@empty",
+ "args": [
+  "Theme"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown command 'Theme'\n\n  theme  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,23 @@
+{
+ "id": "init_--json_@plain",
+ "args": [
+  "init",
+  "--json"
+ ],
+ "fixture": "plain",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.run\",\n  \"data\": {\n    \"mode\": \"default\",\n    \"features\": [\n      \"agents\"\n    ],\n    \"docsWritten\": [\n      \"AGENTS.md\",\n      \"GEMINI.md\"\n    ],\n    \"docsError\": null,\n    \"theme\": false,\n    \"themeTemplate\": null,\n    \"themeTemplatePath\": null,\n    \"template\": null,\n    \"templatePath\": null,\n    \"nextSteps\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "plain/AGENTS.md",
+   "status": "created",
+   "text": "# AGENTS.md\n\nProject-specific guidance for AI coding agents.\n\n<!-- ASTRYX:START -->\nAstryx v0.7.12 · 174 components\nCLI: run every command as `npx @astryxdesign/cli@0.7.12 <cmd>` (shown below as `astryx ...`).\n\nSETUP (once, in app entry e.g. main.tsx) — without these, components render unstyled:\n  import \"@astryxdesign/core/reset.css\";\n  import \"@astryxdesign/core/astryx.css\";\n\nWORKFLOW — start every page from a template, never from scratch:\n1. `astryx build \"<idea>\"` — names the template to scaffold from and the parts it lacks.\n2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.\n3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one.\nChanging an existing page? Keep it: skip step 2 and add blocks/components inside its sections.\n\nRULES:\n- No <div> — components handle all layout and spacing.\n- Read `astryx docs layout` before changing a template's frame.\n- Dense data = rows (Table, List/Item), not Card-wrapped lists. Badge = counts only.\n- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.\n- Palettes and custom colors go through the theme, never :root overrides. Run `astryx theme add <slug>` to import; `theme eject <slug>` only forks source. See `astryx docs theme`.\n- SELF-CHECK: re-read the file; replace any raw <div>/<span>, imported .css/@apply, or hardcoded #hex/px with the component or a token.\n\n`astryx help` lists every command. Key ones beyond the workflow:\n  search \"<query>\"   find any component / hook / doc / template\n  discover <words>   integrations you could add\n  docs <topic>       getting-started, principles, tokens, theme … (`astryx docs` lists all)\n  docs cli           commands and API reference\n  docs authoring     build an integration package, and every field it holds\n  upgrade --from <old version> --apply   run after a dependency bump\n<!-- ASTRYX:END -->\n"
+  },
+  {
+   "path": "plain/GEMINI.md",
+   "status": "created",
+   "text": "<!-- ASTRYX:START -->\n@./AGENTS.md\n<!-- ASTRYX:END -->\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "theme_targets_avatar-status-dot",
+ "args": [
+  "theme",
+  "targets",
+  "avatar-status-dot"
+ ],
+ "fixture": "app",
+ "stdout": "Theming targets\n2 across 1 component\n(key - component - props - states - className)\n\navatar-status-dot        Avatar - variant - astryx-avatar-status-dot\navatar-status-dot-glyph  Avatar - shape - astryx-avatar-status-dot-glyph\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

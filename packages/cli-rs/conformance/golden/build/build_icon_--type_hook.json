@@ -1,0 +1,20 @@
+{
+ "id": "build_icon_--type_hook",
+ "args": [
+  "build",
+  "icon",
+  "--type",
+  "hook"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"icon\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useIcon\npackage:     @astryxdesign/core\ndescription: Resolves a semantic icon name to a React node through the nearest Theme, so a custom component draws the same success, warning or error icon that Astryx components draw and follows a theme that overrides it.\n\nname:        useInputContainer\npackage:     @astryxdesign/core\ndescription: Makes an input container wrapper clickable, delegating focus to the inner input/textarea when the user clicks non-interactive areas (icons, padding, status indicators).\n\nname:        useInputStatusIcon\npackage:     @astryxdesign/core\ndescription: Builds the on-field status affordance for a bordered input and its accessibility wiring, so every input in the family behaves the same for a given status.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

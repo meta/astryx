@@ -1,0 +1,12 @@
+{
+ "id": "w_plain_button",
+ "args": [
+  "swizzle",
+  "Button"
+ ],
+ "fixture": "plain",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "ex_experimental_render_page.tsx_@empty",
+ "args": [
+  "experimental",
+  "render",
+  "page.tsx"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "hook_useHoverCard_--params",
+ "args": [
+  "hook",
+  "useHoverCard",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `placement` | `'above' \\| 'below' \\| 'start' \\| 'end'` | `'above'` | Position relative to the trigger. Logical: start/end resolve against the popover's own inherited direction (RTL mirrors in pure CSS). |\n| `alignment` | `'start' \\| 'center' \\| 'end'` | `'center'` | Alignment along the placement axis. Logical: start/end resolve against the popover's own inherited direction (RTL mirrors in pure CSS). |\n| `delay` | `number` | `300` | Delay before showing the hover card on hover, in milliseconds. |\n| `hideDelay` | `number` | `200` | Delay before hiding after mouse or focus leaves, in milliseconds. |\n| `focusTrigger` | `'auto' \\| 'always' \\| 'never'` | `'auto'` | When focus should open the hover card. auto opens when the trigger itself takes focus, or focus lands inside a trigger that is focusable at that moment, so a roving-tabindex member opens when the arrow keys reach it. |\n| `touchTrigger` | `'auto' \\| 'tap' \\| 'none'` | `'auto'` | What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (an aria-disabled control performs none); tap always opens; none never opens on touch. |\n| `isEnabled` | `boolean` | `true` | Whether hover and focus triggers are enabled. |\n| `label` | `string` | - | Accessible name for the hover card popup. When provided, the popup is exposed as a named role=\"dialog\"; when omitted, it falls back to role=\"group\" (a group may validly be unnamed). |\n| `isOpen` | `boolean` | - | Controlled open state. true force-shows, false force-hides, undefined lets hover/focus manage visibility. |\n| `isDefaultOpen` | `boolean` | `false` | Whether the hover card should be shown on mount. |\n| `onShow` | `() => void` | - | Callback fired when the hover card becomes visible. |\n| `onHide` | `() => void` | - | Callback fired when the hover card is hidden. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

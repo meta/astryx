@@ -1,0 +1,82 @@
+[
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst x = <Table tableProps={{className: 'striped', style: {width: 400}}} columns={cols} />;",
+  "output": "import {Table} from '@astryxdesign/core';\nconst x = <Table className='striped' style={{width: 400}} columns={cols} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core/Table';\nconst x = <Table tableProps={{'aria-label': 'Users', 'data-testid': 'users-table'}} />;",
+  "output": "import {Table} from '@astryxdesign/core/Table';\nconst x = <Table aria-label='Users' data-testid='users-table' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@xds/core';\nconst x = <Table tableProps={{id: 'users', onClick: (e) => handle(e)}} />;",
+  "output": "import {Table} from '@xds/core';\nconst x = <Table id='users' onClick={(e) => handle(e)} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst x = <Table className='mine' tableProps={{className: 'theirs', id: 'users'}} />;",
+  "output": "import {Table} from '@astryxdesign/core';\nconst x = <Table\n  className='mine'\n  id='users'\n  tableProps={{\n    className: 'theirs'\n  }}/* TODO(astryx): tableProps is deprecated — merge these into direct props manually */ />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst x = <Table tableProps={props} />;",
+  "output": "import {Table} from '@astryxdesign/core';\nconst x = <Table tableProps={props}/* TODO(astryx): tableProps is deprecated — merge these into direct props manually */ />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst x = <Table tableProps={{className: 'x', ...rest}} />;",
+  "output": "import {Table} from '@astryxdesign/core';\nconst x = <Table tableProps={{className: 'x', ...rest}}/* TODO(astryx): tableProps is deprecated — merge these into direct props manually */ />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table as DataTable} from '@astryxdesign/core';\nconst x = <DataTable tableProps={{className: 'x'}} />;",
+  "output": "import {Table as DataTable} from '@astryxdesign/core';\nconst x = <DataTable className='x' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst a = <Table tableProps={{id: 'users'}} />;\nconst b = <OtherComponent tableProps={{className: 'x'}} />;",
+  "output": "import {Table} from '@astryxdesign/core';\nconst a = <Table id='users' />;\nconst b = <OtherComponent tableProps={{className: 'x'}} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst x = <Table tableProps={{className: 'x'}} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.7/migrate-table-tableprops-to-direct-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Table} from '@astryxdesign/core';\nconst x = <Table className='x' />;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,20 @@
+{
+ "id": "build_navigation-sidebar_--type_hook",
+ "args": [
+  "build",
+  "navigation sidebar",
+  "--type",
+  "hook"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"navigation sidebar\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useCalendarNavigation\npackage:     @astryxdesign/core\ndescription: Manages visible month state and pagination for calendar components.\n\nname:        useGridFocus\npackage:     @astryxdesign/core\ndescription: Manages keyboard navigation within a 2D grid following the WAI-ARIA grid pattern.\n\nname:        useKeyboardHint\npackage:     @astryxdesign/core\ndescription: Shows an ephemeral \"<- -> to navigate\" hint anchored to the focused item the first time a roving-tabindex composite (Toolbar, TabList, SegmentedControl, etc.) receives keyboard focus.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

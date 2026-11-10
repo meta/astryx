@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--description",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--description"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--description <text>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

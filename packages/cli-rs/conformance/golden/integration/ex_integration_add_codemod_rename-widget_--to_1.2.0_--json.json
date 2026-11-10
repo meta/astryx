@@ -1,0 +1,28 @@
+{
+ "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_--json",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "rename-widget",
+  "--to",
+  "1.2.0",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"codemod\",\n    \"name\": \"rename-widget\",\n    \"root\": {\n      \"path\": \"./codemods\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"codemods/1.2.0/rename-widget.mjs\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  codemods: './codemods'\n};\n"
+  },
+  {
+   "path": "app/codemods/1.2.0/rename-widget.mjs",
+   "status": "created",
+   "text": "export default {\n  type: 'code',\n  title: 'Rename Widget',\n  transform(file, api) {\n    // Replace this with your transform logic.\n    return file.source;\n  },\n};\n"
+  }
+ ]
+}

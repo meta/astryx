@@ -1,0 +1,19 @@
+{
+ "id": "component_DrawerHeader_--zh_@large",
+ "args": [
+  "component",
+  "DrawerHeader",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# DrawerHeader\n\n像 Dialog 中的 DialogHeader 一样，把 DrawerHeader 放在 Drawer 内 Layout 的 header 插槽，提供标题行；传入 onOpenChange 时显示关闭按钮。Layout 让页眉对齐抽屉的内边距，而不是重复缩进。Drawer 本身不渲染关闭按钮。与 DialogHeader 不同，它不会在打开时获得焦点（Drawer 使用 data-autofocus），也不为抽屉命名（由 Drawer 的 label 命名）。\n\n**Import:** `import {DrawerHeader} from '@astryxdesign/core/Drawer';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Header row | Yes | 排列标题区、可选的首尾内容和关闭控件。 |\n| Start content | No | 包装可选的首部内容。 |\n| Title block | Yes | 组合标题和可选副标题。 |\n| End content | No | 组合可选尾部内容和可选关闭控件。 |\n| Close icon | No | 关闭按钮内的关闭图标。 |\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `ReactNode` | - | 抽屉标题，渲染为 h2。请使用非交互的行内内容。它不为抽屉命名；请为 Drawer 传入 label。 **(required)** |\n| `subtitle` | `ReactNode` | - | 标题下方的副标题，可包含链接等行内内容；避免使用块级元素。 |\n| `onOpenChange` | `(isOpen: boolean) => unknown` | - | 关闭按钮的回调，以 false 调用（省略时不显示按钮）。传入 Drawer 自己的 onOpenChange。 |\n| `startContent` | `ReactNode` | - | 标题之前的内容（例如返回按钮）。 |\n| `endContent` | `ReactNode` | - | 标题之后、关闭按钮之前的内容。 |\n| `endContentEdgeCompensation` | `'inline' \\| 'block' \\| 'all'` | - | 选择尾部内容插槽的补偿轴；省略时保留关闭操作的自动补偿。 |\n| `hasDivider` | `boolean` | - | 在底部边缘添加分隔线。默认取父级 Layout 的 defaultHasDividers。 |\n\n## Examples\n\n### With close button\n\n```tsx\n\nimport {useState} from 'react';\nimport {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\n\nfunction Inspector() {\n  const [isOpen, setIsOpen] = useState(true);\n\n  // Passing onOpenChange renders a close button that calls it with false.\n  return (\n    <Drawer isOpen={isOpen} onOpenChange={setIsOpen} label=\"Details\">\n      <Layout\n        header={<DrawerHeader title=\"Details\" onOpenChange={setIsOpen} />}\n        content={<LayoutContent>Content</LayoutContent>}\n      />\n    </Drawer>\n  );\n}\n\n```\n\n### With subtitle and end content\n\n```tsx\n\nimport {DrawerHeader} from '@astryxdesign/core/Drawer';\nimport {Badge} from '@astryxdesign/core/Badge';\n\n<DrawerHeader\n  title=\"web-prod-04\"\n  subtitle=\"us-east-1\"\n  endContent={<Badge label=\"Healthy\" />}\n/>;\n\n```\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-drawer-header` | - | - | - |\n| `astryx-drawer-header-start-content` | - | - | - |\n| `astryx-drawer-header-title-block` | - | - | - |\n| `astryx-drawer-header-end-content` | - | - | - |\n| `astryx-drawer-header-close-icon` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'drawer-header': {\n    base: { /* CSS properties */ },\n  },\n  'drawer-header-start-content': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "shell_--lang_xx",
+ "args": [
+  "--lang",
+  "xx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--lang <locale>' argument 'xx' is invalid. Allowed choices are en, zh, dense.\n",
+ "exit": 1,
+ "files": []
+}

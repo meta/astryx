@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-nope_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/nope"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/nope\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

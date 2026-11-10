@@ -1,0 +1,20 @@
+{
+ "id": "search_stylex_--limit_3",
+ "args": [
+  "search",
+  "stylex",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"stylex\" (3 of 54)\n\nname:        useEntryAnimation\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Returns a StyleX style for animating an element on mount. Only animates when the element is dynamically inserted after the initial page paint; elements rendered on page load are not animated. Uses Astryx motion tokens (duration, easing) for consistent animation timing. Server-rendered elements hydrate without the entry style and never animate; elements mounted after hydration animate.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useEntryAnimation\n\nname:        styling-libraries/css-and-stylex\nsection:     stylex\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Other styling libraries › CSS & StyleX › StyleX\ndescription: For StyleX styles, prefer the typed token exports from `@astryxdesign/core/theme/tokens.stylex`. They provide autocomplete and catch token-name typos while still resolving through the same system CSS variables at runtime.\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling-libraries/css-and-stylex stylex\nparent:      npx @astryxdesign/cli@0.7.12 docs styling-libraries/css-and-stylex --index\n\nname:        styling\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Styling components\ndescription: Customize component appearance: xstyle, Tailwind, className, rest props, compound components, data attribute selectors, tokens, and StyleX setup.\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover stylex\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

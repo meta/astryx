@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatComposer_--blocks_@large",
+ "args": [
+  "component",
+  "ChatComposer",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nExamples\n\nname:        ChatComposerAttachments\ndescription: Chat composer with removable file tokens in a collapsible drawer. Use when users can attach files or context to their message.\n\nname:        ChatComposerFlat\ndescription: The composer is raised by default (`elevation=\"low\"`). Set `elevation=\"none\"` to flatten it; it then draws a border with the same rest / hover / focus treatment as a text input.\n\nname:        ChatComposerFooterActions\ndescription: Chat composer with dropdown menus for a model selector and settings in the footer, and a mic button in the send actions slot.\n\nname:        ChatComposerFullFeatured\ndescription: Chat composer with all slots populated: collapsible attachment drawer, header actions, context progress bar, footer dropdown menus, and mic button. Shows the maximum composer configuration.\n\nname:        ChatComposerSimple\ndescription: Minimal chat composer with a placeholder and submit handler. The simplest way to drop a message input into a page.\n\nname:        ChatComposerStreaming\ndescription: Chat composer with streaming state and a stop button. Use when the assistant is generating a response and the user can cancel.\n\nname:        ChatComposerValidation\ndescription: Chat composer with error and warning status messages. Status can appear above or below the composer to surface validation or system feedback.\n\nRelated: 11 blocks that use ChatComposer\n\n- ChatComposerDrawerFeedback\n- ChatComposerInputControlledInput\n- ChatComposerInputDisabled\n- ChatComposerInputMentionTrigger\n- ChatComposerInputMultipleTriggers\n- ChatComposerInputShowcase\n- ChatComposerInputSlashCommands\n- ChatDictationDictationInComposer\n- ChatDictationButtonBasic\n- ChatDictationButtonShowcase\n- ChatSendButtonInComposer\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

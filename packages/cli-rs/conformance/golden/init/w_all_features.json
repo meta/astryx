@@ -1,0 +1,14 @@
+{
+ "id": "w_all_features",
+ "args": [
+  "init",
+  "--all",
+  "--features",
+  "agents"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--all` and `--features` cannot be used together: `--all` installs every feature, so a feature list is redundant.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+Gap report failed
+
+status:          failed
+package:         @astryxdesign/core
+issuesUrl:       https://github.com/meta/astryx/issues
+filedCount:      0
+routedOnlyCount: 0
+Deliveries
+
+handlerType: fallback
+handler:     github
+audience:    public
+status:      failed
+message:     GitHub CLI could not create the routed issue. Install and authenticate gh, then retry.

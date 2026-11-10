@@ -1,0 +1,18 @@
+{
+ "id": "search_DropdownMenuDivider",
+ "args": [
+  "search",
+  "DropdownMenuDivider"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"DropdownMenuDivider\" (2)\n\nname:        DropdownMenuDivider\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: A horizontal rule separating groups of rows in a compound menu. Renders role=\"separator\", so it is never a stop in the arrow-key order. The data-driven equivalent is the `{type: \"divider\"}` entry in `items`; both modes render this component, so they look and theme identically. Host attributes and DOM handlers (id, data-*, aria-*) reach the separator; its role and orientation stay component-owned.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuDivider\n\nname:        canvas-editor\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Canvas Editor\nkind:        page\ndescription: Layered artboard workspace: document tabs over a layer rail, a fixed-size frame you zoom on a muted backdrop, and an inspector of position, type, and filter fields that retargets to the selected layer. Objects hold a coordinate rather than reflowing, so moving one never moves another.\ncommand:     npx @astryxdesign/cli@0.7.12 template canvas-editor --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover DropdownMenuDivider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

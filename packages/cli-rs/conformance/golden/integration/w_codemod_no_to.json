@@ -1,0 +1,14 @@
+{
+ "id": "w_codemod_no_to",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "rename-widget"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --to is required and must be an exact semver version (e.g. 1.0.0). Received: \"\"\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-charts_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/charts"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/charts\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

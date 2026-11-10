@@ -1,0 +1,98 @@
+[
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@xds/core/Button';\nimport '@xds/theme-daily/theme.css';\nexport {LabThing} from '@xds/lab/Thing';\nexport * from '@xds/core/theme';",
+  "output": "import {Button} from \"@astryxdesign/core/Button\";\nimport \"@astryxdesign/theme-neutral/theme.css\";\nexport {LabThing} from \"@astryxdesign/lab/Thing\";\nexport * from \"@astryxdesign/core/theme\";",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "const mod = await import('@xds/core/theme');\nconst core = require('@xds/core');",
+  "output": "const mod = await import(\"@astryxdesign/core/theme\");\nconst core = require(\"@astryxdesign/core\");",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "const packageName = '@xds/core';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {defaultTheme} from '@xds/theme-daily/built';",
+  "output": "import {neutralTheme as defaultTheme} from \"@astryxdesign/theme-neutral/built\";",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {defaultTheme as dt} from '@xds/theme-daily';",
+  "output": "import {neutralTheme as dt} from \"@astryxdesign/theme-neutral\";",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {neutralTheme} from '@xds/theme-neutral';",
+  "output": "import {neutralTheme} from \"@astryxdesign/theme-neutral\";",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.tsx",
+  "options": null,
+  "source": "vi.mock('@xds/core/Text', async orig => ({\n  ...(await orig<typeof import('@xds/core/Text')>()),\n}));",
+  "output": "vi.mock(\"@astryxdesign/core/Text\", async orig => ({\n  ...(await orig<typeof import(\"@astryxdesign/core/Text\")>()),\n}));",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "jest.mock('@xds/core', () => ({}));",
+  "output": "jest.mock(\"@astryxdesign/core\", () => ({}));",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.ts",
+  "options": null,
+  "source": "vi.doMock('@xds/lab/Thing', () => ({}));\njest.doMock('@xds/core/Text', () => ({}));\nmock('@xds/core', () => ({}));",
+  "output": "vi.doMock(\"@astryxdesign/lab/Thing\", () => ({}));\njest.doMock(\"@astryxdesign/core/Text\", () => ({}));\nmock(\"@astryxdesign/core\", () => ({}));",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.tsx",
+  "options": null,
+  "source": "vi.mock('some-other-pkg', () => ({useXDSFoo: () => 1}));",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useTheme} from '@xds/core/theme';\n\nfunction App() {\n  const theme = useTheme();\n  return theme;\n}",
+  "output": "import {useTheme} from \"@astryxdesign/core/theme\";\n\nfunction App() {\n  const theme = useTheme();\n  return theme;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-module-specifiers",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button, IconRegistry} from '@xds/core';\n\nconst registry = new IconRegistry();\nconst el = <Button />;",
+  "output": "import {Button, IconRegistry} from \"@astryxdesign/core\";\n\nconst registry = new IconRegistry();\nconst el = <Button />;",
+  "error": null
+ }
+]

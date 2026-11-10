@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--words",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--words"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--words <list>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "w_rich_@integration",
+ "args": [
+  "discover",
+  "rich"
+ ],
+ "fixture": "integration",
+ "stdout": "Found 8 matches for \"rich\"\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditor  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorAutoLinkPlugin  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorToolbar  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextView  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorShowcase  (template, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext  (package, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate  (package, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate/chocolate  (theme, not installed)\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

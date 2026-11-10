@@ -1,0 +1,12 @@
+{
+ "id": "shell_blog_--bogus_tty_@app",
+ "args": [
+  "blog",
+  "--bogus"
+ ],
+ "fixture": "app",
+ "stdout": "Error: unknown option '--bogus'\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

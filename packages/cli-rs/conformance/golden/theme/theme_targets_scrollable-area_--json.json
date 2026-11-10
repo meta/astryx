@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_scrollable-area_--json",
+ "args": [
+  "theme",
+  "targets",
+  "scrollable-area",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"scrollable-area\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"scrollable-area\",\n        \"className\": \"astryx-scrollable-area\",\n        \"component\": \"ScrollableArea\",\n        \"props\": [\n          \"axis\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

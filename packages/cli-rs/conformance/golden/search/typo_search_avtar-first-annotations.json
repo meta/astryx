@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_avtar-first-annotations",
+ "args": [
+  "search",
+  "avtar-first annotations"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"avtar-first annotations\" (3)\n\nname:        cli/api/enums/response-types\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › API › Enums › Response Types\ndescription: The `type` discriminant present on every --json success envelope. Consumers switch on it to narrow `data`.\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/api/enums/response-types\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/api/enums\n\nname:        cli/api/functions/template\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › API › Functions › template()\ndescription: List, inspect, or scaffold page and block templates.\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/api/functions/template\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/api/functions\n\nname:        cli/commands/template\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › Commands › astryx template\ndescription: List, show, or scaffold page and block templates\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/commands/template\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/commands\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'avtar-first annotations'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

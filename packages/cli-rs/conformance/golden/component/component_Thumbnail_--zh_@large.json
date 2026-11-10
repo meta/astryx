@@ -1,0 +1,19 @@
+{
+ "id": "component_Thumbnail_--zh_@large",
+ "args": [
+  "component",
+  "Thumbnail",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Thumbnail\n\nThumbnail 是图片附件的方形预览卡片。上传时显示骨架屏动画，成功后显示图片，未设置源时显示占位图标。用于聊天编辑器、文件上传列表或任何需要紧凑图片预览的场景。\n\n**Import:** `import {Thumbnail} from '@astryxdesign/core/Thumbnail';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Image | No | The preview image, displayed as a square with cover fit. |\n| Placeholder | No | An image silhouette icon shown when no src is provided. |\n| Remove button | No | An overlaid close button in the top-right corner. Appears when onRemove is set. Sits on a fixed --color-overlay scrim with an --color-on-dark icon to stay visible on any image. |\n| Upload overlay | No | A semi-transparent overlay with a spinner, shown when isLoading is true and a src preview is available. |\n| Skeleton | No | A shimmer animation shown when isLoading is true and no src is set. |\n\n## Best Practices\n\n- **Do:** 始终提供 label 属性并填写文件名，以便屏幕阅读器能够识别缩略图及其移除按钮，并在悬停时显示提示。\n- **Do:** 上传初期使用不带 src 的 isLoading 显示骨架屏；获得预览 URL 后使用带 src 的 isLoading 显示旋转加载覆盖层。\n- **Do:** 将 onClick 与灯箱或详情视图配对，以便用户查看完整图片——组件会自动添加按钮语义和悬停覆盖层。\n- **Don't:** 对 PDF 或电子表格等非图片文件类型使用 Thumbnail——应使用带有相应图标的文件附件组件。\n- **Don't:** 提供 src 时省略 alt 文本——屏幕阅读器需要图片内容的描述，而不仅是 label 中的文件名。\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `src` | `string` | - | 图片源 URL。 |\n| `alt` | `string` | - | 图片的替代文本。省略时图片会被显式标记为装饰性（alt=\"\"、role=\"presentation\"、aria-hidden）并对屏幕阅读器隐藏；若 alt 和 label 均未设置，开发环境会发出警告。 |\n| `label` | `string` | - | 无障碍标签（如文件名）。悬停时以提示工具显示。 |\n| `onRemove` | `(e: React.MouseEvent) => void` | - | 覆盖层移除按钮的回调。 |\n| `onClick` | `(e: React.MouseEvent) => void` | - | 点击处理器。添加按钮语义和悬停覆盖层。 |\n| `isLoading` | `boolean` | `false` | 显示骨架屏（无 src）或上传覆盖层（有 src）。 |\n| `isDisabled` | `boolean` | `false` | 是否禁用缩略图。 |\n| `showRemoveOn` | `'always' \\| 'hover'` | `'hover'` | 何时显示移除按钮：hover（默认，悬停时以及键盘聚焦时显示，触摸设备上保持可见）\\| always（始终显示）。仅在设置 onRemove 时生效。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式。必须是 stylex.create() 的值，而非内联样式对象。 |\n| `className` | `string` | - | 根元素的 CSS 类名。建议使用 xstyle。 |\n| `style` | `CSSProperties` | - | 根元素的内联样式。建议使用 xstyle。 |\n| `data-testid` | `string` | - | 用于自动化测试框架的测试选择器。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-thumbnail` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'thumbnail': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

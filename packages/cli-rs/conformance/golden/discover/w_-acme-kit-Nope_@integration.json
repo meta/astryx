@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-kit-Nope_@integration",
+ "args": [
+  "discover",
+  "@acme/kit/Nope"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Component \"Nope\" not found in @acme/kit\n",
+ "exit": 1,
+ "files": []
+}

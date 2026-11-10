@@ -1,0 +1,11 @@
+{
+ "id": "component_@brokencore",
+ "args": [
+  "component"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: ENOENT: no such file or directory, scandir '/tmp/astryx-conformance/work/brokencore/node_modules/@astryxdesign/core/src'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "integration_add_template_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "Thing"
+ ],
+ "fixture": "author",
+ "stdout": "",
+ "stderr": "Error: Invalid template name \"Thing\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,10 @@
+export default {
+  agentDocs: {
+    append: [
+      'First line.', // why
+      'Second.',
+    ],
+  },
+
+  docs: './docs'
+};

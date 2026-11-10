@@ -1,0 +1,18 @@
+{
+ "id": "template_BannerStatuses_@large",
+ "args": [
+  "template",
+  "BannerStatuses"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function BannerStatuses() {\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Banner\n        status=\"info\"\n        title=\"A new software update is available\"\n        description=\"Version 2.4.1 includes performance improvements and bug fixes.\"\n      />\n      <Banner\n        status=\"success\"\n        title=\"Changes saved\"\n        description=\"Your profile information has been updated successfully.\"\n      />\n      <Banner\n        status=\"warning\"\n        title=\"Storage almost full\"\n        description=\"You have used 90% of your available storage.\"\n      />\n      <Banner\n        status=\"error\"\n        title=\"Build failed\"\n        description=\"3 tests did not pass. Check the logs for details.\"\n      />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

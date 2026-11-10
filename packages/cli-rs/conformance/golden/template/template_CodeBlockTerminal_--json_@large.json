@@ -1,0 +1,13 @@
+{
+ "id": "template_CodeBlockTerminal_--json_@large",
+ "args": [
+  "template",
+  "CodeBlockTerminal",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CodeBlockTerminal\",\n    \"description\": \"A dark terminal-style command block: a bash CodeBlock wrapped in SyntaxTheme with the GitHub Dark preset, copy button on, and no line numbers. Use for shell sessions or CLI output that should read as a terminal even on light pages. Reach for a dark syntax preset instead of hand-rolling a dark box with custom CSS.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"CodeBlock\",\n      \"SyntaxTheme\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {SyntaxTheme} from '@astryxdesign/core/theme';\\nimport {githubDark} from '@astryxdesign/core/theme/syntax';\\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\\n\\nconst commands = `$ astryx init --features agents\\n✓ AI agent docs installed → AGENTS.md\\n$ pnpm astryx component CodeBlock --dense`;\\n\\nexport default function CodeBlockTerminal() {\\n  return (\\n    <SyntaxTheme theme={githubDark}>\\n      <CodeBlock\\n        code={commands}\\n        language=\\\"bash\\\"\\n        hasCopyButton\\n        style={{width: '100%', maxWidth: 480}}\\n      />\\n    </SyntaxTheme>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

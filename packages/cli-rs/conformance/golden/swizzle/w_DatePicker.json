@@ -1,0 +1,12 @@
+{
+ "id": "w_DatePicker",
+ "args": [
+  "swizzle",
+  "DatePicker"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Component \"DatePicker\" not found.\n\n  AlertDialog\n  AppShell\n  AspectRatio\n  Avatar\n  AvatarGroup\n  Badge\n  Banner\n  Blockquote\n  BottomSheet\n  Breadcrumbs\n",
+ "exit": 1,
+ "files": []
+}

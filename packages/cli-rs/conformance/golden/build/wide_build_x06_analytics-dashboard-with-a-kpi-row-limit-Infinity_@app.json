@@ -1,0 +1,14 @@
+{
+ "id": "wide_build_x06_analytics-dashboard-with-a-kpi-row-limit-Infinity_@app",
+ "args": [
+  "build",
+  "analytics dashboard with a kpi row",
+  "--limit",
+  "Infinity"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"Infinity\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "component_Breadcrumbs_--props_--json_@large",
+ "args": [
+  "component",
+  "Breadcrumbs",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"BreadcrumbItem elements to render inside the breadcrumb trail.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"BreadcrumbItem\",\n          \"props\": {\n            \"href\": \"#\"\n          },\n          \"children\": \"Page\"\n        }\n      ],\n      \"required\": true\n    },\n    {\n      \"name\": \"separator\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Separator rendered between breadcrumb items. The built-in slash mirrors automatically in RTL.\",\n      \"default\": \"'/'\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"chevronRight\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"variant\",\n      \"type\": \"'default' | 'supporting'\",\n      \"description\": \"Visual variant: supporting is smaller with secondary text styling.\",\n      \"default\": \"'default'\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the nav landmark (aria-label).\",\n      \"default\": \"'Breadcrumb'\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--category",
+ "args": [
+  "gap-report",
+  "--category"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--category <category>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

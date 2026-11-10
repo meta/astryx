@@ -1,0 +1,19 @@
+{
+ "id": "docs_shape_--dense_@large",
+ "args": [
+  "docs",
+  "shape",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n# Shape\n\nBorder radius tokens for consistent component rounding, from sharp corners to full pills.\n\n## Overview\n\nThe radius scale uses a semantic naming system: inner → element → container → page. Each level fits a specific context. Themes can multiply the entire scale via a radius multiplier, with --radius-none and --radius-full as fixed anchors.\n\n## Radius Scale\n\nSeven radius tokens, from 0px to 9999px.\n\nNumeric scale based on a 4dp base unit. Tokens scale with the theme's radius multiplier; --radius-none and --radius-full are fixed.\n\nToken              | Value \n------------------ | ------\n--radius-none      | 0px   \n--radius-inner     | 4px   \n--radius-element   | 8px   \n--radius-container | 12px  \n--radius-page      | 28px  \n--radius-chat      | 28px  \n--radius-full      | 9999px\n\n## Concentric Radius\n\nInside a padded, rounded container, give nested elements a radius of outer radius minus padding so the curves stay concentric. Card does not do this for your content.\n\nConcentric radius formula:\n```css\n.inner {\n  border-radius: max(0px, calc(var(--radius-container) - var(--spacing-4)));\n}\n```\n\n## Best Practices\n\n+ Use --radius-element for interactive controls (buttons, inputs, selectors).\n+ Use --radius-container for content containers (cards, panels, dialogs).\n+ Use --radius-full for pill shapes (badges, tags, avatar status dots).\n\nx Use --radius-page for small elements; it's meant for page-level containers.\nx Hardcode radius values; they won't scale with theme radius multipliers.\n\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion\nNext: npx @astryxdesign/cli@0.7.12 docs spacing\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

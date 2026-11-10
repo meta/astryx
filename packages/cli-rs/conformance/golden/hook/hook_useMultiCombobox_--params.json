@@ -1,0 +1,19 @@
+{
+ "id": "hook_useMultiCombobox_--params",
+ "args": [
+  "hook",
+  "useMultiCombobox",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseMultiComboboxOptions` | - | Configuration object. **(required)** |\n| `options.selectableItems` | `MultiSelectorOptionData[]` | - | The options in the same order as they render. Options with `disabled` cannot be toggled and are skipped while moving through the open list. Opening never lands on a disabled option: ArrowUp opens on the last enabled option, and ArrowDown, a press, Enter or Space on the first enabled option. **(required)** |\n| `options.isOpen` | `boolean` | - | Whether the list is shown. The caller owns this state. **(required)** |\n| `options.onOpen` | `() => unknown` | - | Called to show the list. Return `false` to refuse; the hook then leaves the highlight alone. **(required)** |\n| `options.onClose` | `() => void` | - | Called to hide the list. The highlight resets first. **(required)** |\n| `options.onToggle` | `(itemValue: string) => void` | - | Called with the value of the option to add or remove. Toggling keeps the list open. **(required)** |\n| `options.listboxId` | `string` | - | The listbox (or grid) element's id. Option and action-cell ids are derived from it. **(required)** |\n| `options.hasSearch` | `boolean` | `false` | Whether the list has its own search field. Space then types instead of toggling, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last enabled option), Delete and Backspace edit the query, and type-to-select is off. Home and End still jump to the first and last option, so a search input that keeps them for the caret should stop them before this handler and rely on PageUp and PageDown. |\n| `options.onClear` | `() => void` | - | Clears every selected value. When provided, Delete or Backspace on the closed control clears them, so clearing is not pointer-only. Ignored while the list is open or with `hasSearch`. |\n| `options.hasValue` | `boolean` | `false` | Whether anything is selected. The Delete and Backspace clear is skipped when false. |\n| `options.isGrid` | `boolean` | `false` | Whether each row pairs an option cell with an action cell. The inline-end arrow then moves the highlight to the row's action and the inline-start arrow back, following visual direction in right-to-left layouts, and Enter on the action runs `onActivateAction` instead of toggling. |\n| `options.rowHasAction` | `(index: number) => boolean` | - | In a grid, whether the row at `index` has an action cell to move to. |\n| `options.onActivateAction` | `(index: number) => void` | - | In a grid, runs the control in the highlighted row's action cell. The selection does not change. |\n| `options.isDisabled` | `boolean` | `false` | Whether the control ignores clicks and keys. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "ex_experimental_icon_add_Bin_--from_-acme-glyph-library-solid_--id_bin_--variant_solid_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Bin",
+  "--from",
+  "@acme/glyph-library/solid",
+  "--id",
+  "bin",
+  "--variant",
+  "solid"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

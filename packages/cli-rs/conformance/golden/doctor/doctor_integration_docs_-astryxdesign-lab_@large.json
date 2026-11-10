@@ -1,0 +1,20 @@
+{
+ "id": "doctor_integration_docs_-astryxdesign-lab_@large",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "@astryxdesign/lab"
+ ],
+ "fixture": "large",
+ "stdout": "Checking integration docs: @astryxdesign/lab@0.1.9\n\nIntegration issues\n\nseverity: [warn]\ncode:     source_without_component_doc\nmessage:  Component source \"LoadingMessage.tsx\" has no same-stem metadata file LoadingMessage.doc.mjs, so Astryx ignores it. Fix: add LoadingMessage.doc.mjs beside it with type: 'component'; `astryx docs authoring component-doc` lists its fields.\n\nseverity: [warn]\ncode:     unknown_translated_prop\nmessage:  docsDense.propDescriptions names \"xstyle\", but no prop entry of TransferListSelector is named \"xstyle\" (an overlay matches an entry's whole name), so that text is never shown.\nfix:      In src/TransferList/TransferList.doc.mjs, remove \"xstyle\" from docsDense.propDescriptions, or document the prop \"xstyle\" first.\nfile:     src/TransferList/TransferList.doc.mjs\nline:     781\n\nseverity: [warn]\ncode:     unknown_translated_prop\nmessage:  docsDense.propDescriptions names \"className\", but no prop entry of TransferListSelector is named \"className\" (an overlay matches an entry's whole name), so that text is never shown.\nfix:      In src/TransferList/TransferList.doc.mjs, remove \"className\" from docsDense.propDescriptions, or document the prop \"className\" first.\nfile:     src/TransferList/TransferList.doc.mjs\nline:     782\n\nseverity: [warn]\ncode:     unknown_translated_prop\nmessage:  docsDense.propDescriptions names \"style\", but no prop entry of TransferListSelector is named \"style\" (an overlay matches an entry's whole name), so that text is never shown.\nfix:      In src/TransferList/TransferList.doc.mjs, remove \"style\" from docsDense.propDescriptions, or document the prop \"style\" first.\nfile:     src/TransferList/TransferList.doc.mjs\nline:     781\n\n[ok] The docs tree and every link in these docs check out.\n\n[ok] No doc topics overlap with Core.\n\n[ok] No topic copies a passage from another.\n\n[ok] No filler phrases or low-density topics.\n\n[ok] Every pointer to a doc is a link.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

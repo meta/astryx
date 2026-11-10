@@ -1,0 +1,45 @@
+[package]
+name = "astryx-rs"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Experimental Rust clone of the Astryx CLI. Output must match the JavaScript CLI byte for byte."
+license = "MIT"
+
+[[bin]]
+name = "astryx"
+path = "src/main.rs"
+
+[lib]
+name = "astryx_rs"
+path = "src/lib.rs"
+
+[dependencies]
+base64 = "0.22"
+boa_engine = { version = "0.22", features = ["intl_bundled"] }
+boa_gc = "0.22"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+icu_collator = "2"
+indexmap = "2"
+libc = "0.2"
+libm = "0.2"
+oxc = { version = "0.158", features = ["ast_visit", "codegen", "semantic", "transformer"] }
+oxc_allocator = "0.158"
+oxc_ast = { version = "0.158", features = ["serialize"] }
+oxc_ast_visit = "0.158"
+oxc_parser = "0.158"
+oxc_span = "0.158"
+regress = "0.12"
+ryu-js = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "raw_value"] }
+sha2 = "0.10"
+unicode-normalization = "0.1"
+ureq = "2"
+url = "2"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "thin"
+codegen-units = 16

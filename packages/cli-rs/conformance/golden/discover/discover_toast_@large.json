@@ -1,0 +1,12 @@
+{
+ "id": "discover_toast_@large",
+ "args": [
+  "discover",
+  "toast"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"toast\" not found\n\n  @astryxdesign/lab/Stat  (similar name)\n  @astryxdesign/lab/Tour  (similar name)\n  @astryxdesign/charts/Chart  (similar name)\n",
+ "exit": 1,
+ "files": []
+}

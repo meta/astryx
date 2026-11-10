@@ -1,0 +1,12 @@
+{
+ "id": "w_glyphs_@discover-iconsets",
+ "args": [
+  "discover",
+  "glyphs"
+ ],
+ "fixture": "discover-iconsets",
+ "stdout": "Found 2 matches for \"glyphs\"\n\n- npx @astryxdesign/cli@0.7.12 discover @acme/glyphs/glyphs  (icon-set)\n- npx @astryxdesign/cli@0.7.12 discover @acme/glyphs  (package)\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

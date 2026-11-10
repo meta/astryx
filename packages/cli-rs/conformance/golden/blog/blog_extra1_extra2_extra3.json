@@ -1,0 +1,14 @@
+{
+ "id": "blog_extra1_extra2_extra3",
+ "args": [
+  "blog",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\n",
+ "exit": 1,
+ "files": []
+}

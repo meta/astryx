@@ -1,0 +1,13 @@
+{
+ "id": "ex_theme_build_.-src-themes-.ts_@empty",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/*.ts"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: File not found: /tmp/astryx-conformance/work/empty/src/themes/*.ts\n\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/*.ts  (globs are expanded by your shell; pass the pattern unquoted, or list the files)\n",
+ "exit": 1,
+ "files": []
+}

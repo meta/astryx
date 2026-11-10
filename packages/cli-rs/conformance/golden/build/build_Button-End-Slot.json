@@ -1,0 +1,18 @@
+{
+ "id": "build_Button-End-Slot",
+ "args": [
+  "build",
+  "Button — End Slot"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"Button - End Slot\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        ButtonWithEndSlot\npackage:     @astryxdesign/core\ndescription: Buttons with a trailing badge showing a count or status.\n\nname:        ButtonWithIcon\npackage:     @astryxdesign/core\ndescription: Buttons with a leading icon that reinforces the label.\n\nname:        ButtonVariants\npackage:     @astryxdesign/core\ndescription: All 4 button variants in default, disabled, and loading states.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        IconButton\npackage:     @astryxdesign/core\ndescription: A button that shows only an icon with no visible text.\n\nname:        useClickableContainer\npackage:     @astryxdesign/core\ndescription: Makes a container element clickable while preserving nested interactive element behavior.\n\nname:        useInteractiveRole\npackage:     @astryxdesign/core\ndescription: Resolves what a polymorphic component should render as, in one place: href wins, then onClick, then an interactive trigger context supplied by a parent (Popover, DropdownMenu and friends), then inert.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

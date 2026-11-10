@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--bogus-flag",
+ "args": [
+  "gap-report",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_@integration",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--to",
+  "@acme/widgets"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: No gap-report destination \"@acme/widgets\": no loaded integration names an issues URL. Leave out --to for the default.\n",
+ "exit": 1,
+ "files": []
+}

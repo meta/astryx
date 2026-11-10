@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-kit-AcmeBadge_@integration",
+ "args": [
+  "discover",
+  "@acme/kit/AcmeBadge"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Component \"AcmeBadge\" not found in @acme/kit\n",
+ "exit": 1,
+ "files": []
+}

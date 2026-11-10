@@ -1,0 +1,11 @@
+{
+ "id": "search_@nocore",
+ "args": [
+  "search"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'query'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-not-monotonic-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/not-monotonic.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: x: x light ramp is not luminance-monotonic with the requested anchors.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_OverflowListMultiRowTags_@large",
+ "args": [
+  "template",
+  "OverflowListMultiRowTags"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {OverflowList} from '@astryxdesign/core/OverflowList';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Card} from '@astryxdesign/core/Card';\n\nconst tags = [\n  'React',\n  'TypeScript',\n  'StyleX',\n  'Storybook',\n  'Vitest',\n  'Playwright',\n  'ESLint',\n  'Prettier',\n  'Vite',\n  'pnpm',\n];\n\nexport default function OverflowListMultiRowTags() {\n  return (\n    <Card\n      padding={2}\n      style={{\n        resize: 'horizontal',\n        overflow: 'hidden',\n        minWidth: 120,\n        width: 260,\n      }}>\n      <OverflowList\n        gap={1}\n        maxRows={2}\n        overflowRenderer={overflowItems => (\n          <Badge variant=\"neutral\" label={`+${overflowItems.length}`} />\n        )}>\n        {tags.map(tag => (\n          <Badge key={tag} variant=\"info\" label={tag} />\n        ))}\n      </OverflowList>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

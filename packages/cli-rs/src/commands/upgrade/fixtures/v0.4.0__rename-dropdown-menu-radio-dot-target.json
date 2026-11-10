@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {defineTheme} from '@astryxdesign/core/theme';\nexport const theme = defineTheme({\n  name: 'brand',\n  components: {\n    'dropdown-menu-radio-dot': {base: {backgroundColor: 'var(--color-accent)'}},\n  },\n});",
+  "output": "import {defineTheme} from '@astryxdesign/core/theme';\nexport const theme = defineTheme({\n  name: 'brand',\n  components: {\n    /* TODO(astryx upgrade): `dropdown-menu-radio-dot` became `radio-indicator-dot`, which styles EVERY radio dot, not just the ones in a menu. If this rule was meant to be menu-only, scope it under the containing `dropdown-menu-radio` target instead of this one. */\n    'radio-indicator-dot': {base: {backgroundColor: 'var(--color-accent)'}},\n  },\n});",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const components = {\n  'dropdown-menu-radio-dot': {base: {width: '10px'}},\n};",
+  "output": "const components = {\n  /* TODO(astryx upgrade): `dropdown-menu-radio-dot` became `radio-indicator-dot`, which styles EVERY radio dot, not just the ones in a menu. If this rule was meant to be menu-only, scope it under the containing `dropdown-menu-radio` target instead of this one. */\n  'radio-indicator-dot': {base: {width: '10px'}},\n};",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const sel = '.astryx-dropdown-menu-radio-dot';\nconst nested = '.astryx-dropdown-menu-radio .astryx-dropdown-menu-radio-dot';",
+  "output": "const sel = /* TODO(astryx upgrade): `dropdown-menu-radio-dot` became `radio-indicator-dot`, which styles EVERY radio dot, not just the ones in a menu. If this rule was meant to be menu-only, scope it under the containing `dropdown-menu-radio` target instead of this one. */\n'.astryx-radio-indicator-dot';\nconst nested = /* TODO(astryx upgrade): `dropdown-menu-radio-dot` became `radio-indicator-dot`, which styles EVERY radio dot, not just the ones in a menu. If this rule was meant to be menu-only, scope it under the containing `dropdown-menu-radio` target instead of this one. */\n'.astryx-dropdown-menu-radio .astryx-radio-indicator-dot';",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const css = `.astryx-dropdown-menu-radio-dot { background: ${c}; }`;",
+  "output": "const css = `.astryx-radio-indicator-dot { background: ${c}; }`;",
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const components = {\n  'dropdown-menu-radio': {base: {borderWidth: '2px'}},\n};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const components = {button: {base: {fontWeight: '600'}}};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.4.0/rename-dropdown-menu-radio-dot-target",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const components = {\n  /* TODO(astryx upgrade): `dropdown-menu-radio-dot` became `radio-indicator-dot`, which styles EVERY radio dot, not just the ones in a menu. If this rule was meant to be menu-only, scope it under the containing `dropdown-menu-radio` target instead of this one. */\n  'radio-indicator-dot': {base: {width: '10px'}},\n};",
+  "output": null,
+  "error": null
+ }
+]

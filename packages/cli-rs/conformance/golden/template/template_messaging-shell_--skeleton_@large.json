@@ -1,0 +1,19 @@
+{
+ "id": "template_messaging-shell_--skeleton_@large",
+ "args": [
+  "template",
+  "messaging-shell",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# messaging-shell - Four-column nested navigation narrowing left to right (team workspace, channel list, message stream, thread panel) where each column scopes the next. Dense rows, zero cards.\n# Components: Avatar, AvatarStatusDot, Badge, ChatComposer, ChatLayout, ChatMessage, ChatMessageBubble, ChatMessageList, ChatMessageMetadata, ChatSystemMessage, Divider, EmptyState, IconButton, Layout, List, Stack, StatusDot, TextInput, Timestamp\n\n<Layout height=\"fill\">\n  /* start: */\n  <LayoutPanel padding={0} width={68}>\n  </LayoutPanel>\n  <LayoutPanel padding={0} width={260}>\n  </LayoutPanel>\n  /* end: */\n  <LayoutPanel padding={0} width={340}>\n  </LayoutPanel>\n  /* content: */\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

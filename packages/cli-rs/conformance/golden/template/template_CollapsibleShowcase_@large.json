@@ -1,0 +1,18 @@
+{
+ "id": "template_CollapsibleShowcase_@large",
+ "args": [
+  "template",
+  "CollapsibleShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Stack} from '@astryxdesign/core/Stack';\n\n/**\n * Rows inside one card, coordinated so only one is open at a time.\n *\n * Triggers take body-semibold rather than the trigger's default `large`: three\n * rows sharing a single surface are peers, and at 17px semibold each would\n * read as its own section heading. Keep `large` for the case it is for — one\n * Collapsible per card or per Section, where the trigger really is the\n * heading of that surface (see the Multiple Mode and Controlled examples).\n */\nexport default function CollapsibleShowcase() {\n  return (\n    <Card width={420}>\n      <CollapsibleGroup type=\"single\" defaultValue=\"notifications\">\n        <Stack gap={4}>\n          <Collapsible\n            trigger={\n              <Text type=\"body\" weight=\"semibold\">\n                General\n              </Text>\n            }\n            value=\"general\">\n            <Text type=\"body\" color=\"secondary\">\n              Display name, language, and time zone. Time zone drives every date\n              shown in the product, including scheduled reports.\n            </Text>\n          </Collapsible>\n\n          <Collapsible\n            trigger={\n              <Text type=\"body\" weight=\"semibold\">\n                Notifications\n              </Text>\n            }\n            value=\"notifications\">\n            <Stack gap={2}>\n              <Text type=\"body\" color=\"secondary\">\n                Choose which email and push notifications you receive. Mentions\n                and direct messages are always delivered — everything else can\n                be turned off or batched into a daily digest.\n              </Text>\n              <Text type=\"body\" color=\"secondary\">\n                Quiet hours pause push notifications overnight in your local\n                time zone without affecting email.\n              </Text>\n            </Stack>\n          </Collapsible>\n\n          <Collapsible\n            trigger={\n              <Text type=\"body\" weight=\"semibold\">\n                Privacy\n              </Text>\n            }\n            value=\"privacy\">\n            <Text type=\"body\" color=\"secondary\">\n              Control who can see your profile and activity, and whether your\n              workspace appears in search for people outside your organization.\n            </Text>\n          </Collapsible>\n        </Stack>\n      </CollapsibleGroup>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

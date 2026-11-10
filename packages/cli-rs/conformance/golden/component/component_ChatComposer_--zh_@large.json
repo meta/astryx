@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatComposer_--zh_@large",
+ "args": [
+  "component",
+  "ChatComposer",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ChatComposer\n\n聊天编写器布局外壳。排列命名插槽（附件、标题栏、输入、页脚、发送），带有页面圆角容器和同心内圆角。\n\n**Import:** `import {ChatComposer} from '@astryxdesign/core/Chat';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Composer frame | Yes | Outer composition root that groups the body with an optional status message above or below it. |\n| Composer body | Yes | Rounded, elevated surface containing the header, input, and footer. |\n| Drawer | No | Content before the body for attachments or other expandable context, typically ChatComposerDrawer. |\n| Header | No | Row for start-aligned actions and end-aligned contextual information. |\n| Input | Yes | Default ChatComposerInput or a custom editor connected through useChatComposerContext(). |\n| Footer | Yes | Row for caller-supplied footer and send actions plus the primary action. |\n| Send or stop action | Yes | Default ChatSendButton or a custom sendButton; it submits the current draft or requests interruption. |\n| Status message | No | Error or warning feedback rendered before or after the composer body. |\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `onSubmit` | `(value: string) => void` | - | 用户提交消息时调用。 **(required)** |\n| `onStop` | `() => void` | - | 用户请求停止生成时调用。 |\n| `isStopShown` | `boolean` | `false` | 是否显示停止按钮。 |\n| `value` | `string` | - | 受控输入值。 |\n| `onChange` | `(value: string) => void` | - | 受控模式的输入值变更时调用。序列化字符串包含标记占位符。 |\n| `placeholder` | `string` | `'Type a message...'` | 输入为空时显示的占位文本。 |\n| `isDisabled` | `boolean` | `false` | 禁用编写器。 |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | 视觉密度。 |\n| `elevation` | `'none' \\| 'low'` | `'low'` | 编写器主体的静止高度。low（默认）保持当前的抬起外观——静止时 low，悬停/聚焦时升至 med。none 会将其扁平化并绘制边框。编辑器通过键盘获得焦点时，两种呈现方式都会显示共享焦点环；指针聚焦不会显示该焦点环。 |\n| `drawer` | `ReactNode` | - | 插槽：输入上方的可折叠抽屉——附件、上下文标签等。使用 ChatComposerDrawer。 |\n| `headerActions` | `ReactNode` | - | 插槽：标题左侧操作按钮（附件、提及按钮）。使用仅图标 size=\"sm\" 按钮。 |\n| `headerContext` | `ReactNode` | - | 插槽：标题右侧上下文信息（上下文窗口使用情况、ProgressBar、辅助文本）。 |\n| `input` | `ReactNode` | - | 插槽：自定义输入元素。替换默认输入。使用 ChatComposerInput 实现触发菜单/标记，或通过 useChatComposerContext() 将任意输入（纯 textarea、富文本编辑器）接入组合契约——读取 value/onChange/onSubmit/canSend，并在 inputControlRef 上注册聚焦控制，使点击空白处聚焦生效。 |\n| `footerActions` | `ReactNode` | - | 插槽：左对齐的页脚操作（模型选择器等）。 |\n| `sendActions` | `ReactNode` | - | 插槽：发送按钮左侧的操作。 |\n| `sendButton` | `ReactNode` | - | 插槽：自定义发送按钮。替换默认的发送/停止按钮。 |\n| `status` | `{ type: 'error' \\| 'warning'; message?: string }` | - | 编写器下方（或上方）的状态消息。 |\n| `statusPosition` | `'top' \\| 'bottom'` | `'bottom'` | 状态渲染位置。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

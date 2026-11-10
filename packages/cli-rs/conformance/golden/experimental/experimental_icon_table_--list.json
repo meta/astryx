@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_table_--list",
+ "args": [
+  "experimental",
+  "icon",
+  "table",
+  "--list"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --list and a query cannot be used together\n",
+ "exit": 1,
+ "files": []
+}

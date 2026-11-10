@@ -1,0 +1,12 @@
+{
+ "id": "shell_blog_--bogus_@empty",
+ "args": [
+  "blog",
+  "--bogus"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown option '--bogus'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "init_--agent_copilot",
+ "args": [
+  "init",
+  "--agent",
+  "copilot"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown agent \"copilot\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
+ "exit": 1,
+ "files": []
+}

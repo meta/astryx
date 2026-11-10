@@ -1,0 +1,15 @@
+{
+ "id": "w_doctor_int_validate_bad-throws_broken_json",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "@bad/throws",
+  "--json"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@bad/throws\",\n    \"version\": \"1.0.0\",\n    \"issues\": [\n      {\n        \"code\": \"invalid_manifest\",\n        \"severity\": \"error\",\n        \"message\": \"manifest exploded\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

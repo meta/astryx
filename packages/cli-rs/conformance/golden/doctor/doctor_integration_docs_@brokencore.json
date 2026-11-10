@@ -1,0 +1,19 @@
+{
+ "id": "doctor_integration_docs_@brokencore",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "brokencore",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. To check an installed integration: npx @astryxdesign/cli@0.7.12 doctor integration docs <package>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/brokencore\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

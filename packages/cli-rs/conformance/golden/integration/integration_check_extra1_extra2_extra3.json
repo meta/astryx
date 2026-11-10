@@ -1,0 +1,15 @@
+{
+ "id": "integration_check_extra1_extra2_extra3",
+ "args": [
+  "integration",
+  "check",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'check'. Expected 0 arguments but got 3.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_HoverCardInteractiveContent_@large",
+ "args": [
+  "template",
+  "HoverCardInteractiveContent"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {HoverCard} from '@astryxdesign/core/HoverCard';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {VStack, HStack} from '@astryxdesign/core/Layout';\nimport {Link} from '@astryxdesign/core/Link';\nimport {Text} from '@astryxdesign/core/Text';\nimport {LinkIcon} from '@heroicons/react/24/outline';\n\nexport default function HoverCardInteractiveContent() {\n  return (\n    <Text type=\"body\">\n      Read more in the{' '}\n      <HoverCard\n        placement=\"below\"\n        content={\n          <VStack gap={2} style={{maxWidth: 280}}>\n            <HStack gap={2} vAlign=\"start\">\n              <Icon icon={LinkIcon} size=\"sm\" color=\"secondary\" />\n              <VStack gap={1}>\n                <Text type=\"label\">Getting Started Guide</Text>\n                <Text type=\"body\" color=\"secondary\">\n                  Learn how to set up your first project, invite team members,\n                  and configure your workspace.\n                </Text>\n                <Text type=\"supporting\" color=\"secondary\">\n                  docs.example.com/getting-started\n                </Text>\n              </VStack>\n            </HStack>\n          </VStack>\n        }>\n        <Link href=\"#\" hasUnderline>\n          Getting Started Guide\n        </Link>\n      </HoverCard>\n      .\n    </Text>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

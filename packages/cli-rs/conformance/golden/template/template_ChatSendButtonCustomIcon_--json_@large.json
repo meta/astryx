@@ -1,0 +1,13 @@
+{
+ "id": "template_ChatSendButtonCustomIcon_--json_@large",
+ "args": [
+  "template",
+  "ChatSendButtonCustomIcon",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatSendButtonCustomIcon\",\n    \"description\": \"Send buttons with custom icons via sendIcon and stopIcon props. Use to match the personality of the chat experience: a paper airplane for messaging, sparkles for AI generation, or a check mark for confirmation flows.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatSendButton\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ChatSendButton} from '@astryxdesign/core/Chat';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {\\n  CheckIcon,\\n  PaperAirplaneIcon,\\n  SparklesIcon,\\n} from '@heroicons/react/24/solid';\\nimport {XCircleIcon} from '@heroicons/react/24/outline';\\n\\nexport default function ChatSendButtonCustomIcon() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={4}>\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Custom icons for send and stop states\\n      </Text>\\n      <Stack direction=\\\"horizontal\\\" gap={4} vAlign=\\\"center\\\">\\n        <ChatSendButton\\n          isDisabled={false}\\n          onSend={() => {}}\\n          sendIcon={<Icon icon={PaperAirplaneIcon} size=\\\"sm\\\" />}\\n        />\\n        <ChatSendButton\\n          isDisabled={false}\\n          onSend={() => {}}\\n          sendIcon={<Icon icon={CheckIcon} size=\\\"sm\\\" />}\\n        />\\n        <ChatSendButton\\n          isDisabled={false}\\n          onSend={() => {}}\\n          sendIcon={<Icon icon={SparklesIcon} size=\\\"sm\\\" />}\\n        />\\n        <ChatSendButton\\n          isStopShown\\n          onStop={() => {}}\\n          stopIcon={<Icon icon={XCircleIcon} size=\\\"sm\\\" />}\\n        />\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

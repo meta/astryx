@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--to-not-a-version",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--to=not-a-version"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"to\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

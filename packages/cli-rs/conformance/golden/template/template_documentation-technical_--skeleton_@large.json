@@ -1,0 +1,19 @@
+{
+ "id": "template_documentation-technical_--skeleton_@large",
+ "args": [
+  "template",
+  "documentation-technical",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# documentation-technical - Reference article ordered as sequential numbered steps with code at each stage, plus callout cards for prerequisites and onward links. A linear walkthrough rather than a browsable reference.\n# Components: Card, CodeBlock, Divider, DropdownMenu, Layout, List, Outline, Selector\n\n<Layout role=\"complementary\" height=\"auto\">\n  /* end: */\n  <LayoutPanel role=\"complementary\">\n    <Outline />\n  </LayoutPanel>\n  /* content: */\n  <LayoutContent padding={8}>\n    <VStack gap={8}>\n      <VStack gap={2}>\n        <Text />\n        <Text />\n        <Selector width=\"100%\" />\n      </VStack>\n      <Card>\n        <VStack gap={3}>\n          <HStack gap={2}>\n            <StackItem />\n            <HStack gap={2}>\n              <Icon />\n              <Text />\n            </HStack>\n            <Button variant=\"ghost\" />\n            <DropdownMenu />\n          </HStack>\n          <Text />\n        </VStack>\n      </Card>\n      <VStack gap={4}>\n        <Heading />\n        <List density=\"compact\">\n          <ListItem />\n          <ListItem />\n          <ListItem />\n        </List>\n      </VStack>\n      ...\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

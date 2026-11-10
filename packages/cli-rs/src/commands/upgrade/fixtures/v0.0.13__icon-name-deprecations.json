@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon=\"checkCircle\" />",
+  "output": "<XDSIcon icon='success' />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon=\"xCircle\" />",
+  "output": "<XDSIcon icon='error' />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon={copied ? 'checkCircle' : 'copy'} />",
+  "output": "<XDSIcon icon={copied ? 'success' : 'copy'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon={isOk ? 'checkCircle' : 'xCircle'} />",
+  "output": "<XDSIcon icon={isOk ? 'success' : 'error'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon={valid && 'checkCircle'} />",
+  "output": "<XDSIcon icon={valid && 'success'} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const nav = [{ label: 'Done', icon: 'checkCircle' }];",
+  "output": "const nav = [{ label: 'Done', icon: 'success' }];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {XDSIconRegistry} from '@xds/core/Icon';\nconst icons = { checkCircle: <Svg />, xCircle: <X /> };",
+  "output": "import type {XDSIconRegistry} from '@xds/core/Icon';\nconst icons = { success: <Svg />, error: <X /> };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<div title=\"checkCircle\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.13/icon-name-deprecations",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSIcon icon={copied ? 'checkCircle' : 'copy'} color=\"inherit\" />",
+  "output": "<XDSIcon icon={copied ? 'success' : 'copy'} color=\"inherit\" />",
+  "error": null
+ }
+]

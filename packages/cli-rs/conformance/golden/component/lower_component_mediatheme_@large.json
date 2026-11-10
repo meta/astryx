@@ -1,0 +1,18 @@
+{
+ "id": "lower_component_mediatheme_@large",
+ "args": [
+  "component",
+  "mediatheme"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# MediaTheme\n\nProvides token overrides for content rendered on inverted surfaces: media overlays, scrims, toasts, and tooltips. The base behavior flips color-scheme so all light-dark() tokens resolve to the correct side. Only a small set of tokens need explicit overrides beyond that. Themes can further customize component appearance on media surfaces via onDark/onLight in defineTheme(), with both token overrides (e.g. \"--color-accent\": \"#90CAF9\") and component overrides (e.g. ghost buttons get a border on dark surfaces).\n\n**Import:** `import {MediaTheme} from '@astryxdesign/core/theme';`\n\n## Best Practices\n\n- **Do:** Use for any content placed over a dark background (image overlays, video scrims, dark cards) or other inverted surfaces like toasts and tooltips.\n- **Do:** Prefer mode=\"auto\" when the surface color comes from a theme token. A token named \"inverted\" is not guaranteed to be inverted, and auto measures what was actually painted instead of trusting the name. It can even decide that a surface needs no media context at all.\n- **Do:** Pair with a background color: MediaTheme flips the token context but does not add a background. Set backgroundColor on the parent element.\n- **Do:** Themes can customize components on media surfaces via onDark.components and onLight.components in defineTheme(). For example, add a border to ghost buttons on dark surfaces.\n- **Don't:** Use MediaTheme for app-level dark mode: use Theme with mode=\"dark\" or mode=\"system\" instead. MediaTheme is for local surface inversions, not page-wide color scheme.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `mode` | `'dark' \\| 'light' \\| 'auto' \\| 'off'` | - | Surface luminance context: dark for content over dark backgrounds (light text, white-tinted interactions), light for content over light backgrounds (dark text, black-tinted interactions), auto to decide from the painted surface (no media context when the ambient text already reads on the surface at 3:1, otherwise the side that reads better), and off to turn it off explicitly. The element renders either way, so a surface can switch contexts without remounting children. **(required)** |\n| `fallback` | `'dark' \\| 'light'` | `'dark'` | Which side auto uses when the surface cannot be measured: during SSR, on the first client frame, and whenever the backdrop is not knowable from CSS, most often a background-image, whose pixels need sampling (useImageMode) rather than a computed style. Ignored unless mode is auto. |\n| `children` | `ReactNode` | - | Content to render with inverted token context. Components inherit the correct colors automatically. **(required)** |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

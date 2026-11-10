@@ -1,0 +1,12 @@
+{
+ "id": "theme_build_@large",
+ "args": [
+  "theme",
+  "build"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'files'\n",
+ "exit": 1,
+ "files": []
+}

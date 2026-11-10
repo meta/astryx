@@ -1,0 +1,14 @@
+{
+ "id": "theme_palette_generate_--help",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx theme palette generate [options] <config>\n\nGenerate an OKLCH palette candidate for human review\n\nOptions:\n  -o, --out <path>  Write a candidate TypeScript or JSON file and a sibling receipt\n  --preview <path>  Write a self-contained HTML preview page; the path must end in .html\n  -f, --overwrite   Replace existing candidate, receipt, and preview files. Without it, if any of them exists, nothing is written\n  -h, --help        display help for command\n\nExit codes:\n  0  a candidate is produced or existing output is left untouched\n  1  the request is invalid or output cannot be written safely\n\nExamples:\n  # Preview candidate JSON\n  npx @astryxdesign/cli@0.7.12 theme palette generate themes/ocean/palette.config.json\n  # Write candidate and receipt\n  npx @astryxdesign/cli@0.7.12 theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts\n  # Write candidate, receipt, and review preview\n  npx @astryxdesign/cli@0.7.12 theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts --preview themes/ocean/tokens/ocean.palette.html\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-palette-generate\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

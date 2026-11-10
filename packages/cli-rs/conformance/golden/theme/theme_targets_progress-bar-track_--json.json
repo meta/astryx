@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_progress-bar-track_--json",
+ "args": [
+  "theme",
+  "targets",
+  "progress-bar-track",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"progress-bar-track\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"progress-bar-track\",\n        \"className\": \"astryx-progress-bar-track\",\n        \"component\": \"ProgressBar\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

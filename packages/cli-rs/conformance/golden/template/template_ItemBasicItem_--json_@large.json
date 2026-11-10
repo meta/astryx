@@ -1,0 +1,13 @@
+{
+ "id": "template_ItemBasicItem_--json_@large",
+ "args": [
+  "template",
+  "ItemBasicItem",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ItemBasicItem\",\n    \"description\": \"A basic item with a label, supporting description, and end-aligned timestamp. Use this for simple rows that need consistent text alignment and spacing.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Item\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Item} from '@astryxdesign/core/Item';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function ItemBasicItem() {\\n  return (\\n    <Stack gap={0}>\\n      <Item\\n        label=\\\"Quarterly planning\\\"\\n        description=\\\"Agenda, notes, and action items\\\"\\n        endContent={<Text color=\\\"secondary\\\">Today</Text>}\\n      />\\n      <Item\\n        label=\\\"Customer research\\\"\\n        description=\\\"Interview notes from the latest study\\\"\\n        endContent={<Text color=\\\"secondary\\\">Yesterday</Text>}\\n      />\\n      <Item\\n        label=\\\"Launch checklist\\\"\\n        description=\\\"Remaining tasks before release\\\"\\n        endContent={<Text color=\\\"secondary\\\">Fri</Text>}\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

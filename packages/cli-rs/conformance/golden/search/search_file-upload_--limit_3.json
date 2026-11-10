@@ -1,0 +1,20 @@
+{
+ "id": "search_file-upload_--limit_3",
+ "args": [
+  "search",
+  "file upload",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"file upload\" (3 of 202)\n\nname:        FileInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/FileInput\ndescription: FileInput provides file upload with optional drag-and-drop support. Use it for single or multiple file selection with built-in validation for file type, size, and count. Pair with validation status for upload feedback.\ncommand:     npx @astryxdesign/cli@0.7.12 component FileInput\n\nname:        Thumbnail\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Thumbnail\ndescription: Thumbnail displays a compact, square preview of an image attachment. It shows a shimmer effect while uploading, the image on success, and a placeholder icon when no source is set. Use it in chat composers, file upload lists, or anywhere you need a small image preview with optional remove and click actions.\ncommand:     npx @astryxdesign/cli@0.7.12 component Thumbnail\n\nname:        file-explorer\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: File Explorer\nkind:        page\ndescription: Hierarchical browser that drills through nested levels as adjacent columns rather than replacing the list each time, with breadcrumb history, switchable list and grid density, and a metadata pane for the selected node.\ncommand:     npx @astryxdesign/cli@0.7.12 template file-explorer --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'file upload'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

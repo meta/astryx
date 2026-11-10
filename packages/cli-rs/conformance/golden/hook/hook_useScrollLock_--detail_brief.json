@@ -1,0 +1,20 @@
+{
+ "id": "hook_useScrollLock_--detail_brief",
+ "args": [
+  "hook",
+  "useScrollLock",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseScrollLock(isLocked: boolean): void  <- from '@astryxdesign/core/hooks'\n  Locks page scroll while active and keeps the page where it is. The page gets ...\n  Related: Dialog\n  isLocked: boolean\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Dialog\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

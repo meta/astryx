@@ -1,0 +1,66 @@
+[
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.d.ts",
+  "options": null,
+  "source": "declare module '@xds/core/Heading' {\n  export const HeadingLevelMap: Record<string, number>;\n}",
+  "output": "declare module \"@astryxdesign/core/Heading\" {\n  export const HeadingLevelMap: Record<string, number>;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.d.ts",
+  "options": null,
+  "source": "declare module '@xds/core' {\n  const x: number;\n}",
+  "output": "declare module \"@astryxdesign/core\" {\n  const x: number;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.d.ts",
+  "options": null,
+  "source": "declare module '@xds/lab/Thing' {\n  const y: number;\n}",
+  "output": "declare module \"@astryxdesign/lab/Thing\" {\n  const y: number;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.d.ts",
+  "options": null,
+  "source": "declare module 'react' {\n  const z: number;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.d.ts",
+  "options": null,
+  "source": "declare module '@astryxdesign/core/Heading' {\n  const a: number;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.ts",
+  "options": null,
+  "source": "declare namespace XDSCore {\n  const b: number;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useTheme} from \"@astryxdesign/core/theme\";\n\nfunction App() {\n  const theme = useTheme();\n  return theme;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-declare-module",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button, IconRegistry} from \"@astryxdesign/core\";\n\nconst registry = new IconRegistry();\nconst el = <Button />;",
+  "output": null,
+  "error": null
+ }
+]

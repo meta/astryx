@@ -1,0 +1,13 @@
+{
+ "id": "shell_theme_palette_nope_@empty",
+ "args": [
+  "theme",
+  "palette",
+  "nope"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown subcommand 'theme palette nope'\n\n  generate  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_cdn_abs",
+ "args": [
+  "template",
+  "--cdn",
+  "/tmp/x.html"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid cdn template path \"/tmp/x.html\": absolute paths are not allowed. Use a path relative to the project root.\n",
+ "exit": 1,
+ "files": []
+}

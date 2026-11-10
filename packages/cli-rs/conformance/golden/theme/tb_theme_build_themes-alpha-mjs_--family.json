@@ -1,0 +1,14 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_--family",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "--family"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: --family requires --family-key <key>\n",
+ "exit": 1,
+ "files": []
+}

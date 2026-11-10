@@ -1,0 +1,19 @@
+{
+ "id": "docs_use-a-theme_integration-themes_@large",
+ "args": [
+  "docs",
+  "use-a-theme",
+  "integration-themes"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Using a Theme from an Integration\n\nInstall the integration as a direct dependency. Astryx discovers its themes and guides without an `astryx.config` entry. A theme can be added only when the installed package exports its built module and production stylesheet.\n\nInstall, inspect, and add:\n```bash\nnpm install @astryxdesign/core @acme/brand-integration\nnpx @astryxdesign/cli@0.7.12 theme list --package @acme/brand-integration\nnpx @astryxdesign/cli@0.7.12 docs brand-theme\nnpx @astryxdesign/cli@0.7.12 theme add ocean --package @acme/brand-integration\n```\n\n`theme add` keeps the owner package in the app record and imports its built module, stylesheet, and optional font stylesheet. Package updates continue to reach the app. Run `theme eject ocean --package @acme/brand-integration` only to copy the source and descriptor into `src/themes/ocean` as an independent local fork.\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-a-theme theme-props\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme light-dark-mode\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,8 @@
+export default {
+  name: 'acme',
+  themes: './themes',
+
+  agentDocs: {
+    append: ['Run acme verify before finishing.']
+  }
+};

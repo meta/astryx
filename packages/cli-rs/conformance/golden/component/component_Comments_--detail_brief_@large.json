@@ -1,0 +1,20 @@
+{
+ "id": "component_Comments_--detail_brief_@large",
+ "args": [
+  "component",
+  "Comments",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\nComments(mode: interactive|non-editable|read-only, composerPosition: top|bottom|none, density: compact|balanced, container: section|card, layout: pane|embedded, selectedThreadId: string|null, onSelectedThreadChange: (threadId: string|null) => void, onRetryLoad: () => void|Promise<void>, onLoadOlder: () => void|Promise<void>, onSubmit: (content: string, parentCommentId?: string) => void|Promise<void>, onSaveEdit: (commentId: string, content: string) => void|Promise<void>, onDelete: (commentId: string) => void|Promise<void>, onRetryComment: (commentId: string) => void|Promise<void>, onReact: (commentId: string, reactionKey: string, option?: CommentReactionOption) => void|Promise<void>, onResolveThread: (commentId: string) => void|Promise<void>, onReopenThread: (commentId: string) => void|Promise<void>, onUploadImages: (files: readonly File[], context: CommentComposerContext) => CommentUploadedImage[]|Promise<CommentUploadedImage[]>, getReplyMention: (author: CommentUser) => string|undefined)  <- from '@astryxdesign/lab'\n  Comment threads and activity events in time order, with a composer for new co...\n  Targets: astryx-comments preferred attrs: data-layout, data-density, data-container variants: layout, density, container | astryx-comment-thread preferred attrs: data-container variants: container | astryx-comment-composer\n  comments: readonly CommentThreadData[], events, currentUser, label, composerPlaceholder, composerAnchor, onComposerAnchorDismiss, composerControls, highlightColor, isLoading, loadError, hasOlderComments, isLoadingOlder, isSubmitting, onComposerDraftChange, composerError, reactionOptions, loadVersions, composerTriggers, agentCommands, markdownPlugins, markdownInlinePlugins, hasEmojiPicker, emptyState, renderAnchor, renderBody, renderVersionBody, renderEvent, renderAdditionalActions, renderComposer\n  import {useState} from 'react';\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

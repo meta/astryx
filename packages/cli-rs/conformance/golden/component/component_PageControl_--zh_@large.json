@@ -1,0 +1,19 @@
+{
+ "id": "component_PageControl_--zh_@large",
+ "args": [
+  "component",
+  "PageControl",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# PageControl\n\nUse PageControl below a paging view, such as a Carousel with `hasSnap` or onboarding screens, to show how many pages there are and which one is showing. Keep its page in step with the view in both directions.\n\n**Import:** `import {PageControl} from '@astryxdesign/lab';`\n\n## Best Practices\n\n- **Do:** Pair it with a view that pages by swipe: the control is a secondary way to move and the main way to see where you are.\n- **Do:** Keep pages few enough to count at a glance; past ten the row stays a fixed width, shows a window of them and scrolls as the page changes.\n- **Don't:** Don't use it for long lists of results (use Pagination) or for choosing between views (use SegmentedControl or TabList).\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `totalPages` | `number` | - | Number of pages. **(required)** |\n| `page` | `number` | - | Current page number (1-based). Page 1 is the first page. **(required)** |\n| `onChange` | `(page: number) => void` | - | Called with the page, 1-based, that a tap, a click, a scrub, an arrow key, Home, End or an assistive technology asks for; a scrub calls it each time the page under the pointer changes, so a quick sweep can skip a page. Update the paging view and page together. **(required)** |\n| `label` | `string` | - | Names the control for assistive technology. Defaults to \"Page indicators\", localized. |\n| `hidesForSinglePage` | `boolean` | `false` | Render nothing when there is only one page. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

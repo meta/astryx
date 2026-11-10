@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_themes-traversal-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/traversal.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Invalid theme name \"../escaped\": must not contain path separators ('/' or '\\\\').\n",
+ "exit": 1,
+ "files": []
+}

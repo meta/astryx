@@ -1,0 +1,19 @@
+{
+ "id": "template_ScrollableAreaStickyPassthrough_--skeleton_@large",
+ "args": [
+  "template",
+  "ScrollableAreaStickyPassthrough",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ScrollableAreaStickyPassthrough - A section whose content fits clips instead of scrolling, so its sticky label passes outward and pins to the panel edge. The next section sets stickyContainment=\"always\" and keeps its label in its own box.\n# Components: Card, Grid, ScrollableArea\n\n<Card padding={0} width={400}>\n  <ScrollableArea padding={4} role=\"region\" height={300} />\n  <VStack gap={0.5}>\n    <Heading />\n    <Text />\n  </VStack>\n  <ScrollableArea />\n  <Text />\n  <FileGrid />\n  <ScrollableArea />\n  <Text />\n  <FileGrid />\n  <Text />\n  <FileGrid />\n</Card>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

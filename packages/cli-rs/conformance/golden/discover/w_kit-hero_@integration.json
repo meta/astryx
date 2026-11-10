@@ -1,0 +1,12 @@
+{
+ "id": "w_kit-hero_@integration",
+ "args": [
+  "discover",
+  "kit/hero"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: \"kit/hero\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

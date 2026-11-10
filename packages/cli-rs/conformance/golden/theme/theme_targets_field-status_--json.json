@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_field-status_--json",
+ "args": [
+  "theme",
+  "targets",
+  "field-status",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"field-status\",\n    \"componentCount\": 2,\n    \"targets\": [\n      {\n        \"key\": \"field-status\",\n        \"className\": \"astryx-field-status\",\n        \"component\": \"Field\",\n        \"props\": [\n          \"type\",\n          \"variant\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"field-status\",\n        \"className\": \"astryx-field-status\",\n        \"component\": \"FieldStatus\",\n        \"props\": [\n          \"type\",\n          \"variant\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"field-status-icon\",\n        \"className\": \"astryx-field-status-icon\",\n        \"component\": \"FieldStatus\",\n        \"props\": [\n          \"type\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

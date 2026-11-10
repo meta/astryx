@@ -1,0 +1,19 @@
+{
+ "id": "theme_targets_selector-empty-state",
+ "args": [
+  "theme",
+  "targets",
+  "selector-empty-state"
+ ],
+ "fixture": "app",
+ "stdout": "Theming targets\n2 across 2 components\n(key - component - props - states - className)\n\nmulti-selector-empty-state  MultiSelector - astryx-multi-selector-empty-state\nselector-empty-state        Selector - astryx-selector-empty-state\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

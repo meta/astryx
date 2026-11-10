@@ -1,0 +1,13 @@
+{
+ "id": "component_DropdownMenuDivider_--json_@large",
+ "args": [
+  "component",
+  "DropdownMenuDivider",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"DropdownMenuDivider\",\n    \"subComponentOf\": \"DropdownMenu\",\n    \"displayName\": \"Dropdown Menu Divider\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"A horizontal rule separating groups of rows in a compound menu. Renders role=\\\"separator\\\", so it is never a stop in the arrow-key order. The data-driven equivalent is the `{type: \\\"divider\\\"}` entry in `items`; both modes render this component, so they look and theme identically. Host attributes and DOM handlers (id, data-*, aria-*) reach the separator; its role and orientation stay component-owned.\",\n    \"props\": [\n      {\n        \"name\": \"xstyle\",\n        \"type\": \"StyleXStyles\",\n        \"description\": \"StyleX styles applied after the menu spacing. Must be a stylex.create() value: not an inline style object like style={{}}.\"\n      }\n    ],\n    \"theming\": {\n      \"targets\": [\n        {\n          \"className\": \"astryx-dropdown-menu-divider\"\n        }\n      ]\n    },\n    \"package\": \"@astryxdesign/core\",\n    \"import\": \"@astryxdesign/core/DropdownMenu\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

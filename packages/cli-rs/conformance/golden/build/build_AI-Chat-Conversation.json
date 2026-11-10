@@ -1,0 +1,18 @@
+{
+ "id": "build_AI-Chat-Conversation",
+ "args": [
+  "build",
+  "AI Chat Conversation"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"AI Chat Conversation\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        ai-chat\npackage:     @astryxdesign/core\ndescription: Transcript of alternating turns carrying mixed rich content inline (markdown, code blocks, collapsible tool-call output) beside a resizable artifact panel that holds generated output while the stream keeps scrolling.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        ai-chat-landing\npackage:     @astryxdesign/core\ndescription: Zero-state entry surface centered on a single composer with suggestion chips instead of history, sized for the moment before any content exists.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat-landing --type page <path>\n\nname:        table-inbox\npackage:     @astryxdesign/core\ndescription: Two-pane message queue: the table indexes a reading pane rather than being the destination, with a divider you drag to resize.\ncommand:     npx @astryxdesign/cli@0.7.12 template table-inbox --type page <path>\n\nKeyword search matched these page templates: ai-chat (@astryxdesign/core), ai-chat-landing (@astryxdesign/core), messaging-shell (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        ChatMessageListShowcase\npackage:     @astryxdesign/core\ndescription: Basic AI chat conversation with user and assistant messages.\n\nname:        ChatMessageGhost\npackage:     @astryxdesign/core\ndescription: Ghost variant for messages without visible bubble boundaries.\n\nname:        ChatMessageListFullFeatured\npackage:     @astryxdesign/core\ndescription: Conversation showcasing system messages, multi-bubble grouping, markdown, code blocks, and...\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useStreamingText\npackage:     @astryxdesign/core\ndescription: Smooths bursty streamed text into a steady character-by-character reveal using requestAnimationFrame.\n\nname:        Banner\npackage:     @astryxdesign/core\ndescription: Banner shows a persistent message at the top of a page or section.\n\nname:        TextArea\npackage:     @astryxdesign/core\ndescription: TextArea is a multi-line text input for collecting longer-form content like comments, descriptions, or messages.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

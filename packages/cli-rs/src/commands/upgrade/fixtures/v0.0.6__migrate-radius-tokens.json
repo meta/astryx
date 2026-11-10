@@ -1,0 +1,82 @@
+[
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--radius-container';",
+  "output": "const x = \"--radius-3\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "borderRadius: radiusVars['--radius-element']",
+  "output": "borderRadius: radiusVars[\"--radius-2\"]",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "borderRadius: 'var(--radius-content)'",
+  "output": "borderRadius: \"var(--radius-1)\"",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const css = `border-radius: var(--radius-inner)`;",
+  "output": "const css = `border-radius: var(--radius-0)`;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--radius-page';",
+  "output": "const x = \"--radius-4\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "defineTheme({\n      tokens: {\n        '--radius-container': '16px',\n        '--radius-element': '8px',\n      }\n    })",
+  "output": "defineTheme({\n      tokens: {\n        \"--radius-3\": '16px',\n        \"--radius-2\": '8px',\n      }\n    })",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "radiusVars['--radius-rounded']",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--radius-3';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"var(--radius-container-custom)\";",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-radius-tokens",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"--radius-innermost\";",
+  "output": null,
+  "error": null
+ }
+]

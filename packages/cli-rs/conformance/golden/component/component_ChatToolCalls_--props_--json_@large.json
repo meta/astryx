@@ -1,0 +1,14 @@
+{
+ "id": "component_ChatToolCalls_--props_--json_@large",
+ "args": [
+  "component",
+  "ChatToolCalls",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"calls\",\n      \"type\": \"ChatToolCallItem[]\",\n      \"description\": \"Array of tool call data. Each item has name, status, target, duration, node, additions, deletions, stats, errorMessage, resultDetail, key, and data. status is one of 'pending', 'running', 'complete', or 'error' (defaults to 'complete').\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Custom summary label shown for an expanded group. The translated call count is used when omitted.\"\n    },\n    {\n      \"name\": \"isExpanded\",\n      \"type\": \"boolean\",\n      \"description\": \"Controlled expanded state for the group.\"\n    },\n    {\n      \"name\": \"defaultIsExpanded\",\n      \"type\": \"boolean\",\n      \"description\": \"Default expanded state when uncontrolled.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"onExpandedChange\",\n      \"type\": \"(isExpanded: boolean) => void\",\n      \"description\": \"Callback fired when the expanded state changes.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

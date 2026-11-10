@@ -1,0 +1,20 @@
+{
+ "id": "component_Selector_--detail_brief_@large",
+ "args": [
+  "component",
+  "Selector",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nSelector(size: sm|md|lg, variant: input|secondary|ghost, status: {type: error|warning|success, message?: string}, statusVariant: attached|detached|tooltip, indicatorPosition: start|end, presentation: popover|bottom-sheet|adaptive)  <- from '@astryxdesign/core/Selector'\n  A dropdown selector for choosing a single value from a list of options. Suppo...\n  Targets: astryx-selector preferred attrs: data-variant, data-size, data-status, data-disabled, data-readonly variants: variant, size, status states: disabled, readonly | astryx-selector-option | astryx-selector-option-row preferred attrs: data-size, data-selected, data-disabled variants: size states: selected, disabled | astryx-selector-search | astryx-selector-section-heading | astryx-selector-empty-state | astryx-selector-indicator-icon preferred attrs: data-state states: state | astryx-selector-check | astryx-selector-popup\n  options: SelectorOption[], label: string, value, onChange, hasClear, hasSearch, searchPlaceholder, emptyText, emptySearchText, placeholder, isDisabled, isReadOnly, htmlName, disabledMessage, isLabelHidden, description, isOptional, isRequired, renderOption, renderValue, width, startIcon, isLoading, onClick, onFocus, onKeyDown, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

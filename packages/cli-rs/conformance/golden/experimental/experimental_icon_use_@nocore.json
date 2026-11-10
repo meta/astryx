@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_use_@nocore",
+ "args": [
+  "experimental",
+  "icon",
+  "use"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'set'\n",
+ "exit": 1,
+ "files": []
+}

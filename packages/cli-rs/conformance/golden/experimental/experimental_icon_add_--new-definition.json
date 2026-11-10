@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--new-definition",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--new-definition"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--new-definition <name>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

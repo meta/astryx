@@ -1,0 +1,18 @@
+{
+ "id": "template_ToastShowcase_@large",
+ "args": [
+  "template",
+  "ToastShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n// In production, use useToast() hook for proper positioning, stacking, and lifecycle.\n\nimport {Toast} from '@astryxdesign/core/Toast';\nimport {useToast} from '@astryxdesign/core/Toast';\nimport {Button} from '@astryxdesign/core/Button';\n\nexport default function ToastShowcase() {\n  const toast = useToast();\n  return (\n    <Toast\n      type=\"info\"\n      body=\"Document saved successfully\"\n      endContent={\n        <Button\n          label=\"Show toast\"\n          variant=\"ghost\"\n          size=\"sm\"\n          onClick={() => toast({body: 'Document saved successfully'})}\n        />\n      }\n      isAutoHide={false}\n      autoHideDuration={5000}\n      isExiting={false}\n      onDismiss={() => {}}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

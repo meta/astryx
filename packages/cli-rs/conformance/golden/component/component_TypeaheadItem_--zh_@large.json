@@ -1,0 +1,19 @@
+{
+ "id": "component_TypeaheadItem_--zh_@large",
+ "args": [
+  "component",
+  "TypeaheadItem",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TypeaheadItem\n\n预输入结果的默认下拉项渲染器。显示标签以及可选的图标、描述和头像。导出供自定义 renderItem 实现使用。\n\n**Import:** `import {TypeaheadItem} from '@astryxdesign/core/Typeahead';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `item` | `SearchableItem` | - | 要渲染的搜索结果项。 **(required)** |\n| `icon` | `ReactNode` | - | 在标签前显示的图标或头像。 |\n| `description` | `string` | - | 显示在标签下方的描述文本。 |\n| `isDisabled` | `boolean` | `false` | 此项是否在视觉上被禁用。 |\n| `group` | `string` | - | 此属性不影响渲染。要在 Typeahead 或 BaseTypeahead 中分组，请在搜索源返回的结果项上设置 `item.auxiliaryData.group`。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

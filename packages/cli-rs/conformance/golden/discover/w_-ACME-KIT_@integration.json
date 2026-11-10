@@ -1,0 +1,12 @@
+{
+ "id": "w_-ACME-KIT_@integration",
+ "args": [
+  "discover",
+  "@ACME/KIT"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@ACME/KIT\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

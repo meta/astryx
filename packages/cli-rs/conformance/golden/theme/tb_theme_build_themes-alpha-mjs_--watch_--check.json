@@ -1,0 +1,15 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_--watch_--check",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "--watch",
+  "--check"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: --check cannot be combined with --watch\n",
+ "exit": 1,
+ "files": []
+}

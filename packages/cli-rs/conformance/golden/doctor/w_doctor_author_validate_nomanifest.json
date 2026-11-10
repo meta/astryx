@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_validate_nomanifest",
+ "args": [
+  "doctor",
+  "integration",
+  "validate"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Nothing was validated: no astryx.integration.* found next to package.json. To validate an installed integration: npx @astryxdesign/cli@0.7.12 doctor integration validate <package>\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_nosuchsub",
+ "args": [
+  "experimental",
+  "render",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: render reads a page module (.tsx, .jsx, .ts, .js, .mjs); nosuchsub is not one\n",
+ "exit": 1,
+ "files": []
+}

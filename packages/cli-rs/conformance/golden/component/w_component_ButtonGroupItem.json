@@ -1,0 +1,12 @@
+{
+ "id": "w_component_ButtonGroupItem",
+ "args": [
+  "component",
+  "ButtonGroupItem"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"ButtonGroupItem\"\n\n  SegmentedControlItem  (another name for it)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-lab-ChartBar---json_@large",
+ "args": [
+  "discover",
+  "@astryxdesign/lab/ChartBar",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail.doc\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": {\n    \"name\": \"ChartBar\",\n    \"displayName\": \"Chart Bar\",\n    \"group\": \"Charts\",\n    \"category\": \"Data Visualization\",\n    \"usage\": {\n      \"description\": \"\"\n    },\n    \"props\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

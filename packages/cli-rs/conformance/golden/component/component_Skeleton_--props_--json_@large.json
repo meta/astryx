@@ -1,0 +1,14 @@
+{
+ "id": "component_Skeleton_--props_--json_@large",
+ "args": [
+  "component",
+  "Skeleton",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"width\",\n      \"type\": \"number | string\",\n      \"description\": \"Width in pixels (number) or CSS value (string).\",\n      \"default\": \"'100%'\"\n    },\n    {\n      \"name\": \"height\",\n      \"type\": \"number | string\",\n      \"description\": \"Height in pixels (number) or CSS value (string).\",\n      \"default\": \"'100%'\"\n    },\n    {\n      \"name\": \"radius\",\n      \"type\": \"'none' | 0 | 1 | 2 | 3 | 4 | 'rounded'\",\n      \"description\": \"Border radius using design token scale. Use none for sharp corners, rounded for fully rounded (avatars, pills, circles).\",\n      \"default\": \"3\"\n    },\n    {\n      \"name\": \"index\",\n      \"type\": \"number\",\n      \"description\": \"Index for staggered animation timing. For element at index n, animation starts at DELAY_TIME + (STAGGER_TIME × n).\",\n      \"default\": \"0\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

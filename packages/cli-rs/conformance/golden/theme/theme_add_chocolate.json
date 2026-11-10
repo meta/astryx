@@ -1,0 +1,13 @@
+{
+ "id": "theme_add_chocolate",
+ "args": [
+  "theme",
+  "add",
+  "chocolate"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-chocolate\" is not installed. Run `npm install @astryxdesign/theme-chocolate` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add chocolate`.\n",
+ "exit": 1,
+ "files": []
+}

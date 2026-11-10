@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-array-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/array.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Palette generation config must be an object.\n",
+ "exit": 1,
+ "files": []
+}

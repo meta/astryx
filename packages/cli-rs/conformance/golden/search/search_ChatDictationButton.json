@@ -1,0 +1,18 @@
+{
+ "id": "search_ChatDictationButton",
+ "args": [
+  "search",
+  "ChatDictationButton"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"ChatDictationButton\" (4)\n\nname:        ChatDictationButton\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: ChatDictationButton is a toggle button that starts and stops voice dictation inside a chat composer. It pairs with useChatDictation to show a microphone icon when idle and animated frequency bars when listening. Place it in the sendActions slot of ChatComposer.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatDictationButton\n\nname:        ChatDictationButtonBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatDictationButton - Basic\nkind:        block\ndescription: A dictation button wired to useChatDictation and placed in the sendActions slot of a ChatComposer. Click the microphone to transcribe speech into the input.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatDictationButtonBasic --type block\n\nname:        ChatDictationButtonShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatDictationButton\nkind:        block\ndescription: Interactive dictation button connected to the SpeechRecognition API via useChatDictation. Click the mic to dictate into the composer.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatDictationButtonShowcase --type block\n\nname:        ai-chat-landing\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AI Chat Landing\nkind:        page\ndescription: Zero-state entry surface centered on a single composer with suggestion chips instead of history, sized for the moment before any content exists. The empty counterpart to a transcript.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat-landing --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ChatDictationButton\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

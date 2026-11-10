@@ -1,0 +1,14 @@
+{
+ "id": "w_th_eject_traversal",
+ "args": [
+  "theme",
+  "eject",
+  "stone",
+  "../x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid theme target path \"../x\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "docs_use-integrations_--detail_brief_@large",
+ "args": [
+  "docs",
+  "use-integrations",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "Use integrations\nInstall, discover, and use integration packages that add components, templates, themes, and docs to your app.\n\npackage: @astryxdesign/cli\n\ndiscover-integrations   Discover integrations - Integration packages extend Astryx with extra components, templates,\n                        themes, docs, and codemods. They are published as regular npm packages.\ninstall-an-integration  Install an integration - Install the package with your package manager. Integrations autolink:\n                        the CLI finds them among your dependencies, so installing is all it takes:\nuse-what-it-adds        Use what it adds - Once installed, the integration's contributions appear alongside Core:\ncheck-for-problems      Check for problems - Run `npx @astryxdesign/cli@0.7.12 doctor` to see integration issues:\n                        missing roots, invalid contributions, or a CLI version mismatch. The doctor check is the one\n                        place every issue for every package is listed.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs use-integrations <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs use-integrations --full\nUp: npx @astryxdesign/cli@0.7.12 docs guides\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-a-theme\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

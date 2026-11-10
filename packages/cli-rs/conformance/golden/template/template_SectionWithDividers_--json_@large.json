@@ -1,0 +1,13 @@
+{
+ "id": "template_SectionWithDividers_--json_@large",
+ "args": [
+  "template",
+  "SectionWithDividers",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SectionWithDividers\",\n    \"description\": \"Adjacent sections separated by bottom dividers, like a settings page. Use dividers when stacking same-variant sections that need visual separation without a background change.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Section\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Section} from '@astryxdesign/core/Section';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Heading, Text} from '@astryxdesign/core/Text';\\n\\nexport default function SectionWithDividers() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={0}>\\n      <Section variant=\\\"section\\\" padding={5} dividers={['bottom']}>\\n        <Stack direction=\\\"vertical\\\" gap={1}>\\n          <Heading level={4}>Account</Heading>\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            Manage your profile, email, and password.\\n          </Text>\\n        </Stack>\\n      </Section>\\n      <Section variant=\\\"section\\\" padding={5} dividers={['bottom']}>\\n        <Stack direction=\\\"vertical\\\" gap={1}>\\n          <Heading level={4}>Notifications</Heading>\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            Choose what updates you receive and how.\\n          </Text>\\n        </Stack>\\n      </Section>\\n      <Section variant=\\\"section\\\" padding={5}>\\n        <Stack direction=\\\"vertical\\\" gap={1}>\\n          <Heading level={4}>Privacy</Heading>\\n          <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n            Control who can see your activity and data.\\n          </Text>\\n        </Stack>\\n      </Section>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

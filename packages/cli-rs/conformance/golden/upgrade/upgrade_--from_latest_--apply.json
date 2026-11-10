@@ -1,0 +1,14 @@
+{
+ "id": "upgrade_--from_latest_--apply",
+ "args": [
+  "upgrade",
+  "--from",
+  "latest",
+  "--apply"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Invalid --from value: \"latest\". Expected a semver string like 0.0.5.\n",
+ "exit": 1,
+ "files": []
+}

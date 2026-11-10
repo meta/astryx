@@ -1,0 +1,19 @@
+{
+ "id": "component_LogStream_--zh_@large",
+ "args": [
+  "component",
+  "LogStream",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# LogStream\n\nExperimental streaming log viewer: mono grid rows (timestamp | level | source | message) with token-derived level accents, expandable per-row detail panels, follow-scroll live tailing with a \"Jump to latest\" affordance, and an always-dark terminal variant. In the default variant, warning and error labels use their plain-surface status foreground roles. Appended rows fade in via @starting-style. Live announcements follow the pinning state: the role=\"log\" region is aria-live=\"polite\" only while following the tail, and aria-live=\"off\" while unfollowed, so a busy stream never floods assistive tech.\n\n**Import:** `import {LogStream} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `entries` | `LogEntry[]` | - | Array of log entry objects to render. **(required)** |\n| `variant` | `'default' \\| 'terminal'` | `'default'` | Visual variant style: 'default' uses theme surface background, 'terminal' uses fixed dark background. |\n| `isFollowing` | `boolean` | - | Controlled follow-pinning state to auto-scroll to the newest entry. |\n| `onFollowChange` | `(following: boolean) => void` | - | Callback fired when follow-pinning state changes. |\n| `maxHeight` | `number \\| string` | - | Maximum container height before vertical scrolling. |\n| `hasTimestamps` | `boolean` | `true` | Show or hide the timestamp column. |\n| `label` | `string` | `'Log stream'` | Accessible label for the log region. |\n| `renderEntry` | `(entry: LogEntry) => ReactNode` | - | Custom render function for replacing individual row layout. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

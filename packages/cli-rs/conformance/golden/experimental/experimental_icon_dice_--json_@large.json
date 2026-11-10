@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_dice_--json_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "dice",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.search\",\n  \"data\": {\n    \"query\": \"dice\",\n    \"matchCount\": 0,\n    \"matches\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

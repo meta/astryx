@@ -1,0 +1,14 @@
+{
+ "id": "docs_styling-overview_pick-a-path_--json_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "pick-a-path",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"pick-a-path\",\n    \"title\": \"Pick a path\",\n    \"content\": [\n      {\n        \"type\": \"table\",\n        \"headers\": [\n          \"Path\",\n          \"Good for\",\n          \"Build step?\"\n        ],\n        \"rows\": [\n          [\n            \"Plain CSS\",\n            \"Most apps. Style with className, xstyle, or any CSS library.\",\n            \"None.\"\n          ],\n          [\n            \"Tailwind\",\n            \"Apps on Tailwind v4. A CSS bridge maps utility classes to design tokens.\",\n            \"None beyond Tailwind's own.\"\n          ],\n          [\n            \"StyleX for your own code\",\n            \"Your own `stylex.create()` styles and swizzled (ejected) components. Astryx itself stays prebuilt.\",\n            \"Yes — a StyleX plugin for your own code.\"\n          ]\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"All three load the same prebuilt Astryx stylesheets, resolve to the same design tokens, and support theming and dark mode. None of them compiles Astryx package source. You can mix them in one app.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs styling-overview --index\",\n      \"next\": \"astryx docs styling-overview plain\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

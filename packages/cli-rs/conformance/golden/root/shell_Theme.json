@@ -1,0 +1,11 @@
+{
+ "id": "shell_Theme",
+ "args": [
+  "Theme"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown command 'Theme'\n\n  theme  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_new-set_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'name'\n",
+ "exit": 1,
+ "files": []
+}

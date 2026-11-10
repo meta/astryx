@@ -1,0 +1,13 @@
+{
+ "id": "w_component_@comp-kit@2.0.0-Button_--json_@compkit",
+ "args": [
+  "component",
+  "@comp/kit@2.0.0/Button",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@comp/kit\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"Button\",\n    \"group\": \"Kit Actions\",\n    \"usage\": {\n      \"description\": \"The kit button, with a kit-only look.\"\n    },\n    \"props\": [\n      {\n        \"name\": \"tone\",\n        \"type\": \"'calm' | 'loud'\",\n        \"description\": \"How loud it looks.\"\n      }\n    ],\n    \"package\": \"@comp/kit\",\n    \"import\": \"@comp/kit\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

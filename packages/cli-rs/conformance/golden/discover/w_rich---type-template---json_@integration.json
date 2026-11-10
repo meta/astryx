@@ -1,0 +1,15 @@
+{
+ "id": "w_rich---type-template---json_@integration",
+ "args": [
+  "discover",
+  "rich",
+  "--type",
+  "template",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"rich\",\n    \"matches\": [\n      {\n        \"package\": \"@astryxdesign/richtext\",\n        \"component\": \"RichTextEditorShowcase\",\n        \"kind\": \"template\",\n        \"installed\": false\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

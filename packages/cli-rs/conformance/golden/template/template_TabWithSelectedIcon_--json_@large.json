@@ -1,0 +1,13 @@
+{
+ "id": "template_TabWithSelectedIcon_--json_@large",
+ "args": [
+  "template",
+  "TabWithSelectedIcon",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TabWithSelectedIcon\",\n    \"description\": \"A tab that changes its icon when selected.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Tab\",\n      \"TabList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {TabList, Tab} from '@astryxdesign/core/TabList';\\n\\nconst StarIcon = (\\n  <svg\\n    viewBox=\\\"0 0 16 16\\\"\\n    fill=\\\"none\\\"\\n    stroke=\\\"currentColor\\\"\\n    width=\\\"100%\\\"\\n    height=\\\"100%\\\">\\n    <path d=\\\"m8 1.5 2 4.1 4.5.7-3.3 3.2.8 4.5-4-2.1L4 14l.8-4.5-3.3-3.2 4.5-.7L8 1.5Z\\\" />\\n  </svg>\\n);\\n\\nconst SelectedStarIcon = (\\n  <svg viewBox=\\\"0 0 16 16\\\" fill=\\\"currentColor\\\" width=\\\"100%\\\" height=\\\"100%\\\">\\n    <path d=\\\"m8 1.5 2 4.1 4.5.7-3.3 3.2.8 4.5-4-2.1L4 14l.8-4.5-3.3-3.2 4.5-.7L8 1.5Z\\\" />\\n  </svg>\\n);\\n\\nexport default function TabWithSelectedIcon() {\\n  const [value, setValue] = useState('favorites');\\n\\n  return (\\n    <TabList value={value} onChange={setValue}>\\n      <Tab\\n        value=\\\"favorites\\\"\\n        label=\\\"Favorites\\\"\\n        icon={StarIcon}\\n        selectedIcon={SelectedStarIcon}\\n      />\\n      <Tab value=\\\"recent\\\" label=\\\"Recent\\\" />\\n    </TabList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

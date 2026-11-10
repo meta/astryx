@@ -1,0 +1,18 @@
+{
+ "id": "template_LinkExternalLinks_@large",
+ "args": [
+  "template",
+  "LinkExternalLinks"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Link} from '@astryxdesign/core/Link';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function LinkExternalLinks() {\n  return (\n    <VStack gap={2}>\n      <Link href=\"https://github.com\" isExternalLink isStandalone>\n        GitHub\n      </Link>\n      <Link href=\"https://developer.mozilla.org\" isExternalLink isStandalone>\n        MDN Web Docs\n      </Link>\n      <Link href=\"https://react.dev\" isExternalLink hasUnderline isStandalone>\n        React Documentation\n      </Link>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

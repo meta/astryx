@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_iconx",
+ "args": [
+  "search",
+  "iconx"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"iconx\" (5)\n\nname:        author-a-theme\nsection:     icon-registry\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Author a theme › Built themes with an icon registry\ndescription: `theme build` emits an icon import when it detects a named import used by the theme's `icons:` field. It does not compile that registry module. Move the registry to a separate module and use a named import.\ncommand:     npx @astryxdesign/cli@0.7.12 docs author-a-theme icon-registry\nparent:      npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\n\nname:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Templates › Build the template › Assets › Icons\ndescription: Keep icons consistent and accessible by rendering them through Astryx, and ship custom product icons from your package.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/templates/build-the-template/template-assets\n\nname:        icons\nsection:     theme-overrides\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Icons › Theme Overrides\ndescription: Themes can replace the default SVGs for any semantic name with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons -> lucide) without touching component code, and keeps lookup scoped to the active theme...\ncommand:     npx @astryxdesign/cli@0.7.12 docs icons theme-overrides\nparent:      npx @astryxdesign/cli@0.7.12 docs icons --index\n\nname:        icons\nsection:     component-icon-slots\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Icons › Component Icon Slots\ndescription: A component icon slot names why an icon appears in one component, such as `code-block-copy` for CodeBlock's copy button. `defineTheme({componentIcons})` maps a slot to one of the shared icon names. A theme can then change the icon one...\ncommand:     npx @astryxdesign/cli@0.7.12 docs icons component-icon-slots\nparent:      npx @astryxdesign/cli@0.7.12 docs icons --index\n\nname:        icons\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Icons\ndescription: Semantic icon names available in the design system. These adapt to the active theme's icon registry.\ncommand:     npx @astryxdesign/cli@0.7.12 docs icons --index\nparent:      npx @astryxdesign/cli@0.7.12 docs foundations\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover iconx\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

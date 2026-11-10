@@ -1,0 +1,106 @@
+[
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": ".xds-heading { color: red; }",
+  "output": ".astryx-heading { color: red; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "[data-xds-theme=\"dark\"] .xds-card { background: black; }",
+  "output": "[data-astryx-theme=\"dark\"] .astryx-card { background: black; }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "[data-xds-theme-prose] {} [data-xds-media=\"print\"] {}",
+  "output": "[data-astryx-theme-prose] {} [data-astryx-media=\"print\"] {}",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@layer xds-theme, xds-base;\n@layer xds-theme { a { color: red; } }",
+  "output": "@layer astryx-theme, astryx-base;\n@layer astryx-theme { a { color: red; } }",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "/* xds tokens live here */\n.card { content: \"xds\"; }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "/* use xds-heading in markup */",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@layer astryx-theme { [data-astryx-theme=\"dark\"] .astryx-card {} }",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@import '@xds/core/reset.css';\n@import '@xds/core/xds.css';\n@import '@xds/theme-daily/theme.css';",
+  "output": "@import '@astryxdesign/core/reset.css';\n@import '@astryxdesign/core/astryx.css';\n@import '@astryxdesign/theme-neutral/theme.css';",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@import \"@xds/theme-daily/theme.css\";",
+  "output": "@import \"@astryxdesign/theme-neutral/theme.css\";",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@import url('@xds/core/reset.css');",
+  "output": "@import url('@astryxdesign/core/reset.css');",
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.css",
+  "options": null,
+  "source": "@import '@acme/widgets/styles.css';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useTheme} from \"@astryxdesign/core/theme\";\n\nfunction App() {\n  const theme = useTheme();\n  return theme;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.0/migrate-xds-css-surfaces",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button, IconRegistry} from \"@astryxdesign/core\";\n\nconst registry = new IconRegistry();\nconst el = <Button />;",
+  "output": null,
+  "error": null
+ }
+]

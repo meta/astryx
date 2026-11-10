@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_table_--json",
+ "args": [
+  "theme",
+  "targets",
+  "table",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"table\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"table\",\n        \"className\": \"astryx-table\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-body\",\n        \"className\": \"astryx-table-body\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-cell\",\n        \"className\": \"astryx-table-cell\",\n        \"component\": \"Table\",\n        \"props\": [\n          \"density\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-footer\",\n        \"className\": \"astryx-table-footer\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-header\",\n        \"className\": \"astryx-table-header\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-header-cell\",\n        \"className\": \"astryx-table-header-cell\",\n        \"component\": \"Table\",\n        \"props\": [\n          \"density\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-row\",\n        \"className\": \"astryx-table-row\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-scroll-wrapper\",\n        \"className\": \"astryx-table-scroll-wrapper\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

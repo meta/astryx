@@ -1,0 +1,15 @@
+{
+ "id": "component_--list_--category_Dialog_--json_@large",
+ "args": [
+  "component",
+  "--list",
+  "--category",
+  "Dialog",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.list\",\n  \"data\": {\n    \"detail\": \"names\",\n    \"components\": {\n      \"Dialog\": [\n        {\n          \"name\": \"AlertDialog\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"Dialog\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DialogHeader\",\n          \"package\": \"@astryxdesign/core\"\n        }\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

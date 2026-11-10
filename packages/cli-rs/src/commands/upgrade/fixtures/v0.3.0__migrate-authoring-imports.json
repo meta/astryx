@@ -1,0 +1,338 @@
+[
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/cli/config';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/cli/doc';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/cli/integration';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/cli/template';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/cli/codemod';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/core/authoring';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/core/config';\nconst c: AstryxConfig = {};\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst c: AstryxConfig = {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {parseConfig} from '@astryxdesign/cli/config';\n",
+  "output": "import {parseConfig} from '@astryxdesign/cli/authoring';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "export {AstryxIntegration} from '@astryxdesign/cli/integration';\n",
+  "output": "export {AstryxIntegration} from '@astryxdesign/cli/authoring';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const m = await import('@astryxdesign/cli/codemod');\n",
+  "output": "const m = await import('@astryxdesign/cli/authoring');\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "type C = import('@astryxdesign/core/config').AstryxConfig;\n",
+  "output": "type C = import('@astryxdesign/cli/authoring').AstryxConfig;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nimport {parseDoc} from '@astryxdesign/cli/doc';\n",
+  "output": "import {Button} from '@astryxdesign/core';\nimport {parseDoc} from '@astryxdesign/cli/authoring';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {AstryxConfig} from '@astryxdesign/core/config';\nconst config: AstryxConfig = {integrations: ['@acme/widgets'], issuesUrl: 'https://example.com/i'};\nexport default config;\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/cli/authoring';\nconst config: AstryxConfig = {integrations: ['@acme/widgets'], issuesUrl: 'https://example.com/i'};\nexport default config;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {AstryxIntegration} from '@astryxdesign/core/authoring';\nconst integration: AstryxIntegration = {components: './components', codemods: './codemods'};\nexport default integration;\n",
+  "output": "import type {AstryxIntegration} from '@astryxdesign/cli/authoring';\nconst integration: AstryxIntegration = {components: './components', codemods: './codemods'};\nexport default integration;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {ComponentDoc} from '@astryxdesign/core/authoring';\nconst doc: ComponentDoc = {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  usage: {description: 'Cycle related media.'},\n  props: [{name: 'slides', type: 'ReactNode[]', description: 'Slides.'}],\n  type: 'component'\n};\nexport default doc;\n",
+  "output": "import type {ComponentDoc} from '@astryxdesign/cli/authoring';\nconst doc: ComponentDoc = {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  usage: {description: 'Cycle related media.'},\n  props: [{name: 'slides', type: 'ReactNode[]', description: 'Slides.'}],\n  type: 'component'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {HookDoc} from '@astryxdesign/core/authoring';\nconst doc: HookDoc = {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  usage: {description: 'Drive carousel state.'},\n  params: [{name: 'count', type: 'number', description: 'Count.'}],\n  returns: [{name: 'index', type: 'number', description: 'Index.'}],\n  type: 'function'\n};\nexport default doc;\n",
+  "output": "import type {HookDoc} from '@astryxdesign/cli/authoring';\nconst doc: HookDoc = {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  usage: {description: 'Drive carousel state.'},\n  params: [{name: 'count', type: 'number', description: 'Count.'}],\n  returns: [{name: 'index', type: 'number', description: 'Index.'}],\n  type: 'function'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {ReferenceDoc} from '@astryxdesign/core/authoring';\nconst doc: ReferenceDoc = {\n  name: 'theming',\n  title: 'Theming',\n  description: 'How theming works.',\n  sections: [{title: 'Overview', content: [{type: 'prose', text: 'Themes cascade.'}]}],\n  type: 'generic'\n};\nexport default doc;\n",
+  "output": "import type {ReferenceDoc} from '@astryxdesign/cli/authoring';\nconst doc: ReferenceDoc = {\n  name: 'theming',\n  title: 'Theming',\n  description: 'How theming works.',\n  sections: [{title: 'Overview', content: [{type: 'prose', text: 'Themes cascade.'}]}],\n  type: 'generic'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = {\n  name: 'Landing',\n  displayName: 'Landing',\n  description: 'A landing page.',\n  type: 'page'\n};\nexport default t;\n",
+  "output": "import type {TemplateDoc} from '@astryxdesign/cli/authoring';\nconst t: TemplateDoc = {\n  name: 'Landing',\n  displayName: 'Landing',\n  description: 'A landing page.',\n  type: 'page'\n};\nexport default t;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = {\n  name: 'Hero',\n  displayName: 'Hero',\n  exampleFor: 'Button',\n  aspectRatio: 1.5,\n  description: 'A hero block.',\n  type: 'block'\n};\nexport default t;\n",
+  "output": "import type {TemplateDoc} from '@astryxdesign/cli/authoring';\nconst t: TemplateDoc = {\n  name: 'Hero',\n  displayName: 'Hero',\n  exampleFor: 'Button',\n  aspectRatio: 1.5,\n  description: 'A hero block.',\n  type: 'block'\n};\nexport default t;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "f.ts",
+  "options": null,
+  "source": "import type {AstryxCodemodTransform} from '@astryxdesign/cli/codemod';\nconst transform: AstryxCodemodTransform = file => file.source.replace(/a/g, 'b');\nexport default {\n  title: 'Rename',\n  transform,\n  type: 'code'\n};\n",
+  "output": "import type {AstryxCodemodTransform} from '@astryxdesign/cli/authoring';\nconst transform: AstryxCodemodTransform = file => file.source.replace(/a/g, 'b');\nexport default {\n  title: 'Rename',\n  transform,\n  type: 'code'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  integrations: ['@acme/widgets', '@acme/charts'],\n  issuesUrl: 'https://github.com/acme/app/issues',\n  hooks: {postCodemod: [{name: 'reinstall', buildCommand: () => ({command: 'pnpm', args: ['install']})}]},\n  experimental: {xle: {components: {KpiCard: {from: '@/components/KpiCard', default: true}}}},\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  components: './components',\n  templates: './templates',\n  codemods: './codemods',\n  issuesUrl: 'https://github.com/acme/widgets/issues',\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  description: 'A carousel that cycles through slides.',\n  category: 'Content',\n  keywords: ['carousel', 'slider', 'gallery'],\n\n  props: [\n    {name: 'slides', type: 'ReactNode[]', description: 'The slides to render.', required: true},\n    {name: 'autoPlay', type: 'boolean', description: 'Advance automatically.', default: 'false'},\n  ],\n\n  usage: {description: 'Use to cycle related media.', bestPractices: [{guidance: true, description: 'Keep slides consistent in size.'}]},\n  examples: [{label: 'Basic', code: '<AcmeCarousel slides={slides} />'}],\n  type: 'component'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  description: 'Drives carousel state.',\n  params: [{name: 'count', type: 'number', description: 'Slide count.', required: true}],\n  returns: [{name: 'index', type: 'number', description: 'Active slide index.'}],\n  type: 'function'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Theming',\n  displayName: 'Theming',\n  description: 'How theming works in this package.',\n  type: 'generic'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Acme Landing',\n  description: 'A marketing landing page.',\n  category: 'Marketing',\n  componentsUsed: ['AcmeCarousel', 'Button'],\n  preview: {image: './preview.png', aspectRatio: '16 / 9'},\n  type: 'page'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Acme Hero',\n  description: 'A hero block.',\n  componentsUsed: ['AcmeCarousel'],\n  type: 'block'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  title: 'Rename slides prop to items',\n  description: 'v2 renamed AcmeCarousel.slides to items.',\n  transform: (file) => file.source.replace(/slides=/g, 'items='),\n  type: 'code'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  title: 'Bump acme integration id',\n  transform: (file) => file.source.replace('@acme/old', '@acme/new'),\n  type: 'config'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'X',\n  description: 'y',\n  type: 'generic'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import { type ComponentDoc } from '@astryxdesign/core/authoring';\nconst d: ComponentDoc = {\n  name: 'X',\n  props: [],\n  type: 'component'\n};\nexport default d;\n",
+  "output": "import { type ComponentDoc } from '@astryxdesign/cli/authoring';\nconst d: ComponentDoc = {\n  name: 'X',\n  props: [],\n  type: 'component'\n};\nexport default d;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  ...baseDoc,\n  type: 'component'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {type: 'component', name: 'X', props: []};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "export const a = {\n  name: 'A',\n  description: 'a',\n  type: 'generic'\n};\nexport const b = {\n  name: 'B',\n  props: [],\n  type: 'component'\n};\nexport {ComponentDoc} from '@astryxdesign/cli/doc';\n",
+  "output": "export const a = {\n  name: 'A',\n  description: 'a',\n  type: 'generic'\n};\nexport const b = {\n  name: 'B',\n  props: [],\n  type: 'component'\n};\nexport {ComponentDoc} from '@astryxdesign/cli/authoring';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "type C = import('@astryxdesign/cli/config').AstryxConfig;\nconst m = await import('@astryxdesign/cli/codemod');\n",
+  "output": "type C = import('@astryxdesign/cli/authoring').AstryxConfig;\nconst m = await import('@astryxdesign/cli/authoring');\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/config';\nexport const x: T = null;\n",
+  "output": "import type {T} from '@astryxdesign/cli/authoring';\nexport const x: T = null;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/doc';\nexport const x: T = null;\n",
+  "output": "import type {T} from '@astryxdesign/cli/authoring';\nexport const x: T = null;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/integration';\nexport const x: T = null;\n",
+  "output": "import type {T} from '@astryxdesign/cli/authoring';\nexport const x: T = null;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/template';\nexport const x: T = null;\n",
+  "output": "import type {T} from '@astryxdesign/cli/authoring';\nexport const x: T = null;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/codemod';\nexport const x: T = null;\n",
+  "output": "import type {T} from '@astryxdesign/cli/authoring';\nexport const x: T = null;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-authoring-imports",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nexport const x = <Button />;\n",
+  "output": null,
+  "error": null
+ }
+]

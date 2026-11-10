@@ -1,0 +1,32 @@
+{
+ "id": "ex_integration_add_codemod_rename-widget_--to_1.2.0_@integration",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "rename-widget",
+  "--to",
+  "1.2.0"
+ ],
+ "fixture": "integration",
+ "stdout": "codemod contribution added\n\n[ok] rename-widget\n\nDeclare codemod root ./codemods in astryx.integration.mjs.\n\n- codemods/1.2.0/rename-widget.mjs\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "integration/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  codemods: './codemods'\n};\n"
+  },
+  {
+   "path": "integration/codemods/1.2.0/rename-widget.mjs",
+   "status": "created",
+   "text": "export default {\n  type: 'code',\n  title: 'Rename Widget',\n  transform(file, api) {\n    // Replace this with your transform logic.\n    return file.source;\n  },\n};\n"
+  }
+ ]
+}

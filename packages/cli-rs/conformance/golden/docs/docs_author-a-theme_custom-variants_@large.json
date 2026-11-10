@@ -1,0 +1,19 @@
+{
+ "id": "docs_author-a-theme_custom-variants_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "custom-variants"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Custom Variants\n\nThemes can add new prop values to any component. Any `prop:value` key where the value isn't a built-in gets treated as a new variant. Use `npx @astryxdesign/cli@0.7.12 theme build` to generate TypeScript augmentations for type safety.\n\nAdding custom variants:\n```tsx\ncomponents: {\n  button: {\n    'variant:secondary': { backgroundColor: 'rgba(0,0,0,0.06)' },\n    'variant:primary-muted': {\n      backgroundColor: 'light-dark(#F2F4F6, #28292C)',\n      color: 'var(--color-text-primary)',\n    },\n  },\n  banner: {\n    'status:neutral': {\n      backgroundColor: 'var(--color-background-muted)',\n      color: 'var(--color-text-secondary)',\n    },\n  },\n}\n```\n\nUsing custom variants:\n```tsx\n// TypeScript knows about 'primary-muted' after astryx theme build\n<Button variant=\"primary-muted\" label=\"Save draft\" />\n<Banner status=\"neutral\" title=\"Note\" />\n```\n\nCustom variants only work when the theme that defines them is active. The component's variant map is extended via module augmentation, with no changes to the component source needed.\n\nUp: npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs author-a-theme component-style-overrides\nNext: npx @astryxdesign/cli@0.7.12 docs author-a-theme theme-adaptations\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

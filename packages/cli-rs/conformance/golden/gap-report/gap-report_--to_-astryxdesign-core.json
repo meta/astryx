@@ -1,0 +1,13 @@
+{
+ "id": "gap-report_--to_-astryxdesign-core",
+ "args": [
+  "gap-report",
+  "--to",
+  "@astryxdesign/core"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

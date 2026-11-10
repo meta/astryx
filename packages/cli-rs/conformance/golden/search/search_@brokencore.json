@@ -1,0 +1,11 @@
+{
+ "id": "search_@brokencore",
+ "args": [
+  "search"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'query'\n",
+ "exit": 1,
+ "files": []
+}

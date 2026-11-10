@@ -1,0 +1,6 @@
+export default {
+  name: 'x',
+  agentDocs: {
+    append: ['First line.'],
+  },
+};

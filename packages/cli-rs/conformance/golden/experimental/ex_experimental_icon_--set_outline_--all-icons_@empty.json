@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_icon_--set_outline_--all-icons_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "--set",
+  "outline",
+  "--all-icons"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No installed icon set named \"outline\"\n",
+ "exit": 1,
+ "files": []
+}

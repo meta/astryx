@@ -1,0 +1,19 @@
+{
+ "id": "docs_color_usage_@large",
+ "args": [
+  "docs",
+  "color",
+  "usage"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Use color tokens in StyleX\n\nImport the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.\n\nApplying color tokens:\n```tsx\nimport * as stylex from '@stylexjs/stylex';\nimport {colorVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  container: {\n    backgroundColor: colorVars['--color-background-surface'],\n    color: colorVars['--color-text-primary'],\n    borderColor: colorVars['--color-border'],\n  },\n  accent: {\n    color: colorVars['--color-text-accent'],\n  },\n});\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs color --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs color surface-colors\nNext: npx @astryxdesign/cli@0.7.12 docs color best-practices\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

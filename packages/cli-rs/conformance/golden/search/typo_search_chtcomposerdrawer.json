@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_chtcomposerdrawer",
+ "args": [
+  "search",
+  "chtcomposerdrawer"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"chtcomposerdrawer\" (1)\n\nname:        ChatComposerDrawer\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: Use ChatComposerDrawer in the ChatComposer drawer slot for supplementary content such as attachments, context chips, or previews. Provide count only when people should be able to collapse that content.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatComposerDrawer\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover chtcomposerdrawer\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

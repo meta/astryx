@@ -1,0 +1,12 @@
+{
+ "id": "integration_add_@large",
+ "args": [
+  "integration",
+  "add"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'kind'\n",
+ "exit": 1,
+ "files": []
+}

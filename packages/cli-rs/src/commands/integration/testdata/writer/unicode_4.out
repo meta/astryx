@@ -1,0 +1,8 @@
+export default {
+  title: 'Café ☕ 😀',
+  name: 'x',
+
+  agentDocs: {
+    append: ['It\'s "quoted" \\ back']
+  }
+};

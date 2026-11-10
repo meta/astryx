@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_'themes-STAR-mjs'",
+ "args": [
+  "theme",
+  "build",
+  "'themes/*.mjs'"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/themes/'themes/*.mjs'\n\n  npx @astryxdesign/cli@0.7.12 theme build themes/*.mjs  (globs are expanded by your shell; pass the pattern unquoted, or list the files)\n",
+ "exit": 1,
+ "files": []
+}

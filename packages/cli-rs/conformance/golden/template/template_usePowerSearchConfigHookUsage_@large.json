@@ -1,0 +1,18 @@
+{
+ "id": "template_usePowerSearchConfigHookUsage_@large",
+ "args": [
+  "template",
+  "usePowerSearchConfigHookUsage"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {\n  PowerSearch,\n  usePowerSearchConfig,\n} from '@astryxdesign/core/PowerSearch';\nimport type {PowerSearchFilter} from '@astryxdesign/core/PowerSearch';\nimport {Table} from '@astryxdesign/core/Table';\nimport type {TableColumn} from '@astryxdesign/core/Table';\n\nconst statusValues = [\n  {value: 'active', label: 'Active'},\n  {value: 'on-leave', label: 'On Leave'},\n  {value: 'contractor', label: 'Contractor'},\n];\n\nconst fieldDefs = [\n  {key: 'name', type: 'string', label: 'Name'},\n  {key: 'status', type: 'enum', label: 'Status', enumValues: statusValues},\n  {key: 'startDate', type: 'date', label: 'Start date'},\n] as const;\n\ninterface Person extends Record<string, unknown> {\n  id: string;\n  name: string;\n  status: string;\n  startDate: number;\n}\n\nconst people: Person[] = [\n  {id: '1', name: 'Alice Chen', status: 'active', startDate: 1672531200},\n  {id: '2', name: 'Bob Dylan', status: 'on-leave', startDate: 1680307200},\n  {id: '3', name: 'Charlie Kim', status: 'active', startDate: 1688169600},\n  {id: '4', name: 'Dana Scully', status: 'contractor', startDate: 1696118400},\n  {id: '5', name: 'Evan Wright', status: 'active', startDate: 1704067200},\n];\n\nconst columns: TableColumn<Person>[] = [\n  {key: 'name', header: 'Name'},\n  {\n    key: 'status',\n    header: 'Status',\n    renderCell: (person: Person) =>\n      statusValues.find(s => s.value === person.status)?.label ?? person.status,\n  },\n  {\n    key: 'startDate',\n    header: 'Start Date',\n    renderCell: (person: Person) =>\n      new Date(person.startDate * 1000).toLocaleDateString('en-US', {\n        timeZone: 'UTC',\n        year: 'numeric',\n        month: 'short',\n        day: 'numeric',\n      }),\n  },\n];\n\nexport default function UsePowerSearchConfigHookUsage() {\n  const [filters, setFilters] = useState<PowerSearchFilter[]>([]);\n  const {config, applyFilters} = usePowerSearchConfig(\n    fieldDefs,\n    'PeopleDirectory',\n  );\n  const filteredPeople = applyFilters(filters, people);\n\n  return (\n    <VStack gap={4}>\n      <PowerSearch\n        config={config}\n        filters={filters}\n        onChange={newFilters => setFilters([...newFilters])}\n        placeholder=\"Filter directory by name, status, start date...\"\n        resultCount={filteredPeople.length}\n      />\n      <Table data={filteredPeople} columns={columns} idKey=\"id\" hasHover />\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "id": "hook_useClickableContainer",
+ "args": [
+  "hook",
+  "useClickableContainer"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useClickableContainer\n\nMakes a container element clickable while preserving nested interactive element behavior. Solves the \"nested interactive elements\" problem: when a card is clickable but contains buttons/links, clicking those should NOT trigger the card's action. Detects interactive ancestors between the click target and the container, and ignores text selections. Supports href navigation (including middle-click and Ctrl/Cmd+click for new tabs).\n\n## Best Practices\n\n- **Do:** Attach onClick, onMouseUp and onPointerDown to the container element: full click handling including middle-click, and no touch pressed state for a press on a nested control.\n- **Do:** Use inside ClickableCard or SelectableCard for the standard card interaction pattern.\n- **Don't:** Use when the entire container is a single interactive element; just use a <button> or <a> directly.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseClickableContainerOptions` | - | Configuration object for the clickable container. **(required)** |\n| `options.containerRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the outer container element. **(required)** |\n| `options.interactiveRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the primary interactive element inside (link, button). If no onClick or href is provided, clicks are proxied to this element. |\n| `options.onClick` | `(event: MouseEvent<HTMLElement>) => void` | - | Click handler fired when the container surface (not a nested interactive element) is clicked. |\n| `options.href` | `string` | - | Navigation URL. When provided, clicking the container navigates to this URL. |\n| `options.target` | `string` | - | Link target (e.g., '_blank'). Used with href for navigation behavior. |\n| `options.disabled` | `boolean` | `false` | Whether the container is disabled. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `onClick` | `(event: MouseEvent<HTMLElement>) => void` | Click handler to attach to the container element. |\n| `onMouseUp` | `(event: MouseEvent<HTMLElement>) => void` | Mouse up handler to attach to the container (handles middle-click navigation for href). |\n| `onPointerDown` | `(event: PointerEvent<HTMLElement>) => void` | Pointer down handler to attach to the container. On a container that paints its press with usePressFeedback, it drops a touch press that starts on a nested interactive element, which does not activate the container. A mouse :active press paint is unchanged. Without it, the container keeps its click rules and its pressed state for every press. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for ClickableCard, SelectableCard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

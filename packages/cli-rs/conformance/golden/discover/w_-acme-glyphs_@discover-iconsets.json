@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-glyphs_@discover-iconsets",
+ "args": [
+  "discover",
+  "@acme/glyphs"
+ ],
+ "fixture": "discover-iconsets",
+ "stdout": "name:      @acme/glyphs\npackage:   @acme/glyphs\ncategory:  @acme/glyphs\nversion:   1.0.0\niconSets:  glyphs\ninstalled: true\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @acme/glyphs/<item>\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

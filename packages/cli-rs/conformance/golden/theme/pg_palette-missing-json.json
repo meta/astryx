@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-missing-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/missing.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: palette/missing.json\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "search_ToggleButtonGroup",
+ "args": [
+  "search",
+  "ToggleButtonGroup"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"ToggleButtonGroup\" (6)\n\nname:        ToggleButtonGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ToggleButton\ndescription: Groups toggle buttons for exclusive (single) or multi-select behavior. Uses discriminated union on type for type-safe value/onChange. Under the touch presentation a press tracks like a menu: press a toggle and slide across the others, and the highlight follows. Only the toggle you lift on toggles, and lifting outside the group toggles nothing. With a finger, each toggle's target grows toward 44 px, up to half the gap to a neighbour, without the toggles growing.\ncommand:     npx @astryxdesign/cli@0.7.12 component ToggleButtonGroup\n\nname:        ToggleButtonGroup\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ToggleButton - Group\nkind:        block\ndescription: Toggle button groups in single-select and multi-select modes. Single selection acts as a view mode switcher; multiple selection forms a formatting toolbar.\ncommand:     npx @astryxdesign/cli@0.7.12 template ToggleButtonGroup --type block\n\nname:        ToggleButtonGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ToggleButtonGroup\nkind:        block\ndescription: ToggleButtonGroup manages a set of ToggleButtons with single-select or multi-select behavior for options like view modes or filters.\ncommand:     npx @astryxdesign/cli@0.7.12 template ToggleButtonGroupShowcase --type block\n\nname:        ToggleButtonGroupVertical\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ToggleButtonGroup - Vertical\nkind:        block\ndescription: A vertically stacked ToggleButtonGroup using the vertical orientation, shown with both single-select and multi-select behavior, ideal for sidebar-style option lists and vertical toolbars.\ncommand:     npx @astryxdesign/cli@0.7.12 template ToggleButtonGroupVertical --type block\n\nname:        ToggleButtonLabel\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ToggleButton - Label\nkind:        block\ndescription: Toggle buttons with visible text labels that show a font weight shift on press. Use when the icon alone is not enough to communicate the action.\ncommand:     npx @astryxdesign/cli@0.7.12 template ToggleButtonLabel --type block\n\nname:        ToggleButton\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ToggleButton\ndescription: ToggleButton switches between selected and unselected states to represent a persistent on/off choice. Use it standalone for binary actions like bold, mute, or favorite, or inside a ToggleButtonGroup for single-select or multi-select toolbar controls.\ncommand:     npx @astryxdesign/cli@0.7.12 component ToggleButton\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ToggleButtonGroup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

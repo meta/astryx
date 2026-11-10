@@ -1,0 +1,20 @@
+{
+ "id": "w_component_Button_Card_--showcase",
+ "args": [
+  "component",
+  "Button",
+  "Card",
+  "--showcase"
+ ],
+ "fixture": "app",
+ "stdout": "Component batch\n\ncount: 2\n\nResults\n\nButton\n\nselector: Button\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\n// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Button} from '@astryxdesign/core/Button';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function ButtonShowcase() {\n  return (\n    <Stack direction=\"horizontal\" gap={3} vAlign=\"center\">\n      <Button label=\"Primary\" variant=\"primary\" />\n      <Button label=\"Secondary\" variant=\"secondary\" />\n      <Button label=\"Ghost\" variant=\"ghost\" />\n      <Button label=\"Destructive\" variant=\"destructive\" />\n    </Stack>\n  );\n}\n\n\nCard\n\nselector: Card\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\n// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Card} from '@astryxdesign/core/Card';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nexport default function CardShowcase() {\n  return (\n    <Card width={320}>\n      <Stack direction=\"vertical\" gap={2}>\n        <Heading level={4}>Card title</Heading>\n        <Text type=\"body\" color=\"secondary\">\n          Cards group related content with a border and background. Use them for\n          profiles, settings panels, or data summaries.\n        </Text>\n      </Stack>\n    </Card>\n  );\n}\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

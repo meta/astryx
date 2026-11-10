@@ -1,0 +1,13 @@
+{
+ "id": "template_FieldLabelBasic_--json_@large",
+ "args": [
+  "template",
+  "FieldLabelBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"FieldLabelBasic\",\n    \"description\": \"Standalone labels with required and optional indicators and a helper description. Use when labeling a custom control that does not render its own label.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"FieldLabel\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {FieldLabel} from '@astryxdesign/core/Field';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function FieldLabelBasic() {\\n  return (\\n    <VStack gap={4}>\\n      <FieldLabel label=\\\"Email address\\\" inputID=\\\"email-input\\\" isRequired />\\n      <FieldLabel\\n        label=\\\"Phone number\\\"\\n        inputID=\\\"phone-input\\\"\\n        isOptional\\n        description=\\\"Include country code for international numbers\\\"\\n      />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

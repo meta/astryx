@@ -1,0 +1,20 @@
+{
+ "id": "search_data-table_--limit_3",
+ "args": [
+  "search",
+  "data table",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"data table\" (3 of 328)\n\nname:        Table\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Table\ndescription: Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.\ncommand:     npx @astryxdesign/cli@0.7.12 component Table\n\nname:        useTableSortableState\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Table\ndescription: Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useTableSortableState\n\nname:        TableGridDividersTable\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Table - Grid Dividers\nkind:        block\ndescription: Compact table with grid dividers showing both row and column borders, suited for dense numeric data.\ncommand:     npx @astryxdesign/cli@0.7.12 template TableGridDividersTable --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'data table'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

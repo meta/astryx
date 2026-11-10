@@ -1,0 +1,12 @@
+{
+ "id": "w_Menu",
+ "args": [
+  "swizzle",
+  "Menu"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Component \"Menu\" not found.\n\n  AlertDialog\n  AppShell\n  AspectRatio\n  Avatar\n  AvatarGroup\n  Badge\n  Banner\n  Blockquote\n  BottomSheet\n  Breadcrumbs\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_empty_arg",
+ "args": [
+  "swizzle",
+  ""
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Argument <component> is an empty string. An empty argument is not the same as an omitted one, and ignoring it would silently discard the rest of the command: pass a value, or leave <component> out of `astryx swizzle` entirely.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "theme_remove_-h",
+ "args": [
+  "theme",
+  "remove",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx theme remove [options] <slug>\n\nRemove a non-default theme from the app\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  the module is regenerated without the theme\n  1  the theme is not added, is the default, or state is invalid\n\nExamples:\n  # Remove an added theme\n  npx @astryxdesign/cli@0.7.12 theme remove ocean\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-remove\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

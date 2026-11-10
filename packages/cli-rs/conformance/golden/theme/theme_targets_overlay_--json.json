@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_overlay_--json",
+ "args": [
+  "theme",
+  "targets",
+  "overlay",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"overlay\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"overlay\",\n        \"className\": \"astryx-overlay\",\n        \"component\": \"Overlay\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"overlay-scrim\",\n        \"className\": \"astryx-overlay-scrim\",\n        \"component\": \"Overlay\",\n        \"props\": [\n          \"position\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

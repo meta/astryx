@@ -1,0 +1,18 @@
+{
+ "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_@empty",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--to",
+  "@acme/widgets"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No gap-report destination \"@acme/widgets\": no loaded integration names an issues URL. Leave out --to for the default.\n",
+ "exit": 1,
+ "files": []
+}

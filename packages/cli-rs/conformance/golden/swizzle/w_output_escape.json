@@ -1,0 +1,14 @@
+{
+ "id": "w_output_escape",
+ "args": [
+  "swizzle",
+  "Button",
+  "--output",
+  "../out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid output directory \"../out\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

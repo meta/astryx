@@ -1,0 +1,12 @@
+{
+ "id": "theme_remove_@brokencore",
+ "args": [
+  "theme",
+  "remove"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

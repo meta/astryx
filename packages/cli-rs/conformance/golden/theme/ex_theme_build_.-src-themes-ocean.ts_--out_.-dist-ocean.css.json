@@ -1,0 +1,15 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--out_.-dist-ocean.css",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--out",
+  "./dist/ocean.css"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/app/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "component_--source_--help",
+ "args": [
+  "component",
+  "--source",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx component [options] [names...]\n\nList components or print component docs\n\nArguments:\n  names                  One or more exact selectors. Use Name, package/Name, @scope/package/Name, or @scope/package@version/Name. Two or more return one ordered batch. At most 100 selectors are accepted.\n\nOptions:\n  --list                 List every component (the same as giving no name)\n  --category <category>  List one component group, e.g. --category Layout or --category Avatar (an unknown group lists the valid ones)\n  --props                Print only the props table\n  --source               Print component source code\n  --showcase             Print showcase source code\n  --blocks               List example blocks: showcase, examples, and related\n  --package <name>       Scope lookup to an external package (e.g. @acme/xds-widgets). Use @astryxdesign/core to select an original replaced by an integration component.\n  -h, --help             display help for command\n\nExit codes:\n  0  success\n  1  unknown component, category, or package; more than 100 selectors; any batch row is unresolved; or @astryxdesign/core cannot be resolved\n\nExamples:\n  # Browse the catalog\n  npx @astryxdesign/cli@0.7.12 component --list\n  # Look up several components\n  npx @astryxdesign/cli@0.7.12 component Button Badge Text\n  # Props table as JSON\n  npx @astryxdesign/cli@0.7.12 component Button --props --json\n  # Select a replaced Core original\n  npx @astryxdesign/cli@0.7.12 component SideNav --package @astryxdesign/core\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/component\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

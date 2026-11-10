@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_table-header_--json",
+ "args": [
+  "theme",
+  "targets",
+  "table-header",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"table-header\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"table-header\",\n        \"className\": \"astryx-table-header\",\n        \"component\": \"Table\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"table-header-cell\",\n        \"className\": \"astryx-table-header-cell\",\n        \"component\": \"Table\",\n        \"props\": [\n          \"density\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

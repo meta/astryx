@@ -1,0 +1,13 @@
+{
+ "id": "search_table_--limit--1",
+ "args": [
+  "search",
+  "table",
+  "--limit=-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"-1\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

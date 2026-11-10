@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {isImeKeyEvent, useFocusTrap} from '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "output": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport { useFocusTrap } from '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {isImeKeyEvent as isIme, useFocusTrap} from '@astryxdesign/core/hooks';\nimport {mergeProps} from '@astryxdesign/core/utils';\nconst guarded = isIme(event);",
+  "output": "import { useFocusTrap } from '@astryxdesign/core/hooks';\nimport { mergeProps, isImeKeyEvent as isIme } from '@astryxdesign/core/utils';\nconst guarded = isIme(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import './polyfill';\nimport {isImeKeyEvent} from '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "output": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport './polyfill';\nconst guarded = isImeKeyEvent(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import '@astryxdesign/core/hooks';\nimport {isImeKeyEvent} from '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "output": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {isImeKeyEvent} from '@astryxdesign/core/hooks';\nimport type {UtilityType} from '@astryxdesign/core/utils';\nconst guarded = isImeKeyEvent(event);",
+  "output": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport type {UtilityType} from '@astryxdesign/core/utils';\nconst guarded = isImeKeyEvent(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {isImeKeyEvent} from '@astryxdesign/core/hooks';\nimport * as utils from '@astryxdesign/core/utils';\nconst guarded = isImeKeyEvent(event);",
+  "output": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport * as utils from '@astryxdesign/core/utils';\nconst guarded = isImeKeyEvent(event);",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/move-ime-helper-import",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { isImeKeyEvent } from '@astryxdesign/core/utils';\nimport { useFocusTrap } from '@astryxdesign/core/hooks';\nconst guarded = isImeKeyEvent(event);",
+  "output": null,
+  "error": null
+ }
+]

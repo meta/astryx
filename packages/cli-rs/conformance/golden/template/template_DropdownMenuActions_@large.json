@@ -1,0 +1,18 @@
+{
+ "id": "template_DropdownMenuActions_@large",
+ "args": [
+  "template",
+  "DropdownMenuActions"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {DropdownMenu} from '@astryxdesign/core/DropdownMenu';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function DropdownMenuActions() {\n  const [lastAction, setLastAction] = useState<string | null>(null);\n\n  return (\n    <VStack gap={3}>\n      <DropdownMenu\n        button={{label: 'Actions'}}\n        items={[\n          {label: 'Edit', onClick: () => setLastAction('Edit')},\n          {label: 'Duplicate', onClick: () => setLastAction('Duplicate')},\n          {label: 'Move to folder', onClick: () => setLastAction('Move')},\n          {type: 'divider'},\n          {label: 'Archive', onClick: () => setLastAction('Archive')},\n          {label: 'Delete', onClick: () => setLastAction('Delete')},\n        ]}\n      />\n      {lastAction && (\n        <Text type=\"supporting\" color=\"secondary\">\n          Last action: {lastAction}\n        </Text>\n      )}\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

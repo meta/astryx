@@ -1,0 +1,20 @@
+{
+ "id": "ex_experimental_icon_add_Bin_--from_-acme-glyph-library-solid_--id_bin_--variant_solid_@empty",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Bin",
+  "--from",
+  "@acme/glyph-library/solid",
+  "--id",
+  "bin",
+  "--variant",
+  "solid"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: astryx experimental icon add works only in a project. Run it in the icon-set package.\n",
+ "exit": 1,
+ "files": []
+}

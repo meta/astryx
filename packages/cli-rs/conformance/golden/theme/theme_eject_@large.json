@@ -1,0 +1,12 @@
+{
+ "id": "theme_eject_@large",
+ "args": [
+  "theme",
+  "eject"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

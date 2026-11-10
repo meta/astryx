@@ -1,0 +1,18 @@
+{
+ "id": "template_TableTreeTable_@large",
+ "args": [
+  "template",
+  "TableTreeTable"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Table,\n  useTableTreeData,\n  useTableTreeState,\n  proportional,\n  pixel,\n} from '@astryxdesign/core/Table';\n\ninterface FileNode extends Record<string, unknown> {\n  id: string;\n  name: string;\n  kind: 'folder' | 'file';\n  size: string;\n  children?: FileNode[];\n}\n\nconst fileTree: FileNode[] = [\n  {\n    id: 'src',\n    name: 'src',\n    kind: 'folder',\n    size: '',\n    children: [\n      {\n        id: 'src/components',\n        name: 'components',\n        kind: 'folder',\n        size: '',\n        children: [\n          {\n            id: 'src/components/Button.tsx',\n            name: 'Button.tsx',\n            kind: 'file',\n            size: '4.2 KB',\n          },\n          {\n            id: 'src/components/Table.tsx',\n            name: 'Table.tsx',\n            kind: 'file',\n            size: '12.8 KB',\n          },\n        ],\n      },\n      {id: 'src/index.ts', name: 'index.ts', kind: 'file', size: '0.4 KB'},\n    ],\n  },\n  {id: 'package.json', name: 'package.json', kind: 'file', size: '1.8 KB'},\n];\n\nconst columns = [\n  {key: 'name', header: 'Name', width: proportional(2)},\n  {key: 'kind', header: 'Kind', width: pixel(90)},\n  {key: 'size', header: 'Size', width: pixel(90)},\n];\n\nexport default function TableTreeTable() {\n  // useTableTreeState owns the expanded set and flattens the nested data into\n  // the visible rows; useTableTreeData draws the indent + expander in the tree\n  // column. hasExpandAllControl adds the expand-all toggle to the header.\n  const {visibleData, treeConfig} = useTableTreeState<FileNode>({\n    data: fileTree,\n    idKey: 'id',\n    defaultExpandedIds: ['src'],\n  });\n\n  const tree = useTableTreeData({...treeConfig, hasExpandAllControl: true});\n\n  return (\n    <Table\n      data={visibleData}\n      columns={columns}\n      idKey=\"id\"\n      hasHover\n      plugins={{tree}}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

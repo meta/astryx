@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_drawer-header-close-icon_--json",
+ "args": [
+  "theme",
+  "targets",
+  "drawer-header-close-icon",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"drawer-header-close-icon\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"drawer-header-close-icon\",\n        \"className\": \"astryx-drawer-header-close-icon\",\n        \"component\": \"Drawer\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

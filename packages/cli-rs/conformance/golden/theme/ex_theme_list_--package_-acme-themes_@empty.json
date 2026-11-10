@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_list_--package_-acme-themes_@empty",
+ "args": [
+  "theme",
+  "list",
+  "--package",
+  "@acme/themes"
+ ],
+ "fixture": "empty",
+ "stdout": "No themes are available in this project.\n\nMore themes in packages you could add: npx @astryxdesign/cli@0.7.12 discover theme\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

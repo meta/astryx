@@ -1,0 +1,20 @@
+{
+ "id": "ex_init_--user_--remove-agents_--json",
+ "args": [
+  "init",
+  "--user",
+  "--remove-agents",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.user\",\n  \"data\": {\n    \"files\": [\n      {\n        \"path\": \"/tmp/astryx-conformance/work/home/.agents/skills/astryx/SKILL.md\",\n        \"action\": \"absent\"\n      }\n    ],\n    \"command\": \"astryx\",\n    \"warnings\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/settings.json",
+   "status": "created",
+   "text": "{\n  \"computerAgentText\": {\n    \"install\": false,\n    \"links\": []\n  }\n}\n"
+  }
+ ]
+}

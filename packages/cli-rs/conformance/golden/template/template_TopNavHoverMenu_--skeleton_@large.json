@@ -1,0 +1,19 @@
+{
+ "id": "template_TopNavHoverMenu_--skeleton_@large",
+ "args": [
+  "template",
+  "TopNavHoverMenu",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TopNavHoverMenu - Navigation bar with a hover-triggered dropdown menu showing product items with icons and descriptions.\n# Components: BoltIcon, ChartBarIcon, CodeBracketIcon, NavIcon, ShieldCheckIcon, TopNav, TopNavMenu, UserCircleIcon\n\n<TopNav />\n<TopNavHeading />\n<TopNavItem />\n<TopNavMenu />\n<TopNavItem />\n<Button variant=\"ghost\" />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

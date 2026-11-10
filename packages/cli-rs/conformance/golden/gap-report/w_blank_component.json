@@ -1,0 +1,16 @@
+{
+ "id": "w_blank_component",
+ "args": [
+  "gap-report",
+  "  ",
+  "--category",
+  "other",
+  "--reason",
+  "x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

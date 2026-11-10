@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_components_noname",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Checking integration components: (local package)\n\n[ok] No component names conflict with Core.\n\n[skip] Props not compared: TypeScript is not installed in this project, so documented props were not compared with the code. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

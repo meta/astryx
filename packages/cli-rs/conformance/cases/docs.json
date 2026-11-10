@@ -1,0 +1,5554 @@
+[
+ {
+  "id": "docs_--help",
+  "args": [
+   "docs",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--json",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_-h",
+  "args": [
+   "docs",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_docs",
+  "args": [
+   "help",
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--bogus-flag",
+  "args": [
+   "docs",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--bogus-flag_--json",
+  "args": [
+   "docs",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_extra1_extra2_extra3",
+  "args": [
+   "docs",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_extra1_extra2_extra3_--json",
+  "args": [
+   "docs",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_@empty",
+  "args": [
+   "docs"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@empty",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "docs_@nocore",
+  "args": [
+   "docs"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@nocore",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "docs_@brokencore",
+  "args": [
+   "docs"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@brokencore",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "docs_@plain",
+  "args": [
+   "docs"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@plain",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "docs_@large",
+  "args": [
+   "docs"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@large",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_@integration",
+  "args": [
+   "docs"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_--json_@integration",
+  "args": [
+   "docs",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme",
+  "args": [
+   "docs",
+   "theme"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_@empty",
+  "args": [
+   "docs",
+   "theme"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_@integration",
+  "args": [
+   "docs",
+   "theme"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_@large",
+  "args": [
+   "docs",
+   "theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_--json",
+  "args": [
+   "docs",
+   "theme",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_spacing_--json",
+  "args": [
+   "docs",
+   "spacing",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_spacing_--json_@empty",
+  "args": [
+   "docs",
+   "spacing",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_spacing_--json_@integration",
+  "args": [
+   "docs",
+   "spacing",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_spacing_--json_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_quick-start",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_quick-start_@empty",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_quick-start_@integration",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_quick-start_@large",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_theme_quick-start_--json",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_@empty",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_@integration",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_@large",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--json",
+  "args": [
+   "docs",
+   "cli",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--depth_all",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "all"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--depth_all_@empty",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "all"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--depth_all_@integration",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "all"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--depth_all_@large",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "all"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli_--depth_all_--json",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "all",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_--depth_all",
+  "args": [
+   "docs",
+   "--depth",
+   "all"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_--depth_all_@empty",
+  "args": [
+   "docs",
+   "--depth",
+   "all"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_--depth_all_@integration",
+  "args": [
+   "docs",
+   "--depth",
+   "all"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_--depth_all_@large",
+  "args": [
+   "docs",
+   "--depth",
+   "all"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_--depth_all_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "all",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring_--depth_all_--detail_full",
+  "args": [
+   "docs",
+   "authoring",
+   "--depth",
+   "all",
+   "--detail",
+   "full"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring_--depth_all_--detail_full_@empty",
+  "args": [
+   "docs",
+   "authoring",
+   "--depth",
+   "all",
+   "--detail",
+   "full"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring_--depth_all_--detail_full_@integration",
+  "args": [
+   "docs",
+   "authoring",
+   "--depth",
+   "all",
+   "--detail",
+   "full"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring_--depth_all_--detail_full_@large",
+  "args": [
+   "docs",
+   "authoring",
+   "--depth",
+   "all",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring_--depth_all_--detail_full_--json",
+  "args": [
+   "docs",
+   "authoring",
+   "--depth",
+   "all",
+   "--detail",
+   "full",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli-api-functions-search",
+  "args": [
+   "docs",
+   "cli/api/functions/search"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli-api-functions-search_@empty",
+  "args": [
+   "docs",
+   "cli/api/functions/search"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli-api-functions-search_@integration",
+  "args": [
+   "docs",
+   "cli/api/functions/search"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli-api-functions-search_@large",
+  "args": [
+   "docs",
+   "cli/api/functions/search"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_cli-api-functions-search_--json",
+  "args": [
+   "docs",
+   "cli/api/functions/search",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring-quick-start_--full",
+  "args": [
+   "docs",
+   "authoring/quick-start",
+   "--full"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring-quick-start_--full_@empty",
+  "args": [
+   "docs",
+   "authoring/quick-start",
+   "--full"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring-quick-start_--full_@integration",
+  "args": [
+   "docs",
+   "authoring/quick-start",
+   "--full"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring-quick-start_--full_@large",
+  "args": [
+   "docs",
+   "authoring/quick-start",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_docs_authoring-quick-start_--full_--json",
+  "args": [
+   "docs",
+   "authoring/quick-start",
+   "--full",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--index",
+  "args": [
+   "docs",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--index_--json",
+  "args": [
+   "docs",
+   "--index",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--index_--help",
+  "args": [
+   "docs",
+   "--index",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--full",
+  "args": [
+   "docs",
+   "--full"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--full_--json",
+  "args": [
+   "docs",
+   "--full",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--full",
+  "args": [
+   "docs",
+   "principles",
+   "--full"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--full_--help",
+  "args": [
+   "docs",
+   "--full",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_1",
+  "args": [
+   "docs",
+   "--depth",
+   "1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_1_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "1",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth-1",
+  "args": [
+   "docs",
+   "--depth=1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_2",
+  "args": [
+   "docs",
+   "--depth",
+   "2"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_2_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "2",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth-2",
+  "args": [
+   "docs",
+   "--depth=2"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_0",
+  "args": [
+   "docs",
+   "--depth",
+   "0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_0_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "0",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth-0",
+  "args": [
+   "docs",
+   "--depth=0"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_abc",
+  "args": [
+   "docs",
+   "--depth",
+   "abc"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_abc_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "abc",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth-abc",
+  "args": [
+   "docs",
+   "--depth=abc"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth",
+  "args": [
+   "docs",
+   "--depth"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_--json",
+  "args": [
+   "docs",
+   "--depth",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--depth_1",
+  "args": [
+   "docs",
+   "principles",
+   "--depth",
+   "1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_--depth_1_--help",
+  "args": [
+   "docs",
+   "--depth",
+   "1",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_nosuchsub",
+  "args": [
+   "docs",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_@large",
+  "args": [
+   "docs",
+   "author-a-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--index_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--full_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--dense_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--zh_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_creating-a-custom-theme_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "creating-a-custom-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_creating-a-custom-theme_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "creating-a-custom-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_palette_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "palette"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_palette_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "palette",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_definetheme_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "definetheme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_definetheme_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "definetheme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_extending-a-theme_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "extending-a-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_extending-a-theme_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "extending-a-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_component-style-overrides_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "component-style-overrides"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_component-style-overrides_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "component-style-overrides",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_custom-variants_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "custom-variants"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_custom-variants_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "custom-variants",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_theme-adaptations_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "theme-adaptations"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_theme-adaptations_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "theme-adaptations",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_adaptation-rules_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "adaptation-rules"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_adaptation-rules_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "adaptation-rules",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_building-themes-for-production_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "building-themes-for-production"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_building-themes-for-production_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "building-themes-for-production",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_icon-registry_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "icon-registry"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_icon-registry_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "icon-registry",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_building-a-theme-family_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "building-a-theme-family"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_building-a-theme-family_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "building-a-theme-family",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_token-utilities_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "token-utilities"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_token-utilities_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "token-utilities",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_usetheme-hook_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "usetheme-hook"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_usetheme-hook_--json_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "usetheme-hook",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_author-a-theme_Custom-themes_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "Custom themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_@large",
+  "args": [
+   "docs",
+   "browser-support"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--index_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--full_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--dense_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--zh_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_overview_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_overview_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_support-tiers_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "support-tiers"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_support-tiers_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "support-tiers",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_which-features-set-the-floor_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "which-features-set-the-floor"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_which-features-set-the-floor_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "which-features-set-the-floor",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_which-components-are-affected_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "which-components-are-affected"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_which-components-are-affected_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "which-components-are-affected",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_what-astryx-guarantees_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "what-astryx-guarantees"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_what-astryx-guarantees_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "what-astryx-guarantees",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_the-on-screen-keyboard_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "the-on-screen-keyboard"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_the-on-screen-keyboard_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "the-on-screen-keyboard",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_supporting-older-browsers_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "supporting-older-browsers"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_supporting-older-browsers_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "supporting-older-browsers",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_how-these-tiers-move-over-time_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "how-these-tiers-move-over-time"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_how-these-tiers-move-over-time_--json_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "how-these-tiers-move-over-time",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_browser-support_Overview_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_@large",
+  "args": [
+   "docs",
+   "color"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--json_@large",
+  "args": [
+   "docs",
+   "color",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--index_@large",
+  "args": [
+   "docs",
+   "color",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--full_@large",
+  "args": [
+   "docs",
+   "color",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--dense_@large",
+  "args": [
+   "docs",
+   "color",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--zh_@large",
+  "args": [
+   "docs",
+   "color",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_overview_@large",
+  "args": [
+   "docs",
+   "color",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_overview_--json_@large",
+  "args": [
+   "docs",
+   "color",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_surface-colors_@large",
+  "args": [
+   "docs",
+   "color",
+   "surface-colors"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_surface-colors_--json_@large",
+  "args": [
+   "docs",
+   "color",
+   "surface-colors",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_usage_@large",
+  "args": [
+   "docs",
+   "color",
+   "usage"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_usage_--json_@large",
+  "args": [
+   "docs",
+   "color",
+   "usage",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_best-practices_@large",
+  "args": [
+   "docs",
+   "color",
+   "best-practices"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_best-practices_--json_@large",
+  "args": [
+   "docs",
+   "color",
+   "best-practices",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_color_Overview_@large",
+  "args": [
+   "docs",
+   "color",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_@large",
+  "args": [
+   "docs",
+   "elevation"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--index_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--full_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--dense_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--zh_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_overview_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_overview_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_elevation-scale_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "elevation-scale"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_elevation-scale_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "elevation-scale",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_choosing-a-level_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "choosing-a-level"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_choosing-a-level_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "choosing-a-level",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_the-elevation-prop_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "the-elevation-prop"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_the-elevation-prop_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "the-elevation-prop",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_usage_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "usage"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_usage_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "usage",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_best-practices_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "best-practices"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_best-practices_--json_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "best-practices",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_elevation_Overview_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_@large",
+  "args": [
+   "docs",
+   "getting-started"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--index_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--full_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--dense_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--zh_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_quick-start-with-ai_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "quick-start-with-ai"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_quick-start-with-ai_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "quick-start-with-ai",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_install_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "install"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_install_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "install",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_upgrade_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "upgrade"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_upgrade_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "upgrade",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_install-once_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "install-once"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_install-once_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "install-once",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_add-base-css-and-a-theme_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "add-base-css-and-a-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_add-base-css-and-a-theme_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "add-base-css-and-a-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_add-your-first-component_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "add-your-first-component"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_add-your-first-component_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "add-your-first-component",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_customize-with-stylex_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "customize-with-stylex"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_customize-with-stylex_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "customize-with-stylex",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_example-apps_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "example-apps"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_example-apps_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "example-apps",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_explore-the-cli_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "explore-the-cli"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_explore-the-cli_--json_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "explore-the-cli",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_getting-started_Quick-Start-with-AI_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "Quick Start with AI"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_@large",
+  "args": [
+   "docs",
+   "icons"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--index_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--full_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--dense_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--zh_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_available-names_@large",
+  "args": [
+   "docs",
+   "icons",
+   "available-names"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_available-names_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "available-names",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_custom-icons_@large",
+  "args": [
+   "docs",
+   "icons",
+   "custom-icons"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_custom-icons_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "custom-icons",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_theme-overrides_@large",
+  "args": [
+   "docs",
+   "icons",
+   "theme-overrides"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_theme-overrides_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "theme-overrides",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_icon-variants_@large",
+  "args": [
+   "docs",
+   "icons",
+   "icon-variants"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_icon-variants_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "icon-variants",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_component-and-library-icons_@large",
+  "args": [
+   "docs",
+   "icons",
+   "component-and-library-icons"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_component-and-library-icons_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "component-and-library-icons",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_component-icon-slots_@large",
+  "args": [
+   "docs",
+   "icons",
+   "component-icon-slots"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_component-icon-slots_--json_@large",
+  "args": [
+   "docs",
+   "icons",
+   "component-icon-slots",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_icons_Available-Names_@large",
+  "args": [
+   "docs",
+   "icons",
+   "Available Names"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_@large",
+  "args": [
+   "docs",
+   "illustrations"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--json_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--index_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--full_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--dense_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--zh_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_when-to-use_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "when-to-use"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_when-to-use_--json_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "when-to-use",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_guidelines_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "guidelines"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_guidelines_--json_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "guidelines",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_placement_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "placement"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_placement_--json_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "placement",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_illustrations_When-to-Use_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "When to Use"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_@large",
+  "args": [
+   "docs",
+   "is-my-code-good"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--index_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--full_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--dense_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--zh_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_understand-the-app_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "understand-the-app"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_understand-the-app_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "understand-the-app",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_choose-the-review_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "choose-the-review"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_choose-the-review_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "choose-the-review",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_apply-the-rubric_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "apply-the-rubric"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_apply-the-rubric_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "apply-the-rubric",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_collect-the-evidence_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "collect-the-evidence"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_collect-the-evidence_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "collect-the-evidence",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_ask-an-agent_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "ask-an-agent"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_ask-an-agent_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "ask-an-agent",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_verify-and-repeat_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "verify-and-repeat"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_verify-and-repeat_--json_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "verify-and-repeat",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_is-my-code-good_Understand-the-app_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "Understand the app"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_@large",
+  "args": [
+   "docs",
+   "motion"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--index_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--full_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--dense_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--zh_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_overview_@large",
+  "args": [
+   "docs",
+   "motion",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_overview_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_duration_@large",
+  "args": [
+   "docs",
+   "motion",
+   "duration"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_duration_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "duration",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_easing_@large",
+  "args": [
+   "docs",
+   "motion",
+   "easing"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_easing_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "easing",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_where-motion-helps_@large",
+  "args": [
+   "docs",
+   "motion",
+   "where-motion-helps"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_where-motion-helps_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "where-motion-helps",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_where-motion-hurts_@large",
+  "args": [
+   "docs",
+   "motion",
+   "where-motion-hurts"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_where-motion-hurts_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "where-motion-hurts",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_movement-principles_@large",
+  "args": [
+   "docs",
+   "motion",
+   "movement-principles"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_movement-principles_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "movement-principles",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_respecting-user-preferences_@large",
+  "args": [
+   "docs",
+   "motion",
+   "respecting-user-preferences"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_respecting-user-preferences_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "respecting-user-preferences",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_usage_@large",
+  "args": [
+   "docs",
+   "motion",
+   "usage"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_usage_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "usage",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_theme-motion_@large",
+  "args": [
+   "docs",
+   "motion",
+   "theme-motion"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_theme-motion_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "theme-motion",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_best-practices_@large",
+  "args": [
+   "docs",
+   "motion",
+   "best-practices"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_best-practices_--json_@large",
+  "args": [
+   "docs",
+   "motion",
+   "best-practices",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_motion_Overview_@large",
+  "args": [
+   "docs",
+   "motion",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_@large",
+  "args": [
+   "docs",
+   "principles"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--full_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--dense_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--zh_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_design-philosophy_@large",
+  "args": [
+   "docs",
+   "principles",
+   "design-philosophy"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_design-philosophy_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "design-philosophy",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_rules_@large",
+  "args": [
+   "docs",
+   "principles",
+   "rules"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_rules_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "rules",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_styling-approach_@large",
+  "args": [
+   "docs",
+   "principles",
+   "styling-approach"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_styling-approach_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "styling-approach",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_anti-patterns_@large",
+  "args": [
+   "docs",
+   "principles",
+   "anti-patterns"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_anti-patterns_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "anti-patterns",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_design-tokens_@large",
+  "args": [
+   "docs",
+   "principles",
+   "design-tokens"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_design-tokens_--json_@large",
+  "args": [
+   "docs",
+   "principles",
+   "design-tokens",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_principles_Design-Philosophy_@large",
+  "args": [
+   "docs",
+   "principles",
+   "Design Philosophy"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_@large",
+  "args": [
+   "docs",
+   "shape"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--json_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--index_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--full_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--dense_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--zh_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_overview_@large",
+  "args": [
+   "docs",
+   "shape",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_overview_--json_@large",
+  "args": [
+   "docs",
+   "shape",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_radius-scale_@large",
+  "args": [
+   "docs",
+   "shape",
+   "radius-scale"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_radius-scale_--json_@large",
+  "args": [
+   "docs",
+   "shape",
+   "radius-scale",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_concentric-radius_@large",
+  "args": [
+   "docs",
+   "shape",
+   "concentric-radius"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_concentric-radius_--json_@large",
+  "args": [
+   "docs",
+   "shape",
+   "concentric-radius",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_best-practices_@large",
+  "args": [
+   "docs",
+   "shape",
+   "best-practices"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_best-practices_--json_@large",
+  "args": [
+   "docs",
+   "shape",
+   "best-practices",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_shape_Overview_@large",
+  "args": [
+   "docs",
+   "shape",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_@large",
+  "args": [
+   "docs",
+   "spacing"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--index_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--full_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--dense_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--zh_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_overview_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_overview_--json_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_scale_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "scale"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_scale_--json_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "scale",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_usage_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "usage"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_usage_--json_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "usage",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_best-practices_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "best-practices"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_best-practices_--json_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "best-practices",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_spacing_Overview_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_@large",
+  "args": [
+   "docs",
+   "styling-overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--index_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--full_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--dense_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--zh_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_pick-a-path_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "pick-a-path"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_pick-a-path_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "pick-a-path",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_plain_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "plain"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_plain_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "plain",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_tailwind_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "tailwind"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_tailwind_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "tailwind",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_stylex-own-code_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "stylex-own-code"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_stylex-own-code_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "stylex-own-code",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_other-packages_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "other-packages"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_other-packages_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "other-packages",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_what-each-file-does_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "what-each-file-does"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_what-each-file-does_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "what-each-file-does",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_further-reading_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "further-reading"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_further-reading_--json_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "further-reading",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_styling-overview_Pick-a-path_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "Pick a path"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--index_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--full_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--dense_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--zh_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_quick-start_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "quick-start",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_creating-a-custom-theme_@large",
+  "args": [
+   "docs",
+   "theme",
+   "creating-a-custom-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_creating-a-custom-theme_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "creating-a-custom-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_icon-sizes_@large",
+  "args": [
+   "docs",
+   "theme",
+   "icon-sizes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_icon-sizes_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "icon-sizes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_light-dark-mode_@large",
+  "args": [
+   "docs",
+   "theme",
+   "light-dark-mode"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_light-dark-mode_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "light-dark-mode",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_integration-themes_@large",
+  "args": [
+   "docs",
+   "theme",
+   "integration-themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_integration-themes_--json_@large",
+  "args": [
+   "docs",
+   "theme",
+   "integration-themes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_theme_Wrap-your-app-in-a-theme_@large",
+  "args": [
+   "docs",
+   "theme",
+   "Wrap your app in a theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_@large",
+  "args": [
+   "docs",
+   "use-a-theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--index_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--full_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--dense_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--zh_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_quick-start_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "quick-start"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_quick-start_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "quick-start",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_migrating-earlier-theme-copies_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "migrating-earlier-theme-copies"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_migrating-earlier-theme-copies_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "migrating-earlier-theme-copies",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_available-themes_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "available-themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_available-themes_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "available-themes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_theme-props_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "theme-props"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_theme-props_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "theme-props",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_integration-themes_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "integration-themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_integration-themes_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "integration-themes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_light-dark-mode_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "light-dark-mode"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_light-dark-mode_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "light-dark-mode",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_nesting-themes_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "nesting-themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_nesting-themes_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "nesting-themes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_runtime-vs-built-themes_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "runtime-vs-built-themes"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_runtime-vs-built-themes_--json_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "runtime-vs-built-themes",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_use-a-theme_Wrap-your-app-in-a-theme_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "Wrap your app in a theme"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_@large",
+  "args": [
+   "docs",
+   "use-integrations"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--json_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--index_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--full_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--dense_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--zh_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_discover-integrations_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "discover-integrations"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_discover-integrations_--json_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "discover-integrations",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_install-an-integration_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "install-an-integration"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_install-an-integration_--json_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "install-an-integration",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_use-what-it-adds_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "use-what-it-adds"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_use-what-it-adds_--json_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "use-what-it-adds",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_check-for-problems_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "check-for-problems"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_check-for-problems_--json_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "check-for-problems",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_use-integrations_Discover-integrations_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "Discover integrations"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_@large",
+  "args": [
+   "docs",
+   "working-with-ai"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--index_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--index"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--full_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--dense_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--dense"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--zh_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--zh"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_overview_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_overview_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "overview",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_quick-start_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "quick-start"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_quick-start_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "quick-start",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_what-gets-generated_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "what-gets-generated"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_what-gets-generated_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "what-gets-generated",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_cursor-setup_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "cursor-setup"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_cursor-setup_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "cursor-setup",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_checking-your-setup_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "checking-your-setup"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_checking-your-setup_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "checking-your-setup",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_the-astryx-pattern_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "the-astryx-pattern"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_the-astryx-pattern_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "the-astryx-pattern",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_the-dense-flag_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "the-dense-flag"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_the-dense-flag_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "the-dense-flag",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_mcp-server_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "mcp-server"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_mcp-server_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "mcp-server",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_global-mode_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "global-mode"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_global-mode_--json_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "global-mode",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "title_docs_working-with-ai_Overview_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "Overview"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_cli_--depth_1",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "1"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_cli_--depth_2",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "2"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_cli_--depth_3",
+  "args": [
+   "docs",
+   "cli",
+   "--depth",
+   "3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_principals",
+  "args": [
+   "docs",
+   "principals"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_nope",
+  "args": [
+   "docs",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_tokens_nope",
+  "args": [
+   "docs",
+   "tokens",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--detail_full_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--detail_compact_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--detail_brief_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_author-a-theme_--depth_2_@large",
+  "args": [
+   "docs",
+   "author-a-theme",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--detail_full_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--detail_compact_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--detail_brief_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_browser-support_--depth_2_@large",
+  "args": [
+   "docs",
+   "browser-support",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--detail_full_@large",
+  "args": [
+   "docs",
+   "color",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--detail_compact_@large",
+  "args": [
+   "docs",
+   "color",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--detail_brief_@large",
+  "args": [
+   "docs",
+   "color",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_color_--depth_2_@large",
+  "args": [
+   "docs",
+   "color",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--detail_full_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--detail_compact_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--detail_brief_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_elevation_--depth_2_@large",
+  "args": [
+   "docs",
+   "elevation",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--detail_full_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--detail_compact_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--detail_brief_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_getting-started_--depth_2_@large",
+  "args": [
+   "docs",
+   "getting-started",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--detail_full_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--detail_compact_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--detail_brief_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_icons_--depth_2_@large",
+  "args": [
+   "docs",
+   "icons",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--detail_full_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--detail_compact_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--detail_brief_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_illustrations_--depth_2_@large",
+  "args": [
+   "docs",
+   "illustrations",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--detail_full_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--detail_compact_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--detail_brief_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_is-my-code-good_--depth_2_@large",
+  "args": [
+   "docs",
+   "is-my-code-good",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--detail_full_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--detail_compact_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--detail_brief_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_motion_--depth_2_@large",
+  "args": [
+   "docs",
+   "motion",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--detail_full_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--detail_compact_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--detail_brief_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--depth_2_@large",
+  "args": [
+   "docs",
+   "principles",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--detail_full_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--detail_compact_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--detail_brief_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_shape_--depth_2_@large",
+  "args": [
+   "docs",
+   "shape",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--detail_full_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--detail_compact_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--detail_brief_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_spacing_--depth_2_@large",
+  "args": [
+   "docs",
+   "spacing",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--detail_full_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--detail_compact_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--detail_brief_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_styling-overview_--depth_2_@large",
+  "args": [
+   "docs",
+   "styling-overview",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--detail_full_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--detail_compact_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--detail_brief_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_theme_--depth_2_@large",
+  "args": [
+   "docs",
+   "theme",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--detail_full_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--detail_compact_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--detail_brief_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-a-theme_--depth_2_@large",
+  "args": [
+   "docs",
+   "use-a-theme",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--detail_full_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--detail_compact_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--detail_brief_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_use-integrations_--depth_2_@large",
+  "args": [
+   "docs",
+   "use-integrations",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--detail_full_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--detail",
+   "full"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--detail_compact_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--detail",
+   "compact"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--detail_brief_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--detail",
+   "brief"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_working-with-ai_--depth_2_@large",
+  "args": [
+   "docs",
+   "working-with-ai",
+   "--depth",
+   "2"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_@empty",
+  "args": [
+   "docs",
+   "principles"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index_@empty",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_@nocore",
+  "args": [
+   "docs",
+   "principles"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index_@nocore",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_@plain",
+  "args": [
+   "docs",
+   "principles"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index_@plain",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_@integration",
+  "args": [
+   "docs",
+   "principles"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_principles_--index_@integration",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_@integration",
+  "args": [
+   "docs",
+   "acme-guide"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_--json_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_--full_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "--full"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_--index_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "--index"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_colors_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "colors"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_start_--json_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "start",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_--zh_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "--zh"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "docs_acme-guide_nope_@integration",
+  "args": [
+   "docs",
+   "acme-guide",
+   "nope"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "cols40_docs",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "40"
+  }
+ },
+ {
+  "id": "cols80_docs",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "80"
+  }
+ },
+ {
+  "id": "cols200_docs",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "200"
+  }
+ },
+ {
+  "id": "cols-empty_docs",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": ""
+  }
+ },
+ {
+  "id": "docs_tty",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true
+ },
+ {
+  "id": "cols60_docs_tty",
+  "args": [
+   "docs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true,
+  "env": {
+   "COLUMNS": "60"
+  }
+ },
+ {
+  "id": "cols40_docs_cli",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "40"
+  }
+ },
+ {
+  "id": "cols80_docs_cli",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "80"
+  }
+ },
+ {
+  "id": "cols200_docs_cli",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "200"
+  }
+ },
+ {
+  "id": "cols-empty_docs_cli",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": ""
+  }
+ },
+ {
+  "id": "docs_cli_tty",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true
+ },
+ {
+  "id": "cols60_docs_cli_tty",
+  "args": [
+   "docs",
+   "cli"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true,
+  "env": {
+   "COLUMNS": "60"
+  }
+ },
+ {
+  "id": "cols40_docs_principles_--index",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "40"
+  }
+ },
+ {
+  "id": "cols80_docs_principles_--index",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "80"
+  }
+ },
+ {
+  "id": "cols200_docs_principles_--index",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": "200"
+  }
+ },
+ {
+  "id": "cols-empty_docs_principles_--index",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "env": {
+   "COLUMNS": ""
+  }
+ },
+ {
+  "id": "docs_principles_--index_tty",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true
+ },
+ {
+  "id": "cols60_docs_principles_--index_tty",
+  "args": [
+   "docs",
+   "principles",
+   "--index"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "tty": true,
+  "env": {
+   "COLUMNS": "60"
+  }
+ },
+ {
+  "id": "stdin_docs_tokens",
+  "args": [
+   "docs",
+   "tokens"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "stdin": "y\nn\n\n"
+ }
+]

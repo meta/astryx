@@ -1,0 +1,15 @@
+{
+ "id": "integration_pack_extra1_extra2_extra3",
+ "args": [
+  "integration",
+  "pack",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `integration pack` is now `integration verify`: run `npx @astryxdesign/cli@0.7.12 integration verify` to check the package the way npm will publish it. To build the tarball, run `npm pack`.\n",
+ "exit": 1,
+ "files": []
+}

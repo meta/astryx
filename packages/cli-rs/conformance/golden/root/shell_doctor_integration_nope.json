@@ -1,0 +1,13 @@
+{
+ "id": "shell_doctor_integration_nope",
+ "args": [
+  "doctor",
+  "integration",
+  "nope"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'doctor integration nope'\n\n  validate  (available subcommand)\n  templates  (available subcommand)\n  components  (available subcommand)\n  docs  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

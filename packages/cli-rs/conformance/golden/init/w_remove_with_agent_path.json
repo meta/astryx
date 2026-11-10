@@ -1,0 +1,16 @@
+{
+ "id": "w_remove_with_agent_path",
+ "args": [
+  "init",
+  "--remove-agents",
+  "--agent",
+  "claude",
+  "--agent-docs-path",
+  "x.md"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--remove-agents` cannot be combined with --agent, --agent-docs-path: it removes the managed block and ignores install options.\n",
+ "exit": 1,
+ "files": []
+}

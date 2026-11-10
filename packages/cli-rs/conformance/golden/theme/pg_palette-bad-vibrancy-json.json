@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-bad-vibrancy-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/bad-vibrancy.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Vibrancy must be a number from 0 to 100.\n",
+ "exit": 1,
+ "files": []
+}

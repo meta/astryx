@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--from-not-a-version",
+ "args": [
+  "upgrade",
+  "--from=not-a-version"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Invalid --from value: \"not-a-version\". Expected a semver string like 0.0.5.\n",
+ "exit": 1,
+ "files": []
+}

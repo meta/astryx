@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--skip-codemod",
+ "args": [
+  "upgrade",
+  "--skip-codemod"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--skip-codemod <name...>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

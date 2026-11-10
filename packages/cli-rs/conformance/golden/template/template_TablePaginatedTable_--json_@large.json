@@ -1,0 +1,13 @@
+{
+ "id": "template_TablePaginatedTable_--json_@large",
+ "args": [
+  "template",
+  "TablePaginatedTable",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TablePaginatedTable\",\n    \"description\": \"Paginated data table navigating through a larger dataset page by page.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Section\",\n      \"Table\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {\\n  Table,\\n  useTablePagination,\\n  paginateData,\\n  proportional,\\n} from '@astryxdesign/core/Table';\\nimport type {TableColumn} from '@astryxdesign/core/Table';\\nimport {Section} from '@astryxdesign/core/Section';\\n\\ninterface User extends Record<string, unknown> {\\n  id: string;\\n  name: string;\\n  email: string;\\n  role: string;\\n}\\n\\nconst names = [\\n  'Alice Johnson',\\n  'Bob Smith',\\n  'Charlie Brown',\\n  'Diana Prince',\\n  'Eve Davis',\\n  'Frank Miller',\\n  'Grace Lee',\\n  'Hank Wilson',\\n  'Ivy Chen',\\n  'Jack Turner',\\n  'Karen White',\\n  'Leo Garcia',\\n  'Mia Thompson',\\n  'Noah Martinez',\\n  'Olivia Clark',\\n  'Paul Harris',\\n  'Quinn Walker',\\n  'Rachel Adams',\\n  'Sam Robinson',\\n  'Tina Scott',\\n];\\n\\nconst roles = ['Engineer', 'Designer', 'Manager', 'Admin', 'Analyst'];\\n\\nconst users: User[] = names.map((name, i) => ({\\n  id: String(i + 1),\\n  name,\\n  email: `${name.split(' ')[0].toLowerCase()}@example.com`,\\n  role: roles[i % roles.length],\\n}));\\n\\nconst columns: TableColumn<User>[] = [\\n  {key: 'name', header: 'Name', width: proportional(1)},\\n  {key: 'email', header: 'Email', width: proportional(2)},\\n  {key: 'role', header: 'Role', width: proportional(1)},\\n];\\n\\nexport default function TablePaginatedTable() {\\n  const [page, setPage] = useState(1);\\n  const pageSize = 5;\\n\\n  const plugin = useTablePagination<User>({\\n    page,\\n    onPageChange: setPage,\\n    totalItems: users.length,\\n    pageSize,\\n  });\\n\\n  return (\\n    <Section>\\n      <Table\\n        data={paginateData(users, page, pageSize)}\\n        columns={columns}\\n        idKey=\\\"id\\\"\\n        plugins={{pagination: plugin}}\\n      />\\n    </Section>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

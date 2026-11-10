@@ -1,0 +1,14 @@
+{
+ "id": "w_component_Button_KitPanelHeader_SideNav_@compkit",
+ "args": [
+  "component",
+  "Button",
+  "KitPanelHeader",
+  "SideNav"
+ ],
+ "fixture": "compkit",
+ "stdout": "Component batch\n\ncount: 3\n\nResults\n\nButton\n\nselector: Button\nstatus:   ambiguous\ncode:     ERR_AMBIGUOUS_COMPONENT\nerror:    Component \"Button\" is provided by multiple packages. Re-run with --package <pkg> to choose one.\n\nCandidates\n\npackage:   @astryxdesign/core\ncomponent: Button\nkind:      component\ninstalled: true\n\npackage:   @comp/kit\ncomponent: Button\nkind:      component\ninstalled: true\n\nKitPanelHeader\n\nselector: KitPanelHeader\nstatus:   found\n\nResult\n\npackage: @comp/kit\n\nparentDoc: KitPanel\n\n# KitPanelHeader\n\nA panel with an optional header.\n\n**Import:** `import {KitPanelHeader} from '@comp/kit/KitPanel';`\n\n## Best Practices\n\n- **Do:** Give every panel a header.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `string` | - | Header text. **(required)** |\n\n## Components\n\n### KitPanelHeader\n\nThe panel header row.\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `string` | - | Header text. **(required)** |\n\n\nSideNav\n\nselector: SideNav\nstatus:   found\n\nResult\n\npackage: @comp/swap\n\n# SwapNav\n\nA side navigation that replaces the Core one.\n\n**Import:** `import {SwapNav} from '@comp/swap';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `items` | `NavItem[]` | - | The links. **(required)** |\n\n",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
+ "exit": 1,
+ "files": []
+}

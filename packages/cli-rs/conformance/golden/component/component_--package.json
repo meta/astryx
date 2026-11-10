@@ -1,0 +1,12 @@
+{
+ "id": "component_--package",
+ "args": [
+  "component",
+  "--package"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--package <name>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

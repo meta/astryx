@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_missing.tsx",
+ "args": [
+  "experimental",
+  "render",
+  "missing.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: missing.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

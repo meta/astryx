@@ -1,0 +1,12 @@
+{
+ "id": "component_Dialgo",
+ "args": [
+  "component",
+  "Dialgo"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"Dialgo\"\n\n  Dialog  (similar name (distance 2))\n  ComplexSelector  (keyword \"dialog\" (distance 2))\n  AlertDialog  (keyword \"dialog\" (distance 2))\n  Drawer  (keyword \"dialog\" (distance 2))\n  CommandPalette  (keyword \"dialog\" (distance 2))\n",
+ "exit": 1,
+ "files": []
+}

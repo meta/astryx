@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_radio-indicator-dot_--json",
+ "args": [
+  "theme",
+  "targets",
+  "radio-indicator-dot",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"radio-indicator-dot\",\n    \"componentCount\": 2,\n    \"targets\": [\n      {\n        \"key\": \"radio-indicator-dot\",\n        \"className\": \"astryx-radio-indicator-dot\",\n        \"component\": \"Indicator\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"radio-indicator-dot\",\n        \"className\": \"astryx-radio-indicator-dot\",\n        \"component\": \"RadioList\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

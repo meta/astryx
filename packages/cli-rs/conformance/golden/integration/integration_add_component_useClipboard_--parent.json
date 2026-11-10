@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--parent",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--parent"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--parent <namespace>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

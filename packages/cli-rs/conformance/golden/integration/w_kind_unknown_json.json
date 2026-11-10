@@ -1,0 +1,15 @@
+{
+ "id": "w_kind_unknown_json",
+ "args": [
+  "integration",
+  "add",
+  "widget",
+  "Foo",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Unknown contribution kind \\\"widget\\\". Choose component, doc, template, codemod, agent-doc, or theme.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

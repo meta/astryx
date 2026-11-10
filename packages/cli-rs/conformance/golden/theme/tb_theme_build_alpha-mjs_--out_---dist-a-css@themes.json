@@ -1,0 +1,15 @@
+{
+ "id": "tb_theme_build_alpha-mjs_--out_---dist-a-css@themes",
+ "args": [
+  "theme",
+  "build",
+  "alpha.mjs",
+  "--out",
+  "../dist/a.css"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/themes/alpha.mjs\n",
+ "exit": 1,
+ "files": []
+}

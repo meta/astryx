@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-definition_useClipboard_--description",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "useClipboard",
+  "--description"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--description <text>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

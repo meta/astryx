@@ -1,0 +1,13 @@
+{
+ "id": "template_NumberInputWithUnits_--json_@large",
+ "args": [
+  "template",
+  "NumberInputWithUnits",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"NumberInputWithUnits\",\n    \"description\": \"Number input with a percentage unit suffix and valid range\",\n    \"type\": \"block\",\n    \"components\": [\n      \"NumberInput\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {NumberInput} from '@astryxdesign/core/NumberInput';\\n\\nexport default function NumberInputWithUnits() {\\n  const [value, setValue] = useState<number | null>(50);\\n  return (\\n    <div style={{width: 300}}>\\n      <NumberInput\\n        label=\\\"Discount\\\"\\n        placeholder=\\\"Enter discount\\\"\\n        min={0}\\n        max={100}\\n        units=\\\"%\\\"\\n        value={value}\\n        onChange={setValue}\\n      />\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

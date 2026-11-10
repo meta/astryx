@@ -1,0 +1,14 @@
+{
+ "id": "component_TourStep_--props_--json_@large",
+ "args": [
+  "component",
+  "TourStep",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"targetRef\",\n      \"type\": \"RefObject<HTMLElement>\",\n      \"description\": \"Ref to the element this step points at. The callout anchors to it like a Popover trigger; it must be a <button> or [role=\\\"button\\\"] element (Popover's anchorRef contract).\",\n      \"required\": true\n    },\n    {\n      \"name\": \"heading\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Step heading.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Step body content.\"\n    },\n    {\n      \"name\": \"placement\",\n      \"type\": \"'above' | 'below' | 'start' | 'end'\",\n      \"description\": \"Which side of the target the callout sits on.\",\n      \"default\": \"'below'\"\n    },\n    {\n      \"name\": \"alignment\",\n      \"type\": \"'start' | 'center' | 'end'\",\n      \"description\": \"How the callout aligns along the placement side (e.g. with placement=\\\"below\\\": start left-aligns under the target, center centers, end right-aligns).\",\n      \"default\": \"'start'\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

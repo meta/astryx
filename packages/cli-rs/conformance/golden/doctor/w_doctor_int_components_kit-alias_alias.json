@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_components_kit-alias_alias",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "kit-alias"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Checking integration components: @real/kit@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     missing_root\nmessage:  Declared themes root does not exist on disk: /tmp/astryx-conformance/work/doctor-integrations/alias/node_modules/kit-alias/gone\n\n[skip] Props not compared: TypeScript is not installed in this project, so documented props were not compared with the code. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

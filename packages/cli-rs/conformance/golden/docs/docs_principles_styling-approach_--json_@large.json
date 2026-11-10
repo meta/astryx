@@ -1,0 +1,14 @@
+{
+ "id": "docs_principles_styling-approach_--json_@large",
+ "args": [
+  "docs",
+  "principles",
+  "styling-approach",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Styling Approach\",\n    \"category\": \"guide\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"The design system supports multiple styling approaches. Every component accepts an `xstyle` prop for StyleX style overrides via `stylex.create()`. For layout and wrapper styling outside of components, use StyleX or Tailwind utilities; both resolve to the same design tokens.\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"See `astryx docs styling` for the complete guide with examples.\"\n      }\n    ],\n    \"id\": \"styling-approach\",\n    \"links\": {\n      \"up\": \"astryx docs principles --index\",\n      \"previous\": \"astryx docs principles rules\",\n      \"next\": \"astryx docs principles anti-patterns\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

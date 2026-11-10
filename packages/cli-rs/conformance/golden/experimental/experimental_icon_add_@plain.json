@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_add_@plain",
+ "args": [
+  "experimental",
+  "icon",
+  "add"
+ ],
+ "fixture": "plain",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
+ "exit": 1,
+ "files": []
+}

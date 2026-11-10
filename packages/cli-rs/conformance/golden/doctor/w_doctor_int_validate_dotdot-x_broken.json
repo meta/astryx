@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_validate_dotdot-x_broken",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "../x"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Validating integration: ../x\n\nseverity: [fail]\ncode:     invalid_package_spec\nmessage:  Invalid integration package name \"../x\". Use a bare package name (no path segments).\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

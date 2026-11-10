@@ -1,0 +1,19 @@
+{
+ "id": "hook_useCollapsible_--dense",
+ "args": [
+  "hook",
+  "useCollapsible",
+  "--dense"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useCollapsible\n\nReusable hook that encapsulates the collapsible state machine. Supports three modes: group-controlled (inside CollapsibleGroup), controlled (isOpen + onOpenChange), and uncontrolled (self-managed with defaultIsOpen). Used internally by Card and Section.\n\n## Best Practices\n\n- **Do:** Use the hook directly when building custom collapsible components that need Astryx collapsible behavior without Collapsible wrapper.\n- **Do:** For accordion behavior, wrap items in CollapsibleGroup and pass unique value props.\n- **Don't:** Pass local isOpen, defaultIsOpen, or onOpenChange expecting them to run for a value-bound group item; the group owns that state and notification path.\n- **Don't:** Implement your own open/close state when useCollapsible already provides it; the hook handles group coordination automatically.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `isCollapsible` | `boolean \\| CollapsibleConfig` | - | Enable collapsible behavior. true = self-managed (starts open). Pass config object for controlled mode or custom defaults. |\n| `value` | `string` | - | Unique identifier within an CollapsibleGroup. When present and inside a group, state is managed by the group. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `isEnabled` | `boolean` | Whether collapsible behavior is active. |\n| `isOpen` | `boolean` | Whether the content is currently expanded. |\n| `toggle` | `() => void` | Toggle open/closed state. Dispatches to group, controlled callback, or internal state. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Collapsible, Card, Section\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

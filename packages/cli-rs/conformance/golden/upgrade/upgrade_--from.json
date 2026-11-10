@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--from",
+ "args": [
+  "upgrade",
+  "--from"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--from <version>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

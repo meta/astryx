@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_Button_@nocore",
+ "args": [
+  "swizzle",
+  "Button"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.\n",
+ "exit": 1,
+ "files": []
+}

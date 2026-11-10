@@ -1,0 +1,14 @@
+{
+ "id": "component_ChartAxis_--props_--json_@large",
+ "args": [
+  "component",
+  "ChartAxis",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/charts\",\n  \"data\": [\n    {\n      \"name\": \"position\",\n      \"type\": \"'top' | 'right' | 'bottom' | 'left'\",\n      \"description\": \"Physical plot edge on which to render the axis.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"tickCount\",\n      \"type\": \"number\",\n      \"description\": \"Approximate continuous-scale tick count. d3 chooses the final values.\",\n      \"default\": \"5\"\n    },\n    {\n      \"name\": \"maxTicks\",\n      \"type\": \"number\",\n      \"description\": \"Maximum displayed label count. Labels are evenly skipped when the generated set is larger.\"\n    },\n    {\n      \"name\": \"tickFormat\",\n      \"type\": \"(value: unknown) => string\",\n      \"description\": \"Formats each retained tick. When omitted, continuous scales use d3 formatting and band scales use their category strings.\"\n    },\n    {\n      \"name\": \"truncate\",\n      \"type\": \"number\",\n      \"description\": \"Maximum content characters retained before an ellipsis is appended. User-perceived characters remain intact.\"\n    },\n    {\n      \"name\": \"animated\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether tick position and visibility changes use the built-in transition.\",\n      \"default\": \"true\"\n    },\n    {\n      \"name\": \"showAxisLine\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether to draw the edge line. Tick marks force the line on so they remain grounded.\",\n      \"default\": \"true for bottom; false for top, right, and left\"\n    },\n    {\n      \"name\": \"showTicks\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether to draw an outward mark at each retained tick.\",\n      \"default\": \"false\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "hook_useImperativeDialog_--json",
+ "args": [
+  "hook",
+  "useImperativeDialog",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useImperativeDialog\",\n    \"subComponentOf\": \"Dialog\",\n    \"displayName\": \"useImperativeDialog\",\n    \"description\": \"Hook for showing a dialog without managing open state. Call dialog.show(content, options) to open and dialog.hide() to close. Render dialog.element in your JSX tree.\",\n    \"props\": [\n      {\n        \"name\": \"show\",\n        \"type\": \"(content: ReactNode, options?: DialogOptions) => void\",\n        \"description\": \"Show the dialog with the given content. Options are the same as Dialog props minus isOpen/onOpenChange/children.\"\n      },\n      {\n        \"name\": \"hide\",\n        \"type\": \"() => void\",\n        \"description\": \"Hide the dialog.\"\n      },\n      {\n        \"name\": \"isOpen\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether the dialog is currently open.\"\n      },\n      {\n        \"name\": \"element\",\n        \"type\": \"ReactNode\",\n        \"description\": \"The dialog element: render this in your JSX tree.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

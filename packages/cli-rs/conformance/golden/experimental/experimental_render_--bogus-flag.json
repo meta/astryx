@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_--bogus-flag",
+ "args": [
+  "experimental",
+  "render",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

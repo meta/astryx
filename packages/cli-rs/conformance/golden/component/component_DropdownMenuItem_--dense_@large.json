@@ -1,0 +1,19 @@
+{
+ "id": "component_DropdownMenuItem_--dense_@large",
+ "args": [
+  "component",
+  "DropdownMenuItem",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# DropdownMenuItem\n\none pointer-menu action/destination row; parent owns keyboard, row owns activation, state, destination, content, and root inputs\n\n**Import:** `import {DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Row | Yes | The role=\"menuitem\" root that owns activation, disabled state, destination behavior, and theme state. |\n| Content | Yes | The non-interactive label plus optional icon, description, and end content. |\n\n## Best Practices\n\n- **Do:** Use href for a destination so LinkProvider, modified clicks, middle clicks, and browser link affordances remain available.\n- **Do:** Use hasCloseOnSelect=false only when activation reports a result in place on the same row.\n- **Don't:** Put buttons, links, or other focusable controls inside label, description, or endContent. Each menu row is one interactive target.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `icon` | `IconType` | - | icon before label |\n| `label` | `ReactNode` | - | primary label text **(required)** |\n| `description` | `ReactNode` | - | secondary text below label |\n| `onClick` | `(event: MouseEvent) => void` | - | selection callback (event); keyboard activation = synthesized click w/ modifiers; skipped for a modified click on an href row |\n| `href` | `string` | - | row is a real anchor w/ role=menuitem; modified/middle click keeps browser meaning |\n| `target` | `'_blank' \\| '_self'` | - | link target ('_blank' \\| '_self'), with href |\n| `rel` | `string` | - | link rel; noopener noreferrer added for _blank |\n| `isDisabled` | `boolean` | `false` | unavailable; removes destinations and suppresses activation |\n| `endContent` | `ReactNode` | - | non-interactive content after label+description |\n| `hasCloseOnSelect` | `boolean` | `true` | false keeps the menu open on activation (in-place result on the item) |\n| `variant` | `'default' \\| 'destructive'` | `'default'` | 'destructive' renders the item in the error color for dangerous actions |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for root container |\n| `ref` | `React.Ref<HTMLElement>` | - | forwarded to the row root (the role=\"menuitem\" element) |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-dropdown-menu-item` | `data-size`, `data-variant` | default, destructive | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'dropdown-menu-item': {\n    base: { /* CSS properties */ },\n    'size:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

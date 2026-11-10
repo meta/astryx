@@ -1,0 +1,19 @@
+{
+ "id": "hook_useFocusTrap_--params",
+ "args": [
+  "hook",
+  "useFocusTrap",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseFocusTrapOptions` | - | Configuration object for the focus trap. **(required)** |\n| `options.isActive` | `boolean` | - | Whether the focus trap is currently active. **(required)** |\n| `options.onEscape` | `() => void` | - | Callback when Escape key is pressed inside the trapped container. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

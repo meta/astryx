@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--codemod",
+ "args": [
+  "upgrade",
+  "--codemod"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--codemod <name>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

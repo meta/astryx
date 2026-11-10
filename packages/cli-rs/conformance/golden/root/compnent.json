@@ -1,0 +1,11 @@
+{
+ "id": "compnent",
+ "args": [
+  "compnent"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown command 'compnent'\n\n  component  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

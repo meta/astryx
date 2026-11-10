@@ -1,0 +1,11 @@
+function f() {}
+export default {
+      name: 'x',
+      b: 'y',
+
+      agentDocs: {
+            append: [
+                  'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+            ]
+      }
+};

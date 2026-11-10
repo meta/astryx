@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_templates_--bogus-flag",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

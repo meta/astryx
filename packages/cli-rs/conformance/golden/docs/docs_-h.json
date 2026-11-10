@@ -1,0 +1,12 @@
+{
+ "id": "docs_-h",
+ "args": [
+  "docs",
+  "-h"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx docs [options] [topic] [section]\n\nPrint reference docs\n\nOptions:\n  --index           List the topic's sections and their keys, even for a topic with one section\n  --full            Print the whole topic instead of its sections (text; `--json` returns the whole topic unless --index). Cannot be set with --index\n  --depth <levels>  How many levels of the docs tree to read below a namespace: 0 for the namespace alone, 1 for its children (what a read without --depth shows), all for everything below it. On the topic list, where a namespace otherwise lists alone, it names the docs below each one by the route that opens them, one line each. With it on a namespace read, --detail sets how much of each doc below shows: brief (one line each, the default), compact (with its sections), or full; the topic list is one line per doc whatever the detail\n  -h, --help        display help for command\n\nExit codes:\n  0  success\n  1  unknown topic or route, a section that matches no section or more than one, or a --depth that is not a number of levels or all\n\nExamples:\n  # List topics\n  npx @astryxdesign/cli@0.7.12 docs\n  # A topic's sections\n  npx @astryxdesign/cli@0.7.12 docs theme\n  # A whole topic as JSON\n  npx @astryxdesign/cli@0.7.12 docs spacing --json\n  # One section\n  npx @astryxdesign/cli@0.7.12 docs theme quick-start\n  # The CLI docs tree\n  npx @astryxdesign/cli@0.7.12 docs cli\n  # Every CLI doc, one line each\n  npx @astryxdesign/cli@0.7.12 docs cli --depth all\n  # Every route in the docs tree, one line each\n  npx @astryxdesign/cli@0.7.12 docs --depth all\n  # The integration guides as one read\n  npx @astryxdesign/cli@0.7.12 docs authoring --depth all --detail full\n  # One API function\n  npx @astryxdesign/cli@0.7.12 docs cli/api/functions/search\n  # A whole guide\n  npx @astryxdesign/cli@0.7.12 docs authoring/quick-start --full\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/docs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

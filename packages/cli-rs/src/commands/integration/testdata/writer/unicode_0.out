@@ -1,0 +1,8 @@
+export default {
+  title: 'Café ☕ 😀',
+  name: 'x',
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

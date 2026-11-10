@@ -1,0 +1,18 @@
+{
+ "id": "template_SideNavCollapseButtonShowcase_@large",
+ "args": [
+  "template",
+  "SideNavCollapseButtonShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport type {ComponentProps} from 'react';\nimport {\n  SideNav,\n  SideNavCollapseButton,\n  SideNavHeading,\n  SideNavItem,\n  SideNavSection,\n} from '@astryxdesign/core/SideNav';\n\nfunction HomeIcon(props: ComponentProps<'svg'>) {\n  return (\n    <svg\n      fill=\"none\"\n      viewBox=\"0 0 24 24\"\n      strokeWidth={1.5}\n      stroke=\"currentColor\"\n      {...props}>\n      <path\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n        d=\"m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25\"\n      />\n    </svg>\n  );\n}\n\nfunction FolderIcon(props: ComponentProps<'svg'>) {\n  return (\n    <svg\n      fill=\"none\"\n      viewBox=\"0 0 24 24\"\n      strokeWidth={1.5}\n      stroke=\"currentColor\"\n      {...props}>\n      <path\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n        d=\"M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z\"\n      />\n    </svg>\n  );\n}\n\nexport default function SideNavCollapseButtonShowcase() {\n  return (\n    <SideNav\n      collapsible={{hasButton: false}}\n      header={<SideNavHeading heading=\"Workspace\" />}\n      footerIcons={<SideNavCollapseButton />}>\n      <SideNavSection title=\"Main\">\n        <SideNavItem label=\"Home\" icon={HomeIcon} isSelected href=\"#\" />\n        <SideNavItem label=\"Projects\" icon={FolderIcon} href=\"#\" />\n      </SideNavSection>\n    </SideNav>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

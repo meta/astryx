@@ -1,0 +1,20 @@
+{
+ "id": "hook_useCombobox_--detail_brief",
+ "args": [
+  "hook",
+  "useCombobox",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseCombobox(options: UseComboboxOptions): { highlightedIndex, setHighlightedIndex, getItemId, onTriggerClick, onKeyDown, onItemSelect, onItemMouseEnter, getFieldProps, getListboxProps, getOptionProps }  <- from '@astryxdesign/core/Selector'\n  Tracks the active option of a single-select combobox and handles its keys, wh...\n  Related: Selector, CommandPalette\n  options: UseComboboxOptions\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Selector, CommandPalette\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

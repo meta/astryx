@@ -1,0 +1,19 @@
+{
+ "id": "template_ScrollableAreaTwoAxisBoard_--skeleton_@large",
+ "args": [
+  "template",
+  "ScrollableAreaTwoAxisBoard",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ScrollableAreaTwoAxisBoard - axis=\"both\" gives the content box max-content inline sizing, so a board wider and taller than its panel scrolls on both axes from one viewport.\n# Components: Card, ScrollableArea\n\n<Card padding={0} width={420}>\n  <ScrollableArea padding={4} role=\"region\" height={300} />\n  <VStack gap={4}>\n    <VStack gap={0.5}>\n      <Heading />\n      <Text />\n    </VStack>\n    <HStack gap={3}>\n      <VStack gap={2} width={180}>\n        <Text />\n        <Card padding={3} variant=\"muted\">\n          <VStack gap={1}>\n            <Text />\n            <Text />\n          </VStack>\n        </Card>\n      </VStack>\n    </HStack>\n  </VStack>\n</Card>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

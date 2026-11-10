@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_inotip",
+ "args": [
+  "search",
+  "inotip"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"inotip\" (5)\n\nname:        InfoTip\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/InfoTip\ndescription: An info icon that reveals help: a small \"i\" button. Hover and keyboard focus preview the help, and a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving. Use it next to labels, values, and metrics for permission notes, metric definitions, and field help. Its value over hand-composing Icon inside Tooltip is the pre-wired accessible trigger: a real button with an aria-label, Tab-reachable, tooltip on hover AND focus AND tap, and Escape dismissal. It follows the toggletip pattern: the button reports `aria-expanded=\"true\"` while the help is pinned, and a screen reader hears the help once when it pins.\ncommand:     npx @astryxdesign/cli@0.7.12 component InfoTip\n\nname:        Tooltip\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Tooltip\ndescription: A short text hint that appears on hover or focus, anchored to a trigger element. Use it to describe icon-only buttons, show the full text of truncated labels, or provide supplementary context without cluttering the UI.\ncommand:     npx @astryxdesign/cli@0.7.12 component Tooltip\n\nname:        InfoTipMetricDefinitions\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InfoTip - Metric Definitions\nkind:        block\ndescription: A row of metrics, each label followed by an InfoTip that defines how the value is counted.\ncommand:     npx @astryxdesign/cli@0.7.12 template InfoTipMetricDefinitions --type block\n\nname:        InfoTipPermissionNotes\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InfoTip - Permission Notes\nkind:        block\ndescription: Read-only settings whose labels carry an InfoTip that says who can change each value.\ncommand:     npx @astryxdesign/cli@0.7.12 template InfoTipPermissionNotes --type block\n\nname:        InfoTipShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InfoTip\nkind:        block\ncommand:     npx @astryxdesign/cli@0.7.12 template InfoTipShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover inotip\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_FieldStatusVariants_--skeleton_@large",
+ "args": [
+  "template",
+  "FieldStatusVariants",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# FieldStatusVariants - All three validation states: error, warning, and success. Use error for invalid input, warning for potential issues like reserved names, and success to confirm valid entries like API keys.\n# Components: Center, TextInput\n\n<Center>\n  <VStack gap={4}>\n    <TextInput />\n    <TextInput />\n    <TextInput />\n  </VStack>\n</Center>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

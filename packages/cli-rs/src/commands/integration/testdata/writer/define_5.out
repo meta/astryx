@@ -1,0 +1,11 @@
+import {defineIntegration} from '@astryxdesign/cli/authoring';
+
+export default defineIntegration({
+  components: './src/components',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+});

@@ -1,0 +1,13 @@
+{
+ "id": "ex_integration_pack_--check_@empty",
+ "args": [
+  "integration",
+  "pack",
+  "--check"
+ ],
+ "fixture": "empty",
+ "stdout": "Integration package check failed\n\n[fail] local package\n\n- [fail] No package.json found. Run this command inside an integration package.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nNote: `integration pack --check` is deprecated. Run `npx @astryxdesign/cli@0.7.12 integration verify`: it runs the same check.\n",
+ "exit": 1,
+ "files": []
+}

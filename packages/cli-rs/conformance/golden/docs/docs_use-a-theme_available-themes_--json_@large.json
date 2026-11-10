@@ -1,0 +1,14 @@
+{
+ "id": "docs_use-a-theme_available-themes_--json_@large",
+ "args": [
+  "docs",
+  "use-a-theme",
+  "available-themes",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Available Themes\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install the theme package you want with `npm install @astryxdesign/theme-<name>`, then import its slug with `theme add <slug>`. The CLI imports the package's built outputs for you.\"\n      },\n      {\n        \"type\": \"table\",\n        \"headers\": [\n          \"Theme\",\n          \"Add command\",\n          \"Description\"\n        ],\n        \"rows\": [\n          [\n            \"Neutral\",\n            \"`astryx theme add neutral`\",\n            \"Muted, minimal aesthetic with Figtree typography. A good starting point.\"\n          ],\n          [\n            \"Butter\",\n            \"astryx theme add butter\",\n            \"Golden, buttery surfaces with blue accents; Sarina + Outfit type.\"\n          ],\n          [\n            \"Chocolate\",\n            \"astryx theme add chocolate\",\n            \"Warm brown tones and cozy beige; Fraunces + Albert Sans type.\"\n          ],\n          [\n            \"Gothic\",\n            \"astryx theme add gothic\",\n            \"Dark-only atmospheric theme; deep blue-gray surfaces, distressed display type.\"\n          ],\n          [\n            \"Matcha\",\n            \"astryx theme add matcha\",\n            \"Earthy greens; DM Sans + Playwrite US Trad type.\"\n          ],\n          [\n            \"Stone\",\n            \"astryx theme add stone\",\n            \"Warm stone and slate tones; Montserrat + Figtree type.\"\n          ],\n          [\n            \"Y2K\",\n            \"astryx theme add y2k\",\n            \"Playful Y2K pop; periwinkle body, holographic accents, Poppins + Crimson Text.\"\n          ]\n        ]\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Every first-party package exports its built theme at `@astryxdesign/theme-{name}/built`, production CSS at `/theme.css`, and font loading CSS at `/fonts.css`. `theme add` writes those imports into the generated app module.\"\n      }\n    ],\n    \"id\": \"available-themes\",\n    \"links\": {\n      \"up\": \"astryx docs use-a-theme --index\",\n      \"previous\": \"astryx docs use-a-theme migrating-earlier-theme-copies\",\n      \"next\": \"astryx docs use-a-theme theme-props\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

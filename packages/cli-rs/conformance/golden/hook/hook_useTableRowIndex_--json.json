@@ -1,0 +1,13 @@
+{
+ "id": "hook_useTableRowIndex_--json",
+ "args": [
+  "hook",
+  "useTableRowIndex",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableRowIndex\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableRowIndex\",\n    \"description\": \"Hook that returns a TablePlugin which prepends a right-aligned, monospaced row-number column, starting at 1 by default. Without data, Table supplies row positions; with data, ordinary numbers follow that array. Windowed rows use the parent Table logical position directly; nondefault startFrom values use full rendering.\",\n    \"props\": [\n      {\n        \"name\": \"data\",\n        \"type\": \"T[]\",\n        \"description\": \"Optional: the array whose order the numbers follow. Omit it to number rows from the positions Table gives them.\"\n      },\n      {\n        \"name\": \"getRowKey\",\n        \"type\": \"(item: T) => string\",\n        \"description\": \"Optional key extractor used with data, returning a unique string per row. When provided, rows match data by the returned string; otherwise by reference identity. Memoize with useCallback for a stable plugin identity.\"\n      },\n      {\n        \"name\": \"label\",\n        \"type\": \"ReactNode\",\n        \"description\": \"Header label for the index column.\",\n        \"default\": \"'#'\"\n      },\n      {\n        \"name\": \"startFrom\",\n        \"type\": \"number\",\n        \"description\": \"First index value.\",\n        \"default\": \"1\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

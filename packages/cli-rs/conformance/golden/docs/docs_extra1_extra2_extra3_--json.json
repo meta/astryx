@@ -1,0 +1,15 @@
+{
+ "id": "docs_extra1_extra2_extra3_--json",
+ "args": [
+  "docs",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Unknown topic \\\"extra1\\\"\",\n  \"code\": \"ERR_UNKNOWN_TOPIC\",\n  \"suggestions\": [\n    {\n      \"name\": \"authoring\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"calendars\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"cli\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"foundations\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"global\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"guides\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"internationalization\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"layout\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"migration\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"styling\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"styling-libraries\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"tokens\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"typography\",\n      \"reason\": \"docs namespace\"\n    },\n    {\n      \"name\": \"author-a-theme\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"browser-support\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"color\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"elevation\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"getting-started\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"icons\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"illustrations\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"is-my-code-good\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"motion\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"principles\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"shape\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"spacing\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"styling-overview\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"theme\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"use-a-theme\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"use-integrations\",\n      \"reason\": \"available topic\"\n    },\n    {\n      \"name\": \"working-with-ai\",\n      \"reason\": \"available topic\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

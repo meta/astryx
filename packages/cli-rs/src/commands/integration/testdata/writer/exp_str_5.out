@@ -1,0 +1,9 @@
+export default {
+  experimental: 'no',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

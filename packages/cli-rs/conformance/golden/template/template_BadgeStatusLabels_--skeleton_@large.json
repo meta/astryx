@@ -1,0 +1,19 @@
+{
+ "id": "template_BadgeStatusLabels_--skeleton_@large",
+ "args": [
+  "template",
+  "BadgeStatusLabels",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# BadgeStatusLabels - Show the state of an item like Active, Pending, or Failed. Use in table rows, list items, or detail pages where users need to see status at a glance.\n# Components: Badge, Stack\n\n<Stack gap={6} />\n<Stack gap={2} />\n<Text />\n<Stack gap={2} />\n<Badge variant=\"success\" />\n<Badge variant=\"warning\" />\n<Badge variant=\"error\" />\n<Stack gap={2} />\n<Text />\n<Stack gap={2} />\n<Badge variant=\"neutral\" />\n<Badge variant=\"info\" />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

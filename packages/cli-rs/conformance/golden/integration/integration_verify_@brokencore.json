@@ -1,0 +1,12 @@
+{
+ "id": "integration_verify_@brokencore",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "brokencore",
+ "stdout": "Integration package check failed\n\n[fail] brokencore\n\n- [fail] No astryx.integration.{ts,mjs,js} found next to package.json.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

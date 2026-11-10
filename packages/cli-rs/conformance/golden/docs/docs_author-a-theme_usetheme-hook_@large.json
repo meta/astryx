@@ -1,0 +1,19 @@
+{
+ "id": "docs_author-a-theme_usetheme-hook_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "usetheme-hook"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## useTheme Hook\n\n`useTheme()` reads the nearest Theme and effective color mode from React context. Prefer `dataVars` for CSS-capable SVG and DOM values. Use this hook for canvas, charts, maps, third-party configuration objects, or an SVG API that requires a concrete JavaScript color instead of a `var(...)` reference.\n\nAccess resolved token values in React:\n```tsx\nimport {useMemo} from 'react';\nimport {useTheme} from '@astryxdesign/core/theme';\n\nfunction ChartConfig() {\n  const {mode, tokens} = useTheme();\n  const options = useMemo(() => ({\n    mode,\n    textColor: tokens['--color-text-primary'],\n    gridColor: tokens['--color-border'],\n    seriesColor: tokens['--color-data-categorical-blue'],\n  }), [mode, tokens]);\n  return <Chart options={options} />;\n}\n```\n\nPrefer CSS variables for ordinary styling. See `npx @astryxdesign/cli@0.7.12 docs use-a-theme` for the provider setup, and `npx @astryxdesign/cli@0.7.12 docs tokens` for the full token reference.\n\nUp: npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs author-a-theme token-utilities\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

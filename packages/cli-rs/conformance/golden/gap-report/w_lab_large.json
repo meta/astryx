@@ -1,0 +1,19 @@
+{
+ "id": "w_lab_large",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "other",
+  "--reason",
+  "x",
+  "--to",
+  "@astryxdesign/lab",
+  "--confirm-public"
+ ],
+ "fixture": "large",
+ "stdout": "Gap report failed\n\nstatus:          failed\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      failed\nmessage:     GitHub CLI could not create the routed issue. Install and authenticate gh, then retry.\n",
+ "stderr": "gap-report: delivery to github failed: GitHub CLI could not create the routed issue. Install and authenticate gh, then retry.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_themes-nameless-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/nameless.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Theme must have a name property.\n",
+ "exit": 1,
+ "files": []
+}

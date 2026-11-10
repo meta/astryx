@@ -1,0 +1,12 @@
+{
+ "id": "theme_eject_@empty",
+ "args": [
+  "theme",
+  "eject"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

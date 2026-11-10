@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-charts-ChartShowcase_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/charts/ChartShowcase"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/charts\" not found\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "component_RadioListItem_--detail_compact_@large",
+ "args": [
+  "component",
+  "RadioListItem",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# RadioListItem\n\nIndividual radio item with label, description, and content slots. Under a coarse pointer an enabled option’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; the row keeps its size. That hit area is the row’s `::after`, so decorate a row with a child.\n\n## Import\n\n```tsx\nimport { RadioListItem } from '@astryxdesign/core/RadioList';\n```\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | Primary label for the radio item. Rich labels may contain links or buttons, which keep their own behavior without selecting the item. The label text names the radio; use aria-label only when that text is absent, or retain every visible label word in the override. **(required)** |\n| `aria-label` | `string` | - | Plain-text accessible name for the radio, applied to the control rather than the row. It overrides the name derived from the label. Use it when a rich label has no visible text; otherwise retain every visible label word. |\n| `value` | `string` | - | Value of this radio item. **(required)** |\n| `description` | `ReactNode` | - | Secondary content displayed below the label. Links and buttons keep their own click behaviour — the row only delegates clicks from its non-interactive surface to the radio. |\n| `align` | `'center' \\| 'start' \\| 'first-line'` | `'center'` | Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a radio) level with the first line of a wrapped label. See Item.align. |\n| `isDisabled` | `boolean` | `false` | Whether this individual radio item is disabled. |\n| `startContent` | `ReactNode` | - | Content to render before the radio circle. |\n| `endContent` | `ReactNode` | - | Content to render after the label. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

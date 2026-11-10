@@ -1,0 +1,18 @@
+{
+ "id": "template_CodeAcrossTextSizes_@large",
+ "args": [
+  "template",
+  "CodeAcrossTextSizes"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Code} from '@astryxdesign/core/CodeBlock';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Heading} from '@astryxdesign/core/Text';\nimport {VStack} from '@astryxdesign/core/Stack';\n\nexport default function CodeAcrossTextSizes() {\n  return (\n    <VStack gap={3}>\n      <Heading level={3}>\n        Heading with <Code>inline code</Code>\n      </Heading>\n      <Text type=\"body\">\n        Body text with <Code>inline code</Code>\n      </Text>\n      <Text type=\"supporting\">\n        Supporting text with <Code>inline code</Code>\n      </Text>\n      <Text type=\"label\">\n        Label text with <Code>inline code</Code>\n      </Text>\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

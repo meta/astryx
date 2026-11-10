@@ -1,0 +1,12 @@
+{
+ "id": "manifest_--bogus-flag",
+ "args": [
+  "manifest",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "search_TopNavMegaMenuItem",
+ "args": [
+  "search",
+  "TopNavMegaMenuItem"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"TopNavMegaMenuItem\" (7)\n\nname:        TopNavMegaMenuItem\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: An individual item inside an TopNavMegaMenu. Renders itself in both desktop (popover grid) and mobile drawer modes via render mode context.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavMegaMenuItem\n\nname:        TopNavMegaMenuBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenu - Basic\nkind:        block\ndescription: A mega menu trigger inside a TopNav that opens a panel of rich link items. Use when a navigation section has multiple destinations worth describing.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuBasic --type block\n\nname:        TopNavMegaMenuFeaturedCardShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenuFeaturedCard\nkind:        block\ndescription: Demonstrates TopNavMegaMenuFeaturedCard with a title, description, and CTA link inside a mega menu.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuFeaturedCardShowcase --type block\n\nname:        TopNavMegaMenuItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenuItem - Basic\nkind:        block\ndescription: Rich link items with an icon, title, and description. Use inside the items slot of a TopNavMegaMenu to describe each destination.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuItemBasic --type block\n\nname:        TopNavMegaMenuItemShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenuItem\nkind:        block\ndescription: Demonstrates TopNavMegaMenuItem with icons, titles, and descriptions inside a mega menu.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuItemShowcase --type block\n\nname:        TopNavMegaMenuShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: TopNavMegaMenu\nkind:        block\ndescription: Demonstrates TopNavMegaMenu with items and a featured card in the mega menu panel.\ncommand:     npx @astryxdesign/cli@0.7.12 template TopNavMegaMenuShowcase --type block\n\nname:        TopNavMegaMenu\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: Navigation item that displays a full-width mega menu panel on hover. Uses a slots API with items and featured props. TopNavMegaMenuItem renders itself in both desktop and mobile drawer modes. Supports inline collapsible drawer via render mode context.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavMegaMenu\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover TopNavMegaMenuItem\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,122 @@
+[
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Text color=\"active\">Hi</Text>",
+  "output": "<Text color='accent'>Hi</Text>",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Heading level={2} color=\"active\">Title</Heading>",
+  "output": "<Heading level={2} color='accent'>Title</Heading>",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Link href=\"/x\" color=\"active\">Go</Link>",
+  "output": "<Link href=\"/x\" color='accent'>Go</Link>",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Timestamp value={d} color=\"active\" />",
+  "output": "<Timestamp value={d} color='accent' />",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Text color={'active'}>Hi</Text>",
+  "output": "<Text color={'accent'}>Hi</Text>",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Text color={isOn ? 'active' : 'secondary'}>Hi</Text>",
+  "output": "<Text color={isOn ? 'accent' : 'secondary'}>Hi</Text>",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Text color=\"secondary\">Hi</Text>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<StatusDot color=\"active\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const node = {id: 'active', label: 'Active Users'};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const filters = {status: 'active'};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Text} from '@xds/core/Text';\nconst cfg = {color: 'active'};",
+  "output": "import {Text} from '@xds/core/Text';\nconst cfg = {color: 'accent'};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Text} from '@xds/core/Text';\nconst COLORS = [{color: 'active' as const, description: 'Accent'}];",
+  "output": "import {Text} from '@xds/core/Text';\nconst COLORS = [{color: 'accent' as const, description: 'Accent'}];",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const cfg = {color: 'active'};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Text} from '@xds/core/Text';\nconst meta = {argTypes: {color: {control: 'select', options: ['primary', 'active', 'inherit']}}};",
+  "output": "import {Text} from '@xds/core/Text';\nconst meta = {argTypes: {color: {control: 'select', options: ['primary', 'accent', 'inherit']}}};",
+  "error": null
+ },
+ {
+  "transform": "v0.1.2/rename-text-color-active-to-accent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Text color=\"primary\">Hi</Text>",
+  "output": null,
+  "error": null
+ }
+]

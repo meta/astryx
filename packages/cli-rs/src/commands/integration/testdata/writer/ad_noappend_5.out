@@ -1,0 +1,9 @@
+export default {
+  agentDocs: {
+    replace: false,
+
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  },
+};

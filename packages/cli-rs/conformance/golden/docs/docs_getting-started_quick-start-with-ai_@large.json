@@ -1,0 +1,19 @@
+{
+ "id": "docs_getting-started_quick-start-with-ai_@large",
+ "args": [
+  "docs",
+  "getting-started",
+  "quick-start-with-ai"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Quick Start with AI\n\nPaste this into your AI coding tool and let it handle the setup:\n\nSet up the design system:\n```text\nInstall @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `npx @astryxdesign/cli@0.7.12 init` to set up agent docs. Read the generated files to learn the conventions.\n```\n\nThen give it a look. Every app gets a theme whether or not anyone picks one, so it is worth one question at setup rather than revisiting screens later that were built around the wrong look:\n\nGive it a look:\n```text\nAsk me what look and feel this app should have. Run `npx @astryxdesign/cli@0.7.12 theme list`, install the closest theme package, and run `theme add <slug>`; use `--package` when owners share a slug. Import `themes` and `defaultThemeSlug` from the generated module once and pass `themes[defaultThemeSlug]` to `<Theme>`. Customize with `defineTheme({extends: importedTheme, ...})`. Use `theme eject` only when I ask for an independent source fork. Default to neutral if I have no preference, and show me the result before moving on.\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nNext: npx @astryxdesign/cli@0.7.12 docs getting-started install\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

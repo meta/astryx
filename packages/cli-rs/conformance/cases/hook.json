@@ -1,0 +1,5196 @@
+[
+  {
+    "id": "hook_--help",
+    "args": [
+      "hook",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook",
+    "args": [
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--json",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_-h",
+    "args": [
+      "hook",
+      "-h"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "help_hook",
+    "args": [
+      "help",
+      "hook"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--bogus-flag",
+    "args": [
+      "hook",
+      "--bogus-flag"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--bogus-flag_--json",
+    "args": [
+      "hook",
+      "--bogus-flag",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_extra1_extra2_extra3",
+    "args": [
+      "hook",
+      "extra1",
+      "extra2",
+      "extra3"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_extra1_extra2_extra3_--json",
+    "args": [
+      "hook",
+      "extra1",
+      "extra2",
+      "extra3",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_@empty",
+    "args": [
+      "hook"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@empty",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "hook_@nocore",
+    "args": [
+      "hook"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@nocore",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "nocore",
+    "gen": true
+  },
+  {
+    "id": "hook_@brokencore",
+    "args": [
+      "hook"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@brokencore",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "brokencore",
+    "gen": true
+  },
+  {
+    "id": "hook_@plain",
+    "args": [
+      "hook"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@plain",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "plain",
+    "gen": true
+  },
+  {
+    "id": "hook_@large",
+    "args": [
+      "hook"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@large",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "hook_@integration",
+    "args": [
+      "hook"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "hook_--json_@integration",
+    "args": [
+      "hook",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_--list_@empty",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_--list_@integration",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_--list_@large",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_--list_--json",
+    "args": [
+      "hook",
+      "--list",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_useFocusTrap_--json",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_useFocusTrap_--json_@empty",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--json"
+    ],
+    "fixture": "empty",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_useFocusTrap_--json_@integration",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--json"
+    ],
+    "fixture": "integration",
+    "gen": true
+  },
+  {
+    "id": "ex_hook_useFocusTrap_--json_@large",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--json"
+    ],
+    "fixture": "large",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--list",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--help",
+    "args": [
+      "hook",
+      "--list",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_Layout",
+    "args": [
+      "hook",
+      "--category",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_Layout_--json",
+    "args": [
+      "hook",
+      "--category",
+      "Layout",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category-Layout",
+    "args": [
+      "hook",
+      "--category=Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_Inputs",
+    "args": [
+      "hook",
+      "--category",
+      "Inputs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_Inputs_--json",
+    "args": [
+      "hook",
+      "--category",
+      "Inputs",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category-Inputs",
+    "args": [
+      "hook",
+      "--category=Inputs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_nope",
+    "args": [
+      "hook",
+      "--category",
+      "nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_nope_--json",
+    "args": [
+      "hook",
+      "--category",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category-nope",
+    "args": [
+      "hook",
+      "--category=nope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category",
+    "args": [
+      "hook",
+      "--category"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_--json",
+    "args": [
+      "hook",
+      "--category",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--category_Layout",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--category",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--category_Layout_--help",
+    "args": [
+      "hook",
+      "--category",
+      "Layout",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--params",
+    "args": [
+      "hook",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--params_--json",
+    "args": [
+      "hook",
+      "--params",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--params",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--params_--help",
+    "args": [
+      "hook",
+      "--params",
+      "--help"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_nosuchsub",
+    "args": [
+      "hook",
+      "nosuchsub"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce",
+    "args": [
+      "hook",
+      "useAnnounce"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--json",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--params",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--dense",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox",
+    "args": [
+      "hook",
+      "useCombobox"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--json",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--params",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--dense",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap",
+    "args": [
+      "hook",
+      "useFocusTrap"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap_--params",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap_--dense",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus",
+    "args": [
+      "hook",
+      "useGridFocus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--json",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--params",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--dense",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--json",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--params",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--dense",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint",
+    "args": [
+      "hook",
+      "useKeyboardHint"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--json",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--params",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--dense",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus",
+    "args": [
+      "hook",
+      "useListFocus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--json",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--params",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--dense",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox",
+    "args": [
+      "hook",
+      "useMultiCombobox"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--json",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--params",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--dense",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus",
+    "args": [
+      "hook",
+      "useTreeFocus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--json",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--params",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--dense",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead",
+    "args": [
+      "hook",
+      "useTypeahead"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--json",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--params",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--dense",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable",
+    "args": [
+      "hook",
+      "createReorderable"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--json",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--params",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--dense",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer",
+    "args": [
+      "hook",
+      "useClickableContainer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--json",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--params",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--dense",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard",
+    "args": [
+      "hook",
+      "useClipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--json",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--dense",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible",
+    "args": [
+      "hook",
+      "useCollapsible"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--json",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--params",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--dense",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal",
+    "args": [
+      "hook",
+      "useContainerReveal"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--json",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--params",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--dense",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints",
+    "args": [
+      "hook",
+      "useDragToSnapPoints"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--json",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--params",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--dense",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys",
+    "args": [
+      "hook",
+      "useHotkeys"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--json",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--params",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--dense",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard",
+    "args": [
+      "hook",
+      "useHoverCard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--json",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--params",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--dense",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer",
+    "args": [
+      "hook",
+      "useInputContainer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--json",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--params",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--dense",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon",
+    "args": [
+      "hook",
+      "useInputStatusIcon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--json",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--params",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--dense",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole",
+    "args": [
+      "hook",
+      "useInteractiveRole"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--json",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--params",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--dense",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer",
+    "args": [
+      "hook",
+      "useLayer"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--json",
+    "args": [
+      "hook",
+      "useLayer",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--params",
+    "args": [
+      "hook",
+      "useLayer",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--dense",
+    "args": [
+      "hook",
+      "useLayer",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox",
+    "args": [
+      "hook",
+      "useLightbox"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--json",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--params",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--dense",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress",
+    "args": [
+      "hook",
+      "useLongPress"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--json",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--params",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--dense",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress",
+    "args": [
+      "hook",
+      "useMenuPress"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--json",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--params",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--dense",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay",
+    "args": [
+      "hook",
+      "useOverlay"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--json",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--params",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--dense",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover",
+    "args": [
+      "hook",
+      "usePopover"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--json",
+    "args": [
+      "hook",
+      "usePopover",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--params",
+    "args": [
+      "hook",
+      "usePopover",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--dense",
+    "args": [
+      "hook",
+      "usePopover",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast",
+    "args": [
+      "hook",
+      "useToast"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--json",
+    "args": [
+      "hook",
+      "useToast",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--params",
+    "args": [
+      "hook",
+      "useToast",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--dense",
+    "args": [
+      "hook",
+      "useToast",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip",
+    "args": [
+      "hook",
+      "useTooltip"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--json",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--params",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--dense",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile",
+    "args": [
+      "hook",
+      "useAppShellMobile"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--json",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--params",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--dense",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow",
+    "args": [
+      "hook",
+      "useOverflow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--json",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--params",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--dense",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable",
+    "args": [
+      "hook",
+      "useResizable"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--json",
+    "args": [
+      "hook",
+      "useResizable",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--params",
+    "args": [
+      "hook",
+      "useResizable",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--dense",
+    "args": [
+      "hook",
+      "useResizable",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock",
+    "args": [
+      "hook",
+      "useScrollLock"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--json",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--params",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--dense",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow",
+    "args": [
+      "hook",
+      "useScrollOverflow"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--json",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--params",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--dense",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea",
+    "args": [
+      "hook",
+      "useScrollableArea"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--json",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--params",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--dense",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify",
+    "args": [
+      "hook",
+      "useLinkify"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--json",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--params",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--dense",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode",
+    "args": [
+      "hook",
+      "useImageMode"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--json",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--params",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--dense",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery",
+    "args": [
+      "hook",
+      "useMediaQuery"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--json",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--params",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--dense",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout",
+    "args": [
+      "hook",
+      "useAnimatedLayout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--json",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--params",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--dense",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator",
+    "args": [
+      "hook",
+      "useAnimator"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--json",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--params",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--dense",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useEntryAnimation",
+    "args": [
+      "hook",
+      "useEntryAnimation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useEntryAnimation_--json",
+    "args": [
+      "hook",
+      "useEntryAnimation",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useEntryAnimation_--params",
+    "args": [
+      "hook",
+      "useEntryAnimation",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useEntryAnimation_--dense",
+    "args": [
+      "hook",
+      "useEntryAnimation",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePanGesture",
+    "args": [
+      "hook",
+      "usePanGesture"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePanGesture_--json",
+    "args": [
+      "hook",
+      "usePanGesture",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePanGesture_--params",
+    "args": [
+      "hook",
+      "usePanGesture",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePanGesture_--dense",
+    "args": [
+      "hook",
+      "usePanGesture",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePressFeedback",
+    "args": [
+      "hook",
+      "usePressFeedback"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePressFeedback_--json",
+    "args": [
+      "hook",
+      "usePressFeedback",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePressFeedback_--params",
+    "args": [
+      "hook",
+      "usePressFeedback",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePressFeedback_--dense",
+    "args": [
+      "hook",
+      "usePressFeedback",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useSnapPaging",
+    "args": [
+      "hook",
+      "useSnapPaging"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useSnapPaging_--json",
+    "args": [
+      "hook",
+      "useSnapPaging",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useSnapPaging_--params",
+    "args": [
+      "hook",
+      "useSnapPaging",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useSnapPaging_--dense",
+    "args": [
+      "hook",
+      "useSnapPaging",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOutlineFromMarkdown",
+    "args": [
+      "hook",
+      "useOutlineFromMarkdown"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOutlineFromMarkdown_--json",
+    "args": [
+      "hook",
+      "useOutlineFromMarkdown",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOutlineFromMarkdown_--params",
+    "args": [
+      "hook",
+      "useOutlineFromMarkdown",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOutlineFromMarkdown_--dense",
+    "args": [
+      "hook",
+      "useOutlineFromMarkdown",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useStreamingText",
+    "args": [
+      "hook",
+      "useStreamingText"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useStreamingText_--json",
+    "args": [
+      "hook",
+      "useStreamingText",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useStreamingText_--params",
+    "args": [
+      "hook",
+      "useStreamingText",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useStreamingText_--dense",
+    "args": [
+      "hook",
+      "useStreamingText",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarConstraints",
+    "args": [
+      "hook",
+      "useCalendarConstraints"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarConstraints_--json",
+    "args": [
+      "hook",
+      "useCalendarConstraints",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarConstraints_--params",
+    "args": [
+      "hook",
+      "useCalendarConstraints",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarConstraints_--dense",
+    "args": [
+      "hook",
+      "useCalendarConstraints",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarDays",
+    "args": [
+      "hook",
+      "useCalendarDays"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarDays_--json",
+    "args": [
+      "hook",
+      "useCalendarDays",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarDays_--params",
+    "args": [
+      "hook",
+      "useCalendarDays",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarDays_--dense",
+    "args": [
+      "hook",
+      "useCalendarDays",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarNavigation",
+    "args": [
+      "hook",
+      "useCalendarNavigation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarNavigation_--json",
+    "args": [
+      "hook",
+      "useCalendarNavigation",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarNavigation_--params",
+    "args": [
+      "hook",
+      "useCalendarNavigation",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCalendarNavigation_--dense",
+    "args": [
+      "hook",
+      "useCalendarNavigation",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollator",
+    "args": [
+      "hook",
+      "useCollator"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollator_--json",
+    "args": [
+      "hook",
+      "useCollator",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollator_--params",
+    "args": [
+      "hook",
+      "useCollator",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollator_--dense",
+    "args": [
+      "hook",
+      "useCollator",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIcon",
+    "args": [
+      "hook",
+      "useIcon"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIcon_--json",
+    "args": [
+      "hook",
+      "useIcon",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIcon_--params",
+    "args": [
+      "hook",
+      "useIcon",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIcon_--dense",
+    "args": [
+      "hook",
+      "useIcon",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkComponent",
+    "args": [
+      "hook",
+      "useLinkComponent"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkComponent_--json",
+    "args": [
+      "hook",
+      "useLinkComponent",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkComponent_--params",
+    "args": [
+      "hook",
+      "useLinkComponent",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkComponent_--dense",
+    "args": [
+      "hook",
+      "useLinkComponent",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLocale",
+    "args": [
+      "hook",
+      "useLocale"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLocale_--json",
+    "args": [
+      "hook",
+      "useLocale",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLocale_--params",
+    "args": [
+      "hook",
+      "useLocale",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLocale_--dense",
+    "args": [
+      "hook",
+      "useLocale",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePowerSearchConfig",
+    "args": [
+      "hook",
+      "usePowerSearchConfig"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePowerSearchConfig_--json",
+    "args": [
+      "hook",
+      "usePowerSearchConfig",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePowerSearchConfig_--params",
+    "args": [
+      "hook",
+      "usePowerSearchConfig",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePowerSearchConfig_--dense",
+    "args": [
+      "hook",
+      "usePowerSearchConfig",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettingsState",
+    "args": [
+      "hook",
+      "useTableColumnSettingsState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettingsState_--json",
+    "args": [
+      "hook",
+      "useTableColumnSettingsState",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettingsState_--params",
+    "args": [
+      "hook",
+      "useTableColumnSettingsState",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettingsState_--dense",
+    "args": [
+      "hook",
+      "useTableColumnSettingsState",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortableState",
+    "args": [
+      "hook",
+      "useTableSortableState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortableState_--json",
+    "args": [
+      "hook",
+      "useTableSortableState",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortableState_--params",
+    "args": [
+      "hook",
+      "useTableSortableState",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortableState_--dense",
+    "args": [
+      "hook",
+      "useTableSortableState",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTranslator",
+    "args": [
+      "hook",
+      "useTranslator"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTranslator_--json",
+    "args": [
+      "hook",
+      "useTranslator",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTranslator_--params",
+    "args": [
+      "hook",
+      "useTranslator",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTranslator_--dense",
+    "args": [
+      "hook",
+      "useTranslator",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDevWarning",
+    "args": [
+      "hook",
+      "useDevWarning"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDevWarning_--json",
+    "args": [
+      "hook",
+      "useDevWarning",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDevWarning_--params",
+    "args": [
+      "hook",
+      "useDevWarning",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDevWarning_--dense",
+    "args": [
+      "hook",
+      "useDevWarning",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMergedRefs",
+    "args": [
+      "hook",
+      "useMergedRefs"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMergedRefs_--json",
+    "args": [
+      "hook",
+      "useMergedRefs",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMergedRefs_--params",
+    "args": [
+      "hook",
+      "useMergedRefs",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMergedRefs_--dense",
+    "args": [
+      "hook",
+      "useMergedRefs",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTheme",
+    "args": [
+      "hook",
+      "useTheme"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTheme_--json",
+    "args": [
+      "hook",
+      "useTheme",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTheme_--params",
+    "args": [
+      "hook",
+      "useTheme",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTheme_--dense",
+    "args": [
+      "hook",
+      "useTheme",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeAlertDialog",
+    "args": [
+      "hook",
+      "useImperativeAlertDialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeAlertDialog_--json",
+    "args": [
+      "hook",
+      "useImperativeAlertDialog",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeAlertDialog_--params",
+    "args": [
+      "hook",
+      "useImperativeAlertDialog",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeAlertDialog_--dense",
+    "args": [
+      "hook",
+      "useImperativeAlertDialog",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeDialog",
+    "args": [
+      "hook",
+      "useImperativeDialog"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeDialog_--json",
+    "args": [
+      "hook",
+      "useImperativeDialog",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeDialog_--params",
+    "args": [
+      "hook",
+      "useImperativeDialog",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImperativeDialog_--dense",
+    "args": [
+      "hook",
+      "useImperativeDialog",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnResize",
+    "args": [
+      "hook",
+      "useTableColumnResize"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnResize_--json",
+    "args": [
+      "hook",
+      "useTableColumnResize",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnResize_--params",
+    "args": [
+      "hook",
+      "useTableColumnResize",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnResize_--dense",
+    "args": [
+      "hook",
+      "useTableColumnResize",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettings",
+    "args": [
+      "hook",
+      "useTableColumnSettings"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettings_--json",
+    "args": [
+      "hook",
+      "useTableColumnSettings",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettings_--params",
+    "args": [
+      "hook",
+      "useTableColumnSettings",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableColumnSettings_--dense",
+    "args": [
+      "hook",
+      "useTableColumnSettings",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFilterState",
+    "args": [
+      "hook",
+      "useTableFilterState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFilterState_--json",
+    "args": [
+      "hook",
+      "useTableFilterState",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFilterState_--params",
+    "args": [
+      "hook",
+      "useTableFilterState",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFilterState_--dense",
+    "args": [
+      "hook",
+      "useTableFilterState",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFiltering",
+    "args": [
+      "hook",
+      "useTableFiltering"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFiltering_--json",
+    "args": [
+      "hook",
+      "useTableFiltering",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFiltering_--params",
+    "args": [
+      "hook",
+      "useTableFiltering",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableFiltering_--dense",
+    "args": [
+      "hook",
+      "useTableFiltering",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableGroupedRows",
+    "args": [
+      "hook",
+      "useTableGroupedRows"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableGroupedRows_--json",
+    "args": [
+      "hook",
+      "useTableGroupedRows",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableGroupedRows_--params",
+    "args": [
+      "hook",
+      "useTableGroupedRows",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableGroupedRows_--dense",
+    "args": [
+      "hook",
+      "useTableGroupedRows",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTablePagination",
+    "args": [
+      "hook",
+      "useTablePagination"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTablePagination_--json",
+    "args": [
+      "hook",
+      "useTablePagination",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTablePagination_--params",
+    "args": [
+      "hook",
+      "useTablePagination",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTablePagination_--dense",
+    "args": [
+      "hook",
+      "useTablePagination",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowExpansion",
+    "args": [
+      "hook",
+      "useTableRowExpansion"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowExpansion_--json",
+    "args": [
+      "hook",
+      "useTableRowExpansion",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowExpansion_--params",
+    "args": [
+      "hook",
+      "useTableRowExpansion",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowExpansion_--dense",
+    "args": [
+      "hook",
+      "useTableRowExpansion",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowIndex",
+    "args": [
+      "hook",
+      "useTableRowIndex"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowIndex_--json",
+    "args": [
+      "hook",
+      "useTableRowIndex",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowIndex_--params",
+    "args": [
+      "hook",
+      "useTableRowIndex",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowIndex_--dense",
+    "args": [
+      "hook",
+      "useTableRowIndex",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowStatus",
+    "args": [
+      "hook",
+      "useTableRowStatus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowStatus_--json",
+    "args": [
+      "hook",
+      "useTableRowStatus",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowStatus_--params",
+    "args": [
+      "hook",
+      "useTableRowStatus",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowStatus_--dense",
+    "args": [
+      "hook",
+      "useTableRowStatus",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowsVirtualization",
+    "args": [
+      "hook",
+      "useTableRowsVirtualization"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowsVirtualization_--json",
+    "args": [
+      "hook",
+      "useTableRowsVirtualization",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowsVirtualization_--params",
+    "args": [
+      "hook",
+      "useTableRowsVirtualization",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableRowsVirtualization_--dense",
+    "args": [
+      "hook",
+      "useTableRowsVirtualization",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelection",
+    "args": [
+      "hook",
+      "useTableSelection"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelection_--json",
+    "args": [
+      "hook",
+      "useTableSelection",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelection_--params",
+    "args": [
+      "hook",
+      "useTableSelection",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelection_--dense",
+    "args": [
+      "hook",
+      "useTableSelection",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelectionState",
+    "args": [
+      "hook",
+      "useTableSelectionState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelectionState_--json",
+    "args": [
+      "hook",
+      "useTableSelectionState",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelectionState_--params",
+    "args": [
+      "hook",
+      "useTableSelectionState",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSelectionState_--dense",
+    "args": [
+      "hook",
+      "useTableSelectionState",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortable",
+    "args": [
+      "hook",
+      "useTableSortable"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortable_--json",
+    "args": [
+      "hook",
+      "useTableSortable",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortable_--params",
+    "args": [
+      "hook",
+      "useTableSortable",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableSortable_--dense",
+    "args": [
+      "hook",
+      "useTableSortable",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableStickyColumns",
+    "args": [
+      "hook",
+      "useTableStickyColumns"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableStickyColumns_--json",
+    "args": [
+      "hook",
+      "useTableStickyColumns",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableStickyColumns_--params",
+    "args": [
+      "hook",
+      "useTableStickyColumns",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableStickyColumns_--dense",
+    "args": [
+      "hook",
+      "useTableStickyColumns",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeData",
+    "args": [
+      "hook",
+      "useTableTreeData"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeData_--json",
+    "args": [
+      "hook",
+      "useTableTreeData",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeData_--params",
+    "args": [
+      "hook",
+      "useTableTreeData",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeData_--dense",
+    "args": [
+      "hook",
+      "useTableTreeData",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeState",
+    "args": [
+      "hook",
+      "useTableTreeState"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeState_--json",
+    "args": [
+      "hook",
+      "useTableTreeState",
+      "--json"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeState_--params",
+    "args": [
+      "hook",
+      "useTableTreeState",
+      "--params"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTableTreeState_--dense",
+    "args": [
+      "hook",
+      "useTableTreeState",
+      "--dense"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Accessibility",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Accessibility"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Focus",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Focus"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Interaction",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Interaction"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Layout",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Layout"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Link",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Link"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Media",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Media"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Motion-gestures",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Motion & gestures"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Navigation",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Navigation"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Streaming",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Streaming"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Utilities",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Utilities"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Utility",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Utility"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_--list_--category_Other",
+    "args": [
+      "hook",
+      "--list",
+      "--category",
+      "Other"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipbord",
+    "args": [
+      "hook",
+      "useClipbord"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_clipboard",
+    "args": [
+      "hook",
+      "clipboard"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useNope",
+    "args": [
+      "hook",
+      "useNope"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--detail_compact",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--detail_brief",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnnounce_--zh",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--detail_compact",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--detail_brief",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCombobox_--zh",
+    "args": [
+      "hook",
+      "useCombobox",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap_--detail_compact",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap_--detail_brief",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useFocusTrap_--zh",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--detail_compact",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--detail_brief",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useGridFocus_--zh",
+    "args": [
+      "hook",
+      "useGridFocus",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--detail_compact",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--detail_brief",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useIndicatorFocusRing_--zh",
+    "args": [
+      "hook",
+      "useIndicatorFocusRing",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--detail_compact",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--detail_brief",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useKeyboardHint_--zh",
+    "args": [
+      "hook",
+      "useKeyboardHint",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--detail_compact",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--detail_brief",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useListFocus_--zh",
+    "args": [
+      "hook",
+      "useListFocus",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--detail_compact",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--detail_brief",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMultiCombobox_--zh",
+    "args": [
+      "hook",
+      "useMultiCombobox",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--detail_compact",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--detail_brief",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTreeFocus_--zh",
+    "args": [
+      "hook",
+      "useTreeFocus",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--detail_compact",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--detail_brief",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTypeahead_--zh",
+    "args": [
+      "hook",
+      "useTypeahead",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--detail_compact",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--detail_brief",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_createReorderable_--zh",
+    "args": [
+      "hook",
+      "createReorderable",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--detail_compact",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--detail_brief",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClickableContainer_--zh",
+    "args": [
+      "hook",
+      "useClickableContainer",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--detail_compact",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--detail_brief",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useClipboard_--zh",
+    "args": [
+      "hook",
+      "useClipboard",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--detail_compact",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--detail_brief",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useCollapsible_--zh",
+    "args": [
+      "hook",
+      "useCollapsible",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--detail_compact",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--detail_brief",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useContainerReveal_--zh",
+    "args": [
+      "hook",
+      "useContainerReveal",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--detail_compact",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--detail_brief",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useDragToSnapPoints_--zh",
+    "args": [
+      "hook",
+      "useDragToSnapPoints",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--detail_compact",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--detail_brief",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHotkeys_--zh",
+    "args": [
+      "hook",
+      "useHotkeys",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--detail_compact",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--detail_brief",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useHoverCard_--zh",
+    "args": [
+      "hook",
+      "useHoverCard",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--detail_compact",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--detail_brief",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputContainer_--zh",
+    "args": [
+      "hook",
+      "useInputContainer",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--detail_compact",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--detail_brief",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInputStatusIcon_--zh",
+    "args": [
+      "hook",
+      "useInputStatusIcon",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--detail_compact",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--detail_brief",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useInteractiveRole_--zh",
+    "args": [
+      "hook",
+      "useInteractiveRole",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--detail_compact",
+    "args": [
+      "hook",
+      "useLayer",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--detail_brief",
+    "args": [
+      "hook",
+      "useLayer",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLayer_--zh",
+    "args": [
+      "hook",
+      "useLayer",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--detail_compact",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--detail_brief",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLightbox_--zh",
+    "args": [
+      "hook",
+      "useLightbox",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--detail_compact",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--detail_brief",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLongPress_--zh",
+    "args": [
+      "hook",
+      "useLongPress",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--detail_compact",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--detail_brief",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMenuPress_--zh",
+    "args": [
+      "hook",
+      "useMenuPress",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--detail_compact",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--detail_brief",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverlay_--zh",
+    "args": [
+      "hook",
+      "useOverlay",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--detail_compact",
+    "args": [
+      "hook",
+      "usePopover",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--detail_brief",
+    "args": [
+      "hook",
+      "usePopover",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_usePopover_--zh",
+    "args": [
+      "hook",
+      "usePopover",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--detail_compact",
+    "args": [
+      "hook",
+      "useToast",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--detail_brief",
+    "args": [
+      "hook",
+      "useToast",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useToast_--zh",
+    "args": [
+      "hook",
+      "useToast",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--detail_compact",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--detail_brief",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useTooltip_--zh",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--detail_compact",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--detail_brief",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAppShellMobile_--zh",
+    "args": [
+      "hook",
+      "useAppShellMobile",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--detail_compact",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--detail_brief",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useOverflow_--zh",
+    "args": [
+      "hook",
+      "useOverflow",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--detail_compact",
+    "args": [
+      "hook",
+      "useResizable",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--detail_brief",
+    "args": [
+      "hook",
+      "useResizable",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useResizable_--zh",
+    "args": [
+      "hook",
+      "useResizable",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--detail_compact",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--detail_brief",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollLock_--zh",
+    "args": [
+      "hook",
+      "useScrollLock",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--detail_compact",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--detail_brief",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollOverflow_--zh",
+    "args": [
+      "hook",
+      "useScrollOverflow",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--detail_compact",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--detail_brief",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useScrollableArea_--zh",
+    "args": [
+      "hook",
+      "useScrollableArea",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--detail_compact",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--detail_brief",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useLinkify_--zh",
+    "args": [
+      "hook",
+      "useLinkify",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--detail_compact",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--detail_brief",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useImageMode_--zh",
+    "args": [
+      "hook",
+      "useImageMode",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--detail_compact",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--detail_brief",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useMediaQuery_--zh",
+    "args": [
+      "hook",
+      "useMediaQuery",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--detail_compact",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--detail_brief",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimatedLayout_--zh",
+    "args": [
+      "hook",
+      "useAnimatedLayout",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--detail_compact",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--detail_brief",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "hook_useAnimator_--zh",
+    "args": [
+      "hook",
+      "useAnimator",
+      "--zh"
+    ],
+    "fixture": "app",
+    "gen": true
+  },
+  {
+    "id": "cols40_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "40"
+    }
+  },
+  {
+    "id": "cols80_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "80"
+    }
+  },
+  {
+    "id": "cols200_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": "200"
+    }
+  },
+  {
+    "id": "cols-empty_hook_--list",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "env": {
+      "COLUMNS": ""
+    }
+  },
+  {
+    "id": "hook_--list_tty",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true
+  },
+  {
+    "id": "cols60_hook_--list_tty",
+    "args": [
+      "hook",
+      "--list"
+    ],
+    "fixture": "app",
+    "gen": true,
+    "tty": true,
+    "env": {
+      "COLUMNS": "60"
+    }
+  },
+  {
+    "id": "w_hook_useFocusTrap_--detail_compact",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--detail_brief",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--detail",
+      "brief"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_focustrap",
+    "args": [
+      "hook",
+      "focustrap"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_FocusTrap",
+    "args": [
+      "hook",
+      "FocusTrap"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrp",
+    "args": [
+      "hook",
+      "useFocusTrp"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useNope",
+    "args": [
+      "hook",
+      "useNope"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_zzzzzzzzzzzz",
+    "args": [
+      "hook",
+      "zzzzzzzzzzzz"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--params_--json",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--params",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useAnnounce_--params",
+    "args": [
+      "hook",
+      "useAnnounce",
+      "--params"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_focus_--detail_compact",
+    "args": [
+      "hook",
+      "--category",
+      "focus",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_focus_--detail_full",
+    "args": [
+      "hook",
+      "--category",
+      "focus",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--category_nope_--json",
+    "args": [
+      "hook",
+      "--category",
+      "nope",
+      "--json"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--detail_compact",
+    "args": [
+      "hook",
+      "--list",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--detail_full",
+    "args": [
+      "hook",
+      "--list",
+      "--detail",
+      "full"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useFocusTrap_--zh",
+    "args": [
+      "hook",
+      "useFocusTrap",
+      "--zh"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTooltip_--lang_dense",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--lang",
+      "dense"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTooltip_--detail_bogus",
+    "args": [
+      "hook",
+      "useTooltip",
+      "--detail",
+      "bogus"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_createReorderable",
+    "args": [
+      "hook",
+      "createReorderable"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_useTableSortable_--detail_compact",
+    "args": [
+      "hook",
+      "useTableSortable",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  },
+  {
+    "id": "w_hook_--list_--json_--detail_compact",
+    "args": [
+      "hook",
+      "--list",
+      "--json",
+      "--detail",
+      "compact"
+    ],
+    "fixture": "app"
+  }
+]

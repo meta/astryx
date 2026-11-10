@@ -1,0 +1,13 @@
+{
+ "id": "shell_--detail_nope_blog_@empty",
+ "args": [
+  "--detail",
+  "nope",
+  "blog"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: option '--detail <level>' argument 'nope' is invalid. Allowed choices are full, compact, brief.\n",
+ "exit": 1,
+ "files": []
+}

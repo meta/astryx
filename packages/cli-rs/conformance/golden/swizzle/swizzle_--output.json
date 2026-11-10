@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_--output",
+ "args": [
+  "swizzle",
+  "--output"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--output <dir>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

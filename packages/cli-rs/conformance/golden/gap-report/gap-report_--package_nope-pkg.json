@@ -1,0 +1,13 @@
+{
+ "id": "gap-report_--package_nope-pkg",
+ "args": [
+  "gap-report",
+  "--package",
+  "nope-pkg"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

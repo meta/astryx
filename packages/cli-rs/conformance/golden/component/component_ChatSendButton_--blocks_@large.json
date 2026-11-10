@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatSendButton_--blocks_@large",
+ "args": [
+  "component",
+  "ChatSendButton",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: ChatSendButton\ndescription: Ready, custom icon, and streaming states of the send button.\n\nExamples\n\nname:        ChatSendButtonCustomIcon\ndescription: Send buttons with custom icons via sendIcon and stopIcon props. Use to match the personality of the chat experience: a paper airplane for messaging, sparkles for AI generation, or a check mark for confirmation flows.\n\nname:        ChatSendButtonInComposer\ndescription: Send button inside ChatComposer, where it reads state from context automatically. No wiring needed; the button enables when the input has content.\n\nname:        ChatSendButtonStates\ndescription: Disabled, ready, and streaming states at both sizes. The button automatically toggles between send (primary) and stop (secondary) based on streaming state.\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

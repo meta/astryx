@@ -1,0 +1,98 @@
+[
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded><p>d</p></Banner>;",
+  "output": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" collapsible={{\n  defaultIsOpen: true\n}}><p>d</p></Banner>;",
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded={true}><p>d</p></Banner>;",
+  "output": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" collapsible={{\n  defaultIsOpen: true\n}}><p>d</p></Banner>;",
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded={false}><p>d</p></Banner>;",
+  "output": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\"><p>d</p></Banner>;",
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded={isOpen}><p>d</p></Banner>;",
+  "output": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" collapsible={{\n  defaultIsOpen: isOpen\n}}><p>d</p></Banner>;",
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"error\" title=\"T\"><ul><li>a</li></ul></Banner>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" collapsible={false} defaultIsExpanded><p>d</p></Banner>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded {...rest}><p>d</p></Banner>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {ChatToolCalls} from '@astryxdesign/core/Chat';\nconst el = <ChatToolCalls calls={calls} defaultIsExpanded />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from './ui/Banner';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded><p>d</p></Banner>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner} from '@astryxdesign/core/Banner';\nconst args = {status: 'info', title: 'T', defaultIsExpanded: true};\nconst el = <Banner {...args} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.5.0/banner-collapsible-content",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Banner, Button} from '@astryxdesign/core';\nconst el = <Banner status=\"info\" title=\"T\" defaultIsExpanded><p>d</p></Banner>;",
+  "output": "import {Banner, Button} from '@astryxdesign/core';\nconst el = <Banner status=\"info\" title=\"T\" collapsible={{\n  defaultIsOpen: true\n}}><p>d</p></Banner>;",
+  "error": null
+ }
+]

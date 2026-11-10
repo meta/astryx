@@ -1,0 +1,14 @@
+{
+ "id": "theme_eject_..-x_src-t",
+ "args": [
+  "theme",
+  "eject",
+  "../x",
+  "src/t"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown theme \"../x\"\n\n  butter --package @astryxdesign/cli  (bundled theme)\n  chocolate --package @astryxdesign/cli  (bundled theme)\n  gothic --package @astryxdesign/cli  (bundled theme)\n  matcha --package @astryxdesign/cli  (bundled theme)\n  neutral --package @astryxdesign/cli  (bundled theme)\n  stone --package @astryxdesign/cli  (bundled theme)\n  y2k --package @astryxdesign/cli  (bundled theme)\n",
+ "exit": 1,
+ "files": []
+}

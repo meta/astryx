@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_templates_nomanifest",
+ "args": [
+  "doctor",
+  "integration",
+  "templates"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. To check an installed integration: npx @astryxdesign/cli@0.7.12 doctor integration templates <package>\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

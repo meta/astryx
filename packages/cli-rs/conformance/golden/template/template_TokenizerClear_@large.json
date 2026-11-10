@@ -1,0 +1,18 @@
+{
+ "id": "template_TokenizerClear_@large",
+ "args": [
+  "template",
+  "TokenizerClear"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Tokenizer} from '@astryxdesign/core/Tokenizer';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst users: SearchableItem[] = [\n  {id: '1', label: 'Alice Johnson'},\n  {id: '2', label: 'Bob Smith'},\n  {id: '3', label: 'Charlie Brown'},\n  {id: '4', label: 'Diana Prince'},\n  {id: '5', label: 'Eve Williams'},\n];\n\nconst userSource: SearchSource = {\n  search: (query: string) =>\n    users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),\n  bootstrap: () => users,\n};\n\nexport default function TokenizerClear() {\n  const [value, setValue] = useState<SearchableItem[]>([users[0], users[1]]);\n\n  return (\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\n      <Stack direction=\"vertical\" gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Clear-all button appears when tokens are selected; on touch screens,\n          clear through the sheet's Clear all\n        </Text>\n        <Tokenizer\n          label=\"Team Members\"\n          placeholder=\"Search people...\"\n          searchSource={userSource}\n          value={value}\n          onChange={items => setValue(items)}\n          hasClear\n        />\n      </Stack>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

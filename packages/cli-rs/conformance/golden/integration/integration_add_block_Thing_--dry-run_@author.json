@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_block_Thing_--dry-run_@author",
+ "args": [
+  "integration",
+  "add",
+  "block",
+  "Thing",
+  "--dry-run"
+ ],
+ "fixture": "author",
+ "stdout": "",
+ "stderr": "Error: Unknown contribution kind \"block\". Choose component, doc, template, codemod, agent-doc, or theme.\n",
+ "exit": 1,
+ "files": []
+}

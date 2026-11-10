@@ -1,0 +1,20 @@
+{
+ "id": "search_calendar_--limit_3",
+ "args": [
+  "search",
+  "calendar",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"calendar\" (3 of 71)\n\nname:        Calendar\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Calendar\ndescription: Calendar lets the user pick a date or date range from a month grid. Use it in booking flows, scheduling UIs, date filters, or anywhere the user needs to see surrounding dates for context.\ncommand:     npx @astryxdesign/cli@0.7.12 component Calendar\n\nname:        calendars\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Internationalization: calendars\ndescription: Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, lunisolar, and other calendars while values stay Gregorian ISO dates.\ncommand:     npx @astryxdesign/cli@0.7.12 docs calendars\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nname:        DateInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DateInput\ndescription: DateInput lets the user type or pick a date from a calendar popover. Use it for scheduling, deadlines, booking dates, or any form field that needs a specific calendar date.\ncommand:     npx @astryxdesign/cli@0.7.12 component DateInput\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover calendar\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

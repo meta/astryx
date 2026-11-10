@@ -1,0 +1,13 @@
+{
+ "id": "template_CardShowcase_--json_@large",
+ "args": [
+  "template",
+  "CardShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CardShowcase\",\n    \"description\": \"A card with a heading and body text showing the default container style.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text, Heading} from '@astryxdesign/core/Text';\\n\\nexport default function CardShowcase() {\\n  return (\\n    <Card width={320}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Heading level={4}>Card title</Heading>\\n        <Text type=\\\"body\\\" color=\\\"secondary\\\">\\n          Cards group related content with a border and background. Use them for\\n          profiles, settings panels, or data summaries.\\n        </Text>\\n      </Stack>\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

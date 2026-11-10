@@ -1,0 +1,20 @@
+{
+ "id": "component_EmptyState_--detail_brief_@large",
+ "args": [
+  "component",
+  "EmptyState",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nEmptyState(headingLevel: 1|2|3|4|5|6)  <- from '@astryxdesign/core/EmptyState'\n  EmptyState shows a placeholder when a content area has no data. Use it for em...\n  Targets: astryx-empty-state preferred attrs: data-variant variants: variant | astryx-empty-state-title preferred attrs: data-variant variants: variant | astryx-empty-state-description preferred attrs: data-variant variants: variant\n  title: string, description, icon, actions, isCompact, xstyle\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

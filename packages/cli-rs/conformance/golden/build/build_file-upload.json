@@ -1,0 +1,18 @@
+{
+ "id": "build_file-upload",
+ "args": [
+  "build",
+  "file upload"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"file upload\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `file-explorer` by name, but the idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        contact-form\npackage:     @astryxdesign/core\ndescription: Flat single-column form mixing control types (text, pill toggles, dropdowns, long free-text) landing on one full-width submit.\ncommand:     npx @astryxdesign/cli@0.7.12 template contact-form --type page <path>\n\nname:        form-two-column\npackage:     @astryxdesign/core\ndescription: Form split into two columns beneath a hero header: inputs on one flank, a persistent context panel opposite that stays put while the fields scroll.\ncommand:     npx @astryxdesign/cli@0.7.12 template form-two-column --type page <path>\n\nKeyword search matched these page templates: file-explorer (@astryxdesign/core), contact-form (@astryxdesign/core), form-two-column (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks. Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        FileInputBasic\npackage:     @astryxdesign/core\ndescription: A controlled single-file upload with accepted types, a size limit, and helper text.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        FileInput\npackage:     @astryxdesign/core\ndescription: FileInput provides file upload with optional drag-and-drop support.\n\nname:        Thumbnail\npackage:     @astryxdesign/core\ndescription: Thumbnail displays a compact, square preview of an image attachment.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

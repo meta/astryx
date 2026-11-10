@@ -1,0 +1,14 @@
+{
+ "id": "component_AspectRatio_--props_--json_@large",
+ "args": [
+  "component",
+  "AspectRatio",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"ratio\",\n      \"type\": \"number\",\n      \"description\": \"Aspect ratio as width/height (e.g. 16/9, 1). Emitted as a class-level declaration (never inline), so `xstyle` rules or unlayered consumer CSS can override it responsively.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"shape\",\n      \"type\": \"'rectangle' | 'ellipse'\",\n      \"description\": \"Container shape. Both respect the `ratio`. `ellipse` clips to an oval (a circle when `ratio={1}`).\",\n      \"default\": \"'rectangle'\"\n    },\n    {\n      \"name\": \"fit\",\n      \"type\": \"'cover' | 'contain' | 'center'\",\n      \"description\": \"How the child is sized inside the ratio box. `cover` fills and crops media, `contain` fills and letterboxes, `center` keeps the natural size centered. When omitted, the child styles itself.\"\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content positioned absolutely to fill the container.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

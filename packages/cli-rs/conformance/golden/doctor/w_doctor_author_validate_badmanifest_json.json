@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_author_validate_badmanifest_json",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "--json"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/bad\",\n    \"version\": \"1.0.0\",\n    \"issues\": [\n      {\n        \"code\": \"invalid_manifest\",\n        \"severity\": \"error\",\n        \"message\": \"Integration manifest (astryx.integration.mjs) has no default export (it exports `notDefault`). Fix: export the manifest object as the default export: `export default {components: './components'}`, naming the roots the package has.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

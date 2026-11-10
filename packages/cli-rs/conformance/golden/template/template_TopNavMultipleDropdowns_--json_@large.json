@@ -1,0 +1,13 @@
+{
+ "id": "template_TopNavMultipleDropdowns_--json_@large",
+ "args": [
+  "template",
+  "TopNavMultipleDropdowns",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TopNavMultipleDropdowns\",\n    \"description\": \"Navigation bar with multiple hover-triggered dropdown menus that auto-close when switching between them.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChartBarIcon\",\n      \"NavIcon\",\n      \"ShieldCheckIcon\",\n      \"TopNav\",\n      \"TopNavMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  TopNav,\\n  TopNavHeading,\\n  TopNavItem,\\n  TopNavMenu,\\n} from '@astryxdesign/core/TopNav';\\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {\\n  CubeIcon,\\n  ChartBarIcon,\\n  ShieldCheckIcon,\\n} from '@heroicons/react/24/outline';\\n\\nexport default function TopNavMultipleDropdowns() {\\n  return (\\n    <TopNav\\n      label=\\\"Main navigation\\\"\\n      heading={\\n        <TopNavHeading\\n          heading=\\\"My App\\\"\\n          logo={<NavIcon icon={<Icon icon={CubeIcon} size=\\\"sm\\\" />} />}\\n          headingHref=\\\"#\\\"\\n        />\\n      }\\n      startContent={\\n        <>\\n          <TopNavMenu\\n            label=\\\"Products\\\"\\n            items={[\\n              {\\n                title: 'Analytics',\\n                description: 'Track behavior',\\n                icon: <ChartBarIcon />,\\n                href: '#',\\n              },\\n              {\\n                title: 'Security',\\n                description: 'Enterprise protection',\\n                icon: <ShieldCheckIcon />,\\n                href: '#',\\n              },\\n            ]}\\n          />\\n          <TopNavMenu\\n            label=\\\"Resources\\\"\\n            items={[\\n              {title: 'Documentation', href: '#'},\\n              {title: 'API Reference', href: '#'},\\n              {title: 'Community Forum', href: '#'},\\n            ]}\\n          />\\n          <TopNavItem label=\\\"Pricing\\\" href=\\\"#\\\" />\\n        </>\\n      }\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "compnent_@empty",
+ "args": [
+  "compnent"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown command 'compnent'\n\n  component  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

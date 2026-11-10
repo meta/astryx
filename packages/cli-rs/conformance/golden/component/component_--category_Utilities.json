@@ -1,0 +1,19 @@
+{
+ "id": "component_--category_Utilities",
+ "args": [
+  "component",
+  "--category",
+  "Utilities"
+ ],
+ "fixture": "app",
+ "stdout": "Utilities\n\nname:   InternationalizationProvider\nimport: @astryxdesign/core/i18n\n\nname:   LinkProvider\nimport: @astryxdesign/core/Link\n\nname:   MediaTheme\nimport: @astryxdesign/core/theme\n\nname:   Theme\nimport: @astryxdesign/core/theme\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

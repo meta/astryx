@@ -1,0 +1,239 @@
+[
+ {
+  "id": "blog_--help",
+  "args": [
+   "blog",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog",
+  "args": [
+   "blog"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_--json",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_-h",
+  "args": [
+   "blog",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_blog",
+  "args": [
+   "help",
+   "blog"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_--bogus-flag",
+  "args": [
+   "blog",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_--bogus-flag_--json",
+  "args": [
+   "blog",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_extra1_extra2_extra3",
+  "args": [
+   "blog",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_extra1_extra2_extra3_--json",
+  "args": [
+   "blog",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "blog_@empty",
+  "args": [
+   "blog"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@empty",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "blog_@nocore",
+  "args": [
+   "blog"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@nocore",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "blog_@brokencore",
+  "args": [
+   "blog"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@brokencore",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "blog_@plain",
+  "args": [
+   "blog"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@plain",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "blog_@large",
+  "args": [
+   "blog"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@large",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "blog_@integration",
+  "args": [
+   "blog"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "blog_--json_@integration",
+  "args": [
+   "blog",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_blog_introducing-astryx_--json",
+  "args": [
+   "blog",
+   "introducing-astryx",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_blog_introducing-astryx_--json_@empty",
+  "args": [
+   "blog",
+   "introducing-astryx",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_blog_introducing-astryx_--json_@integration",
+  "args": [
+   "blog",
+   "introducing-astryx",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_blog_introducing-astryx_--json_@large",
+  "args": [
+   "blog",
+   "introducing-astryx",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "blog_nosuchsub",
+  "args": [
+   "blog",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ }
+]

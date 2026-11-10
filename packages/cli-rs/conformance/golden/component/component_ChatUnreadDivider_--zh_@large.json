@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatUnreadDivider_--zh_@large",
+ "args": [
+  "component",
+  "ChatUnreadDivider",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatUnreadDivider\n\n错误色横线加末尾标签，标记聊天线程中未读消息的起点。渲染为带无障碍标签的 aria separator。与 ChatSystemMessage 的 divider 变体不同，后者用于中性的日期分隔。\n\n**Import:** `import {ChatUnreadDivider} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | `'New'` | 横线末尾显示的标签，同时用于无障碍名称。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

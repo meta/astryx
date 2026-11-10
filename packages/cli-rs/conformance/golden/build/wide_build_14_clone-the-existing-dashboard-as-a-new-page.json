@@ -1,0 +1,18 @@
+{
+ "id": "wide_build_14_clone-the-existing-dashboard-as-a-new-page",
+ "args": [
+  "build",
+  "clone the existing dashboard as a new page"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"clone the existing dashboard as a new page\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe closest template; none is exactly this page. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        dashboard\npackage:     @astryxdesign/core\ndescription: Three-band analytics: a row of headline tiles, then charts, then supporting tables, all re-reading from one global filter bar.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard --type page <path>\n\nInstall missing dependencies: npm install recharts@\"^3.9.2\" @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        dashboard-alert-rail\npackage:     @astryxdesign/core\ndescription: Always-on analytics with a triage rail: status-colored tiles with sparklines, multi-series time charts over a switchable window, and an independently scrolling alert column that folds into the content when narrow.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-alert-rail --type page <path>\n\nname:        dashboard-comparison\npackage:     @astryxdesign/core\ndescription: Comparison-heavy analytics behind a persistent filter bar: tiles that each carry an inline sparkline and several period-over-period deltas, then segmented breakdowns underneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-comparison --type page <path>\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 5; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        SegmentedControl\npackage:     @astryxdesign/core\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options.\n\nname:        ChatToolCalls\npackage:     @astryxdesign/core\ndescription: ChatToolCalls displays tool or function call invocations from an LLM response.\n\nname:        DateRangeInput\npackage:     @astryxdesign/core\ndescription: DateRangeInput lets users select a start and end date from a dual-month calendar popover.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

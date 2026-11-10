@@ -1,0 +1,14 @@
+{
+ "id": "theme_build_theme.ts_--icons-specifier",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--icons-specifier"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--icons-specifier <specifier>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,162 @@
+[
+ {
+  "slug": "butter",
+  "displayName": "Butter",
+  "description": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.",
+  "maintained": false,
+  "entry": "butterTheme.ts",
+  "exportName": "butterTheme",
+  "files": [
+   "butterTheme.ts",
+   "butterTheme.doc.mjs",
+   "icons.tsx",
+   "butterPalettes.generated.ts",
+   "butterPaletteRefs.generated.ts",
+   "butterPalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "butter",
+  "bundled": true,
+  "docPath": "butter/butterTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-butter"
+ },
+ {
+  "slug": "chocolate",
+  "displayName": "Chocolate",
+  "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
+  "maintained": false,
+  "entry": "chocolateTheme.ts",
+  "exportName": "chocolateTheme",
+  "files": [
+   "chocolateTheme.ts",
+   "chocolateTheme.doc.mjs",
+   "icons.tsx"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "chocolate",
+  "bundled": true,
+  "docPath": "chocolate/chocolateTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-chocolate"
+ },
+ {
+  "slug": "gothic",
+  "displayName": "Gothic",
+  "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",
+  "maintained": false,
+  "entry": "gothicTheme.ts",
+  "exportName": "gothicTheme",
+  "files": [
+   "gothicTheme.ts",
+   "gothicTheme.doc.mjs",
+   "icons.tsx",
+   "gothicPalettes.generated.ts",
+   "gothicPaletteRefs.generated.ts",
+   "gothicPalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "gothic",
+  "bundled": true,
+  "docPath": "gothic/gothicTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-gothic"
+ },
+ {
+  "slug": "matcha",
+  "displayName": "Matcha",
+  "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
+  "maintained": false,
+  "entry": "matchaTheme.ts",
+  "exportName": "matchaTheme",
+  "files": [
+   "matchaTheme.ts",
+   "matchaTheme.doc.mjs",
+   "icons.tsx",
+   "matchaPalettes.ts",
+   "matchaPalettes.generated.ts",
+   "matchaPaletteRefs.generated.ts",
+   "matchaPalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "matcha",
+  "bundled": true,
+  "docPath": "matcha/matchaTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-matcha"
+ },
+ {
+  "slug": "neutral",
+  "displayName": "Neutral",
+  "description": "Restrained warm grays. Minimal and quiet, so the content stays the focus.",
+  "maintained": true,
+  "entry": "neutralTheme.ts",
+  "exportName": "neutralTheme",
+  "files": [
+   "neutralTheme.ts",
+   "neutralTheme.doc.mjs",
+   "icons.tsx",
+   "neutralPalettes.ts",
+   "neutralPalettes.generated.ts",
+   "neutralPaletteRefs.generated.ts",
+   "neutralPalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "neutral",
+  "bundled": true,
+  "docPath": "neutral/neutralTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-neutral"
+ },
+ {
+  "slug": "stone",
+  "displayName": "Stone",
+  "description": "Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.",
+  "maintained": false,
+  "entry": "stoneTheme.ts",
+  "exportName": "stoneTheme",
+  "files": [
+   "stoneTheme.ts",
+   "stoneTheme.doc.mjs",
+   "icons.tsx",
+   "stonePalettes.generated.ts",
+   "stonePaletteRefs.generated.ts",
+   "stonePalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "stone",
+  "bundled": true,
+  "docPath": "stone/stoneTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-stone"
+ },
+ {
+  "slug": "y2k",
+  "displayName": "Y2K",
+  "description": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.",
+  "maintained": false,
+  "entry": "y2kTheme.ts",
+  "exportName": "y2kTheme",
+  "files": [
+   "y2kTheme.ts",
+   "y2kTheme.doc.mjs",
+   "icons.tsx",
+   "y2kPalettes.ts",
+   "y2kPalettes.generated.ts",
+   "y2kPaletteRefs.generated.ts",
+   "y2kPalettes.generated.receipt.json",
+   "palette.config.json"
+  ],
+  "package": "@astryxdesign/cli",
+  "source": "bundled",
+  "sourceDir": "y2k",
+  "bundled": true,
+  "docPath": "y2k/y2kTheme.doc.mjs",
+  "importPackage": "@astryxdesign/theme-y2k"
+ }
+]

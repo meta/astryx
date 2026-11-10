@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_map_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "map"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Name the icon definition to map\n\n  npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions  (every icon definition)\n",
+ "exit": 1,
+ "files": []
+}

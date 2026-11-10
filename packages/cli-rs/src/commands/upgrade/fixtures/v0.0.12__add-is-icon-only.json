@@ -1,0 +1,162 @@
+[
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<XDSButton label=\"Settings\" icon={<GearIcon />} variant=\"ghost\" />",
+  "output": "import {XDSIconButton} from '@xds/core/IconButton';\n<XDSIconButton label=\"Settings\" icon={<GearIcon />} variant=\"ghost\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Save\" icon={<SaveIcon />}>Save</XDSButton>",
+  "output": "<XDSButton label=\"Save\" icon={<SaveIcon />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Save\" icon={<SaveIcon />} children=\"Save\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Submit\" variant=\"primary\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Settings\" icon={<GearIcon />} isIconOnly />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<>\n  <XDSButton label=\"A\" icon={<I />} />\n  <XDSButton label=\"B\" />\n  <XDSButton label=\"C\" icon={<I />} />\n</>",
+  "output": "import {XDSButton} from '@xds/core/Button';\nimport { XDSIconButton } from '@xds/core/IconButton';\n<>\n  <XDSIconButton label=\"A\" icon={<I />} />\n  <XDSButton label=\"B\" />\n  <XDSIconButton label=\"C\" icon={<I />} />\n</>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSToggleButton label=\"Bold\" icon={<B />} value=\"bold\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"Close dialog\" icon={<X />}>Close</XDSButton>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenu button={{ label: 'More', icon: <I /> }} items={[]} />",
+  "output": "<XDSDropdownMenu button={{\n  label: 'More',\n  icon: <I />,\n  isIconOnly: true\n}} items={[]} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenu button={{ label: 'X', icon: <I />, children: 'X' }} items={[]} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAvatar icon={<P />} name=\"U\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton label=\"X\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<XDSButton label=\"X\" icon={<I />} endContent={<Badge />} />",
+  "output": "import {XDSIconButton} from '@xds/core/IconButton';\n<XDSIconButton label=\"X\" icon={<I />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<XDSButton label=\"X\" icon={<I />} />",
+  "output": "import {XDSIconButton} from '@xds/core/IconButton';\n<XDSIconButton label=\"X\" icon={<I />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<><XDSButton label=\"A\" icon={<I />} /><XDSButton label=\"B\" variant=\"primary\" /></>",
+  "output": "import {XDSButton} from '@xds/core/Button';\nimport { XDSIconButton } from '@xds/core/IconButton';\n<><XDSIconButton label=\"A\" icon={<I />} /><XDSButton label=\"B\" variant=\"primary\" /></>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton, XDSBadge} from '@xds/core';\n<XDSButton label=\"X\" icon={<I />} />",
+  "output": "import { XDSButton, XDSBadge, XDSIconButton } from '@xds/core';\n<XDSIconButton label=\"X\" icon={<I />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton} from '@xds/core/Button';\n<XDSButton label=\"X\" icon={<I />}></XDSButton>",
+  "output": "import {XDSIconButton} from '@xds/core/IconButton';\n<XDSIconButton label=\"X\" icon={<I />}></XDSIconButton>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "'use client';\n\nimport {XDSButton} from '@xds/core/Button';\n\nfunction Foo() {\n  return <XDSButton label=\"X\" icon={<I />} />;\n}",
+  "output": "'use client';\n\nimport {XDSIconButton} from '@xds/core/IconButton';\n\nfunction Foo() {\n  return <XDSIconButton label=\"X\" icon={<I />} />;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "'use client';\n\nimport {XDSButton} from '@xds/core/Button';\nimport {SomeIcon} from '@heroicons/react/24/outline';\n\nexport function F() {\n  return <><XDSButton label=\"X\" icon={<I />} /><XDSButton label=\"Y\" variant=\"primary\" /></>;\n}",
+  "output": "'use client';;\nimport {XDSButton} from '@xds/core/Button';\nimport {SomeIcon} from '@heroicons/react/24/outline';\n\nimport { XDSIconButton } from '@xds/core/IconButton';\n\nexport function F() {\n  return <><XDSIconButton label=\"X\" icon={<I />} /><XDSButton label=\"Y\" variant=\"primary\" /></>;\n}",
+  "error": null
+ },
+ {
+  "transform": "v0.0.12/add-is-icon-only",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSButton, type XDSButtonProps} from '@xds/core/Button';\n\nfunction Foo(props: XDSButtonProps) {\n  return <XDSButton label=\"X\" icon={<I />} />;\n}",
+  "output": "import { type XDSButtonProps } from '@xds/core/Button';\n\nimport { XDSIconButton } from '@xds/core/IconButton';\n\nfunction Foo(props: XDSButtonProps) {\n  return <XDSIconButton label=\"X\" icon={<I />} />;\n}",
+  "error": null
+ }
+]

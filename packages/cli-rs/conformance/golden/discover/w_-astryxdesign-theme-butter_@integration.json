@@ -1,0 +1,18 @@
+{
+ "id": "w_-astryxdesign-theme-butter_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-butter"
+ ],
+ "fixture": "integration",
+ "stdout": "name:        @astryxdesign/theme-butter\npackage:     @astryxdesign/theme-butter\ncategory:    @astryxdesign/theme-butter\nversion:     0.7.12\ndescription: Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\nthemes:      butter\ninstalled:   false\nlatest:      0.7.12\nsource:      Astryx\n\nVersions\n1 known, newest first\n\n- 0.7.12  date unknown  latest\n\nAdd it\n\nnpm install @astryxdesign/theme-butter@0.7.12\n\nThen use its theme:\n\nnpx @astryxdesign/cli@0.7.12 theme add butter\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-butter/<item>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

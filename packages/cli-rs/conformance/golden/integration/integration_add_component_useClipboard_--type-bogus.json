@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--type-bogus",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--type=bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"templateType\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

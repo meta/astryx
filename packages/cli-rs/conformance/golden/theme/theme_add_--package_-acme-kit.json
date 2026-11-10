@@ -1,0 +1,20 @@
+{
+ "id": "theme_add_--package_-acme-kit",
+ "args": [
+  "theme",
+  "add",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "app",
+ "stdout": "No themes are available in this project.\n\nMore themes in packages you could add: npx @astryxdesign/cli@0.7.12 discover theme\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

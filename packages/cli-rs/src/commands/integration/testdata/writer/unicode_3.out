@@ -1,0 +1,8 @@
+export default {
+  title: 'Café ☕ 😀',
+  name: 'x',
+
+  agentDocs: {
+    append: ['Run acme verify before finishing.']
+  }
+};

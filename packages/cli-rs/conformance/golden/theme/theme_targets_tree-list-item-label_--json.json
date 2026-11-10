@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_tree-list-item-label_--json",
+ "args": [
+  "theme",
+  "targets",
+  "tree-list-item-label",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"tree-list-item-label\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"tree-list-item-label\",\n        \"className\": \"astryx-tree-list-item-label\",\n        \"component\": \"TreeList\",\n        \"props\": [],\n        \"states\": [\n          \"selected\"\n        ]\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "template_table_--skeleton_@large",
+ "args": [
+  "template",
+  "table",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# table - Flat row collection where columns sort, rows select into a bulk-action toolbar, and each row carries an overflow menu. Sortable but ungrouped, with no detail pane, the baseline shape.\n# Components: Badge, Layout, Table\n\n<Layout hasDivider>\n  /* header: */\n  <LayoutHeader hasDivider>\n    <Text />\n    <Button variant=\"primary\" />\n  </LayoutHeader>\n  /* content: */\n  <LayoutContent>\n    <Table columns={columns}>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

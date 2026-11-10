@@ -1,0 +1,19 @@
+{
+ "id": "template_classic-gallery_--skeleton_@large",
+ "args": [
+  "template",
+  "classic-gallery",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# classic-gallery - Uniform grid of equal-ratio media tiles under a centered intro, with filter tabs that narrow the set in place. Regular rhythm, unlike the variable-height masonry variant.\n# Components: Center, Grid, Layout, Section, Tab, TabList\n\n<Layout padding={0} height=\"fill\">\n  /* content: */\n  <LayoutContent padding={0}>\n    <Center>\n      <VStack gap={8}>\n        <Center>\n          <Section padding={0} variant=\"transparent\" maxWidth={680}>\n            <VStack gap={4}>\n              <VStack gap={2}>\n                <Heading />\n                <Text />\n              </VStack>\n              <TabList>\n                <Tab />\n                <Tab />\n                <Tab />\n                <Tab />\n              </TabList>\n            </VStack>\n          </Section>\n        </Center>\n        <Grid gap={4} columns={{minWidth: 260, repeat: 'fit'}}>\n        </Grid>\n      </VStack>\n    </Center>\n  </LayoutContent>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

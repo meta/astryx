@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--from",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--from"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--from <module>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

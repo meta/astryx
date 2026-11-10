@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatMessageMetadata_--dense_@large",
+ "args": [
+  "component",
+  "ChatMessageMetadata",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ChatMessageMetadata\n\ncomposable metadata row; renders timestamp · footer · status; reverses for user sender\n\n**Import:** `import {ChatMessageMetadata} from '@astryxdesign/core/Chat';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Metadata row | Yes | Sender-aware line containing the visible metadata items. |\n| Timestamp | No | Caller-supplied time content at the start of the logical sequence. |\n| Footer | No | Caller-supplied information or actions between time and status. |\n| Status | No | Localized delivery icon and text when a status is supplied. |\n\n## Best Practices\n\n- **Do:** Put metadata in the last bubble metadata slot when the message uses bubbles, so it follows the bubble content.\n- **Do:** Pass timestamp and footer content independently; separators are omitted for non-rendering scalar slots. Composite React nodes are used as supplied.\n- **Don't:** Do not supply footer actions without their own accessible names and interaction behavior; the metadata row does not own those controls.\n- **Don't:** Do not put the same metadata on both a bubble and its enclosing message.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `timestamp` | `ReactNode` | - | timestamp content; string or Timestamp |\n| `footer` | `ReactNode` | - | footer content; model info, reaction btns, copy btn |\n| `status` | `'sending' \\| 'sent' \\| 'delivered' \\| 'read' \\| 'error'` | - | delivery status; shows icon+label |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

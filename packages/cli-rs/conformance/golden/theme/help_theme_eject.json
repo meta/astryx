@@ -1,0 +1,13 @@
+{
+ "id": "help_theme_eject",
+ "args": [
+  "help",
+  "theme",
+  "eject"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx theme [options] [command]\n\nAdd, switch, build, and author themes\n\nOptions:\n  -h, --help                     display help for command\n\nCommands:\n  palette                        Create and work with theme-owned color palettes\n  build [options] <files...>     Compile standalone themes or one keyed theme family\n  list [options]                 List themes available to add\n  add [options] [slug]           Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.\n  remove <slug>                  Remove a non-default theme from the app\n  use <slug>                     Choose the app default from its added themes\n  eject [options] <slug> [path]  Fork a theme as editable local source\n  template [options] [path]      Write the annotated theme template into your project\n  targets [filter]               List the component theming targets a theme can override\n\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand or a subcommand failure\n\nExamples:\n  # List available and added themes\n  npx @astryxdesign/cli@0.7.12 theme list\n  # Import a theme into the app\n  npx @astryxdesign/cli@0.7.12 theme add ocean\n  # Choose the default\n  npx @astryxdesign/cli@0.7.12 theme use ocean\n  # Fork source to customize\n  npx @astryxdesign/cli@0.7.12 theme eject ocean\n  # Generate a palette candidate\n  npx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json\n  # See what a theme can override\n  npx @astryxdesign/cli@0.7.12 theme targets\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme\n\nComponent style overrides:\n  npx @astryxdesign/cli@0.7.12 theme targets            Every themeable class, with its props and states\n  npx @astryxdesign/cli@0.7.12 component <Name>         One component's theming table\n  npx @astryxdesign/cli@0.7.12 docs theme               How component overrides work\n\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

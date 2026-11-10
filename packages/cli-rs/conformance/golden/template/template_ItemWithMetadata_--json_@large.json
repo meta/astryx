@@ -1,0 +1,13 @@
+{
+ "id": "template_ItemWithMetadata_--json_@large",
+ "args": [
+  "template",
+  "ItemWithMetadata",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ItemWithMetadata\",\n    \"description\": \"Status rows with an icon, a title, a short description, and end-aligned metadata such as a timestamp or a status badge, here build, memory, and sync events. Use the endContent slot for counts, status, timestamps, and other secondary row information.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Item\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {Item} from '@astryxdesign/core/Item';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function ItemWithMetadata() {\\n  return (\\n    <Stack gap={0}>\\n      <Item\\n        startContent={<Icon icon=\\\"check\\\" size=\\\"sm\\\" color=\\\"success\\\" />}\\n        label=\\\"Build passed\\\"\\n        description=\\\"Production deploy completed\\\"\\n        endContent={<Text color=\\\"secondary\\\">2m ago</Text>}\\n      />\\n      <Item\\n        startContent={<Icon icon=\\\"warning\\\" size=\\\"sm\\\" color=\\\"warning\\\" />}\\n        label=\\\"High memory usage\\\"\\n        description=\\\"Worker pool is above the warning threshold\\\"\\n        endContent={<Badge label=\\\"Warning\\\" variant=\\\"warning\\\" />}\\n        isHighlighted\\n      />\\n      <Item\\n        startContent={<Icon icon=\\\"error\\\" size=\\\"sm\\\" color=\\\"error\\\" />}\\n        label=\\\"Sync failed\\\"\\n        description=\\\"Retry after checking service credentials\\\"\\n        endContent={<Badge label=\\\"Action\\\" variant=\\\"error\\\" />}\\n        isSelected\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

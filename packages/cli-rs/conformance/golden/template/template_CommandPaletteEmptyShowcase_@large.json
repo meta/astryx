@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPaletteEmptyShowcase_@large",
+ "args": [
+  "template",
+  "CommandPaletteEmptyShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {Text} from '@astryxdesign/core/Text';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\nexport default function CommandPaletteEmptyShowcase() {\n  const emptySource = useMemo(() => createStaticSource([]), []);\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={emptySource}\n      emptyBootstrapText={\n        <Text type=\"supporting\" color=\"secondary\">\n          No commands available yet\n        </Text>\n      }\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

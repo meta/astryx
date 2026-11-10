@@ -1,0 +1,13 @@
+{
+ "id": "w_--type-icon-set_@discover-iconsets",
+ "args": [
+  "discover",
+  "--type",
+  "icon-set"
+ ],
+ "fixture": "discover-iconsets",
+ "stdout": "Installed\n\nname:     @acme/glyphs\npackage:  @acme/glyphs\ncategory: @acme/glyphs\nversion:  1.0.0\niconSets: glyphs\n\nAvailable\nfrom Astryx\n\nNo package you could add adds icon sets.\n\nUsage:\n  npx @astryxdesign/cli@0.7.12 discover <package>            Browse a package and its versions\n  npx @astryxdesign/cli@0.7.12 discover <package>/<item>     View one item\n  npx @astryxdesign/cli@0.7.12 discover <search>             Search every item and package\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

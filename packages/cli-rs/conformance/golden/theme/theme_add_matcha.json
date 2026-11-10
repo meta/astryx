@@ -1,0 +1,13 @@
+{
+ "id": "theme_add_matcha",
+ "args": [
+  "theme",
+  "add",
+  "matcha"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-matcha\" is not installed. Run `npm install @astryxdesign/theme-matcha` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add matcha`.\n",
+ "exit": 1,
+ "files": []
+}

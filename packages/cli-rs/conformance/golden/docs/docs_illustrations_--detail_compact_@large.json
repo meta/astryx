@@ -1,0 +1,20 @@
+{
+ "id": "docs_illustrations_--detail_compact_@large",
+ "args": [
+  "docs",
+  "illustrations",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "Illustrations\nIllustration guidelines for empty states, onboarding flows, and feature highlights.\n\npackage: @astryxdesign/cli\n\nwhen-to-use  When to Use - Consistent illustration usage reinforces brand identity and helps users understand context at\n             a glance. Use illustrations in these contexts:\nguidelines   Guidelines - Keep illustrations consistent in style across the product.\nplacement    Placement - For an empty state, pass the illustration to the `icon` slot of `EmptyState`, which centers it\n             above the title and description. Typical illustration sizes range from 120px for inline empty states to\n             240px for full-page onboarding screens....\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs illustrations <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs illustrations --full\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nPrevious: npx @astryxdesign/cli@0.7.12 docs icons\nNext: npx @astryxdesign/cli@0.7.12 docs motion\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

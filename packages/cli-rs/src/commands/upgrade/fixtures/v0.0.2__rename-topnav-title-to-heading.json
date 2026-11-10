@@ -1,0 +1,98 @@
+[
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNav title={<Logo />} label=\"Nav\" />",
+  "output": "<XDSTopNav heading={<Logo />} label=\"Nav\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNavTitle title=\"My App\" href=\"/\" />",
+  "output": "<XDSTopNavHeading heading=\"My App\" href=\"/\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNavHeading title=\"My App\" href=\"/\" />",
+  "output": "<XDSTopNavHeading heading=\"My App\" href=\"/\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNavTitle title=\"My App\">Custom</XDSTopNavTitle>",
+  "output": "<XDSTopNavHeading heading=\"My App\">Custom</XDSTopNavHeading>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSTopNavTitle} from '@xds/core';\n<XDSTopNavTitle title=\"My App\" />",
+  "output": "import {XDSTopNavHeading} from '@xds/core';\n<XDSTopNavHeading heading=\"My App\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSTopNavTitleProps} from '@xds/core';",
+  "output": "import {XDSTopNavHeadingProps} from '@xds/core';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner title=\"Alert\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog title=\"Confirm\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNav title={<Logo />} label=\"Nav\" startContent={items} />",
+  "output": "<XDSTopNav heading={<Logo />} label=\"Nav\" startContent={items} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTopNav heading={<Logo />} label=\"Nav\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSTopNav, XDSTopNavTitle} from '@xds/core';\n<XDSTopNav title={<XDSTopNavTitle title=\"My App\" href=\"/\" />} label=\"Nav\" />",
+  "output": "import {XDSTopNav, XDSTopNavHeading} from '@xds/core';\n<XDSTopNav heading={<XDSTopNavHeading heading=\"My App\" href=\"/\" />} label=\"Nav\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-topnav-title-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSTopNavTitle as Title} from '@xds/core';\n<Title title=\"My App\" />",
+  "output": "import {XDSTopNavHeading as Title} from '@xds/core';\n<Title title=\"My App\" />",
+  "error": null
+ }
+]

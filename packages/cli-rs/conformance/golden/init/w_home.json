@@ -1,0 +1,11 @@
+{
+ "id": "w_home",
+ "args": [
+  "init"
+ ],
+ "fixture": "app",
+ "stdout": "\n  Tip: `npx @astryxdesign/cli@0.7.12 init --all` also points you to the theme and page-building workflows.\n\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nNote: Agent docs are not written into the home folder, or into a settings folder in it outside a project (/tmp/astryx-conformance/work/home): agents read the files there in every project. Run init inside a project folder.\n",
+ "exit": 0,
+ "files": []
+}

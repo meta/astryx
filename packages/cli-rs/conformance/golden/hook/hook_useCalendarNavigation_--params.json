@@ -1,0 +1,19 @@
+{
+ "id": "hook_useCalendarNavigation_--params",
+ "args": [
+  "hook",
+  "useCalendarNavigation",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseCalendarNavigationOptions` | - | Configuration for visible month, calendar system, and navigation callbacks. **(required)** |\n| `options.initialValue` | `ISODateString` | - | Initial ISO date string (YYYY-MM-DD) used to determine the starting focus month when uncontrolled. |\n| `options.focusDate` | `ISODateString` | - | Controlled ISO date string (YYYY-MM-DD) determining which month is currently displayed. Used with onFocusDateChange as a controlled pair. |\n| `options.onFocusDateChange` | `(focusDate: ISODateString) => void` | - | Callback invoked when user navigation changes the visible focus month. Used with focusDate as a controlled pair. |\n| `options.numberOfMonths` | `1 \\| 2` | `1` | Number of consecutive months to display simultaneously (1 or 2). Default is 1. |\n| `options.calendar` | `CalendarSystem` | `'gregory'` | Calendar system whose months the hook steps and formats (e.g. 'gregory', 'persian', 'hebrew'). Calendars other than gregory, iso8601, buddhist, roc and japanese need Temporal. The provider's calendar is never read. Default is 'gregory'. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

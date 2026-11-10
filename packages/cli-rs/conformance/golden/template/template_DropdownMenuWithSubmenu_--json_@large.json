@@ -1,0 +1,13 @@
+{
+ "id": "template_DropdownMenuWithSubmenu_--json_@large",
+ "args": [
+  "template",
+  "DropdownMenuWithSubmenu",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DropdownMenuWithSubmenu\",\n    \"description\": \"Action menu with a nested submenu. Hover or Right arrow opens the flyout; Left arrow / Escape closes it. Use to group related destinations or secondary actions without crowding the top level.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"DropdownMenu\",\n      \"DropdownMenuSubMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {\\n  DropdownMenu,\\n  DropdownMenuItem,\\n  DropdownMenuSubMenu,\\n} from '@astryxdesign/core/DropdownMenu';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function DropdownMenuWithSubmenu() {\\n  const [lastAction, setLastAction] = useState<string | null>(null);\\n\\n  return (\\n    <VStack gap={3}>\\n      <DropdownMenu button={{label: 'Actions'}}>\\n        <DropdownMenuItem\\n          icon=\\\"pencil\\\"\\n          label=\\\"Rename\\\"\\n          onClick={() => setLastAction('Rename')}\\n        />\\n        <DropdownMenuSubMenu icon=\\\"folder\\\" label=\\\"Move to\\\">\\n          <DropdownMenuItem\\n            label=\\\"Projects\\\"\\n            onClick={() => setLastAction('Move to Projects')}\\n          />\\n          <DropdownMenuItem\\n            label=\\\"Archive\\\"\\n            onClick={() => setLastAction('Move to Archive')}\\n          />\\n          <DropdownMenuItem\\n            label=\\\"Trash\\\"\\n            onClick={() => setLastAction('Move to Trash')}\\n          />\\n        </DropdownMenuSubMenu>\\n        <DropdownMenuItem\\n          icon=\\\"trash\\\"\\n          label=\\\"Delete\\\"\\n          onClick={() => setLastAction('Delete')}\\n        />\\n      </DropdownMenu>\\n      {lastAction && (\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Last action: {lastAction}\\n        </Text>\\n      )}\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

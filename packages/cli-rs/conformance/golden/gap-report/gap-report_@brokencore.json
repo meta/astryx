@@ -1,0 +1,11 @@
+{
+ "id": "gap-report_@brokencore",
+ "args": [
+  "gap-report"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

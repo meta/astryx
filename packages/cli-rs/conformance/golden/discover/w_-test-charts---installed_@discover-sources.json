@@ -1,0 +1,24 @@
+{
+ "id": "w_-test-charts---installed_@discover-sources",
+ "args": [
+  "discover",
+  "@test/charts",
+  "--installed"
+ ],
+ "fixture": "discover-sources",
+ "stdout": "name:       @test/charts\npackage:    @test/charts\ncategory:   @test/charts\ncomponents: Chart\nversion:    2.0.0\ntemplates:  pages/Report\ninstalled:  false\nlatest:     2.0.0\nsource:     Test catalog\n\nVersions\n2 known, newest first\n\n- 2.0.0  2026-09-20  latest\n\n1 prerelease is not listed. See any version: npx @astryxdesign/cli@0.7.12 discover @test/charts@<version>\n\nAdd it\n\nnpm install @test/charts\n\nAstryx loads an integration on the next command once it is a dependency.\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @test/charts/<item>\n",
+ "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/834a3f313d8f05a68ca5b774e066c120.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/charts\",\"integration\":\"test-charts\",\"aliases\":[],\"latest\":\"2.0.0\",\"versions\":[{\"version\":\"2.1.0-beta.1\",\"publishedAt\":\"2026-09-25T00:00:00.000Z\",\"prerelease\":true,\"status\":\"ok\"},{\"version\":\"2.0.0\",\"publishedAt\":\"2026-09-20T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Chart\"},{\"kind\":\"template\",\"name\":\"pages/Report\"}]}]}}"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/discover-sources\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

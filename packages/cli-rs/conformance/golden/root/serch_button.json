@@ -1,0 +1,12 @@
+{
+ "id": "serch_button",
+ "args": [
+  "serch",
+  "button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown command 'serch'\n\n  search  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

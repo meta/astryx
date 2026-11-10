@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_complex-selector_--json",
+ "args": [
+  "theme",
+  "targets",
+  "complex-selector",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"complex-selector\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"complex-selector\",\n        \"className\": \"astryx-complex-selector\",\n        \"component\": \"ComplexSelector\",\n        \"props\": [\n          \"variant\",\n          \"size\",\n          \"status\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"complex-selector-indicator-icon\",\n        \"className\": \"astryx-complex-selector-indicator-icon\",\n        \"component\": \"ComplexSelector\",\n        \"props\": [],\n        \"states\": [\n          \"state\"\n        ]\n      },\n      {\n        \"key\": \"complex-selector-popup\",\n        \"className\": \"astryx-complex-selector-popup\",\n        \"component\": \"ComplexSelector\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "w_doc_parent_and_replaces",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "topic",
+  "--parent",
+  "acme",
+  "--replaces",
+  "a"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: A guide placed in a namespace has its own route: it cannot also replace or extend a topic.\n",
+ "exit": 1,
+ "files": []
+}

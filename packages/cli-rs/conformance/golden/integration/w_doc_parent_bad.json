@@ -1,0 +1,16 @@
+{
+ "id": "w_doc_parent_bad",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "topic",
+  "--parent",
+  "Acme"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --parent must name a namespace in lowercase letters and digits joined by single hyphens, such as \"acme\".\n",
+ "exit": 1,
+ "files": []
+}

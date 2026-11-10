@@ -1,0 +1,32 @@
+{
+ "id": "ex_integration_add_doc_releasing_--parent_acme_@author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "releasing",
+  "--parent",
+  "acme"
+ ],
+ "fixture": "author",
+ "stdout": "doc contribution added\n\n[ok] releasing\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/releasing.doc.mjs\n- docs/acme.doc.mjs\n- package.json\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/docs/acme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: 'acme',\n  title: 'Acme',\n  summary: 'Guides for Acme.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n"
+  },
+  {
+   "path": "author/docs/releasing.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'releasing',\n  title: 'Releasing',\n  description: 'Releasing documentation.',\n  placement: {parent: 'namespace:acme', slot: 'guides'},\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Releasing documentation.' },\n      ],\n    },\n  ],\n};\n"
+  },
+  {
+   "path": "author/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@acme/widgets\",\n  \"version\": \"0.1.0\",\n  \"peerDependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  }
+ ]
+}

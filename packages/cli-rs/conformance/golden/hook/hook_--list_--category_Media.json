@@ -1,0 +1,20 @@
+{
+ "id": "hook_--list_--category_Media",
+ "args": [
+  "hook",
+  "--list",
+  "--category",
+  "Media"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\nMedia:\n\n- useImageMode\n- useMediaQuery\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

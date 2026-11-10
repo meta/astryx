@@ -1,0 +1,20 @@
+{
+ "id": "pg_palette-anchors-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/anchors.json"
+ ],
+ "fixture": "themes",
+ "stdout": "Palette candidate\n3 families, 11 stops, light, dark\n\n{\n  \"schemaVersion\": 1,\n  \"status\": \"candidate\",\n  \"recipe\": \"astryx-oklch-v1\",\n  \"black\": \"#000000\",\n  \"white\": \"#ffffff\",\n  \"stops\": [\n    0,\n    10,\n    20,\n    30,\n    40,\n    50,\n    60,\n    70,\n    80,\n    90,\n    100\n  ],\n  \"palette\": {\n    \"brand\": {\n      \"name\": \"Brand\",\n      \"light\": {\n        \"0\": \"#000000\",\n        \"10\": \"#1d1437\",\n        \"20\": \"#332657\",\n        \"30\": \"#4a377b\",\n        \"40\": \"#6236ba\",\n        \"50\": \"#7c3aed\",\n        \"60\": \"#926af7\",\n        \"70\": \"#ab98ef\",\n        \"80\": \"#c7bcf1\",\n        \"90\": \"#e2dcff\",\n        \"100\": \"#ffffff\"\n      },\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"10\": \"#1d1532\",\n        \"20\": \"#322456\",\n        \"30\": \"#493779\",\n        \"40\": \"#615190\",\n        \"50\": \"#796da3\",\n        \"60\": \"#9388bc\",\n        \"70\": \"#ada3d5\",\n        \"80\": \"#c8bfed\",\n        \"90\": \"#e3ddff\",\n        \"100\": \"#ffffff\"\n      }\n    },\n    \"yellow\": {\n      \"name\": \"yellow\",\n      \"light\": {\n        \"0\": \"#000000\",\n        \"10\": \"#241a00\",\n        \"20\": \"#3d2f00\",\n        \"30\": \"#574500\",\n        \"40\": \"#725c0c\",\n        \"50\": \"#8b752b\",\n        \"60\": \"#a58f49\",\n        \"70\": \"#bfaa69\",\n        \"80\": \"#d9c68c\",\n        \"90\": \"#f1e2b5\",\n        \"100\": \"#ffffff\"\n      },\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"10\": \"#241a00\",\n        \"20\": \"#3c2f00\",\n        \"30\": \"#55450b\",\n        \"40\": \"#6f5d22\",\n        \"50\": \"#88763b\",\n        \"60\": \"#a28f56\",\n        \"70\": \"#bcaa74\",\n        \"80\": \"#d6c696\",\n        \"90\": \"#efe2bc\",\n        \"100\": \"#ffffff\"\n      }\n    },\n    \"blue\": {\n      \"name\": \"blue\",\n      \"light\": {\n        \"0\": \"#000000\",\n        \"10\": \"#09193c\",\n        \"20\": \"#172e5d\",\n        \"30\": \"#28447d\",\n        \"40\": \"#3d5c9b\",\n        \"50\": \"#5476b8\",\n        \"60\": \"#6d90d3\",\n        \"70\": \"#89abec\",\n        \"80\": \"#a9c7ff\",\n        \"90\": \"#d4e3ff\",\n        \"100\": \"#ffffff\"\n      },\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"10\": \"#0c1a37\",\n        \"20\": \"#1b2f57\",\n        \"30\": \"#2d4575\",\n        \"40\": \"#425d92\",\n        \"50\": \"#5976af\",\n        \"60\": \"#7390ca\",\n        \"70\": \"#8eabe2\",\n        \"80\": \"#adc7f9\",\n        \"90\": \"#d4e3ff\",\n        \"100\": \"#ffffff\"\n      }\n    }\n  }\n}\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/themes\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

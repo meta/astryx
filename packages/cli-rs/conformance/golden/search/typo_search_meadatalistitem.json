@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_meadatalistitem",
+ "args": [
+  "search",
+  "meadatalistitem"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"meadatalistitem\" (3)\n\nname:        MetadataListItem\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/MetadataList\ndescription: A single labeled metadata value within an MetadataList.\ncommand:     npx @astryxdesign/cli@0.7.12 component MetadataListItem\n\nname:        MetadataListItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: MetadataListItem - Basic\nkind:        block\ndescription: A titled section of label and value rows for one record, here a deployment's environment, health status badge, version, and last deploy date. Values take plain text or a component such as a Badge.\ncommand:     npx @astryxdesign/cli@0.7.12 template MetadataListItemBasic --type block\n\nname:        MetadataListItemShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: MetadataListItem\nkind:        block\ndescription: Metadata list items displaying labeled values in various formats including text, badges, and links.\ncommand:     npx @astryxdesign/cli@0.7.12 template MetadataListItemShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover meadatalistitem\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

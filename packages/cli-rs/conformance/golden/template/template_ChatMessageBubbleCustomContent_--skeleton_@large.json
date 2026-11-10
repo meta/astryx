@@ -1,0 +1,19 @@
+{
+ "id": "template_ChatMessageBubbleCustomContent_--skeleton_@large",
+ "args": [
+  "template",
+  "ChatMessageBubbleCustomContent",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ChatMessageBubbleCustomContent - Custom in-message content aligned to the bubble text column. An artifact card is wrapped in a ghost bubble with width=\"100%\", so its left edge matches the bubble text and it spans the full message column instead of the default bubble width cap; the timestamp rides the bubble metadata slot.\n# Components: ChatMessage, ChatMessageBubble, ChatMessageList, ChatMessageMetadata, ClickableCard, Timestamp\n\n<ChatMessageList />\n<ChatMessage />\n<ChatMessageBubble />\n<ChatMessage />\n<ChatMessageBubble />\n<ChatMessageBubble variant=\"ghost\" width=\"100%\" />\n<ChatMessageMetadata />\n<Timestamp />\n/* footer: */\n<Text />\n<ClickableCard />\n<Text />\n<Text />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

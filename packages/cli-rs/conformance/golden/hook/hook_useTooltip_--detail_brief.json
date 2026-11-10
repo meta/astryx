@@ -1,0 +1,20 @@
+{
+ "id": "hook_useTooltip_--detail_brief",
+ "args": [
+  "hook",
+  "useTooltip",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseTooltip(placement?: 'above' | 'below' | 'start' | 'end', alignment?: 'start' | 'center' | 'end', delay?: number, hideDelay?: number, focusTrigger?: 'auto' | 'always' | 'never', touchTrigger?: 'auto' | 'tap' | 'none', isEnabled?: boolean, isOpen?: boolean, isDefaultOpen?: boolean, onShow?: () => void, onHide?: () => void): { ref, positionRef, interactionRef, anchorId, describedBy, renderTooltip, show, hide }  <- from '@astryxdesign/core/Tooltip'\n  Headless hook for hover/focus-triggered tooltips. Builds on useLayer with hov...\n  Related: Tooltip, HoverCard, Popover\n  placement, alignment, delay, hideDelay, focusTrigger, touchTrigger, isEnabled, isOpen, isDefaultOpen, onShow, onHide\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Tooltip, HoverCard, Popover\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "theme_add_stone",
+ "args": [
+  "theme",
+  "add",
+  "stone"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-stone\" is not installed. Run `npm install @astryxdesign/theme-stone` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add stone`.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "shell_help_nope_--json",
+ "args": [
+  "help",
+  "nope",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"unknown command 'nope'\",\n  \"code\": \"ERR_UNKNOWN_COMMAND\",\n  \"suggestions\": [\n    {\n      \"name\": \"init\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"component\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"docs\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"blog\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"swizzle\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"gap-report\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"template\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"upgrade\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"theme\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"integration\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"hook\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"discover\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"search\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"build\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"doctor\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"experimental\",\n      \"reason\": \"available command\"\n    },\n    {\n      \"name\": \"manifest\",\n      \"reason\": \"available command\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

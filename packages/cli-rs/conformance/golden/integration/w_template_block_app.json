@@ -1,0 +1,37 @@
+{
+ "id": "w_template_block_app",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "account-card",
+  "--type",
+  "block"
+ ],
+ "fixture": "app",
+ "stdout": "template contribution added\n\n[ok] account-card\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/account-card.doc.mjs\n- templates/account-card.tsx\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "app/templates/account-card.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'block',\n  name: 'account-card',\n  displayName: 'Account Card',\n  description: 'Account Card template.',\n  aspectRatio: 1,\n};\n"
+  },
+  {
+   "path": "app/templates/account-card.tsx",
+   "status": "created",
+   "text": "export default function AccountCard() {\n  return <div>Account Card</div>;\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

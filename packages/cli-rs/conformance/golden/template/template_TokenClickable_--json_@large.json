@@ -1,0 +1,13 @@
+{
+ "id": "template_TokenClickable_--json_@large",
+ "args": [
+  "template",
+  "TokenClickable",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TokenClickable\",\n    \"description\": \"Interactive tokens that respond to clicks. Use for toggleable filters or tokens that open a detail view when selected.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"Token\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Token} from '@astryxdesign/core/Token';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function TokenClickable() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={4}>\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Click a token to view details\\n      </Text>\\n      <Stack direction=\\\"horizontal\\\" gap={2} wrap=\\\"wrap\\\">\\n        <Token label=\\\"Bug\\\" color=\\\"red\\\" onClick={() => {}} />\\n        <Token label=\\\"Feature\\\" color=\\\"blue\\\" onClick={() => {}} />\\n        <Token label=\\\"Enhancement\\\" color=\\\"green\\\" onClick={() => {}} />\\n        <Token label=\\\"Documentation\\\" color=\\\"gray\\\" onClick={() => {}} />\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

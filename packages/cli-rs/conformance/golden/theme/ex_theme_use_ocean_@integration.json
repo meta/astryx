@@ -1,0 +1,13 @@
+{
+ "id": "ex_theme_use_ocean_@integration",
+ "args": [
+  "theme",
+  "use",
+  "ocean"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Theme \"ocean\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add ocean` first.\n",
+ "exit": 1,
+ "files": []
+}

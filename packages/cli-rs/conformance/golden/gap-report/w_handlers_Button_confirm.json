@@ -1,0 +1,17 @@
+{
+ "id": "w_handlers_Button_confirm",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--confirm-public"
+ ],
+ "fixture": "gapreport",
+ "stdout": "Gap report partially filed\n\nstatus:          partial\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      2\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: project\nhandler:     project\naudience:    internal\nstatus:      filed\nurl:         https://example.com/issues/1\nmessage:     filed Button Missing variant or prop @astryxdesign/core\n\nhandlerType: integration\nhandler:     @acme/hooks\naudience:    public\nstatus:      filed\nurl:         https://example.com/hooks/1\n\nhandlerType: integration\nhandler:     @acme/broken\nstatus:      failed\nmessage:     Integration @acme/broken named export \"gapReport\" is invalid: audience: Invalid option: expected one of \"internal\"|\"public\"; handle: Expected a function\nDestinations\n\ndefault: true\n\nto:        @acme/hooks\ndefault:   false\nissuesUrl: https://example.com/hooks/issues\n\nto:        @acme/broken\ndefault:   false\nissuesUrl: https://github.com/acme/broken/issues\n\nAsk the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\n",
+ "stderr": "gap-report: delivery to @acme/broken failed: Integration @acme/broken named export \"gapReport\" is invalid: audience: Invalid option: expected one of \"internal\"|\"public\"; handle: Expected a function\n",
+ "exit": 1,
+ "files": []
+}

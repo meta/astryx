@@ -1,0 +1,12 @@
+{
+ "id": "init_--features-a-b",
+ "args": [
+  "init",
+  "--features=a,b"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown features: a, b. Valid features: agents, theme, template\n",
+ "exit": 1,
+ "files": []
+}

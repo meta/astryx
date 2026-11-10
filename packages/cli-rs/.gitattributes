@@ -1,0 +1,5 @@
+Cargo.toml merge=union
+src/commands/mod.rs merge=union
+src/discovery/mod.rs merge=union
+src/lib.rs merge=union
+Cargo.lock merge=ours

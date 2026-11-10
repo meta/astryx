@@ -1,0 +1,19 @@
+{
+ "id": "w_component_HStack_--blocks",
+ "args": [
+  "component",
+  "HStack",
+  "--blocks"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nExamples\n\nname:        HStackBasic\ndescription: Items arranged in a horizontal row with a consistent gap and centered vertical alignment. Use HStack whenever siblings should sit side by side.\n\nRelated: 39 blocks that use HStack\n\n- AvatarStatusDotVariants\n- DrawerForm\n- DrawerScrim\n- DrawerWidths\n- IconNonSemanticColors\n- IconSemanticColors\n- IconSizes\n- IconStatusIcons\n- IconButtonActionBar\n- IconButtonLoadingToggle\n- IconButtonTooltipIconButton\n- InfoTipMetricDefinitions\n- InfoTipPermissionNotes\n- InfoTipShowcase\n- KbdModifierCombos\n- LayoutBasicCardLayout\n- LayoutContentWidth\n- LayoutFullBleedContent\n- LayoutSidebarLayout\n- LayoutFooterActions\n- LayoutHeaderWithActions\n- LinksWithTooltips\n- MetadataListMultiColumnMetadata\n- MobileNavToggleBasic\n- MultiSelectorGhostToolbar\n- NavIconBasic\n- SelectorGhostToolbar\n- SkeletonCardSkeleton\n- SkeletonTableRowSkeleton\n- StackItemFill\n- StatusDotPulsing\n- StatusDotStatusIndicators\n- StatusDotVariants\n- TooltipActionBarTooltips\n- VisuallyHiddenLiveRegion\n- VisuallyHiddenShowcase\n- VisuallyHiddenStructuralHeading\n- VisuallyHiddenSupplementaryContext\n- PanDraggableBox\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_--type-icon-set_@large",
+ "args": [
+  "discover",
+  "--type",
+  "icon-set"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Unknown --type \"icon-set\"\n\n  component  (item kind)\n  template  (item kind)\n  doc  (item kind)\n  theme  (item kind)\n  codemod  (item kind)\n  agent-doc  (item kind)\n",
+ "exit": 1,
+ "files": []
+}

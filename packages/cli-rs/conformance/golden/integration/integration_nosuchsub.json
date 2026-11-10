@@ -1,0 +1,12 @@
+{
+ "id": "integration_nosuchsub",
+ "args": [
+  "integration",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'integration nosuchsub'\n\n  add  (available subcommand)\n  check  (available subcommand)\n  verify  (available subcommand)\n  pack  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

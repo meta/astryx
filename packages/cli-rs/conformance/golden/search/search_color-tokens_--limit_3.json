@@ -1,0 +1,20 @@
+{
+ "id": "search_color-tokens_--limit_3",
+ "args": [
+  "search",
+  "color tokens",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"color tokens\" (3 of 265)\n\nname:        tokens/tokens-color\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       All Tokens › Color Tokens\ndescription: Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.\ncommand:     npx @astryxdesign/cli@0.7.12 docs tokens/tokens-color\nparent:      npx @astryxdesign/cli@0.7.12 docs tokens\n\nname:        color\nsection:     surface-colors\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Color › Color Tokens\ndescription: Layered surface hierarchy: body -> surface -> card -> popover. Each level sits visually above the previous one.\ncommand:     npx @astryxdesign/cli@0.7.12 docs color surface-colors\nparent:      npx @astryxdesign/cli@0.7.12 docs color --index\n\nname:        color\nsection:     usage\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Color › Use color tokens in StyleX\ndescription: Import the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.\ncommand:     npx @astryxdesign/cli@0.7.12 docs color usage\nparent:      npx @astryxdesign/cli@0.7.12 docs color --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'color tokens'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

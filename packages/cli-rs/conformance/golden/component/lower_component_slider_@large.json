@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_slider_@large",
+ "args": [
+  "component",
+  "slider"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"slider\"\n\n  Slider  (same name)\n  Carousel  (keyword \"slider\")\n",
+ "exit": 1,
+ "files": []
+}

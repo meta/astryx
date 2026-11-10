@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-lab-ChartBar_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/lab/ChartBar"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/lab\" not found\n",
+ "exit": 1,
+ "files": []
+}

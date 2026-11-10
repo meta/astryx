@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_chtmessagelist",
+ "args": [
+  "search",
+  "chtmessagelist"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"chtmessagelist\" (5)\n\nname:        ChatMessageList\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: Presentational message container with density context and infinite scroll support. Provides role=\"log\" with aria-live=\"polite\" for accessibility. A flex spacer pushes messages to the bottom when the list isn't full; set align=\"top\" to start messages at the top instead.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatMessageList\n\nname:        ChatMessageListDensity\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageList - Density\nkind:        block\ndescription: Side-by-side comparison of compact, balanced, and spacious densities. Use compact in sidebars or panels, balanced for most full-page chat, and spacious for long-form reading. Use gap when row spacing needs to differ from density.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageListDensity --type block\n\nname:        ChatMessageListFullFeatured\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageList - Full Featured\nkind:        block\ndescription: Conversation showcasing system messages, multi-bubble grouping, markdown, code blocks, and metadata. Combines date dividers, ghost bubbles, grouped messages, and rich content in a single example.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageListFullFeatured --type block\n\nname:        ChatMessageListShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageList\nkind:        block\ndescription: Basic AI chat conversation with user and assistant messages. The simplest way to render a message list with alternating sender bubbles, metadata, and a date divider.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageListShowcase --type block\n\nname:        ListMessageList\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: List - Message List\nkind:        block\ndescription: Chat-style message list with avatars, preview text, and unread badges.\ncommand:     npx @astryxdesign/cli@0.7.12 template ListMessageList --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover chtmessagelist\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_VisuallyHiddenSupplementaryContext_@large",
+ "args": [
+  "template",
+  "VisuallyHiddenSupplementaryContext"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';\nimport {Card} from '@astryxdesign/core/Card';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {ArrowUpIcon, ArrowDownIcon} from '@heroicons/react/24/solid';\n\nconst stats = [\n  {label: 'Revenue', value: '$48.2k', delta: '+12%', direction: 'up'},\n  {label: 'Churn', value: '2.1%', delta: '-4%', direction: 'down'},\n] as const;\n\nexport default function VisuallyHiddenSupplementaryContext() {\n  return (\n    <HStack gap={4} wrap=\"wrap\">\n      {stats.map(({label, value, delta, direction}) => (\n        <Card key={label} variant=\"muted\">\n          <VStack gap={1}>\n            <Text type=\"supporting\" color=\"secondary\">\n              {label}\n            </Text>\n            <Text type=\"display-3\">{value}</Text>\n            <HStack gap={1} vAlign=\"center\">\n              <Icon\n                icon={direction === 'up' ? ArrowUpIcon : ArrowDownIcon}\n                size=\"sm\"\n                color={direction === 'up' ? 'accent' : 'secondary'}\n              />\n              <Text type=\"body\">\n                {delta}\n                {/* The arrow is decorative; spell out the trend for AT. */}\n                <VisuallyHidden>\n                  {direction === 'up' ? ' increase' : ' decrease'} from last\n                  month\n                </VisuallyHidden>\n              </Text>\n            </HStack>\n          </VStack>\n        </Card>\n      ))}\n    </HStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

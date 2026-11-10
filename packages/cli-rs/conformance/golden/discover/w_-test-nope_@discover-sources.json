@@ -1,0 +1,18 @@
+{
+ "id": "w_-test-nope_@discover-sources",
+ "args": [
+  "discover",
+  "@test/nope"
+ ],
+ "fixture": "discover-sources",
+ "stdout": "",
+ "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Package \"@test/nope\" not found\n\n  @test/kit  (available package)\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/c2371db6328d02a25095c2c5f891799d.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[]}}"
+  }
+ ]
+}

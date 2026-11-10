@@ -1,0 +1,98 @@
+[
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeader title=\"My App\" />",
+  "output": "<XDSSideNavHeading heading=\"My App\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeader\n  title=\"My App\"\n  titleHref=\"/\"\n  supertitle=\"Acme Corp\"\n  supertitleHref=\"/org\"\n  subtitle=\"v2.0\"\n  subtitleHref=\"/version\"\n/>",
+  "output": "<XDSSideNavHeading\n  heading=\"My App\"\n  headingHref=\"/\"\n  superheading=\"Acme Corp\"\n  superheadingHref=\"/org\"\n  subheading=\"v2.0\"\n  subheadingHref=\"/version\"\n/>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeading title=\"My App\" titleHref=\"/\" />",
+  "output": "<XDSSideNavHeading heading=\"My App\" headingHref=\"/\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeader title=\"My App\"><Menu /></XDSSideNavHeader>",
+  "output": "<XDSSideNavHeading heading=\"My App\"><Menu /></XDSSideNavHeading>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSideNavHeader} from '@xds/core';\n<XDSSideNavHeader title=\"My App\" />",
+  "output": "import {XDSSideNavHeading} from '@xds/core';\n<XDSSideNavHeading heading=\"My App\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSideNavHeaderProps} from '@xds/core';",
+  "output": "import {XDSSideNavHeadingProps} from '@xds/core';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard title=\"Card Title\" subtitle=\"Subtitle\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavSection title=\"Section\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeader title=\"My App\" icon={<AppIcon />} menu={<Menu />} />",
+  "output": "<XDSSideNavHeading heading=\"My App\" icon={<AppIcon />} menu={<Menu />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSideNavHeading heading=\"My App\" headingHref=\"/\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSideNavHeader} from '@xds/core';\n<XDSSideNavHeader\n  title=\"My App\"\n  titleHref=\"/\"\n  supertitle=\"Corp\"\n  subtitle=\"v1\"\n  icon={<Icon />}\n/>",
+  "output": "import {XDSSideNavHeading} from '@xds/core';\n<XDSSideNavHeading\n  heading=\"My App\"\n  headingHref=\"/\"\n  superheading=\"Corp\"\n  subheading=\"v1\"\n  icon={<Icon />}\n/>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-sidenav-header-to-heading",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {XDSSideNavHeader as Header} from '@xds/core';\n<Header title=\"My App\" />",
+  "output": "import {XDSSideNavHeading as Header} from '@xds/core';\n<Header title=\"My App\" />",
+  "error": null
+ }
+]

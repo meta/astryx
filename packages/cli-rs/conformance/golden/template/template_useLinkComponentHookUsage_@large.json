@@ -1,0 +1,18 @@
+{
+ "id": "template_useLinkComponentHookUsage_@large",
+ "args": [
+  "template",
+  "useLinkComponentHookUsage"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {createContext, use, useState, type AnchorHTMLAttributes} from 'react';\nimport {Card} from '@astryxdesign/core/Card';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {\n  LinkProvider,\n  useLinkComponent,\n  type LinkComponentType,\n} from '@astryxdesign/core/Link';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst NavigateContext = createContext<(to: string) => void>(() => {});\n\nfunction RouterLink({\n  to,\n  href: _href,\n  ...props\n}: AnchorHTMLAttributes<HTMLAnchorElement> & {to: string}) {\n  const navigate = use(NavigateContext);\n  return (\n    <a\n      {...props}\n      href={to}\n      onClick={event => {\n        event.preventDefault();\n        navigate(to);\n      }}\n    />\n  );\n}\n\nfunction ArticleCard({\n  title,\n  href,\n  resolvedBy,\n  linkAs,\n}: {\n  title: string;\n  href: string;\n  resolvedBy: string;\n  linkAs?: LinkComponentType;\n}) {\n  const LinkComponent = useLinkComponent(linkAs);\n  return (\n    <Card padding={3}>\n      <VStack gap={1}>\n        <Text type=\"body\" weight=\"bold\">\n          <LinkComponent href={href}>{title}</LinkComponent>\n        </Text>\n        <Text type=\"supporting\" color=\"secondary\">\n          {resolvedBy}\n        </Text>\n      </VStack>\n    </Card>\n  );\n}\n\nexport default function UseLinkComponentHookUsage() {\n  const [route, setRoute] = useState('/');\n\n  return (\n    <VStack gap={3}>\n      <Text type=\"body\">Router location: {route}</Text>\n      <NavigateContext value={setRoute}>\n        <LinkProvider component={RouterLink}>\n          <ArticleCard\n            title=\"Getting started\"\n            href=\"/articles/getting-started\"\n            resolvedBy=\"LinkProvider: the router's link, no page load\"\n          />\n          <ArticleCard\n            title=\"Style guide (PDF)\"\n            href=\"#style-guide\"\n            resolvedBy='as=\"a\": a native anchor, even inside the provider'\n            linkAs=\"a\"\n          />\n        </LinkProvider>\n      </NavigateContext>\n      <ArticleCard\n        title=\"Release notes\"\n        href=\"#release-notes\"\n        resolvedBy=\"Outside the provider: the app's LinkProvider, or a native anchor\"\n      />\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

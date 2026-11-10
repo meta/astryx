@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--id",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--id"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--id <id>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

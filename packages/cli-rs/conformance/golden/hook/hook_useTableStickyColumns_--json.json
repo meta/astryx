@@ -1,0 +1,13 @@
+{
+ "id": "hook_useTableStickyColumns_--json",
+ "args": [
+  "hook",
+  "useTableStickyColumns",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableStickyColumns\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableStickyColumns\",\n    \"description\": \"Hook that returns a TablePlugin which pins a contiguous run of columns to the start and/or end edge of the table. Pinned columns get cumulative offsets and a soft, scroll-aware shadow over the scrolling content. An empty config ({}) is a valid no-op that pins nothing.\",\n    \"props\": [\n      {\n        \"name\": \"startKeys\",\n        \"type\": \"string[]\",\n        \"description\": \"Column keys pinned to the start (inline-start / left in LTR) edge: the contiguous run from the first column through the last listed key.\"\n      },\n      {\n        \"name\": \"endKeys\",\n        \"type\": \"string[]\",\n        \"description\": \"Column keys pinned to the end (inline-end / right in LTR) edge: the contiguous run from the first listed key through the last column.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

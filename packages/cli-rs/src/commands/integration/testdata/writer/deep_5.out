@@ -1,0 +1,19 @@
+export default {
+  a: {
+    b: {
+      c: [1,
+        2],
+    },
+  },
+
+  d: [
+    'x',
+    'y',
+  ],
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

@@ -1,0 +1,58 @@
+[
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid minChildWidth={280}><Item /></Grid>;",
+  "output": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid columns={{\n  minWidth: 280,\n  repeat: 'fit'\n}}><Item /></Grid>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid columns={3} minChildWidth={280}><Item /></Grid>;",
+  "output": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid\n  columns={{\n    minWidth: 280,\n    max: 3,\n    repeat: 'fit'\n  }}><Item /></Grid>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid columns={5} gap={5} minChildWidth={140}><Item /></Grid>;",
+  "output": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid\n  columns={{\n    minWidth: 140,\n    max: 5,\n    repeat: 'fit'\n  }}\n  gap={5}><Item /></Grid>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid columns={{minWidth: 100}} minChildWidth={280}><Item /></Grid>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core';\nconst t = <Grid columns={cols} minChildWidth={280}><Item /></Grid>;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid as G} from '@astryxdesign/core/Grid';\nconst t = <G columns={4} minChildWidth={200}><Item /></G>;",
+  "output": "import {Grid as G} from '@astryxdesign/core/Grid';\nconst t = <G\n  columns={{\n    minWidth: 200,\n    max: 4,\n    repeat: 'fit'\n  }}><Item /></G>;",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/migrate-grid-minchildwidth-to-columns",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Grid} from '@astryxdesign/core/Grid';\nconst x = <Grid minChildWidth={160} gap={4} />;",
+  "output": "import {Grid} from '@astryxdesign/core/Grid';\nconst x = <Grid columns={{\n  minWidth: 160,\n  repeat: 'fit'\n}} gap={4} />;",
+  "error": null
+ }
+]

@@ -1,0 +1,12 @@
+{
+ "id": "experimental_render_@plain",
+ "args": [
+  "experimental",
+  "render"
+ ],
+ "fixture": "plain",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: A page file is required\n\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx  (render a page to one HTML file)\n",
+ "exit": 1,
+ "files": []
+}

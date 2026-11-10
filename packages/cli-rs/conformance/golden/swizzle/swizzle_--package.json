@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_--package",
+ "args": [
+  "swizzle",
+  "--package"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--package <pkg>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

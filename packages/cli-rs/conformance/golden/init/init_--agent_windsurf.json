@@ -1,0 +1,13 @@
+{
+ "id": "init_--agent_windsurf",
+ "args": [
+  "init",
+  "--agent",
+  "windsurf"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown agent \"windsurf\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
+ "exit": 1,
+ "files": []
+}

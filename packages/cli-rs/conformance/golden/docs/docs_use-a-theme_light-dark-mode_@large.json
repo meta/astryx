@@ -1,0 +1,19 @@
+{
+ "id": "docs_use-a-theme_light-dark-mode_@large",
+ "args": [
+  "docs",
+  "use-a-theme",
+  "light-dark-mode"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Dark mode\n\nUse [light, dark] tuples in token values for automatic mode switching. Use mode='system' (default) on Theme to follow OS preference.\n\nLight/dark tuple:\n```tsx\n'--color-accent': ['#0064E0', '#2694FE'],\n//                   ^light     ^dark\n```\n\nToggle with a button:\n```tsx\nconst [mode, setMode] = useState<'light' | 'dark'>('light');\n\n<Theme theme={myTheme} mode={mode}>\n  <Button\n    label={mode === 'light' ? 'Switch to Dark' : 'Switch to Light'}\n    onClick={() => setMode(m => (m === 'light' ? 'dark' : 'light'))}\n  />\n</Theme>;\n```\n\nTo create a theme with custom dark mode colors, see `npx @astryxdesign/cli@0.7.12 docs author-a-theme`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-a-theme integration-themes\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme nesting-themes\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

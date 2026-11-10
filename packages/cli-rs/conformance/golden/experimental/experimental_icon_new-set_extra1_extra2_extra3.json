@@ -1,0 +1,16 @@
+{
+ "id": "experimental_icon_new-set_extra1_extra2_extra3",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'new-set'. Expected 1 argument but got 3.\n",
+ "exit": 1,
+ "files": []
+}

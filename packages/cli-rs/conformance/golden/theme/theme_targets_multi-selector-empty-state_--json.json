@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_multi-selector-empty-state_--json",
+ "args": [
+  "theme",
+  "targets",
+  "multi-selector-empty-state",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"multi-selector-empty-state\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"multi-selector-empty-state\",\n        \"className\": \"astryx-multi-selector-empty-state\",\n        \"component\": \"MultiSelector\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

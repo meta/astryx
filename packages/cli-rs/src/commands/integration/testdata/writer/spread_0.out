@@ -1,0 +1,1 @@
+ERROR Could not update astryx.integration.mjs safely: it spreads another object (`...`) where "experimental" would go, so a written "experimental" could replace what the spread sets. Set "experimental.iconSets: './icons'" in it yourself.

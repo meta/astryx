@@ -1,0 +1,19 @@
+{
+ "id": "docs_browser-support_supporting-older-browsers_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "supporting-older-browsers"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Supporting Older Browsers\n\nIf your audience includes Tier 2 browsers and you need correct layer positioning, you have three options, cheapest first. All of them are decisions you make for your audience; Astryx does not impose one.\n\n1. Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; polyfills may not cover every position-fallback feature.\n2. Provide a JS positioning fallback. Detect missing support with `CSS.supports(\"anchor-name\", \"--x\")` and position layers with a measurement-based library (e.g. a floating-element positioner) when it returns false. More code, full control.\n3. Accept degraded positioning. Document for your users that on Tier 2 browsers, layered surfaces open correctly but may not sit next to their trigger. Cheapest, and often fine for internal tools on evergreen browsers.\n\nFeature-detect at runtime rather than sniffing user agents:\n\nFeature detection:\n```js\n// Popover API (Tier 2 and up)\nconst hasPopover = typeof HTMLElement !== 'undefined'\n  && typeof HTMLElement.prototype.showPopover === 'function';\n\n// CSS anchor positioning (Tier 1)\nconst hasAnchorPositioning = CSS.supports('anchor-name', '--x');\n\n// CSS light-dark() (Tier 2 and up)\nconst hasLightDark = CSS.supports('color', 'light-dark(#000, #fff)');\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs browser-support --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs browser-support the-on-screen-keyboard\nNext: npx @astryxdesign/cli@0.7.12 docs browser-support how-these-tiers-move-over-time\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

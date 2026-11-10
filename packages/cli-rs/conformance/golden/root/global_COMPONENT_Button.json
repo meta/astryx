@@ -1,0 +1,12 @@
+{
+ "id": "global_COMPONENT_Button",
+ "args": [
+  "COMPONENT",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown command 'COMPONENT'\n\n  component  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

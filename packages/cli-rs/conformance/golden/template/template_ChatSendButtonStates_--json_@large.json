@@ -1,0 +1,13 @@
+{
+ "id": "template_ChatSendButtonStates_--json_@large",
+ "args": [
+  "template",
+  "ChatSendButtonStates",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatSendButtonStates\",\n    \"description\": \"Disabled, ready, and streaming states at both sizes. The button automatically toggles between send (primary) and stop (secondary) based on streaming state.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatSendButton\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ChatSendButton} from '@astryxdesign/core/Chat';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function ChatSendButtonStates() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={2}>\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Disabled → Ready → Streaming\\n      </Text>\\n      <Stack direction=\\\"horizontal\\\" gap={3} vAlign=\\\"center\\\">\\n        <ChatSendButton isDisabled onSend={() => {}} />\\n        <ChatSendButton isDisabled={false} onSend={() => {}} />\\n        <ChatSendButton isStopShown onStop={() => {}} />\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

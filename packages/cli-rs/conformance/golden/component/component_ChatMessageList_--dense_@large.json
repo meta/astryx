@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatMessageList_--dense_@large",
+ "args": [
+  "component",
+  "ChatMessageList",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ChatMessageList\n\npresentational msg container w/ density context + infinite scroll; auto-scroll owned by ChatLayout\n\n**Import:** `import {ChatMessageList} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | msg elements (ChatMessage or ChatSystemMessage) **(required)** |\n| `emptyState` | `ReactNode` | - | content when no msgs |\n| `scrollToTopAction` | `() => Promise<void>` | - | async action at scroll top; load older msgs |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | visual density; flows to children via context |\n| `gap` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | top-level row gap; defaults to density spacing; override for independent LLM/tool rows |\n| `align` | `'top' \\| 'bottom'` | `'bottom'` | 'top'\\|'bottom' (def bottom); bottom spacer pushes short lists down, top starts at top; overflow scrolls same either way |\n| `isStreaming` | `boolean` | `false` | assistant streaming? marks log aria-busy so SR announces the completed msg once |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

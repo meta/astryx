@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_copy_abs",
+ "args": [
+  "template",
+  "login",
+  "/tmp/x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid template target path \"/tmp/x/page.tsx\": absolute paths are not allowed. Use a path relative to the project root.\n",
+ "exit": 1,
+ "files": []
+}

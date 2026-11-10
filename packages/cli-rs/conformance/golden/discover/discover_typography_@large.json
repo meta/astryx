@@ -1,0 +1,12 @@
+{
+ "id": "discover_typography_@large",
+ "args": [
+  "discover",
+  "typography"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"typography\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

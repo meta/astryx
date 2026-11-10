@@ -1,0 +1,14 @@
+{
+ "id": "discover_data-table_--type_bogus",
+ "args": [
+  "discover",
+  "data table",
+  "--type",
+  "bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown --type \"bogus\"\n\n  component  (item kind)\n  template  (item kind)\n  doc  (item kind)\n  theme  (item kind)\n  codemod  (item kind)\n  agent-doc  (item kind)\n",
+ "exit": 1,
+ "files": []
+}

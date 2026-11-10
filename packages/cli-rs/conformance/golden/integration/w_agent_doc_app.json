@@ -1,0 +1,25 @@
+{
+ "id": "w_agent_doc_app",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "Run acme verify before finishing."
+ ],
+ "fixture": "app",
+ "stdout": "agent-doc contribution added\n\n[ok] Run acme verify before finishing.\n\nUpdate astryx.integration.mjs.\n\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  agentDocs: {\n    append: ['Run acme verify before finishing.']\n  }\n};\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

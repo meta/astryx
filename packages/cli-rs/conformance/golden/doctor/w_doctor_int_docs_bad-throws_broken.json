@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_docs_bad-throws_broken",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "@bad/throws"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Checking integration docs: @bad/throws@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_manifest\nmessage:  manifest exploded\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

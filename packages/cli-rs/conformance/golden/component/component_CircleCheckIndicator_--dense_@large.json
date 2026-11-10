@@ -1,0 +1,19 @@
+{
+ "id": "component_CircleCheckIndicator_--dense_@large",
+ "args": [
+  "component",
+  "CircleCheckIndicator",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# CircleCheckIndicator\n\nFor iOS-style selection circles: edit-mode list rows and multiple-choice sets. Map it to `checkbox` in a theme, or render it in your own row.\n\n**Import:** `import {CircleCheckIndicator} from '@astryxdesign/lab';`\n\n## Best Practices\n\n- **Do:** Map via defineTheme({indicators: {checkbox: CircleCheckIndicator}}); hosts keep semantics + focus ring.\n- **Do:** Keep a visible label; the circle is decorative.\n- **Don't:** Use for a single choice (radio or row checkmark instead).\n- **Don't:** Add role, label or tabIndex; the owning control has them.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `state` | `'unchecked' \\| 'checked' \\| 'indeterminate'` | - | 'unchecked' (empty ring) \\| 'checked' (check) \\| 'indeterminate' (bar). **(required)** |\n| `size` | `'sm' \\| 'md'` | `'md'` | 'sm' an 18px circle \\| 'md' a 21.8px circle (in a 20px or 24px slot). |\n| `isDisabled` | `boolean` | `false` | Disabled look only; owner keeps semantics. |\n| `children` | `ReactNode` | - | Drawn inside the circle instead of the mark (e.g. Spinner). |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles; must be stylex.create() value. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-circle-check-indicator` | `data-size`, `data-checked`, `data-disabled` | size, checked, disabled | - |\n| `astryx-circle-check-indicator-check` | `data-size` | size | - |\n| `astryx-circle-check-indicator-dash` | `data-size` | size | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'circle-check-indicator': {\n    base: { /* CSS properties */ },\n    'size:value': { /* variant-specific */ },\n  },\n  'circle-check-indicator-check': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

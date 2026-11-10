@@ -1,0 +1,19 @@
+{
+ "id": "hook_useInteractiveRole_--dense",
+ "args": [
+  "hook",
+  "useInteractiveRole",
+  "--dense"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useInteractiveRole\n\nResolves what a polymorphic component should render as, in one place: href wins, then onClick, then an interactive trigger context supplied by a parent (Popover, DropdownMenu and friends), then inert. Use it in any component that is sometimes a link, sometimes a button, and sometimes plain content; Token, Thumbnail, Item and ClickableCard all do. Because context is part of the resolution, a component built on it becomes a valid trigger for new surfaces without changing.\n\n## Best Practices\n\n- **Do:** Switch on the returned role to pick the element, and render an anchor only for \"link\" so keyboard and middle-click behavior come from the platform.\n- **Do:** Pass isDisabled through rather than dropping the href yourself; the hook already keeps disabled links out of the tab order.\n- **Don't:** Add another ad-hoc href/onClick precedence check in a component; new trigger contexts are added here so every consumer inherits them.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInteractiveRoleOptions` | - | The interactivity inputs the component received. **(required)** |\n| `options.href` | `string` | - | URL for navigation. Highest priority: with an href the component is a link. |\n| `options.onClick` | `((...args: never[]) => unknown) \\| null` | - | Click handler. Resolves to a button, ahead of any context-provided role. |\n| `options.isDisabled` | `boolean` | `false` | When true, href is ignored for role resolution (a disabled link is an anti-pattern), so the role comes from onClick, then context, then inert. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `role` | `'link' \\| 'button' \\| 'inert'` | The element the component should render: an anchor, a button, or a non-interactive span/div. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Token, Thumbnail, Item, ClickableCard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

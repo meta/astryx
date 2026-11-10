@@ -1,0 +1,21 @@
+{
+ "id": "w_agent_doc_quotes_app_json",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "Use the team's \"acme\" CLI \\ wrapper.",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"agent-doc\",\n    \"name\": \"Use the team's \\\"acme\\\" CLI \\\\ wrapper.\",\n    \"root\": null,\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  agentDocs: {\n    append: ['Use the team\\'s \"acme\" CLI \\\\ wrapper.']\n  }\n};\n"
+  }
+ ]
+}

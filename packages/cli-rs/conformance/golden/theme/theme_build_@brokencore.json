@@ -1,0 +1,12 @@
+{
+ "id": "theme_build_@brokencore",
+ "args": [
+  "theme",
+  "build"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'files'\n",
+ "exit": 1,
+ "files": []
+}

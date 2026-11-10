@@ -1,0 +1,18 @@
+{
+ "id": "cols60_theme_list_tty",
+ "args": [
+  "theme",
+  "list"
+ ],
+ "fixture": "app",
+ "stdout": "Themes\r\n7 available\r\n\r\nslug:        butter\r\ndisplayName: Butter\r\ndescription: Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        chocolate\r\ndisplayName: Chocolate\r\ndescription: Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        gothic\r\ndisplayName: Gothic\r\ndescription: Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        matcha\r\ndisplayName: Matcha\r\ndescription: Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        neutral\r\ndisplayName: Neutral\r\ndescription: Restrained warm grays. Minimal and quiet, so the content stays the focus.\r\nmaintained:  yes\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        stone\r\ndisplayName: Stone\r\ndescription: Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nslug:        y2k\r\ndisplayName: Y2K\r\ndescription: Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.\r\nmaintained:  no\r\npackage:     @astryxdesign/cli\r\nsource:      bundled\r\nadded:       no\r\ndefault:     no\r\n\r\nImport one: npx @astryxdesign/cli@0.7.12 theme add <slug> [--package <package>]\r\nFork source: npx @astryxdesign/cli@0.7.12 theme eject <slug> [target-path]\r\n\r\nMore themes in packages you could add: npx @astryxdesign/cli@0.7.12 discover theme\r\n\r\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

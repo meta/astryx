@@ -1,0 +1,10 @@
+[
+ {
+  "transform": "v0.3.0/migrate-navmenuitem-to-navheadingmenuitem",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {NavMenuItem, type NavMenuItemProps} from '@astryxdesign/core/NavMenu';\nconst item: NavMenuItemProps = {};\nconst x = <NavMenuItem label=\"Legacy\" />;",
+  "output": "import {NavHeadingMenuItem, type NavHeadingMenuItemProps} from '@astryxdesign/core/NavMenu';\nconst item: NavHeadingMenuItemProps = {};\nconst x = <NavHeadingMenuItem label=\"Legacy\" />;",
+  "error": null
+ }
+]

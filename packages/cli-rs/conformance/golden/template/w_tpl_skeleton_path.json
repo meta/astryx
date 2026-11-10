@@ -1,0 +1,14 @@
+{
+ "id": "w_tpl_skeleton_path",
+ "args": [
+  "template",
+  "login",
+  "src",
+  "--skeleton"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: `--skeleton` cannot be combined with <path>: it prints the skeleton and does not write files.\n",
+ "exit": 1,
+ "files": []
+}

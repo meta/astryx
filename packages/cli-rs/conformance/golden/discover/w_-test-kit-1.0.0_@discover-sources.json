@@ -1,0 +1,18 @@
+{
+ "id": "w_-test-kit-1.0.0_@discover-sources",
+ "args": [
+  "discover",
+  "@test/kit@1.0.0"
+ ],
+ "fixture": "discover-sources",
+ "stdout": "",
+ "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Version \"1.0.0\" of @test/kit not found\n\n  @test/kit@3.2.0  (published version)\n  @test/kit@3.1.4  (published version)\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/949e9ac3d98512f042d8f38cdf01d49a.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/kit\",\"integration\":\"test-kit\",\"aliases\":[],\"latest\":\"3.2.0\",\"versions\":[{\"version\":\"3.2.0\",\"publishedAt\":\"2026-09-29T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"},{\"version\":\"3.1.4\",\"publishedAt\":\"2026-09-01T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"component\",\"name\":\"Dial\"}]}]}}"
+  }
+ ]
+}

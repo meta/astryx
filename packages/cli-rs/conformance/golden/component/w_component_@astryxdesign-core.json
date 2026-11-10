@@ -1,0 +1,12 @@
+{
+ "id": "w_component_@astryxdesign-core",
+ "args": [
+  "component",
+  "@astryxdesign/core"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Component selector \"@astryxdesign/core\" names a package but no component\n",
+ "exit": 1,
+ "files": []
+}

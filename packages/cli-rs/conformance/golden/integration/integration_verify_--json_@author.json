@@ -1,0 +1,13 @@
+{
+ "id": "integration_verify_--json_@author",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/widgets\",\n    \"version\": \"0.1.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"acme-widgets-0.1.0.tgz\",\n      \"fileCount\": 5,\n      \"size\": 513,\n      \"unpackedSize\": 527\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"components\",\n          \"path\": \"src/components\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        },\n        {\n          \"kind\": \"docs\",\n          \"path\": \"docs\",\n          \"expectedFiles\": 1,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 4,\n      \"packedFiles\": 4\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [],\n        \"components\": [\n          \"WidgetCard\"\n        ],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"widgets\"\n        ],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [],\n        \"components\": [\n          \"WidgetCard\"\n        ],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"widgets\"\n        ],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"component_import_unresolvable\",\n        \"severity\": \"error\",\n        \"message\": \"Component \\\"WidgetCard\\\" advertises import \\\"@acme/widgets\\\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

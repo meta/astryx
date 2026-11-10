@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_built_empty_outside",
+ "args": [
+  "doctor",
+  "--built",
+  "."
+ ],
+ "fixture": "empty",
+ "stdout": "astryx doctor - diagnosing your setup\n\nid:      node-version\nstatus:  [ok]\nlabel:   Node.js version\nmessage: Node v22.23.2 meets the minimum (>=22.13.0).\n\nid:      answering-release\nstatus:  [ok]\nlabel:   Release that answered\nmessage: CLI 0.7.12 with Core 0.7.12 answered, outside a project. How each folder is answered: `npx @astryxdesign/cli@0.7.12 docs global`.\n\nid:      newest-release\nstatus:  [info]\nlabel:   Newest release\nmessage: Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.\n\nid:      cli-on-path\nstatus:  [info]\nlabel:   `astryx` on the search path\nmessage: No `astryx` command on the search path, so `astryx` runs only through a package manager.\nfix:     To run the CLI in any folder, install it for the computer: `npm i -g @astryxdesign/cli`.\n\nid:      computer-integrations\nstatus:  [info]\nlabel:   Integrations installed for this computer\nmessage: No integration is installed beside the CLI installed for this computer.\n\nid:      computer-agent-text\nstatus:  [info]\nlabel:   Computer-level agent text\nmessage: No computer-level agent text: agents outside a project with Astryx agent docs do not know Astryx is here. Not linked yet: ~/.claude/skills/astryx.\nfix:     Run `npx @astryxdesign/cli@0.7.12 init --user`.\n\nid:      built-astryx-usage\nstatus:  [fail]\nlabel:   Built output uses Astryx\nmessage: . holds no source or built files, so nothing was checked.\nfix:     Pass the project folder, the build output folder, or the built HTML file.\n\nid:      built-astryx-purity\nstatus:  [info]\nlabel:   Source uses Astryx well\nmessage: Not inspected: 0 source files under . and no JSX read among them, so components, icons and styles were not checked. A bundle or other build output is not source.\nfix:     Run `npx @astryxdesign/cli@0.7.12 doctor --built <project folder>` on the folder that holds the page's source.\n\nsummary\n\npass: 2\nwarn: 0\nfail: 1\ninfo: 5\n\nSome checks failed. Address the items marked [fail] above.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

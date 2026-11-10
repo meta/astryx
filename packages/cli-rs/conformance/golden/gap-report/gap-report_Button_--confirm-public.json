@@ -1,0 +1,13 @@
+{
+ "id": "gap-report_Button_--confirm-public",
+ "args": [
+  "gap-report",
+  "Button",
+  "--confirm-public"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

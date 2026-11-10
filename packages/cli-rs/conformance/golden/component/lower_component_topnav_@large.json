@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_topnav_@large",
+ "args": [
+  "component",
+  "topnav"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"topnav\"\n\n  TopNav  (same name)\n  AppShell  (keyword \"topnav\")\n",
+ "exit": 1,
+ "files": []
+}

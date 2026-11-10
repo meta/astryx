@@ -1,0 +1,18 @@
+{
+ "id": "template_ChatComposerInputDisabled_@large",
+ "args": [
+  "template",
+  "ChatComposerInputDisabled"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatComposer, ChatComposerInput} from '@astryxdesign/core/Chat';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function ChatComposerInputDisabled() {\n  return (\n    <Stack direction=\"vertical\" width={450} maxWidth=\"100%\">\n      <ChatComposer\n        onSubmit={() => {}}\n        isDisabled\n        input={<ChatComposerInput isDisabled placeholder=\"Input is disabled\" />}\n      />\n    </Stack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

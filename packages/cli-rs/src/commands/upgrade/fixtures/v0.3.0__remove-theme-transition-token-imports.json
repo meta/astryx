@@ -1,0 +1,10 @@
+[
+ {
+  "transform": "v0.3.0/remove-theme-transition-token-imports",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {transitionVars, durationVars, type TransitionVarName} from '@astryxdesign/core/theme';\nconst d = durationVars;",
+  "output": "import { durationVars } from '@astryxdesign/core/theme';\nconst d = durationVars;",
+  "error": null
+ }
+]

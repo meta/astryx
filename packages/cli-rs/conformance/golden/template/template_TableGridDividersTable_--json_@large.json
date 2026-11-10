@@ -1,0 +1,13 @@
+{
+ "id": "template_TableGridDividersTable_--json_@large",
+ "args": [
+  "template",
+  "TableGridDividersTable",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TableGridDividersTable\",\n    \"description\": \"Compact table with grid dividers showing both row and column borders, suited for dense numeric data.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Table\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Table, proportional, pixel} from '@astryxdesign/core/Table';\\nimport type {TableColumn} from '@astryxdesign/core/Table';\\n\\ninterface Metric extends Record<string, unknown> {\\n  id: string;\\n  metric: string;\\n  q1: string;\\n  q2: string;\\n  q3: string;\\n  q4: string;\\n}\\n\\nconst metrics: Metric[] = [\\n  {\\n    id: '1',\\n    metric: 'Revenue',\\n    q1: '$1.2M',\\n    q2: '$1.4M',\\n    q3: '$1.3M',\\n    q4: '$1.8M',\\n  },\\n  {\\n    id: '2',\\n    metric: 'Users',\\n    q1: '12,400',\\n    q2: '14,200',\\n    q3: '15,800',\\n    q4: '18,100',\\n  },\\n  {id: '3', metric: 'Retention', q1: '82%', q2: '85%', q3: '84%', q4: '88%'},\\n  {id: '4', metric: 'NPS', q1: '42', q2: '45', q3: '48', q4: '51'},\\n  {id: '5', metric: 'CSAT', q1: '4.2', q2: '4.3', q3: '4.5', q4: '4.6'},\\n];\\n\\nconst columns: TableColumn<Metric>[] = [\\n  {key: 'metric', header: 'Metric', width: proportional(2)},\\n  {key: 'q1', header: 'Q1', width: pixel(90), align: 'end'},\\n  {key: 'q2', header: 'Q2', width: pixel(90), align: 'end'},\\n  {key: 'q3', header: 'Q3', width: pixel(90), align: 'end'},\\n  {key: 'q4', header: 'Q4', width: pixel(90), align: 'end'},\\n];\\n\\nexport default function TableGridDividersTable() {\\n  return (\\n    <Table\\n      data={metrics}\\n      columns={columns}\\n      idKey=\\\"id\\\"\\n      dividers=\\\"grid\\\"\\n      density=\\\"compact\\\"\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

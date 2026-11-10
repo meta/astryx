@@ -1,0 +1,20 @@
+{
+ "id": "integration_add_agent-doc_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "agent-doc",
+  "Thing"
+ ],
+ "fixture": "author",
+ "stdout": "agent-doc contribution added\n\n[ok] Thing\n\nUpdate astryx.integration.mjs.\n\n- astryx.integration.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n\n  agentDocs: {\n    append: ['Thing']\n  }\n};\n"
+  }
+ ]
+}

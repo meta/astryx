@@ -1,0 +1,14 @@
+{
+ "id": "ex_integration_add_doc_deploying_@empty",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "deploying"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: No package.json found. Run this command inside an integration package.\n",
+ "exit": 1,
+ "files": []
+}

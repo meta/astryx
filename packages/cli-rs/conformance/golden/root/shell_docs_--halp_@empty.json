@@ -1,0 +1,12 @@
+{
+ "id": "shell_docs_--halp_@empty",
+ "args": [
+  "docs",
+  "--halp"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown option '--halp'\n(Did you mean --help?)\n",
+ "exit": 1,
+ "files": []
+}

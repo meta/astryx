@@ -1,0 +1,18 @@
+{
+ "id": "template_TextWrap_@large",
+ "args": [
+  "template",
+  "TextWrap"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TextWrap() {\n  return (\n    <div\n      style={{\n        display: 'flex',\n        flexDirection: 'column',\n        gap: 16,\n        maxWidth: 400,\n      }}>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Wrap (default)\n        </Text>\n        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>\n          <Text type=\"body\" textWrap=\"wrap\">\n            This text wraps normally at word boundaries when it reaches the\n            edge.\n          </Text>\n        </div>\n      </div>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Nowrap\n        </Text>\n        <div\n          style={{\n            border: '1px solid #ccc',\n            padding: 8,\n            width: 200,\n            overflow: 'hidden',\n          }}>\n          <Text type=\"body\" textWrap=\"nowrap\">\n            This text does not wrap and will overflow its container.\n          </Text>\n        </div>\n      </div>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Balance\n        </Text>\n        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>\n          <Text type=\"body\" textWrap=\"balance\">\n            This text is balanced for better visual appearance across lines.\n          </Text>\n        </div>\n      </div>\n      <div>\n        <Text type=\"label\" display=\"block\">\n          Pretty\n        </Text>\n        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>\n          <Text type=\"body\" textWrap=\"pretty\">\n            This text uses pretty wrap to avoid orphans at the end of\n            paragraphs.\n          </Text>\n        </div>\n      </div>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

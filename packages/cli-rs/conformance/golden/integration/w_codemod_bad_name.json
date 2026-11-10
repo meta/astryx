@@ -1,0 +1,16 @@
+{
+ "id": "w_codemod_bad_name",
+ "args": [
+  "integration",
+  "add",
+  "codemod",
+  "Rename",
+  "--to",
+  "1.0.0"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid codemod id \"Rename\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

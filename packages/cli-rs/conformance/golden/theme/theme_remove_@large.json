@@ -1,0 +1,12 @@
+{
+ "id": "theme_remove_@large",
+ "args": [
+  "theme",
+  "remove"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

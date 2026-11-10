@@ -1,0 +1,12 @@
+{
+ "id": "theme_use_@integration",
+ "args": [
+  "theme",
+  "use"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

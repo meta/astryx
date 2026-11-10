@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_switch-thumb_--json",
+ "args": [
+  "theme",
+  "targets",
+  "switch-thumb",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"switch-thumb\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"switch-thumb\",\n        \"className\": \"astryx-switch-thumb\",\n        \"component\": \"Switch\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": [\n          \"checked\"\n        ]\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

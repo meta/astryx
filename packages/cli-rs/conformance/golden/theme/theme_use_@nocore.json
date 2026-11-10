@@ -1,0 +1,12 @@
+{
+ "id": "theme_use_@nocore",
+ "args": [
+  "theme",
+  "use"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

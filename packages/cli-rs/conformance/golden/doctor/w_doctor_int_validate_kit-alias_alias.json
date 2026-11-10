@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_int_validate_kit-alias_alias",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "kit-alias"
+ ],
+ "fixture": "doctor-integrations",
+ "stdout": "Validating integration: @real/kit@1.0.0\n\nseverity: [fail]\ncode:     missing_root\nmessage:  Declared themes root does not exist on disk: /tmp/astryx-conformance/work/doctor-integrations/alias/node_modules/kit-alias/gone\n\nSummary: 1 error, 0 warnings\n\n[info] No doc files to type-check.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

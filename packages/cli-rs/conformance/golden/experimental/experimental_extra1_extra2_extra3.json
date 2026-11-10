@@ -1,0 +1,14 @@
+{
+ "id": "experimental_extra1_extra2_extra3",
+ "args": [
+  "experimental",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'experimental extra1'\n\n  icon  (available subcommand)\n  render  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

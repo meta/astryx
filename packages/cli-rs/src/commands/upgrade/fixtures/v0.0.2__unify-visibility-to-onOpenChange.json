@@ -1,0 +1,114 @@
+[
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog onHide={handleHide} />",
+  "output": "<XDSDialog onOpenChange={handleHide} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialogHeader onHide={close} title=\"Test\" />",
+  "output": "<XDSDialogHeader onOpenChange={close} title=\"Test\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSMobileNav onClose={handleClose} />",
+  "output": "<XDSMobileNav onOpenChange={handleClose} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDropdownMenu onMenuToggle={toggle} />",
+  "output": "<XDSDropdownMenu onOpenChange={toggle} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSPopover onToggle={handleToggle} />",
+  "output": "<XDSPopover onOpenChange={handleToggle} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCollapsibleGroup onToggle={handleToggle} />",
+  "output": "<XDSCollapsibleGroup onOpenChange={handleToggle} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHoverCard onShow={handleShow} />",
+  "output": "<XDSHoverCard onOpenChange={handleShow} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTooltip onHide={handleHide} />",
+  "output": "<XDSTooltip onOpenChange={handleHide} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSHoverCard onShow={show} onHide={hide} />",
+  "output": "<XDSHoverCard onShow={show}/* TODO: Merge onShow and onHide into a single onOpenChange={(isOpen) => { ... }} prop */ onHide={hide} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTooltip onShow={show} onHide={hide} content=\"tip\" />",
+  "output": "<XDSTooltip onShow={show}/* TODO: Merge onShow and onHide into a single onOpenChange={(isOpen) => { ... }} prop */ onHide={hide} content=\"tip\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Dialog onHide={handleHide} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Popover onToggle={handleToggle} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog onOpenChange={handleChange} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/unify-visibility-to-onOpenChange",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSDialog onHide={close} />\n        <XDSPopover onToggle={toggle} />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSDialog onOpenChange={close} />\n        <XDSPopover onOpenChange={toggle} />\n      </div>\n    ",
+  "error": null
+ }
+]

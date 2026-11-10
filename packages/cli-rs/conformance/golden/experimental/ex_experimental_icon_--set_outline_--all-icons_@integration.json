@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_icon_--set_outline_--all-icons_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "--set",
+  "outline",
+  "--all-icons"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"outline\"\n",
+ "exit": 1,
+ "files": []
+}

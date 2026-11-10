@@ -1,0 +1,19 @@
+{
+ "id": "template_shell-nav_--skeleton_@large",
+ "args": [
+  "template",
+  "shell-nav",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# shell-nav - Application frame combining both navigation axes: a top menu bar with command-palette search over a resizable hierarchy rail, wrapping placeholder content. For when one axis is not enough.\n# Components: AppShell, Card, CommandPalette, Divider, DropdownMenu, Fragment, IconButton, Kbd, Layout, SideNav, Stack, TextInput, TopNav, TreeList\n\n<AppShell contentPadding={0}>\n  /* topNav: */\n  <TopNav>\n    <DropdownMenu />\n    <Fragment />\n    <DropdownMenuItem />\n    <Stack />\n    <TextInput width={240} />\n    <IconButton variant=\"ghost\" />\n    <Button variant=\"secondary\" />\n    /* sideNav: */\n    <SideNav>\n      <TreeList density=\"compact\" />\n    </SideNav>\n    <Layout padding={6} hasDivider height=\"fill\">\n      /* header: */\n      <LayoutHeader padding={6} hasDivider>\n        <HStack gap={2}>\n          <Card padding={0} variant=\"muted\" height={36} width={132} />\n        </HStack>\n      </LayoutHeader>\n      /* content: */\n      <LayoutContent padding={6}>\n        <VStack gap={2}>\n          <Card padding={0} variant=\"muted\" height={14} width={1} />\n          <HStack gap={3}>\n            <Card padding={0} variant=\"muted\" height={14} width={20} />\n            <Card padding={0} variant=\"muted\" height={14} width={width} />\n          </HStack>\n        </VStack>\n      </LayoutContent>\n      <CommandPalette />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

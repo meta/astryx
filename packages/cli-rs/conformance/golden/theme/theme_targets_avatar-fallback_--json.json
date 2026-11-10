@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_avatar-fallback_--json",
+ "args": [
+  "theme",
+  "targets",
+  "avatar-fallback",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"avatar-fallback\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"avatar-fallback\",\n        \"className\": \"astryx-avatar-fallback\",\n        \"component\": \"Avatar\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

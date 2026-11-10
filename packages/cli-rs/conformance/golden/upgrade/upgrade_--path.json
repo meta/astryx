@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--path",
+ "args": [
+  "upgrade",
+  "--path"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--path <dir>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

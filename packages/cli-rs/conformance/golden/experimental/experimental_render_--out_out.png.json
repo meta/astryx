@@ -1,0 +1,14 @@
+{
+ "id": "experimental_render_--out_out.png",
+ "args": [
+  "experimental",
+  "render",
+  "--out",
+  "out.png"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: A page file is required\n\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx  (render a page to one HTML file)\n",
+ "exit": 1,
+ "files": []
+}

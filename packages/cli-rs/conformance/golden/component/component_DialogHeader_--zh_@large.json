@@ -1,0 +1,19 @@
+{
+ "id": "component_DialogHeader_--zh_@large",
+ "args": [
+  "component",
+  "DialogHeader",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# DialogHeader\n\n使用 DialogHeader 为对话框提供带标签的标题区和可选的关闭控件。\n\n**Import:** `import {DialogHeader} from '@astryxdesign/core/Dialog';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Header row | Yes | 排列标题区、可选的首尾内容和关闭控件。 |\n| Start content | No | 包装可选的首部内容。 |\n| Title block | Yes | 组合标题和可选副标题。 |\n| End content | No | 组合可选尾部内容和可选关闭控件。 |\n| Close icon | No | 关闭按钮内的关闭图标。 |\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `ReactNode` | - | 对话框标题，渲染在可聚焦的 h2 中（打开时获得焦点，其文本内容通过 aria-labelledby 为对话框命名）。请使用非空、非交互的行内内容。 |\n| `subtitle` | `ReactNode` | - | 标题下方的副标题，可包含链接等行内内容；避免使用块级元素。 |\n| `onOpenChange` | `(isOpen: boolean) => unknown` | - | 关闭按钮的回调（省略时不显示按钮）。 |\n| `startContent` | `ReactNode` | - | 标题之前的内容（例如返回按钮）。 |\n| `endContent` | `ReactNode` | - | 标题之后、关闭按钮之前的内容。 |\n| `endContentEdgeCompensation` | `'inline' \\| 'block' \\| 'all'` | - | 选择尾部内容插槽的补偿轴；省略时保留关闭操作的自动补偿。 |\n| `hasDivider` | `boolean` | `true` | 在底部边缘添加分隔线。 |\n\n## Examples\n\n### Basic\n\n```tsx\n\nimport {DialogHeader} from '@astryxdesign/core/Dialog';\n\n<DialogHeader title=\"Delete file?\" subtitle=\"This action cannot be undone.\" />;\n\n```\n\n### With close button\n\n```tsx\n\nimport {useState} from 'react';\nimport {DialogHeader} from '@astryxdesign/core/Dialog';\n\nfunction Header() {\n  const [, setIsOpen] = useState(true);\n\n  // Passing onOpenChange renders a close button that calls it with false.\n  return <DialogHeader title=\"Settings\" onOpenChange={setIsOpen} />;\n}\n\n```\n\n### With a link in the subtitle\n\n```tsx\n\nimport {DialogHeader} from '@astryxdesign/core/Dialog';\nimport {Link} from '@astryxdesign/core/Link';\n\n<DialogHeader\n  title=\"Share conversation\"\n  subtitle={\n    <>\n      Anyone with the link can view it. Review the{' '}\n      <Link href=\"#sharing-policy\">sharing policy</Link> first.\n    </>\n  }\n/>;\n\n```\n\n### With start and end content\n\n```tsx\n\nimport {DialogHeader} from '@astryxdesign/core/Dialog';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Badge} from '@astryxdesign/core/Badge';\n\n<DialogHeader\n  title=\"Notifications\"\n  startContent={<Icon icon=\"chevronLeft\" size=\"sm\" />}\n  endContent={<Badge label=\"3\" />}\n/>;\n\n```\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-dialog-header` | - | - | - |\n| `astryx-dialog-header-start-content` | - | - | - |\n| `astryx-dialog-header-title-block` | - | - | - |\n| `astryx-dialog-header-end-content` | - | - | - |\n| `astryx-dialog-header-close-icon` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'dialog-header': {\n    base: { /* CSS properties */ },\n  },\n  'dialog-header-start-content': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

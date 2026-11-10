@@ -1,0 +1,13 @@
+{
+ "id": "template_BannerStatuses_--json_@large",
+ "args": [
+  "template",
+  "BannerStatuses",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BannerStatuses\",\n    \"description\": \"All 4 banner statuses: info, success, warning, and error. Use to show persistent messages like updates, confirmations, cautions, or problems at the top of a page or section.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Banner\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Banner} from '@astryxdesign/core/Banner';\\nimport {Stack} from '@astryxdesign/core/Layout';\\n\\nexport default function BannerStatuses() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={3}>\\n      <Banner\\n        status=\\\"info\\\"\\n        title=\\\"A new software update is available\\\"\\n        description=\\\"Version 2.4.1 includes performance improvements and bug fixes.\\\"\\n      />\\n      <Banner\\n        status=\\\"success\\\"\\n        title=\\\"Changes saved\\\"\\n        description=\\\"Your profile information has been updated successfully.\\\"\\n      />\\n      <Banner\\n        status=\\\"warning\\\"\\n        title=\\\"Storage almost full\\\"\\n        description=\\\"You have used 90% of your available storage.\\\"\\n      />\\n      <Banner\\n        status=\\\"error\\\"\\n        title=\\\"Build failed\\\"\\n        description=\\\"3 tests did not pass. Check the logs for details.\\\"\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

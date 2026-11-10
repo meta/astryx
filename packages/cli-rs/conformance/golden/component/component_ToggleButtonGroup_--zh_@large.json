@@ -1,0 +1,19 @@
+{
+ "id": "component_ToggleButtonGroup_--zh_@large",
+ "args": [
+  "component",
+  "ToggleButtonGroup",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ToggleButtonGroup\n\n将切换按钮分组，支持单选或多选行为。通过 type 判别联合类型实现类型安全。在触摸呈现下（主要指针为粗指针时），按下时分组像菜单一样跟踪按压：按下一个切换按钮并滑过其他按钮，高亮随之移动。只有松开时所在的按钮会切换，在分组外松开则不切换任何按钮。使用手指时，每个按钮的触控目标向 44 px 扩展，最多到与相邻按钮间距的一半，按钮本身不变大。\n\n**Import:** `import {ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | ToggleButton 子元素；每个成员都需要 value。分组控制按下状态，并忽略成员的 isPressed、onPressedChange 和 pressedChangeAction。激活成员只调用分组的 onChange，不启动成员的 Action 过渡。 **(required)** |\n| `label` | `string` | - | 分组的无障碍标签 (aria-label)。 **(required)** |\n| `type` | `'single' \\| 'multiple'` | `'single'` | 选择模式。single 允许单个激活，multiple 允许多个。 |\n| `value` | `string \\| null \\| string[]` | - | 当前选中的值。类型取决于选择模式。 **(required)** |\n| `onChange` | `(value: string \\| null \\| string[]) => void` | - | 选择变更时的回调。 **(required)** |\n| `orientation` | `'horizontal' \\| 'vertical'` | `'horizontal'` | 按钮组的布局方向。 |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | 分组内按钮的默认尺寸。单个按钮可覆盖。 |\n| `isDisabled` | `boolean` | `false` | 分组内所有按钮是否禁用。 |\n| `xstyle` | `StyleXStyles` | - | StyleX 样式，用于布局自定义。必须是 stylex.create() 的值。 |\n| `data-testid` | `string` | - | 自动化测试的选择器。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

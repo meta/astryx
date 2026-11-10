@@ -1,0 +1,14 @@
+{
+ "id": "w_kind_unknown",
+ "args": [
+  "integration",
+  "add",
+  "widget",
+  "Foo"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown contribution kind \"widget\". Choose component, doc, template, codemod, agent-doc, or theme.\n",
+ "exit": 1,
+ "files": []
+}

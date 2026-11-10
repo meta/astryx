@@ -1,0 +1,13 @@
+{
+ "id": "ex_experimental_icon_outline-trash_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "outline/trash"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"outline\"\n",
+ "exit": 1,
+ "files": []
+}

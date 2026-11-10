@@ -1,0 +1,14 @@
+{
+ "id": "hook_extra1_extra2_extra3",
+ "args": [
+  "hook",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No hook named \"extra1\"\n",
+ "exit": 1,
+ "files": []
+}

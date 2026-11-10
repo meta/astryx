@@ -1,0 +1,20 @@
+{
+ "id": "docs_spacing_--detail_compact_@large",
+ "args": [
+  "docs",
+  "spacing",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "Spacing\nSpacing scale tokens for padding, gap, and margin: the rhythmic foundation of design system layouts.\n\npackage: @astryxdesign/cli\n\noverview        Overview - The design system uses a 4px base-unit spacing scale, written in rem so gaps and padding grow\n                with the reader's browser font size the way text does: each step is 0.25rem, which is 4px at the default\n                16px root. Component gap props accept...\nscale           Scale - Fifteen spacing tokens, from 0 to 3rem (0px to 48px at the default 16px root).\nusage           Usage - Stack, HStack, VStack, Grid, Toolbar, OverflowList, and ChatMessageList take a `gap` step: 0,\n                0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, or 10 (×4px). Carousel takes the steps from 0 to 4. For custom layouts,\n                use the spacing tokens in StyleX.\nbest-practices  Best Practices - Use component gap props when available; they handle automatic spacing compensation.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs spacing <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs spacing --full\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nPrevious: npx @astryxdesign/cli@0.7.12 docs shape\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

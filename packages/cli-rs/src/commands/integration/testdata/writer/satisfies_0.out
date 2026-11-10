@@ -1,0 +1,9 @@
+import type {AstryxIntegration} from '@astryxdesign/cli/authoring';
+
+export default {
+  docs: './docs',
+
+  experimental: {
+    iconSets: './icons'
+  }
+} satisfies AstryxIntegration;

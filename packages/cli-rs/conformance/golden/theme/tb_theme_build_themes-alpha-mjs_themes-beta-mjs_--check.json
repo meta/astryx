@@ -1,0 +1,15 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_themes-beta-mjs_--check",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "themes/beta.mjs",
+  "--check"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from themes/alpha.mjs...\n\nBuilding theme from themes/beta.mjs...\n\n[fail] Checked 2 themes.\n",
+ "stderr": "\n[fail] 3 theme output(s) are out of date with themes/alpha.mjs:\n  missing: themes/alpha.css\n  missing: themes/alpha.js\n  missing: themes/alpha.d.ts\n\n  Rebuild with: astryx theme build themes/alpha.mjs\n\n[fail] 3 theme output(s) are out of date with themes/beta.mjs:\n  missing: themes/beta.css\n  missing: themes/beta.js\n  missing: themes/beta.d.ts\n\n  Rebuild with: astryx theme build themes/beta.mjs\n",
+ "exit": 1,
+ "files": []
+}

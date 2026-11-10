@@ -1,0 +1,2292 @@
+[
+ {
+  "id": "gap-report_--help",
+  "args": [
+   "gap-report",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_-h",
+  "args": [
+   "gap-report",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_gap-report",
+  "args": [
+   "help",
+   "gap-report"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--bogus-flag",
+  "args": [
+   "gap-report",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--bogus-flag_--json",
+  "args": [
+   "gap-report",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_extra1_extra2_extra3",
+  "args": [
+   "gap-report",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_extra1_extra2_extra3_--json",
+  "args": [
+   "gap-report",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@empty",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@empty",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@nocore",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@nocore",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@brokencore",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@brokencore",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@plain",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@plain",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@large",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@large",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "gap-report_@integration",
+  "args": [
+   "gap-report"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--json_@integration",
+  "args": [
+   "gap-report",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_--list-categories",
+  "args": [
+   "gap-report",
+   "--list-categories"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_--list-categories_@empty",
+  "args": [
+   "gap-report",
+   "--list-categories"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_--list-categories_@integration",
+  "args": [
+   "gap-report",
+   "--list-categories"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_--list-categories_@large",
+  "args": [
+   "gap-report",
+   "--list-categories"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_--list-categories_--json",
+  "args": [
+   "gap-report",
+   "--list-categories",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_@empty",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_@integration",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_@large",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/widgets"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_@empty",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/widgets"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_@integration",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/widgets"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_@large",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/widgets"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--to_-acme-widgets_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/widgets",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_Layout",
+  "args": [
+   "gap-report",
+   "--category",
+   "Layout"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_Layout_--json",
+  "args": [
+   "gap-report",
+   "--category",
+   "Layout",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category-Layout",
+  "args": [
+   "gap-report",
+   "--category=Layout"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_Inputs",
+  "args": [
+   "gap-report",
+   "--category",
+   "Inputs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_Inputs_--json",
+  "args": [
+   "gap-report",
+   "--category",
+   "Inputs",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category-Inputs",
+  "args": [
+   "gap-report",
+   "--category=Inputs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_nope",
+  "args": [
+   "gap-report",
+   "--category",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_nope_--json",
+  "args": [
+   "gap-report",
+   "--category",
+   "nope",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category-nope",
+  "args": [
+   "gap-report",
+   "--category=nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category",
+  "args": [
+   "gap-report",
+   "--category"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_--json",
+  "args": [
+   "gap-report",
+   "--category",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_Layout",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "Layout"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--category_Layout_--help",
+  "args": [
+   "gap-report",
+   "--category",
+   "Layout",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason-Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "--reason=Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason",
+  "args": [
+   "gap-report",
+   "--reason"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason_--json",
+  "args": [
+   "gap-report",
+   "--reason",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--reason_Need-a-compact-size_--help",
+  "args": [
+   "gap-report",
+   "--reason",
+   "Need a compact size",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context_hello-world",
+  "args": [
+   "gap-report",
+   "--additional-context",
+   "hello world"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context_hello-world_--json",
+  "args": [
+   "gap-report",
+   "--additional-context",
+   "hello world",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context-hello-world",
+  "args": [
+   "gap-report",
+   "--additional-context=hello world"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context",
+  "args": [
+   "gap-report",
+   "--additional-context"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context_--json",
+  "args": [
+   "gap-report",
+   "--additional-context",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--additional-context_hello-world",
+  "args": [
+   "gap-report",
+   "Button",
+   "--additional-context",
+   "hello world"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--additional-context_hello-world_--help",
+  "args": [
+   "gap-report",
+   "--additional-context",
+   "hello world",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_-astryxdesign-core_--json",
+  "args": [
+   "gap-report",
+   "--package",
+   "@astryxdesign/core",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "--package=@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_-acme-kit",
+  "args": [
+   "gap-report",
+   "--package",
+   "@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_-acme-kit_--json",
+  "args": [
+   "gap-report",
+   "--package",
+   "@acme/kit",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package-acme-kit",
+  "args": [
+   "gap-report",
+   "--package=@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_nope-pkg",
+  "args": [
+   "gap-report",
+   "--package",
+   "nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_nope-pkg_--json",
+  "args": [
+   "gap-report",
+   "--package",
+   "nope-pkg",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package-nope-pkg",
+  "args": [
+   "gap-report",
+   "--package=nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package",
+  "args": [
+   "gap-report",
+   "--package"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_--json",
+  "args": [
+   "gap-report",
+   "--package",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--package_-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "Button",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--package_-astryxdesign-core_--help",
+  "args": [
+   "gap-report",
+   "--package",
+   "@astryxdesign/core",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--confirm-public",
+  "args": [
+   "gap-report",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--confirm-public_--json",
+  "args": [
+   "gap-report",
+   "--confirm-public",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--confirm-public_--help",
+  "args": [
+   "gap-report",
+   "--confirm-public",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "--to",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_-astryxdesign-core_--json",
+  "args": [
+   "gap-report",
+   "--to",
+   "@astryxdesign/core",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "--to=@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_-acme-kit",
+  "args": [
+   "gap-report",
+   "--to",
+   "@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_-acme-kit_--json",
+  "args": [
+   "gap-report",
+   "--to",
+   "@acme/kit",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to-acme-kit",
+  "args": [
+   "gap-report",
+   "--to=@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_nope-pkg",
+  "args": [
+   "gap-report",
+   "--to",
+   "nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_nope-pkg_--json",
+  "args": [
+   "gap-report",
+   "--to",
+   "nope-pkg",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to-nope-pkg",
+  "args": [
+   "gap-report",
+   "--to=nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to",
+  "args": [
+   "gap-report",
+   "--to"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_--json",
+  "args": [
+   "gap-report",
+   "--to",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--to_-astryxdesign-core",
+  "args": [
+   "gap-report",
+   "Button",
+   "--to",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--to_-astryxdesign-core_--help",
+  "args": [
+   "gap-report",
+   "--to",
+   "@astryxdesign/core",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--list-categories",
+  "args": [
+   "gap-report",
+   "Button",
+   "--list-categories"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_--list-categories_--help",
+  "args": [
+   "gap-report",
+   "--list-categories",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_nosuchsub",
+  "args": [
+   "gap-report",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_component_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_component",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_component_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_component",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_component_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_component",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_variant_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_layout_gap_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "layout_gap",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_layout_gap_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "layout_gap",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_layout_gap_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "layout_gap",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_styling_gap_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "styling_gap",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_styling_gap_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "styling_gap",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_styling_gap_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "styling_gap",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_a11y_gap_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "a11y_gap",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_a11y_gap_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "a11y_gap",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_a11y_gap_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "a11y_gap",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_api_friction_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "api_friction",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_api_friction_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "api_friction",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_api_friction_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "api_friction",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_docs_gap_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "docs_gap",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_docs_gap_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "docs_gap",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_docs_gap_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "docs_gap",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_other_--reason_Need-a-compact-size",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_other_--reason_Need-a-compact-size_--json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_other_--reason_Need-a-compact-size_--confirm-public",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AppShell_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "AppShell",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AspectRatio_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "AspectRatio",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Avatar_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Avatar",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AvatarGroup_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "AvatarGroup",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AvatarGroupOverflow_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "AvatarGroupOverflow",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AvatarStatusDot_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "AvatarStatusDot",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Badge_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Badge",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Banner_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Banner",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Blockquote_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Blockquote",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_BottomSheet_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "BottomSheet",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_BottomSheetSwitcher_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "BottomSheetSwitcher",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_BreadcrumbItem_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "BreadcrumbItem",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Breadcrumbs_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Breadcrumbs",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ButtonGroup_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ButtonGroup",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_IconButton_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "IconButton",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ToggleButton_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ToggleButton",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ToggleButtonGroup_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ToggleButtonGroup",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Calendar_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Calendar",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Card_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Card",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ClickableCard_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ClickableCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_SelectableCard_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "SelectableCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Carousel_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "Carousel",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatComposer_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatComposer",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatComposerDrawer_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatComposerDrawer",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatComposerInput_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatComposerInput",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatDictationButton_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatDictationButton",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatLayout_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatLayout",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatLayoutScrollButton_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatLayoutScrollButton",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_ChatMessage_--category_missing_variant_--reason_x",
+  "args": [
+   "gap-report",
+   "ChatMessage",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AcmeCard_--category_missing_variant_--reason_x_@integration",
+  "args": [
+   "gap-report",
+   "AcmeCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "gap-report_AcmeCard_--category_missing_variant_--reason_x_--to_-acme-kit_@integration",
+  "args": [
+   "gap-report",
+   "AcmeCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x",
+   "--to",
+   "@acme/kit"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_variant_--reason_x_--additional-context_more-words_@integration",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "x",
+   "--additional-context",
+   "more words"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--category_missing_variant_@integration",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "gap-report_Button_--reason_x",
+  "args": [
+   "gap-report",
+   "Button",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "w_handlers_Button",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Button_confirm",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Button_json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Throw",
+  "args": [
+   "gap-report",
+   "Throw",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Throw_confirm",
+  "args": [
+   "gap-report",
+   "Throw",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Throw_json",
+  "args": [
+   "gap-report",
+   "Throw",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Exit",
+  "args": [
+   "gap-report",
+   "Exit",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Code",
+  "args": [
+   "gap-report",
+   "Code",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Bad",
+  "args": [
+   "gap-report",
+   "Bad",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Skip",
+  "args": [
+   "gap-report",
+   "Skip",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Route",
+  "args": [
+   "gap-report",
+   "Route",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Never",
+  "args": [
+   "gap-report",
+   "Never",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport",
+  "timeoutMs": 60000
+ },
+ {
+  "id": "w_handlers_HookCard",
+  "args": [
+   "gap-report",
+   "HookCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_HookCard_confirm",
+  "args": [
+   "gap-report",
+   "HookCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_HookCard_json",
+  "args": [
+   "gap-report",
+   "HookCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_PublicThrow",
+  "args": [
+   "gap-report",
+   "PublicThrow",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_PublicThrow_confirm",
+  "args": [
+   "gap-report",
+   "PublicThrow",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--confirm-public"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_PublicThrow_json",
+  "args": [
+   "gap-report",
+   "PublicThrow",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_Log_detail",
+  "args": [
+   "gap-report",
+   "Log",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--additional-context",
+   "  some detail  "
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_hooks",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/hooks"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_hooks_json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/hooks",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_broken",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/broken"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_broken_confirm",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/broken",
+   "--confirm-public"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_unknown",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   "@acme/nope"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_to_empty",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--to",
+   ""
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_list",
+  "args": [
+   "gap-report",
+   "--list-categories"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_list_json",
+  "args": [
+   "gap-report",
+   "--list-categories",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_package_hooks",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--package",
+   "@acme/hooks"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_package_broken",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--package",
+   "@acme/broken"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_package_unknown",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size",
+   "--package",
+   "@acme/zzz",
+   "--json"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_xds_prefix",
+  "args": [
+   "gap-report",
+   "XDSHookCard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_handlers_lowercase",
+  "args": [
+   "gap-report",
+   "hookcard",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "gapreport"
+ },
+ {
+  "id": "w_long_component",
+  "args": [
+   "gap-report",
+   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+   "--category",
+   "missing_variant",
+   "--reason",
+   "Need a compact size"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_long_reason",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_long_detail",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "x",
+   "--additional-context",
+   "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_blank_reason",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "   "
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_blank_component",
+  "args": [
+   "gap-report",
+   "  ",
+   "--category",
+   "other",
+   "--reason",
+   "x"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_list_with_flags",
+  "args": [
+   "gap-report",
+   "--list-categories",
+   "--category",
+   "x",
+   "--reason",
+   "y",
+   "--additional-context",
+   "z",
+   "--package",
+   "p",
+   "--confirm-public",
+   "--to",
+   "t"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_list_with_flags_json",
+  "args": [
+   "gap-report",
+   "--list-categories",
+   "--to",
+   "",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_confirm_github",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "x",
+   "--confirm-public"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_confirm_github_json",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "x",
+   "--confirm-public",
+   "--json"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_emoji",
+  "args": [
+   "gap-report",
+   "Bütton🙂",
+   "--category",
+   "a11y_gap",
+   "--reason",
+   "ünïcode 🙂 reason"
+  ],
+  "fixture": "app"
+ },
+ {
+  "id": "w_lab_large",
+  "args": [
+   "gap-report",
+   "Button",
+   "--category",
+   "other",
+   "--reason",
+   "x",
+   "--to",
+   "@astryxdesign/lab",
+   "--confirm-public"
+  ],
+  "fixture": "large"
+ }
+]

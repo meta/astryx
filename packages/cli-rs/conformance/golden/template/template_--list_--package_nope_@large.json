@@ -1,0 +1,14 @@
+{
+ "id": "template_--list_--package_nope_@large",
+ "args": [
+  "template",
+  "--list",
+  "--package",
+  "nope"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No templates found in package \"nope\".\n\n  @astryxdesign/charts  (has templates)\n  @astryxdesign/core  (has templates)\n  @astryxdesign/lab  (has templates)\n",
+ "exit": 1,
+ "files": []
+}

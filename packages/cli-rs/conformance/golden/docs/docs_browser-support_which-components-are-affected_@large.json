@@ -1,0 +1,19 @@
+{
+ "id": "docs_browser-support_which-components-are-affected_@large",
+ "args": [
+  "docs",
+  "browser-support",
+  "which-components-are-affected"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Which Components Are Affected\n\nAny component that opens a menu, popover, tooltip, or dropdown carries the browser requirement: it renders that surface in an overlay positioned against its trigger. That includes:\n\n- Tooltip, HoverCard, and Popover, and any prop that shows one (such as the Button `tooltip`)\n- DropdownMenu, MoreMenu, and ContextMenu\n- Selector, MultiSelector, ComplexSelector, Typeahead, and PowerSearch (dropdown surfaces)\n- DateInput, DateRangeInput, and DateTimeInput (calendar popovers)\n- Tokenizer (suggestion menu)\n- The overflow and flyout menus in Breadcrumbs, TabList, TopNav, and SideNav\n- Carousel (anchored controls)\n\nIf your product opens no menus, popovers, tooltips, or dropdowns, it has no anchor-positioning requirement; it needs only `light-dark()` (Tier 2 and up) for correct theme colors. Page layout, typography, forms, buttons, cards, and tables work down to Tier 2 with no special handling.\n\nUp: npx @astryxdesign/cli@0.7.12 docs browser-support --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs browser-support which-features-set-the-floor\nNext: npx @astryxdesign/cli@0.7.12 docs browser-support what-astryx-guarantees\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

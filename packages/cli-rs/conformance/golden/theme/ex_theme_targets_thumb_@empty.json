@@ -1,0 +1,13 @@
+{
+ "id": "ex_theme_targets_thumb_@empty",
+ "args": [
+  "theme",
+  "targets",
+  "thumb"
+ ],
+ "fixture": "empty",
+ "stdout": "Theming targets\n3 across 3 components\n(key - component - props - states - className)\n\nslider-thumb  Slider - orientation - disabled - astryx-slider-thumb\nswitch-thumb  Switch - size - checked - astryx-switch-thumb\nthumbnail     Thumbnail - astryx-thumbnail\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "docs_--depth-abc",
+ "args": [
+  "docs",
+  "--depth=abc"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --depth takes a number of levels (0, 1, 2, ...) or all, not \"abc\".\n",
+ "exit": 1,
+ "files": []
+}

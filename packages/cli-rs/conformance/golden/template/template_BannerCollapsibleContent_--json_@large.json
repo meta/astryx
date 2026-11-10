@@ -1,0 +1,13 @@
+{
+ "id": "template_BannerCollapsibleContent_--json_@large",
+ "args": [
+  "template",
+  "BannerCollapsibleContent",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BannerCollapsibleContent\",\n    \"description\": \"Combine an action button, dismiss control, and a collapsible detail area in one banner. Children sit behind the toggle by default; `collapsible={{defaultIsOpen: true}}` starts it open, and `collapsible={false}` drops the toggle entirely. Use for complex notifications like config changes or deployment summaries.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Banner\",\n      \"List\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Banner} from '@astryxdesign/core/Banner';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {List, ListItem} from '@astryxdesign/core/List';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function BannerCollapsibleContent() {\\n  return (\\n    <Banner\\n      status=\\\"warning\\\"\\n      title=\\\"Configuration changes detected\\\"\\n      description=\\\"Review the changes before they take effect.\\\"\\n      endContent={<Button label=\\\"Review\\\" variant=\\\"secondary\\\" size=\\\"sm\\\" />}\\n      isDismissable\\n      collapsible={{defaultIsOpen: true}}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Changed settings:\\n        </Text>\\n        <List density=\\\"compact\\\">\\n          <ListItem label=\\\"Authentication method updated\\\" />\\n          <ListItem label=\\\"Rate limits modified\\\" />\\n        </List>\\n      </Stack>\\n    </Banner>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

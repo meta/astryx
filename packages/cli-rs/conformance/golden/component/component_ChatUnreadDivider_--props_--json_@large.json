@@ -1,0 +1,14 @@
+{
+ "id": "component_ChatUnreadDivider_--props_--json_@large",
+ "args": [
+  "component",
+  "ChatUnreadDivider",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Divider label shown at the end of the rule and used in the accessible name (\\\"New messages below\\\").\",\n      \"default\": \"'New'\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

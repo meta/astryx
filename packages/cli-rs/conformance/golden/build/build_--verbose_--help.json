@@ -1,0 +1,13 @@
+{
+ "id": "build_--verbose_--help",
+ "args": [
+  "build",
+  "--verbose",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx build [options] [query]\n\nBuild a page: the template to start from, or the workflow playbook (no query)\n\nOptions:\n  --type <domain>  Filter the kit to one domain (component|hook|doc|template|theme); doc and theme give an empty kit\n  --limit <n>      Max candidates to draw from (default 60)\n  --verbose        Verbose output (every block and component, full descriptions, import paths and match reason)\n  -h, --help       display help for command\n\nExit codes:\n  0  success (including zero matches)\n  1  invalid --type, a --limit that is not a positive integer, or a query when @astryxdesign/core cannot be found (the playbook needs no core)\n\nExamples:\n  # Get the playbook\n  npx @astryxdesign/cli@0.7.12 build\n  # Find the template to start from\n  npx @astryxdesign/cli@0.7.12 build \"analytics dashboard\" --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/build\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

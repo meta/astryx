@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+// Records goldens from the JS CLI: golden/<command>/<id>.json.
+//
+// Each case runs twice. A case whose two runs differ runs three more times;
+// the most complete output is kept, written with "nondeterministic": true and
+// listed in golden/NONDETERMINISTIC.json.
+//
+// Usage: node record.mjs [--command a,b] [--case id] [--jobs n] [--missing] [--once] [--prune]
+//
+// --prune drops goldens whose case is gone (always on for an unfiltered run).
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {comparable, ensureDirs, GOLDEN_DIR, goldenPath, jsBin, loadCases, pool, runCase, sameResult} from './lib.mjs';
+import {setup} from './setup.mjs';
+
+const argv = process.argv.slice(2);
+const opt = name => {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+const jobs = Number(opt('jobs') ?? Math.max(8, Math.floor(os.cpus().length / 2)));
+const missingOnly = argv.includes('--missing');
+const once = argv.includes('--once');
+
+await setup();
+ensureDirs();
+const all = loadCases({command: opt('command'), caseId: opt('case')});
+const items = [];
+for (const [command, cases] of Object.entries(all)) {
+  for (const c of cases) {
+    if (missingOnly && fs.existsSync(goldenPath(command, c.id))) continue;
+    items.push({command, c});
+  }
+}
+// A generous timeout: the box is shared, and a timeout is never a golden.
+const bin = {...jsBin(), timeoutMs: 120000};
+async function runOk(c) {
+  let r;
+  for (let i = 0; i < 3; i++) {
+    r = await runCase(c, bin);
+    if (r.exit !== 'timeout') return r;
+  }
+  return r;
+}
+let done = 0;
+const started = Date.now();
+const flaky = [];
+await pool(
+  items,
+  jobs,
+  async ({command, c}) => {
+    let a = await runOk(c);
+    let nondeterministic = false;
+    if (!once) {
+      const b = await runOk(c);
+      if (!sameResult(a, b)) {
+        nondeterministic = true;
+        flaky.push(`${command}/${c.id}`);
+        // The JS CLI sometimes cuts its output short when it exits with a
+        // write still pending. Keep the most complete of five runs.
+        const runs = [a, b];
+        for (let i = 0; i < 3; i++) runs.push(await runOk(c));
+        const size = r => r.stdout.length + r.stderr.length;
+        const done = runs.filter(r => r.exit !== 'timeout');
+        a = (done.length ? done : runs).reduce((x, y) => (size(y) > size(x) ? y : x));
+        if (done.length === runs.length && done.every(r => sameResult(r, done[0]))) {
+          // Only timeouts differed: the case is deterministic.
+          nondeterministic = false;
+          flaky.pop();
+        }
+      }
+    }
+    const golden = {id: c.id, args: c.args, fixture: c.fixture ?? 'app', ...comparable(a)};
+    if (nondeterministic) golden.nondeterministic = true;
+    const file = goldenPath(command, c.id);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, `${JSON.stringify(golden, null, 1)}\n`);
+  },
+  () => {
+    done++;
+    if (done % 200 === 0 || done === items.length) process.stderr.write(`recorded ${done}/${items.length} (${((Date.now() - started) / 1000).toFixed(0)}s)\n`);
+  },
+);
+
+// Drop goldens whose case no longer exists (only on a full, unfiltered record).
+if ((!opt('command') && !opt('case')) || argv.includes('--prune')) {
+  for (const command of fs.readdirSync(GOLDEN_DIR)) {
+    const dir = path.join(GOLDEN_DIR, command);
+    if (!fs.statSync(dir).isDirectory()) continue;
+    if (opt('command') && !opt('command').split(',').includes(command)) continue;
+    const ids = new Set((loadCases({command})[command] ?? []).map(c => `${c.id}.json`));
+    for (const f of fs.readdirSync(dir)) if (!ids.has(f)) fs.rmSync(path.join(dir, f));
+  }
+}
+const listFile = path.join(GOLDEN_DIR, 'NONDETERMINISTIC.json');
+let list = [];
+if (fs.existsSync(listFile)) list = JSON.parse(fs.readFileSync(listFile, 'utf8'));
+const recorded = new Set(items.map(({command, c}) => `${command}/${c.id}`));
+if (!once) list = list.filter(k => !recorded.has(k));
+list = [...new Set([...list, ...flaky])].sort();
+fs.writeFileSync(listFile, `${JSON.stringify(list, null, 1)}\n`);
+console.log(`recorded ${items.length} cases in ${((Date.now() - started) / 1000).toFixed(0)}s; nondeterministic: ${flaky.length}`);
+for (const k of flaky) console.log(`  nondeterministic ${k}`);

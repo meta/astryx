@@ -1,0 +1,14 @@
+{
+ "id": "gap-report_extra1_extra2_extra3",
+ "args": [
+  "gap-report",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: category is required.\n",
+ "exit": 1,
+ "files": []
+}

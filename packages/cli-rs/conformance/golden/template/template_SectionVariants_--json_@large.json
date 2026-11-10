@@ -1,0 +1,13 @@
+{
+ "id": "template_SectionVariants_--json_@large",
+ "args": [
+  "template",
+  "SectionVariants",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SectionVariants\",\n    \"description\": \"All three background variants stacked: section (default surface), muted, and transparent. A quick visual reference for choosing the right variant.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Section\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Section} from '@astryxdesign/core/Section';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function SectionVariants() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={6}>\\n      <Section variant=\\\"section\\\" padding={5}>\\n        <Stack direction=\\\"vertical\\\" gap={1}>\\n          <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n            Section\\n          </Text>\\n          <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n            White background.\\n          </Text>\\n        </Stack>\\n      </Section>\\n      <Section variant=\\\"muted\\\" padding={5}>\\n        <Stack direction=\\\"vertical\\\" gap={1}>\\n          <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n            Wash\\n          </Text>\\n          <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n            Gray background.\\n          </Text>\\n        </Stack>\\n      </Section>\\n      <Stack direction=\\\"vertical\\\">\\n        <Section variant=\\\"transparent\\\" padding={5}>\\n          <Stack direction=\\\"vertical\\\" gap={1}>\\n            <Text type=\\\"body\\\" weight=\\\"bold\\\">\\n              Transparent\\n            </Text>\\n            <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n              No background, shows the color behind it.\\n            </Text>\\n          </Stack>\\n        </Section>\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

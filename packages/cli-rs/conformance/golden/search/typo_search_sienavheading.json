@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_sienavheading",
+ "args": [
+  "search",
+  "sienavheading"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"sienavheading\" (5)\n\nname:        SideNavHeading\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/SideNav\ndescription: Product/suite/account heading with smart interaction boundary logic for links and a menu popover.\ncommand:     npx @astryxdesign/cli@0.7.12 component SideNavHeading\n\nname:        SideNavHeadingBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SideNavHeading - Basic\nkind:        block\ndescription: A SideNav header with an app icon and a linked title. Pass it to the SideNav header prop to identify the product or workspace at the top of the navigation rail.\ncommand:     npx @astryxdesign/cli@0.7.12 template SideNavHeadingBasic --type block\n\nname:        SideNavHeadingShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: SideNavHeading\nkind:        block\ndescription: Demonstrates SideNavHeading with an app name, logo icon, superheading, and subheading.\ncommand:     npx @astryxdesign/cli@0.7.12 template SideNavHeadingShowcase --type block\n\nname:        NavHeadingMenuShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: NavHeadingMenu\nkind:        block\ndescription: NavHeadingMenu passed as the menu prop of SideNavHeading, letting the heading act as a product switcher popover trigger.\ncommand:     npx @astryxdesign/cli@0.7.12 template NavHeadingMenuShowcase --type block\n\nname:        TopNavHeading\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TopNav\ndescription: Product/suite/account heading for the TopNav heading slot. Supports smart interaction boundary logic: logo, heading text, superheading/subheading with independent links, and an optional menu popover with automatic chevron indicator.\ncommand:     npx @astryxdesign/cli@0.7.12 component TopNavHeading\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover sienavheading\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

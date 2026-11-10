@@ -1,0 +1,13 @@
+{
+ "id": "w_component_KitPanelHeader_--json_@compkit",
+ "args": [
+  "component",
+  "KitPanelHeader",
+  "--json"
+ ],
+ "fixture": "compkit",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@comp/kit\",\n  \"data\": {\n    \"name\": \"KitPanelHeader\",\n    \"description\": \"The panel header row.\",\n    \"props\": [\n      {\n        \"name\": \"title\",\n        \"type\": \"string\",\n        \"required\": true,\n        \"description\": \"Header text.\"\n      }\n    ],\n    \"components\": [\n      {\n        \"name\": \"KitPanelHeader\",\n        \"description\": \"The panel header row.\",\n        \"props\": [\n          {\n            \"name\": \"title\",\n            \"type\": \"string\",\n            \"required\": true,\n            \"description\": \"Header text.\"\n          }\n        ]\n      }\n    ],\n    \"parentDoc\": \"KitPanel\",\n    \"usage\": {\n      \"description\": \"A panel with an optional header.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Give every panel a header.\"\n        }\n      ]\n    },\n    \"package\": \"@comp/kit\",\n    \"import\": \"@comp/kit/KitPanel\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

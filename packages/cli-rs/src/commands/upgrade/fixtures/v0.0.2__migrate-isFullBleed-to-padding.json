@@ -1,0 +1,122 @@
+[
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isFullBleed>Content</XDSCard>",
+  "output": "<XDSCard padding={0}>Content</XDSCard>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isFullBleed={true}>Content</XDSCard>",
+  "output": "<XDSCard padding={0}>Content</XDSCard>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isFullBleed={false}>Content</XDSCard>",
+  "output": "<XDSCard>Content</XDSCard>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSection isFullBleed>Content</XDSSection>",
+  "output": "<XDSSection padding={0}>Content</XDSSection>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSLayout isFullBleed content={<div />} />",
+  "output": "<XDSLayout content={<div />} padding={0} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSLayoutContent isFullBleed><div /></XDSLayoutContent>",
+  "output": "<XDSLayoutContent padding={0}><div /></XDSLayoutContent>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSLayoutHeader isFullBleed>Header</XDSLayoutHeader>",
+  "output": "<XDSLayoutHeader padding={0}>Header</XDSLayoutHeader>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSLayoutFooter isFullBleed>Footer</XDSLayoutFooter>",
+  "output": "<XDSLayoutFooter padding={0}>Footer</XDSLayoutFooter>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSLayoutPanel isFullBleed><nav /></XDSLayoutPanel>",
+  "output": "<XDSLayoutPanel padding={0}><nav /></XDSLayoutPanel>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDivider isFullBleed />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<CustomComponent isFullBleed />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSCard isFullBleed>Card</XDSCard>\n        <XDSSection isFullBleed={true}>Section</XDSSection>\n        <XDSDivider isFullBleed />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSCard padding={0}>Card</XDSCard>\n        <XDSSection padding={0}>Section</XDSSection>\n        <XDSDivider isFullBleed />\n      </div>\n    ",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard padding={0}>Content</XDSCard>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isFullBleed width={400} height={300}>Content</XDSCard>",
+  "output": "<XDSCard width={400} height={300} padding={0}>Content</XDSCard>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-isFullBleed-to-padding",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCard isFullBleed padding={2}>Content</XDSCard>",
+  "output": "<XDSCard padding={2}>Content</XDSCard>",
+  "error": null
+ }
+]

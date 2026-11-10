@@ -1,0 +1,20 @@
+{
+ "id": "component_SideNavItem_--detail_compact_@large",
+ "args": [
+  "component",
+  "SideNavItem",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# SideNavItem\n\nNavigation item with icon, selected state, optional end content, and nesting support via children.\n\n## Import\n\n```tsx\nimport { SideNavItem } from '@astryxdesign/core/SideNav';\n```\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Item label. **(required)** |\n| `as` | `LinkComponentType` | - | Custom link component. |\n| `icon` | `IconType` | - | Icon displayed in the outline (unselected) variant. See `astryx docs icons` for valid semantic names. |\n| `selectedIcon` | `IconType` | - | Icon displayed when the item is selected (filled variant). See `astryx docs icons` for valid semantic names. |\n| `isSelected` | `boolean` | `false` | Marks this item as the current page. |\n| `isDisabled` | `boolean` | `false` | Disabled state. |\n| `href` | `string` | - | Navigation URL. |\n| `onClick` | `(e: MouseEvent) => void` | - | Click handler. |\n| `endContent` | `ReactNode` | - | Passive right-side content only (badges, counts). Interactive controls go in actions. |\n| `actions` | `ReactNode` | - | Row-level secondary controls (icon buttons, menus) rendered as siblings of the primary element at the trailing edge of the row: after the expand/collapse toggle, before any nested children in DOM and focus order. Each control owns its accessible name and behavior. Controls inherit the row control size through SizeContext, so an unsized icon button matches the built-in expand/collapse toggle; an explicit size still wins. Hidden while the SideNav rail is collapsed. Use endContent for passive content (badges, counts); use actions for anything interactive. |\n| `children` | `ReactNode` | - | Sub-items for nesting. Nested items span the full width of the nav list, like top-level items; their content is indented one step per nesting level. |\n| `collapsible` | `boolean \\| { defaultIsCollapsed?: boolean, isCollapsed?: boolean, onCollapsedChange?: (isCollapsed: boolean) => void }` | `false` | Enables collapse behavior for items with children. Pass true for uncontrolled (starts expanded), or an object for controlled mode. |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | Size variant for the nav item row. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

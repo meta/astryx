@@ -1,0 +1,19 @@
+{
+ "id": "component_CommandPaletteInput_--dense_@large",
+ "args": [
+  "component",
+  "CommandPaletteInput",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# CommandPaletteInput\n\nsearch input; auto-focus on mount; wires to context inside CommandPalette\n\n**Import:** `import {CommandPaletteInput} from '@astryxdesign/core/CommandPalette';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Input | Yes | The surrounding inline layout for the search glyph, query field, and trailing content. |\n| Search glyph | Yes | A decorative search icon before the query field. |\n| Query field | Yes | The native text field. It is a searchbox when standalone without popup attributes and a combobox when popup relationships are supplied or CommandPalette context is present. |\n| Loading spinner | No | A delayed pending indicator shown before trailing content while search is busy. |\n| Trailing content | No | Caller-provided supporting content such as a clear control or shortcut hint. |\n\n## Best Practices\n\n- **Do:** Pass a concise label that identifies what can be searched when \"Search commands\" does not describe it; the placeholder is never the field's name.\n- **Do:** Use endContent for short supporting controls or shortcut hints at the trailing edge.\n- **Don't:** Override combobox role or popup state. CommandPaletteInput owns those semantics when connected to CommandPalette.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `placeholder` | `string` | `'Search…'` | input placeholder text |\n| `label` | `string` | - | accessible label for the query field; default \"Search commands\", never the placeholder |\n| `hasAutoFocus` | `boolean` | `true` | auto-focus on mount; auto-disabled in inline mode |\n| `endContent` | `ReactNode` | - | trailing content after spinner |\n| `value` | `string` | - | search value; reads context when omitted inside palette |\n| `onValueChange` | `(value: string) => void` | - | called on change; writes context when omitted inside palette |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles; must be stylex.create() value |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-command-palette-input` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'command-palette-input': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

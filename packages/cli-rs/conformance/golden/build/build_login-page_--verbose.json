@@ -1,0 +1,19 @@
+{
+ "id": "build_login-page_--verbose",
+ "args": [
+  "build",
+  "login page",
+  "--verbose"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"login page\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        login\npackage:     @astryxdesign/core\ndisplayName: Basic Login\ndescription: Minimal centered credential form on a plain ground: two fields and a submit, nothing competing for attention. The least-chrome entry surface.\ncommand:     npx @astryxdesign/cli@0.7.12 template login --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        login-card\npackage:     @astryxdesign/core\ndisplayName: Login Card\ndescription: Credential form inside an elevated centered card, third-party provider buttons separated from the fields by a divider, secondary sign-up and legal links beneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-card --type page <path>\n\nname:        login-split\npackage:     @astryxdesign/core\ndisplayName: Login Split\ndescription: Credential form filling one half of a two-pane split, full-bleed media holding the other. Same fields as the card variant, but the layout carries brand imagery.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-split --type page <path>\n\nSEARCH MATCHES\nPage templates keyword search matched, best first.\n\nname:        login\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Basic Login\nscore:       100\nreason:      exact name\ndescription: Minimal centered credential form on a plain ground: two fields and a submit, nothing competing for attention. The least-chrome entry surface.\ncommand:     npx @astryxdesign/cli@0.7.12 template login --type page\n\nname:        login-card\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Login Card\nscore:       90\nreason:      keyword \"Login\"\ndescription: Credential form inside an elevated centered card, third-party provider buttons separated from the fields by a divider, secondary sign-up and legal links beneath.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-card --type page\n\nname:        login-split\npackage:     @astryxdesign/core\ndomain:      template\ndisplayName: Login Split\nscore:       90\nreason:      keyword \"Login\"\ndescription: Credential form filling one half of a two-pane split, full-bleed media holding the other. Same fields as the card variant, but the layout carries brand imagery.\ncommand:     npx @astryxdesign/cli@0.7.12 template login-split --type page\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

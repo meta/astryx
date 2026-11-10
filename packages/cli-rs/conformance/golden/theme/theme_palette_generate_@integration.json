@@ -1,0 +1,13 @@
+{
+ "id": "theme_palette_generate_@integration",
+ "args": [
+  "theme",
+  "palette",
+  "generate"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'config'\n",
+ "exit": 1,
+ "files": []
+}

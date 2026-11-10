@@ -1,0 +1,18 @@
+{
+ "id": "search_AvatarGroupOverflow",
+ "args": [
+  "search",
+  "AvatarGroupOverflow"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"AvatarGroupOverflow\" (5)\n\nname:        AvatarGroupOverflow\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/AvatarGroup\ndescription: AvatarGroupOverflow appears at the end of an AvatarGroup to summarize people who are not shown individually. Use it when a group is sliced to a small number of visible avatars but the hidden count still matters.\ncommand:     npx @astryxdesign/cli@0.7.12 component AvatarGroupOverflow\n\nname:        AvatarGroupOverflowCustomText\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AvatarGroupOverflow - Custom Text\nkind:        block\ndescription: Provide short custom children such as 12+ when the overflow count needs compact product-specific formatting.\ncommand:     npx @astryxdesign/cli@0.7.12 template AvatarGroupOverflowCustomText --type block\n\nname:        AvatarGroupOverflowDefault\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AvatarGroupOverflow - Default Count\nkind:        block\ndescription: Use AvatarGroupOverflow without children to render the standard +N overflow count.\ncommand:     npx @astryxdesign/cli@0.7.12 template AvatarGroupOverflowDefault --type block\n\nname:        AvatarGroupOverflowShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AvatarGroupOverflow\nkind:        block\ndescription: Overflow indicators for hidden avatars, including the default +N label and custom count text.\ncommand:     npx @astryxdesign/cli@0.7.12 template AvatarGroupOverflowShowcase --type block\n\nname:        AvatarGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/AvatarGroup\ndescription: AvatarGroup displays multiple avatars in an overlapping row with an optional overflow indicator. Uses a compositional API: pass Avatar children directly so each avatar can carry its own props (status dots, click handlers, etc.).\ncommand:     npx @astryxdesign/cli@0.7.12 component AvatarGroup\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover AvatarGroupOverflow\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "component_TableSelectionToolbar_--props_--json_@large",
+ "args": [
+  "component",
+  "TableSelectionToolbar",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"selection\",\n      \"type\": \"TableSelectionState\",\n      \"description\": \"Shared selection state returned by useTableSelectionState: selectedKeys, selectedCount, hasSelection, and clearSelection.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"startContent\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Product-owned action controls aligned to the logical start. Child controls inherit the toolbar size.\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible name for the action surface.\",\n      \"default\": \"Bulk actions\"\n    },\n    {\n      \"name\": \"renderSelectionLabel\",\n      \"type\": \"(selectedCount: number) => ReactNode\",\n      \"description\": \"Overrides the visible count text for localisation or domain-specific copy.\",\n      \"default\": \"count => `${count} selected`\"\n    },\n    {\n      \"name\": \"clearLabel\",\n      \"type\": \"string\",\n      \"description\": \"Visible label for the command that clears the complete controlled selection.\",\n      \"default\": \"Unselect All\"\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'sm' | 'md' | 'lg'\",\n      \"description\": \"Toolbar size. Cascades to product action controls and the clear action.\",\n      \"default\": \"sm\"\n    },\n    {\n      \"name\": \"variant\",\n      \"type\": \"SectionVariant\",\n      \"description\": \"Toolbar surface variant.\",\n      \"default\": \"muted\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"Caller-owned layout styles, including sticky positioning for floating compositions.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

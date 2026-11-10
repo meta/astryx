@@ -1,0 +1,20 @@
+{
+ "id": "ex_integration_add_doc_deploying_@author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "deploying"
+ ],
+ "fixture": "author",
+ "stdout": "doc contribution added\n\n[ok] deploying\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/deploying.doc.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/docs/deploying.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Deploying documentation.',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Deploying documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

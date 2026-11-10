@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_validate_nope_@integration",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "nope"
+ ],
+ "fixture": "integration",
+ "stdout": "Validating integration: nope\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"nope\" at /tmp/astryx-conformance/work/integration/node_modules/nope/package.json. Install it first.\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,4988 @@
+[
+ {
+  "id": "swizzle_--help",
+  "args": [
+   "swizzle",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_-h",
+  "args": [
+   "swizzle",
+   "-h"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "help_swizzle",
+  "args": [
+   "help",
+   "swizzle"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--bogus-flag",
+  "args": [
+   "swizzle",
+   "--bogus-flag"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--bogus-flag_--json",
+  "args": [
+   "swizzle",
+   "--bogus-flag",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_extra1_extra2_extra3",
+  "args": [
+   "swizzle",
+   "extra1",
+   "extra2",
+   "extra3"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_extra1_extra2_extra3_--json",
+  "args": [
+   "swizzle",
+   "extra1",
+   "extra2",
+   "extra3",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@empty",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@empty",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@nocore",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@nocore",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@brokencore",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@brokencore",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "brokencore",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@plain",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@plain",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@large",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@large",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "swizzle_@integration",
+  "args": [
+   "swizzle"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--json_@integration",
+  "args": [
+   "swizzle",
+   "--json"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_--list",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_--list_@empty",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_--list_@integration",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_--list_@large",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_--list_--json",
+  "args": [
+   "swizzle",
+   "--list",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_Button",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_Button_@empty",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_Button_@integration",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_Button_@large",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_Button_--json",
+  "args": [
+   "swizzle",
+   "Button",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_SideNav_--package_-astryxdesign-core",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_SideNav_--package_-astryxdesign-core_@empty",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "empty",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_SideNav_--package_-astryxdesign-core_@integration",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_SideNav_--package_-astryxdesign-core_@large",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "large",
+  "gen": true
+ },
+ {
+  "id": "ex_swizzle_SideNav_--package_-astryxdesign-core_--json",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--package",
+   "@astryxdesign/core",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output_out-dir",
+  "args": [
+   "swizzle",
+   "--output",
+   "out-dir"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output_out-dir_--json",
+  "args": [
+   "swizzle",
+   "--output",
+   "out-dir",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output-out-dir",
+  "args": [
+   "swizzle",
+   "--output=out-dir"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output",
+  "args": [
+   "swizzle",
+   "--output"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output_--json",
+  "args": [
+   "swizzle",
+   "--output",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--output_out-dir",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "out-dir"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--output_out-dir_--help",
+  "args": [
+   "swizzle",
+   "--output",
+   "out-dir",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_-astryxdesign-core",
+  "args": [
+   "swizzle",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_-astryxdesign-core_--json",
+  "args": [
+   "swizzle",
+   "--package",
+   "@astryxdesign/core",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package-astryxdesign-core",
+  "args": [
+   "swizzle",
+   "--package=@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_-acme-kit",
+  "args": [
+   "swizzle",
+   "--package",
+   "@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_-acme-kit_--json",
+  "args": [
+   "swizzle",
+   "--package",
+   "@acme/kit",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package-acme-kit",
+  "args": [
+   "swizzle",
+   "--package=@acme/kit"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_nope-pkg",
+  "args": [
+   "swizzle",
+   "--package",
+   "nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_nope-pkg_--json",
+  "args": [
+   "swizzle",
+   "--package",
+   "nope-pkg",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package-nope-pkg",
+  "args": [
+   "swizzle",
+   "--package=nope-pkg"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package",
+  "args": [
+   "swizzle",
+   "--package"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_--json",
+  "args": [
+   "swizzle",
+   "--package",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--package_-astryxdesign-core",
+  "args": [
+   "swizzle",
+   "Button",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--package_-astryxdesign-core_--help",
+  "args": [
+   "swizzle",
+   "--package",
+   "@astryxdesign/core",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--list",
+  "args": [
+   "swizzle",
+   "Button",
+   "--list"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--list_--help",
+  "args": [
+   "swizzle",
+   "--list",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--overwrite",
+  "args": [
+   "swizzle",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--overwrite_--json",
+  "args": [
+   "swizzle",
+   "--overwrite",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_-f",
+  "args": [
+   "swizzle",
+   "-f"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--overwrite",
+  "args": [
+   "swizzle",
+   "Button",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_--overwrite_--help",
+  "args": [
+   "swizzle",
+   "--overwrite",
+   "--help"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_nosuchsub",
+  "args": [
+   "swizzle",
+   "nosuchsub"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AlertDialog",
+  "args": [
+   "swizzle",
+   "AlertDialog"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AlertDialog_--json",
+  "args": [
+   "swizzle",
+   "AlertDialog",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AppShell",
+  "args": [
+   "swizzle",
+   "AppShell"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AppShell_--json",
+  "args": [
+   "swizzle",
+   "AppShell",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AspectRatio",
+  "args": [
+   "swizzle",
+   "AspectRatio"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AspectRatio_--json",
+  "args": [
+   "swizzle",
+   "AspectRatio",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Avatar",
+  "args": [
+   "swizzle",
+   "Avatar"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Avatar_--json",
+  "args": [
+   "swizzle",
+   "Avatar",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AvatarGroup",
+  "args": [
+   "swizzle",
+   "AvatarGroup"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AvatarGroup_--json",
+  "args": [
+   "swizzle",
+   "AvatarGroup",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Badge",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Badge_--json",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Banner",
+  "args": [
+   "swizzle",
+   "Banner"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Banner_--json",
+  "args": [
+   "swizzle",
+   "Banner",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Blockquote",
+  "args": [
+   "swizzle",
+   "Blockquote"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Blockquote_--json",
+  "args": [
+   "swizzle",
+   "Blockquote",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_BottomSheet",
+  "args": [
+   "swizzle",
+   "BottomSheet"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_BottomSheet_--json",
+  "args": [
+   "swizzle",
+   "BottomSheet",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Breadcrumbs",
+  "args": [
+   "swizzle",
+   "Breadcrumbs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Breadcrumbs_--json",
+  "args": [
+   "swizzle",
+   "Breadcrumbs",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ButtonGroup",
+  "args": [
+   "swizzle",
+   "ButtonGroup"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ButtonGroup_--json",
+  "args": [
+   "swizzle",
+   "ButtonGroup",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Calendar",
+  "args": [
+   "swizzle",
+   "Calendar"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Calendar_--json",
+  "args": [
+   "swizzle",
+   "Calendar",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Card",
+  "args": [
+   "swizzle",
+   "Card"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Card_--json",
+  "args": [
+   "swizzle",
+   "Card",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Carousel",
+  "args": [
+   "swizzle",
+   "Carousel"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Carousel_--json",
+  "args": [
+   "swizzle",
+   "Carousel",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Center",
+  "args": [
+   "swizzle",
+   "Center"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Center_--json",
+  "args": [
+   "swizzle",
+   "Center",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Chat",
+  "args": [
+   "swizzle",
+   "Chat"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Chat_--json",
+  "args": [
+   "swizzle",
+   "Chat",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CheckboxInput",
+  "args": [
+   "swizzle",
+   "CheckboxInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CheckboxInput_--json",
+  "args": [
+   "swizzle",
+   "CheckboxInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CheckboxList",
+  "args": [
+   "swizzle",
+   "CheckboxList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CheckboxList_--json",
+  "args": [
+   "swizzle",
+   "CheckboxList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Citation",
+  "args": [
+   "swizzle",
+   "Citation"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Citation_--json",
+  "args": [
+   "swizzle",
+   "Citation",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ClickableCard",
+  "args": [
+   "swizzle",
+   "ClickableCard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ClickableCard_--json",
+  "args": [
+   "swizzle",
+   "ClickableCard",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Code",
+  "args": [
+   "swizzle",
+   "Code"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Code_--json",
+  "args": [
+   "swizzle",
+   "Code",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CodeBlock",
+  "args": [
+   "swizzle",
+   "CodeBlock"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CodeBlock_--json",
+  "args": [
+   "swizzle",
+   "CodeBlock",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Collapsible",
+  "args": [
+   "swizzle",
+   "Collapsible"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Collapsible_--json",
+  "args": [
+   "swizzle",
+   "Collapsible",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CommandPalette",
+  "args": [
+   "swizzle",
+   "CommandPalette"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_CommandPalette_--json",
+  "args": [
+   "swizzle",
+   "CommandPalette",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ComplexSelector",
+  "args": [
+   "swizzle",
+   "ComplexSelector"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ComplexSelector_--json",
+  "args": [
+   "swizzle",
+   "ComplexSelector",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ContextMenu",
+  "args": [
+   "swizzle",
+   "ContextMenu"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ContextMenu_--json",
+  "args": [
+   "swizzle",
+   "ContextMenu",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateInput",
+  "args": [
+   "swizzle",
+   "DateInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateInput_--json",
+  "args": [
+   "swizzle",
+   "DateInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateRangeInput",
+  "args": [
+   "swizzle",
+   "DateRangeInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateRangeInput_--json",
+  "args": [
+   "swizzle",
+   "DateRangeInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateTimeInput",
+  "args": [
+   "swizzle",
+   "DateTimeInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DateTimeInput_--json",
+  "args": [
+   "swizzle",
+   "DateTimeInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Dialog",
+  "args": [
+   "swizzle",
+   "Dialog"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Dialog_--json",
+  "args": [
+   "swizzle",
+   "Dialog",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Divider",
+  "args": [
+   "swizzle",
+   "Divider"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Divider_--json",
+  "args": [
+   "swizzle",
+   "Divider",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Drawer",
+  "args": [
+   "swizzle",
+   "Drawer"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Drawer_--json",
+  "args": [
+   "swizzle",
+   "Drawer",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DropdownMenu",
+  "args": [
+   "swizzle",
+   "DropdownMenu"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_DropdownMenu_--json",
+  "args": [
+   "swizzle",
+   "DropdownMenu",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_EmptyState",
+  "args": [
+   "swizzle",
+   "EmptyState"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_EmptyState_--json",
+  "args": [
+   "swizzle",
+   "EmptyState",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Field",
+  "args": [
+   "swizzle",
+   "Field"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Field_--json",
+  "args": [
+   "swizzle",
+   "Field",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FieldStatus",
+  "args": [
+   "swizzle",
+   "FieldStatus"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FieldStatus_--json",
+  "args": [
+   "swizzle",
+   "FieldStatus",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FileInput",
+  "args": [
+   "swizzle",
+   "FileInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FileInput_--json",
+  "args": [
+   "swizzle",
+   "FileInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FormLayout",
+  "args": [
+   "swizzle",
+   "FormLayout"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_FormLayout_--json",
+  "args": [
+   "swizzle",
+   "FormLayout",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Grid",
+  "args": [
+   "swizzle",
+   "Grid"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Grid_--json",
+  "args": [
+   "swizzle",
+   "Grid",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_HStack",
+  "args": [
+   "swizzle",
+   "HStack"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_HStack_--json",
+  "args": [
+   "swizzle",
+   "HStack",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Heading",
+  "args": [
+   "swizzle",
+   "Heading"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Heading_--json",
+  "args": [
+   "swizzle",
+   "Heading",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_HoverCard",
+  "args": [
+   "swizzle",
+   "HoverCard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_HoverCard_--json",
+  "args": [
+   "swizzle",
+   "HoverCard",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Icon",
+  "args": [
+   "swizzle",
+   "Icon"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Icon_--json",
+  "args": [
+   "swizzle",
+   "Icon",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_IconButton",
+  "args": [
+   "swizzle",
+   "IconButton"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_IconButton_--json",
+  "args": [
+   "swizzle",
+   "IconButton",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Indicator",
+  "args": [
+   "swizzle",
+   "Indicator"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Indicator_--json",
+  "args": [
+   "swizzle",
+   "Indicator",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InfoTip",
+  "args": [
+   "swizzle",
+   "InfoTip"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InfoTip_--json",
+  "args": [
+   "swizzle",
+   "InfoTip",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InputGroup",
+  "args": [
+   "swizzle",
+   "InputGroup"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InputGroup_--json",
+  "args": [
+   "swizzle",
+   "InputGroup",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InteractiveRoleContext",
+  "args": [
+   "swizzle",
+   "InteractiveRoleContext"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_InteractiveRoleContext_--json",
+  "args": [
+   "swizzle",
+   "InteractiveRoleContext",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Item",
+  "args": [
+   "swizzle",
+   "Item"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Item_--json",
+  "args": [
+   "swizzle",
+   "Item",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Kbd",
+  "args": [
+   "swizzle",
+   "Kbd"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Kbd_--json",
+  "args": [
+   "swizzle",
+   "Kbd",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Layer",
+  "args": [
+   "swizzle",
+   "Layer"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Layer_--json",
+  "args": [
+   "swizzle",
+   "Layer",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Layout",
+  "args": [
+   "swizzle",
+   "Layout"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Layout_--json",
+  "args": [
+   "swizzle",
+   "Layout",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Lightbox",
+  "args": [
+   "swizzle",
+   "Lightbox"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Lightbox_--json",
+  "args": [
+   "swizzle",
+   "Lightbox",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Link",
+  "args": [
+   "swizzle",
+   "Link"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Link_--json",
+  "args": [
+   "swizzle",
+   "Link",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_List",
+  "args": [
+   "swizzle",
+   "List"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_List_--json",
+  "args": [
+   "swizzle",
+   "List",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Markdown",
+  "args": [
+   "swizzle",
+   "Markdown"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Markdown_--json",
+  "args": [
+   "swizzle",
+   "Markdown",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MetadataList",
+  "args": [
+   "swizzle",
+   "MetadataList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MetadataList_--json",
+  "args": [
+   "swizzle",
+   "MetadataList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MobileNav",
+  "args": [
+   "swizzle",
+   "MobileNav"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MobileNav_--json",
+  "args": [
+   "swizzle",
+   "MobileNav",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MoreMenu",
+  "args": [
+   "swizzle",
+   "MoreMenu"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MoreMenu_--json",
+  "args": [
+   "swizzle",
+   "MoreMenu",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MultiSelector",
+  "args": [
+   "swizzle",
+   "MultiSelector"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_MultiSelector_--json",
+  "args": [
+   "swizzle",
+   "MultiSelector",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavIcon",
+  "args": [
+   "swizzle",
+   "NavIcon"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavIcon_--json",
+  "args": [
+   "swizzle",
+   "NavIcon",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavItem",
+  "args": [
+   "swizzle",
+   "NavItem"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavItem_--json",
+  "args": [
+   "swizzle",
+   "NavItem",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavMenu",
+  "args": [
+   "swizzle",
+   "NavMenu"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NavMenu_--json",
+  "args": [
+   "swizzle",
+   "NavMenu",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NumberInput",
+  "args": [
+   "swizzle",
+   "NumberInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_NumberInput_--json",
+  "args": [
+   "swizzle",
+   "NumberInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Outline",
+  "args": [
+   "swizzle",
+   "Outline"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Outline_--json",
+  "args": [
+   "swizzle",
+   "Outline",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_OverflowList",
+  "args": [
+   "swizzle",
+   "OverflowList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_OverflowList_--json",
+  "args": [
+   "swizzle",
+   "OverflowList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Overlay",
+  "args": [
+   "swizzle",
+   "Overlay"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Overlay_--json",
+  "args": [
+   "swizzle",
+   "Overlay",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Pagination",
+  "args": [
+   "swizzle",
+   "Pagination"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Pagination_--json",
+  "args": [
+   "swizzle",
+   "Pagination",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Popover",
+  "args": [
+   "swizzle",
+   "Popover"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Popover_--json",
+  "args": [
+   "swizzle",
+   "Popover",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_PowerSearch",
+  "args": [
+   "swizzle",
+   "PowerSearch"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_PowerSearch_--json",
+  "args": [
+   "swizzle",
+   "PowerSearch",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ProgressBar",
+  "args": [
+   "swizzle",
+   "ProgressBar"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ProgressBar_--json",
+  "args": [
+   "swizzle",
+   "ProgressBar",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_RadioList",
+  "args": [
+   "swizzle",
+   "RadioList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_RadioList_--json",
+  "args": [
+   "swizzle",
+   "RadioList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Resizable",
+  "args": [
+   "swizzle",
+   "Resizable"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Resizable_--json",
+  "args": [
+   "swizzle",
+   "Resizable",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ScrollableArea",
+  "args": [
+   "swizzle",
+   "ScrollableArea"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ScrollableArea_--json",
+  "args": [
+   "swizzle",
+   "ScrollableArea",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Section",
+  "args": [
+   "swizzle",
+   "Section"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Section_--json",
+  "args": [
+   "swizzle",
+   "Section",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SegmentedControl",
+  "args": [
+   "swizzle",
+   "SegmentedControl"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SegmentedControl_--json",
+  "args": [
+   "swizzle",
+   "SegmentedControl",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SelectableCard",
+  "args": [
+   "swizzle",
+   "SelectableCard"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SelectableCard_--json",
+  "args": [
+   "swizzle",
+   "SelectableCard",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Selector",
+  "args": [
+   "swizzle",
+   "Selector"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Selector_--json",
+  "args": [
+   "swizzle",
+   "Selector",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SideNav",
+  "args": [
+   "swizzle",
+   "SideNav"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SideNav_--json",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SizeContext",
+  "args": [
+   "swizzle",
+   "SizeContext"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SizeContext_--json",
+  "args": [
+   "swizzle",
+   "SizeContext",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Skeleton",
+  "args": [
+   "swizzle",
+   "Skeleton"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Skeleton_--json",
+  "args": [
+   "swizzle",
+   "Skeleton",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Slider",
+  "args": [
+   "swizzle",
+   "Slider"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Slider_--json",
+  "args": [
+   "swizzle",
+   "Slider",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SnapPaging",
+  "args": [
+   "swizzle",
+   "SnapPaging"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_SnapPaging_--json",
+  "args": [
+   "swizzle",
+   "SnapPaging",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Spinner",
+  "args": [
+   "swizzle",
+   "Spinner"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Spinner_--json",
+  "args": [
+   "swizzle",
+   "Spinner",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Stack",
+  "args": [
+   "swizzle",
+   "Stack"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Stack_--json",
+  "args": [
+   "swizzle",
+   "Stack",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_StatusDot",
+  "args": [
+   "swizzle",
+   "StatusDot"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_StatusDot_--json",
+  "args": [
+   "swizzle",
+   "StatusDot",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Stepper",
+  "args": [
+   "swizzle",
+   "Stepper"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Stepper_--json",
+  "args": [
+   "swizzle",
+   "Stepper",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Switch",
+  "args": [
+   "swizzle",
+   "Switch"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Switch_--json",
+  "args": [
+   "swizzle",
+   "Switch",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TabList",
+  "args": [
+   "swizzle",
+   "TabList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TabList_--json",
+  "args": [
+   "swizzle",
+   "TabList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Table",
+  "args": [
+   "swizzle",
+   "Table"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Table_--json",
+  "args": [
+   "swizzle",
+   "Table",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Text",
+  "args": [
+   "swizzle",
+   "Text"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Text_--json",
+  "args": [
+   "swizzle",
+   "Text",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TextArea",
+  "args": [
+   "swizzle",
+   "TextArea"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TextArea_--json",
+  "args": [
+   "swizzle",
+   "TextArea",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TextInput",
+  "args": [
+   "swizzle",
+   "TextInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TextInput_--json",
+  "args": [
+   "swizzle",
+   "TextInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Thumbnail",
+  "args": [
+   "swizzle",
+   "Thumbnail"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Thumbnail_--json",
+  "args": [
+   "swizzle",
+   "Thumbnail",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TimeInput",
+  "args": [
+   "swizzle",
+   "TimeInput"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TimeInput_--json",
+  "args": [
+   "swizzle",
+   "TimeInput",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Timer",
+  "args": [
+   "swizzle",
+   "Timer"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Timer_--json",
+  "args": [
+   "swizzle",
+   "Timer",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Timestamp",
+  "args": [
+   "swizzle",
+   "Timestamp"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Timestamp_--json",
+  "args": [
+   "swizzle",
+   "Timestamp",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Toast",
+  "args": [
+   "swizzle",
+   "Toast"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Toast_--json",
+  "args": [
+   "swizzle",
+   "Toast",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ToggleButton",
+  "args": [
+   "swizzle",
+   "ToggleButton"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_ToggleButton_--json",
+  "args": [
+   "swizzle",
+   "ToggleButton",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Token",
+  "args": [
+   "swizzle",
+   "Token"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Token_--json",
+  "args": [
+   "swizzle",
+   "Token",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Tokenizer",
+  "args": [
+   "swizzle",
+   "Tokenizer"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Tokenizer_--json",
+  "args": [
+   "swizzle",
+   "Tokenizer",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Toolbar",
+  "args": [
+   "swizzle",
+   "Toolbar"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Toolbar_--json",
+  "args": [
+   "swizzle",
+   "Toolbar",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Tooltip",
+  "args": [
+   "swizzle",
+   "Tooltip"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Tooltip_--json",
+  "args": [
+   "swizzle",
+   "Tooltip",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TopNav",
+  "args": [
+   "swizzle",
+   "TopNav"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TopNav_--json",
+  "args": [
+   "swizzle",
+   "TopNav",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TreeList",
+  "args": [
+   "swizzle",
+   "TreeList"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_TreeList_--json",
+  "args": [
+   "swizzle",
+   "TreeList",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Typeahead",
+  "args": [
+   "swizzle",
+   "Typeahead"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Typeahead_--json",
+  "args": [
+   "swizzle",
+   "Typeahead",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_VStack",
+  "args": [
+   "swizzle",
+   "VStack"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_VStack_--json",
+  "args": [
+   "swizzle",
+   "VStack",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_VisuallyHidden",
+  "args": [
+   "swizzle",
+   "VisuallyHidden"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_VisuallyHidden_--json",
+  "args": [
+   "swizzle",
+   "VisuallyHidden",
+   "--json"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AlertDialog_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "AlertDialog",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-AlertDialog_swizzle_AlertDialog",
+  "args": [
+   "swizzle",
+   "AlertDialog"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AlertDialog"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-AlertDialog_swizzle_AlertDialog_--overwrite",
+  "args": [
+   "swizzle",
+   "AlertDialog",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AlertDialog"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_AppShell_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "AppShell",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-AppShell_swizzle_AppShell",
+  "args": [
+   "swizzle",
+   "AppShell"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AppShell"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-AppShell_swizzle_AppShell_--overwrite",
+  "args": [
+   "swizzle",
+   "AppShell",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AppShell"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_AspectRatio_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "AspectRatio",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-AspectRatio_swizzle_AspectRatio",
+  "args": [
+   "swizzle",
+   "AspectRatio"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AspectRatio"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-AspectRatio_swizzle_AspectRatio_--overwrite",
+  "args": [
+   "swizzle",
+   "AspectRatio",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AspectRatio"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Avatar_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Avatar",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Avatar_swizzle_Avatar",
+  "args": [
+   "swizzle",
+   "Avatar"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Avatar"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Avatar_swizzle_Avatar_--overwrite",
+  "args": [
+   "swizzle",
+   "Avatar",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Avatar"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_AvatarGroup_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "AvatarGroup",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-AvatarGroup_swizzle_AvatarGroup",
+  "args": [
+   "swizzle",
+   "AvatarGroup"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AvatarGroup"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-AvatarGroup_swizzle_AvatarGroup_--overwrite",
+  "args": [
+   "swizzle",
+   "AvatarGroup",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "AvatarGroup"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Badge_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Badge_swizzle_Badge",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Badge"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Badge_swizzle_Badge_--overwrite",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Badge"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Banner_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Banner",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Banner_swizzle_Banner",
+  "args": [
+   "swizzle",
+   "Banner"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Banner"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Banner_swizzle_Banner_--overwrite",
+  "args": [
+   "swizzle",
+   "Banner",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Banner"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Blockquote_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Blockquote",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Blockquote_swizzle_Blockquote",
+  "args": [
+   "swizzle",
+   "Blockquote"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Blockquote"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Blockquote_swizzle_Blockquote_--overwrite",
+  "args": [
+   "swizzle",
+   "Blockquote",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Blockquote"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_BottomSheet_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "BottomSheet",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-BottomSheet_swizzle_BottomSheet",
+  "args": [
+   "swizzle",
+   "BottomSheet"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "BottomSheet"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-BottomSheet_swizzle_BottomSheet_--overwrite",
+  "args": [
+   "swizzle",
+   "BottomSheet",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "BottomSheet"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Breadcrumbs_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Breadcrumbs",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Breadcrumbs_swizzle_Breadcrumbs",
+  "args": [
+   "swizzle",
+   "Breadcrumbs"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Breadcrumbs"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Breadcrumbs_swizzle_Breadcrumbs_--overwrite",
+  "args": [
+   "swizzle",
+   "Breadcrumbs",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Breadcrumbs"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Button_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Button_swizzle_Button",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Button_swizzle_Button_--overwrite",
+  "args": [
+   "swizzle",
+   "Button",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_ButtonGroup_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "ButtonGroup",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-ButtonGroup_swizzle_ButtonGroup",
+  "args": [
+   "swizzle",
+   "ButtonGroup"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "ButtonGroup"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-ButtonGroup_swizzle_ButtonGroup_--overwrite",
+  "args": [
+   "swizzle",
+   "ButtonGroup",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "ButtonGroup"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Calendar_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Calendar",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Calendar_swizzle_Calendar",
+  "args": [
+   "swizzle",
+   "Calendar"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Calendar"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Calendar_swizzle_Calendar_--overwrite",
+  "args": [
+   "swizzle",
+   "Calendar",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Calendar"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Card_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Card",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Card_swizzle_Card",
+  "args": [
+   "swizzle",
+   "Card"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Card"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Card_swizzle_Card_--overwrite",
+  "args": [
+   "swizzle",
+   "Card",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Card"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Carousel_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Carousel",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Carousel_swizzle_Carousel",
+  "args": [
+   "swizzle",
+   "Carousel"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Carousel"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Carousel_swizzle_Carousel_--overwrite",
+  "args": [
+   "swizzle",
+   "Carousel",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Carousel"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Center_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Center",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Center_swizzle_Center",
+  "args": [
+   "swizzle",
+   "Center"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Center"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Center_swizzle_Center_--overwrite",
+  "args": [
+   "swizzle",
+   "Center",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Center"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Chat_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Chat",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Chat_swizzle_Chat",
+  "args": [
+   "swizzle",
+   "Chat"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Chat"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Chat_swizzle_Chat_--overwrite",
+  "args": [
+   "swizzle",
+   "Chat",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Chat"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_CheckboxInput_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "CheckboxInput",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-CheckboxInput_swizzle_CheckboxInput",
+  "args": [
+   "swizzle",
+   "CheckboxInput"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "CheckboxInput"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-CheckboxInput_swizzle_CheckboxInput_--overwrite",
+  "args": [
+   "swizzle",
+   "CheckboxInput",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "CheckboxInput"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_CheckboxList_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "CheckboxList",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-CheckboxList_swizzle_CheckboxList",
+  "args": [
+   "swizzle",
+   "CheckboxList"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "CheckboxList"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-CheckboxList_swizzle_CheckboxList_--overwrite",
+  "args": [
+   "swizzle",
+   "CheckboxList",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "CheckboxList"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Citation_--output_src-ejected",
+  "args": [
+   "swizzle",
+   "Citation",
+   "--output",
+   "src/ejected"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "again_after-swizzle-Citation_swizzle_Citation",
+  "args": [
+   "swizzle",
+   "Citation"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Citation"
+   ]
+  ]
+ },
+ {
+  "id": "after-swizzle-Citation_swizzle_Citation_--overwrite",
+  "args": [
+   "swizzle",
+   "Citation",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "gen": true,
+  "pre": [
+   [
+    "swizzle",
+    "Citation"
+   ]
+  ]
+ },
+ {
+  "id": "swizzle_Button_@nocore",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "nocore",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_@plain",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "plain",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Buton",
+  "args": [
+   "swizzle",
+   "Buton"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_nope",
+  "args": [
+   "swizzle",
+   "nope"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_button",
+  "args": [
+   "swizzle",
+   "button"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_..-etc",
+  "args": [
+   "swizzle",
+   "../etc"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_-abs",
+  "args": [
+   "swizzle",
+   "/abs"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--output_..-outside",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "../outside"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_Button_--output_-tmp-astryx-conformance-work-app-abs-out",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "/tmp/astryx-conformance/work/app/abs-out"
+  ],
+  "fixture": "app",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AcmeCard_@integration",
+  "args": [
+   "swizzle",
+   "AcmeCard"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "swizzle_AcmeCard_--package_-acme-kit_@integration",
+  "args": [
+   "swizzle",
+   "AcmeCard",
+   "--package",
+   "@acme/kit"
+  ],
+  "fixture": "integration",
+  "gen": true
+ },
+ {
+  "id": "w_Dialog",
+  "args": [
+   "swizzle",
+   "Dialog"
+  ]
+ },
+ {
+  "id": "w_Table",
+  "args": [
+   "swizzle",
+   "Table"
+  ]
+ },
+ {
+  "id": "w_Tooltip",
+  "args": [
+   "swizzle",
+   "Tooltip"
+  ]
+ },
+ {
+  "id": "w_Icon",
+  "args": [
+   "swizzle",
+   "Icon"
+  ]
+ },
+ {
+  "id": "w_Card",
+  "args": [
+   "swizzle",
+   "Card"
+  ]
+ },
+ {
+  "id": "w_Menu",
+  "args": [
+   "swizzle",
+   "Menu"
+  ]
+ },
+ {
+  "id": "w_TextInput",
+  "args": [
+   "swizzle",
+   "TextInput"
+  ]
+ },
+ {
+  "id": "w_Tabs",
+  "args": [
+   "swizzle",
+   "Tabs"
+  ]
+ },
+ {
+  "id": "w_Avatar",
+  "args": [
+   "swizzle",
+   "Avatar"
+  ]
+ },
+ {
+  "id": "w_Popover",
+  "args": [
+   "swizzle",
+   "Popover"
+  ]
+ },
+ {
+  "id": "w_DatePicker",
+  "args": [
+   "swizzle",
+   "DatePicker"
+  ]
+ },
+ {
+  "id": "w_Toast",
+  "args": [
+   "swizzle",
+   "Toast"
+  ]
+ },
+ {
+  "id": "w_Dialog_json",
+  "args": [
+   "swizzle",
+   "Dialog",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_XDSButton",
+  "args": [
+   "swizzle",
+   "XDSButton"
+  ]
+ },
+ {
+  "id": "w_unknown",
+  "args": [
+   "swizzle",
+   "NoSuchThing"
+  ]
+ },
+ {
+  "id": "w_unknown_json",
+  "args": [
+   "swizzle",
+   "NoSuchThing",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_lowercase",
+  "args": [
+   "swizzle",
+   "button"
+  ]
+ },
+ {
+  "id": "w_traversal",
+  "args": [
+   "swizzle",
+   "../etc"
+  ]
+ },
+ {
+  "id": "w_traversal_json",
+  "args": [
+   "swizzle",
+   "../etc",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_slash",
+  "args": [
+   "swizzle",
+   "a/b"
+  ]
+ },
+ {
+  "id": "w_dot",
+  "args": [
+   "swizzle",
+   ".hidden"
+  ]
+ },
+ {
+  "id": "w_badchars",
+  "args": [
+   "swizzle",
+   "Bu tton"
+  ]
+ },
+ {
+  "id": "w_empty_arg",
+  "args": [
+   "swizzle",
+   ""
+  ]
+ },
+ {
+  "id": "w_empty_arg_list",
+  "args": [
+   "swizzle",
+   "",
+   "--list"
+  ]
+ },
+ {
+  "id": "w_output_escape",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "../out"
+  ]
+ },
+ {
+  "id": "w_output_abs",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "/tmp/out"
+  ]
+ },
+ {
+  "id": "w_output_dot",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "."
+  ]
+ },
+ {
+  "id": "w_output_src",
+  "args": [
+   "swizzle",
+   "Button",
+   "--output",
+   "src"
+  ]
+ },
+ {
+  "id": "w_output_nested",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--output",
+   "ui/kit/astryx"
+  ]
+ },
+ {
+  "id": "w_package_nope",
+  "args": [
+   "swizzle",
+   "Button",
+   "--package",
+   "nope-pkg"
+  ]
+ },
+ {
+  "id": "w_package_nope_json",
+  "args": [
+   "swizzle",
+   "Button",
+   "--package",
+   "nope-pkg",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_subfolder",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "cwd": "app/src"
+ },
+ {
+  "id": "w_plain_button",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "plain"
+ },
+ {
+  "id": "w_nocore_button_json",
+  "args": [
+   "swizzle",
+   "Button",
+   "--json"
+  ],
+  "fixture": "nocore"
+ },
+ {
+  "id": "w_brokencore_button",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "brokencore"
+ },
+ {
+  "id": "w_large_Chart",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "fixture": "large"
+ },
+ {
+  "id": "w_integration_AcmeCard",
+  "args": [
+   "swizzle",
+   "AcmeCard"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_integration_AcmeCard_json",
+  "args": [
+   "swizzle",
+   "AcmeCard",
+   "--json"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_integration_pkg_core_AcmeCard",
+  "args": [
+   "swizzle",
+   "AcmeCard",
+   "--package",
+   "@astryxdesign/core"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_integration_pkg_acme_Button",
+  "args": [
+   "swizzle",
+   "Button",
+   "--package",
+   "@acme/kit"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_integration_list_json",
+  "args": [
+   "swizzle",
+   "--list",
+   "--json"
+  ],
+  "fixture": "integration"
+ },
+ {
+  "id": "w_author_list",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "author"
+ },
+ {
+  "id": "w_all_AlertDialog",
+  "args": [
+   "swizzle",
+   "AlertDialog",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_AppShell",
+  "args": [
+   "swizzle",
+   "AppShell",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_AspectRatio",
+  "args": [
+   "swizzle",
+   "AspectRatio",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Avatar",
+  "args": [
+   "swizzle",
+   "Avatar",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_AvatarGroup",
+  "args": [
+   "swizzle",
+   "AvatarGroup",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Badge",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Banner",
+  "args": [
+   "swizzle",
+   "Banner",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Blockquote",
+  "args": [
+   "swizzle",
+   "Blockquote",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_BottomSheet",
+  "args": [
+   "swizzle",
+   "BottomSheet",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Breadcrumbs",
+  "args": [
+   "swizzle",
+   "Breadcrumbs",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Button",
+  "args": [
+   "swizzle",
+   "Button",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ButtonGroup",
+  "args": [
+   "swizzle",
+   "ButtonGroup",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Calendar",
+  "args": [
+   "swizzle",
+   "Calendar",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Card",
+  "args": [
+   "swizzle",
+   "Card",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Carousel",
+  "args": [
+   "swizzle",
+   "Carousel",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Center",
+  "args": [
+   "swizzle",
+   "Center",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Chat",
+  "args": [
+   "swizzle",
+   "Chat",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_CheckboxInput",
+  "args": [
+   "swizzle",
+   "CheckboxInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_CheckboxList",
+  "args": [
+   "swizzle",
+   "CheckboxList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Citation",
+  "args": [
+   "swizzle",
+   "Citation",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ClickableCard",
+  "args": [
+   "swizzle",
+   "ClickableCard",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Code",
+  "args": [
+   "swizzle",
+   "Code",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_CodeBlock",
+  "args": [
+   "swizzle",
+   "CodeBlock",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Collapsible",
+  "args": [
+   "swizzle",
+   "Collapsible",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_CommandPalette",
+  "args": [
+   "swizzle",
+   "CommandPalette",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ComplexSelector",
+  "args": [
+   "swizzle",
+   "ComplexSelector",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ContextMenu",
+  "args": [
+   "swizzle",
+   "ContextMenu",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_DateInput",
+  "args": [
+   "swizzle",
+   "DateInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_DateRangeInput",
+  "args": [
+   "swizzle",
+   "DateRangeInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_DateTimeInput",
+  "args": [
+   "swizzle",
+   "DateTimeInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Dialog",
+  "args": [
+   "swizzle",
+   "Dialog",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Divider",
+  "args": [
+   "swizzle",
+   "Divider",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Drawer",
+  "args": [
+   "swizzle",
+   "Drawer",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_DropdownMenu",
+  "args": [
+   "swizzle",
+   "DropdownMenu",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_EmptyState",
+  "args": [
+   "swizzle",
+   "EmptyState",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Field",
+  "args": [
+   "swizzle",
+   "Field",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_FieldStatus",
+  "args": [
+   "swizzle",
+   "FieldStatus",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_FileInput",
+  "args": [
+   "swizzle",
+   "FileInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_FormLayout",
+  "args": [
+   "swizzle",
+   "FormLayout",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Grid",
+  "args": [
+   "swizzle",
+   "Grid",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_HStack",
+  "args": [
+   "swizzle",
+   "HStack",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Heading",
+  "args": [
+   "swizzle",
+   "Heading",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_HoverCard",
+  "args": [
+   "swizzle",
+   "HoverCard",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Icon",
+  "args": [
+   "swizzle",
+   "Icon",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_IconButton",
+  "args": [
+   "swizzle",
+   "IconButton",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Indicator",
+  "args": [
+   "swizzle",
+   "Indicator",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_InfoTip",
+  "args": [
+   "swizzle",
+   "InfoTip",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_InputGroup",
+  "args": [
+   "swizzle",
+   "InputGroup",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_InteractiveRoleContext",
+  "args": [
+   "swizzle",
+   "InteractiveRoleContext",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Item",
+  "args": [
+   "swizzle",
+   "Item",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Kbd",
+  "args": [
+   "swizzle",
+   "Kbd",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Layer",
+  "args": [
+   "swizzle",
+   "Layer",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Layout",
+  "args": [
+   "swizzle",
+   "Layout",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Lightbox",
+  "args": [
+   "swizzle",
+   "Lightbox",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Link",
+  "args": [
+   "swizzle",
+   "Link",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_List",
+  "args": [
+   "swizzle",
+   "List",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Markdown",
+  "args": [
+   "swizzle",
+   "Markdown",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_MetadataList",
+  "args": [
+   "swizzle",
+   "MetadataList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_MobileNav",
+  "args": [
+   "swizzle",
+   "MobileNav",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_MoreMenu",
+  "args": [
+   "swizzle",
+   "MoreMenu",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_MultiSelector",
+  "args": [
+   "swizzle",
+   "MultiSelector",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_NavIcon",
+  "args": [
+   "swizzle",
+   "NavIcon",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_NavItem",
+  "args": [
+   "swizzle",
+   "NavItem",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_NavMenu",
+  "args": [
+   "swizzle",
+   "NavMenu",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_NumberInput",
+  "args": [
+   "swizzle",
+   "NumberInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Outline",
+  "args": [
+   "swizzle",
+   "Outline",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_OverflowList",
+  "args": [
+   "swizzle",
+   "OverflowList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Overlay",
+  "args": [
+   "swizzle",
+   "Overlay",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Pagination",
+  "args": [
+   "swizzle",
+   "Pagination",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Popover",
+  "args": [
+   "swizzle",
+   "Popover",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_PowerSearch",
+  "args": [
+   "swizzle",
+   "PowerSearch",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ProgressBar",
+  "args": [
+   "swizzle",
+   "ProgressBar",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_RadioList",
+  "args": [
+   "swizzle",
+   "RadioList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Resizable",
+  "args": [
+   "swizzle",
+   "Resizable",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ScrollableArea",
+  "args": [
+   "swizzle",
+   "ScrollableArea",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Section",
+  "args": [
+   "swizzle",
+   "Section",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_SegmentedControl",
+  "args": [
+   "swizzle",
+   "SegmentedControl",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_SelectableCard",
+  "args": [
+   "swizzle",
+   "SelectableCard",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Selector",
+  "args": [
+   "swizzle",
+   "Selector",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_SideNav",
+  "args": [
+   "swizzle",
+   "SideNav",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_SizeContext",
+  "args": [
+   "swizzle",
+   "SizeContext",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Skeleton",
+  "args": [
+   "swizzle",
+   "Skeleton",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Slider",
+  "args": [
+   "swizzle",
+   "Slider",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_SnapPaging",
+  "args": [
+   "swizzle",
+   "SnapPaging",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Spinner",
+  "args": [
+   "swizzle",
+   "Spinner",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Stack",
+  "args": [
+   "swizzle",
+   "Stack",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_StatusDot",
+  "args": [
+   "swizzle",
+   "StatusDot",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Stepper",
+  "args": [
+   "swizzle",
+   "Stepper",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Switch",
+  "args": [
+   "swizzle",
+   "Switch",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TabList",
+  "args": [
+   "swizzle",
+   "TabList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Table",
+  "args": [
+   "swizzle",
+   "Table",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Text",
+  "args": [
+   "swizzle",
+   "Text",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TextArea",
+  "args": [
+   "swizzle",
+   "TextArea",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TextInput",
+  "args": [
+   "swizzle",
+   "TextInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Thumbnail",
+  "args": [
+   "swizzle",
+   "Thumbnail",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TimeInput",
+  "args": [
+   "swizzle",
+   "TimeInput",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Timer",
+  "args": [
+   "swizzle",
+   "Timer",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Timestamp",
+  "args": [
+   "swizzle",
+   "Timestamp",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Toast",
+  "args": [
+   "swizzle",
+   "Toast",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_ToggleButton",
+  "args": [
+   "swizzle",
+   "ToggleButton",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Token",
+  "args": [
+   "swizzle",
+   "Token",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Tokenizer",
+  "args": [
+   "swizzle",
+   "Tokenizer",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Toolbar",
+  "args": [
+   "swizzle",
+   "Toolbar",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Tooltip",
+  "args": [
+   "swizzle",
+   "Tooltip",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TopNav",
+  "args": [
+   "swizzle",
+   "TopNav",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_TreeList",
+  "args": [
+   "swizzle",
+   "TreeList",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_Typeahead",
+  "args": [
+   "swizzle",
+   "Typeahead",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_VStack",
+  "args": [
+   "swizzle",
+   "VStack",
+   "--json"
+  ]
+ },
+ {
+  "id": "w_all_VisuallyHidden",
+  "args": [
+   "swizzle",
+   "VisuallyHidden",
+   "--json"
+  ]
+ },
+ {
+  "id": "d_button",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_button_json",
+  "args": [
+   "swizzle",
+   "Button",
+   "--json"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_button_f",
+  "args": [
+   "swizzle",
+   "Button",
+   "-f"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_badge",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_badge_ui",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--output",
+   "ui"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_badge_ui_json",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--output",
+   "ui",
+   "--json"
+  ],
+  "fixture": "initdone"
+ },
+ {
+  "id": "d_web_badge",
+  "args": [
+   "swizzle",
+   "Badge"
+  ],
+  "fixture": "initdone",
+  "cwd": "initdone/packages/web"
+ },
+ {
+  "id": "d_app_twice",
+  "args": [
+   "swizzle",
+   "Button"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_twice_f",
+  "args": [
+   "swizzle",
+   "Button",
+   "--overwrite"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_twice_json",
+  "args": [
+   "swizzle",
+   "Button",
+   "--json"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_shared_helpers",
+  "args": [
+   "swizzle",
+   "IconButton"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_shared_helpers_json",
+  "args": [
+   "swizzle",
+   "Dialog",
+   "--json"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ],
+   [
+    "swizzle",
+    "Tooltip"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_two_outputs",
+  "args": [
+   "swizzle",
+   "Badge",
+   "--output",
+   "other"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Badge"
+   ]
+  ]
+ },
+ {
+  "id": "d_app_list_after",
+  "args": [
+   "swizzle",
+   "--list"
+  ],
+  "fixture": "app",
+  "pre": [
+   [
+    "swizzle",
+    "Button"
+   ]
+  ]
+ }
+]

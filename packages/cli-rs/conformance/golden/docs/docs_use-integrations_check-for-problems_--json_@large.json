@@ -1,0 +1,14 @@
+{
+ "id": "docs_use-integrations_check-for-problems_--json_@large",
+ "args": [
+  "docs",
+  "use-integrations",
+  "check-for-problems",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Check for problems\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Run `astryx doctor` to see integration issues: missing roots, invalid contributions, or a CLI version mismatch. The doctor check is the one place every issue for every package is listed.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx doctor\"\n      }\n    ],\n    \"id\": \"check-for-problems\",\n    \"links\": {\n      \"up\": \"astryx docs use-integrations --index\",\n      \"previous\": \"astryx docs use-integrations use-what-it-adds\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

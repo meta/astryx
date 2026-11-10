@@ -1,0 +1,9 @@
+export default {
+  name: 'x',
+
+  transform() {
+    return 1;
+  },
+
+  components: './components'
+};

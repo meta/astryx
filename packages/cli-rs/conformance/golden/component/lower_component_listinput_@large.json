@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_listinput_@large",
+ "args": [
+  "component",
+  "listinput"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"listinput\"\n\n  TextInput  (keyword \"input\")\n  Field  (keyword \"input\")\n  InputGroup  (keyword \"input\")\n",
+ "exit": 1,
+ "files": []
+}

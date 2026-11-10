@@ -1,0 +1,16 @@
+{
+ "id": "w_long_component",
+ "args": [
+  "gap-report",
+  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component must be 120 characters or fewer.\n",
+ "exit": 1,
+ "files": []
+}

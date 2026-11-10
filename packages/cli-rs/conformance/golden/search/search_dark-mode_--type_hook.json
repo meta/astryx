@@ -1,0 +1,20 @@
+{
+ "id": "search_dark-mode_--type_hook",
+ "args": [
+  "search",
+  "dark mode",
+  "--type",
+  "hook"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"dark mode\" (5)\n\nname:        useImageMode\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Detects whether an image is predominantly dark or light by sampling pixels via OffscreenCanvas. Uses APCA perceptual lightness (sRGB linearization + power curve) for accurate detection, especially on saturated colors. Runs entirely off the paint path: no visible canvas, no layout thrash. Supports regional sampling for detecting luminance where text overlays will appear. Returns null while loading and falls back gracefully on CORS or network errors.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useImageMode\n\nname:        useTheme\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/theme\ndescription: Programmatic access to theme tokens for non-CSS consumers like SVG, canvas, Vega, D3, maps, or chart libraries that need values in JavaScript instead of CSS custom property references.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useTheme\n\nname:        createReorderable\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core\ndescription: Makes a collection's rows reorderable. On a touch screen a finger held still on a row's handle for a moment picks it up (a flick on the handle still scrolls): the row stays in its place, dimmed, while a copy of it follows the finger and an accent line marks where it would land; the other rows stay still, the page scrolls near its edges, and on release the rows rearrange. A pen held still on a handle where the primary pointer is coarse picks the row up as a finger does. A mouse, or a pen where the primary pointer is fine, drags a handle at once the same way, and the rows take their places without motion; a cancelled drag puts everything back at once. Without a drag, the handle toggles reorder mode for its row (a click, Space or Enter): each arrow key moves the row a place at once, and Escape or another activation ends the mode, keeping the moves; screen readers hear each move with the row's place and neighbours, and a hint shows the moves and Done as buttons, for taps alone. The reorder code ships with this function: a collection without the prop loads none of it.\ncommand:     npx @astryxdesign/cli@0.7.12 hook createReorderable\n\nname:        useCollapsible\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Collapsible\ndescription: Reusable hook that encapsulates the collapsible state machine. Supports three modes: group-controlled (inside CollapsibleGroup), controlled (isOpen + onOpenChange), and uncontrolled (self-managed with defaultIsOpen). Used internally by Card and Section.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useCollapsible\n\nname:        useLayer\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Layer\ndescription: Core positioning hook for rendering overlay content using CSS Anchor Positioning and the Popover API. Use it as the foundation for custom popovers, hover cards, tooltips, and fixed-position layers when higher-level components are not enough. Both modes use theme body text defaults and end ancestor surface/group membership as a whole, including group-owned state. Explicit props and unrelated contexts remain unchanged. Apply intentional formatting through render styles or content, and establish complete content-local providers inside the rendered layer.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useLayer\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

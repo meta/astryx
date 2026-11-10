@@ -1,0 +1,13 @@
+{
+ "id": "template_TimestampColors_--json_@large",
+ "args": [
+  "template",
+  "TimestampColors",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TimestampColors\",\n    \"description\": \"Timestamp rendered in each available color variant: primary, secondary, disabled, and active.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"Timestamp\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Timestamp} from '@astryxdesign/core/Timestamp';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst DATE = '2026-02-19T17:00:00Z';\\n\\nexport default function TimestampColors() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={4}>\\n      <Stack direction=\\\"vertical\\\" gap={1}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Primary\\n        </Text>\\n        <Timestamp value={DATE} format=\\\"date_time\\\" color=\\\"primary\\\" />\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={1}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Secondary\\n        </Text>\\n        <Timestamp value={DATE} format=\\\"date_time\\\" color=\\\"secondary\\\" />\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={1}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Disabled\\n        </Text>\\n        <Timestamp value={DATE} format=\\\"date_time\\\" color=\\\"disabled\\\" />\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={1}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Accent\\n        </Text>\\n        <Timestamp value={DATE} format=\\\"date_time\\\" color=\\\"accent\\\" />\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

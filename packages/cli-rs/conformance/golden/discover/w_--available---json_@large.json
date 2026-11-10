@@ -1,0 +1,13 @@
+{
+ "id": "w_--available---json_@large",
+ "args": [
+  "discover",
+  "--available",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.list\",\n  \"data\": [],\n  \"meta\": {\n    \"configured\": true,\n    \"available\": [\n      {\n        \"name\": \"@astryxdesign/richtext\",\n        \"package\": \"@astryxdesign/richtext\",\n        \"components\": [\n          \"RichTextEditor\",\n          \"RichTextEditorAutoLinkPlugin\",\n          \"RichTextEditorToolbar\",\n          \"RichTextView\"\n        ],\n        \"version\": \"0.7.12\",\n        \"description\": \"Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.\",\n        \"templates\": [\n          \"RichTextEditorShowcase\"\n        ],\n        \"source\": \"Astryx\",\n        \"install\": \"npm install @astryxdesign/richtext@0.7.12\"\n      }\n    ],\n    \"sources\": [\n      {\n        \"name\": \"Astryx\",\n        \"from\": \"@astryxdesign/cli\",\n        \"status\": \"fresh\",\n        \"complete\": true\n      }\n    ],\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

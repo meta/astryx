@@ -1,0 +1,12 @@
+{
+ "id": "discover_dark-mode_@large",
+ "args": [
+  "discover",
+  "dark mode"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"dark mode\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

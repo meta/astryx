@@ -1,0 +1,13 @@
+{
+ "id": "template_SegmentedControlItemBasic_--json_@large",
+ "args": [
+  "template",
+  "SegmentedControlItemBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SegmentedControlItemBasic\",\n    \"description\": \"A row of label-only options that switches between a few views, here Board, List, and Timeline. Each item declares a value; the parent control holds the selected value and change handler.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"SegmentedControl\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {\\n  SegmentedControl,\\n  SegmentedControlItem,\\n} from '@astryxdesign/core/SegmentedControl';\\n\\nexport default function SegmentedControlItemBasic() {\\n  const [view, setView] = useState('board');\\n\\n  return (\\n    <SegmentedControl value={view} onChange={setView} label=\\\"View mode\\\">\\n      <SegmentedControlItem value=\\\"board\\\" label=\\\"Board\\\" />\\n      <SegmentedControlItem value=\\\"list\\\" label=\\\"List\\\" />\\n      <SegmentedControlItem value=\\\"timeline\\\" label=\\\"Timeline\\\" />\\n    </SegmentedControl>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

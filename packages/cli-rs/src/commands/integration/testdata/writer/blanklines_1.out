@@ -1,0 +1,5 @@
+export default {
+  name: 'x',
+  b: 'y',
+  docs: './docs'
+};

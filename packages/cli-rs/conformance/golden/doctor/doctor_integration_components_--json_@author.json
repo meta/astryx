@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_components_--json_@author",
+ "args": [
+  "doctor",
+  "integration",
+  "components",
+  "--json"
+ ],
+ "fixture": "author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.component-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/widgets\",\n    \"version\": \"0.1.0\",\n    \"conflicts\": [],\n    \"issues\": [],\n    \"propDrift\": {\n      \"status\": \"skipped\",\n      \"reason\": \"TypeScript is not installed in this project, so documented props were not compared with the code. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\",\n      \"components\": 0,\n      \"typesCompared\": 0,\n      \"findings\": [],\n      \"unchecked\": [],\n      \"typesNotCompared\": []\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

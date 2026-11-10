@@ -1,0 +1,20 @@
+{
+ "id": "component_TimeInput_--detail_brief_@large",
+ "args": [
+  "component",
+  "TimeInput",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nTimeInput(onChange: (value: ISOTimeString|undefined) => void, changeAction: (value: ISOTimeString|undefined) => void|Promise<void>, hourFormat: 12h|24h, presentation: text-input|popover|bottom-sheet|native|adaptive-bottom-sheet|adaptive-native, nativePicker: touch|always|never, size: sm|md|lg, status: {type: warning|error|success, message?: string}, statusVariant: attached|detached|tooltip)  <- from '@astryxdesign/core/TimeInput'\n  TimeInput uses a browser/OS time picker on coarse pointers by default and Ast...\n  Targets: astryx-time-input preferred attrs: data-size, data-status, data-disabled variants: size, status states: disabled\n  label: string, isLabelHidden, description, isOptional, isRequired, isDisabled, disabledMessage, value, isLoading, min, max, hasSeconds, hasClear, increment, placeholder, labelTooltip, width, containerXstyle, controlXstyle\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

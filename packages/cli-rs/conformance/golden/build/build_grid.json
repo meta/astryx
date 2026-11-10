@@ -1,0 +1,18 @@
+{
+ "id": "build_grid",
+ "args": [
+  "build",
+  "grid"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"grid\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nThe idea is a part of a page and names no page, so it starts from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: library (@astryxdesign/core), table (@astryxdesign/core), table-collapsible (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        GridGalleryExample\npackage:     @astryxdesign/core\ndescription: Card gallery with responsive columns that maintain consistent widths\n\nname:    GridShowcase\npackage: @astryxdesign/core\n\nname:        GridWithGridSpan\npackage:     @astryxdesign/core\ndescription: Grid with featured items spanning multiple columns and rows\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        ComplexSelector\npackage:     @astryxdesign/core\ndescription: Use ComplexSelector when a selection needs richer custom content than a Selector option row.\n\nname:        GridSpan\npackage:     @astryxdesign/core\ndescription: Grid item that spans multiple columns or rows.\n\nname:        useCalendarDays\npackage:     @astryxdesign/core\ndescription: Builds the day grid for one month: every date to show, including the previous and next months' days that fill the first and last weeks, grouped into weeks, plus localized weekday header names that start on weekStartsOn.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

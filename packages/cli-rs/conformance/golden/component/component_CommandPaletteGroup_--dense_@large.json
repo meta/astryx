@@ -1,0 +1,19 @@
+{
+ "id": "component_CommandPaletteGroup_--dense_@large",
+ "args": [
+  "component",
+  "CommandPaletteGroup",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# CommandPaletteGroup\n\ngroup w/ heading label; inside CommandPaletteList\n\n**Import:** `import {CommandPaletteGroup} from '@astryxdesign/core/CommandPalette';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `heading` | `string` | - | group heading text **(required)** |\n| `children` | `ReactNode` | - | CommandPaletteItem children **(required)** |\n| `xstyle` | `StyleXStyles` | - | StyleX layout styles; must be stylex.create() value |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

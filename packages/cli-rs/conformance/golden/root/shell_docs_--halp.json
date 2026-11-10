@@ -1,0 +1,12 @@
+{
+ "id": "shell_docs_--halp",
+ "args": [
+  "docs",
+  "--halp"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--halp'\n(Did you mean --help?)\n",
+ "exit": 1,
+ "files": []
+}

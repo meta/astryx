@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_dialog-header-start-content_--json",
+ "args": [
+  "theme",
+  "targets",
+  "dialog-header-start-content",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"dialog-header-start-content\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"dialog-header-start-content\",\n        \"className\": \"astryx-dialog-header-start-content\",\n        \"component\": \"Dialog\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

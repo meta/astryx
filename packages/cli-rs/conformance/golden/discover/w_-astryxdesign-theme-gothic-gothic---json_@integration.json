@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-theme-gothic-gothic---json_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/theme-gothic/gothic",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@astryxdesign/theme-gothic\",\n  \"data\": {\n    \"package\": \"@astryxdesign/theme-gothic\",\n    \"version\": \"0.7.12\",\n    \"kind\": \"theme\",\n    \"name\": \"gothic\",\n    \"title\": \"Gothic\",\n    \"summary\": \"Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\",\n    \"installed\": false,\n    \"install\": \"npm install @astryxdesign/theme-gothic@0.7.12\",\n    \"source\": \"Astryx\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "theme_targets_nosuchsub",
+ "args": [
+  "theme",
+  "targets",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No theming target matches \"nosuchsub\". Run `theme targets` with no filter for the whole list.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_HoverCardInlineTextHoverCard_@large",
+ "args": [
+  "template",
+  "HoverCardInlineTextHoverCard"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport type {CSSProperties} from 'react';\nimport {HoverCard} from '@astryxdesign/core/HoverCard';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst content: CSSProperties = {maxWidth: 200};\n\nexport default function HoverCardInlineTextHoverCard() {\n  return (\n    <Text type=\"body\">\n      The component uses a{' '}\n      <HoverCard\n        content={\n          <VStack gap={1} style={content}>\n            <Text type=\"label\">Focus trap</Text>\n            <Text type=\"body\" color=\"secondary\">\n              A pattern that keeps keyboard focus inside a container, preventing\n              it from moving to elements outside. Used in dialogs and modals to\n              ensure accessibility.\n            </Text>\n          </VStack>\n        }\n        placement=\"above\">\n        focus trap\n      </HoverCard>{' '}\n      to keep keyboard navigation inside the{' '}\n      <HoverCard\n        content={\n          <VStack gap={1} style={content}>\n            <Text type=\"label\">Modal dialog</Text>\n            <Text type=\"body\" color=\"secondary\">\n              An overlay that blocks interaction with the rest of the page until\n              the user responds. Uses the native HTML dialog element for\n              built-in accessibility and backdrop support.\n            </Text>\n          </VStack>\n        }\n        placement=\"above\">\n        modal dialog\n      </HoverCard>\n      .\n    </Text>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

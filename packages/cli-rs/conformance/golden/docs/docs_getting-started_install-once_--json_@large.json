@@ -1,0 +1,14 @@
+{
+ "id": "docs_getting-started_install-once_--json_@large",
+ "args": [
+  "docs",
+  "getting-started",
+  "install-once",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"install-once\",\n    \"title\": \"Install once, use everywhere\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install the CLI once for your computer too, and the astryx command works in any folder, for you and for any coding agent, even before a project exists. Inside a project, the project's own version still answers, so a global install never changes what your team and CI get. Keep it in the project as well; that is the recommended setup.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"npm install -g @astryxdesign/cli\",\n        \"label\": \"Terminal\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Project, global, or both: `astryx docs global/project-global-or-both`. Everything else about global mode: `astryx docs global`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs getting-started --index\",\n      \"previous\": \"astryx docs getting-started upgrade\",\n      \"next\": \"astryx docs getting-started add-base-css-and-a-theme\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

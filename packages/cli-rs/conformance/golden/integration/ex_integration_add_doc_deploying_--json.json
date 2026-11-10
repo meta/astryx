@@ -1,0 +1,26 @@
+{
+ "id": "ex_integration_add_doc_deploying_--json",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "deploying",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"doc\",\n    \"name\": \"deploying\",\n    \"root\": {\n      \"path\": \"./docs\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"docs/deploying.doc.mjs\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "app/docs/deploying.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Deploying documentation.',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Deploying documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

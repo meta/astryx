@@ -1,0 +1,20 @@
+{
+ "id": "component_CheckboxInput_--detail_brief_@large",
+ "args": [
+  "component",
+  "CheckboxInput",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nCheckboxInput(value: boolean|indeterminate, changeAction: (checked: boolean, e: ChangeEvent<HTMLInputElement>) => void|Promise<void>, size: sm|md, status: { type: error|warning|success, message: string })  <- from '@astryxdesign/core/CheckboxInput'\n  CheckboxInput toggles a single on/off value. Use it for settings like \"Enable...\n  Targets: astryx-checkbox-input preferred attrs: data-size variants: size | astryx-checkbox-indicator preferred attrs: data-size, data-checked, data-disabled variants: size states: checked, disabled | astryx-checkbox-label\n  label: string, ref, isLabelHidden, description, onChange, isLoading, isDisabled, htmlName, disabledMessage, isReadOnly, isOptional, isRequired, onFocus, onBlur, labelIcon, width\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

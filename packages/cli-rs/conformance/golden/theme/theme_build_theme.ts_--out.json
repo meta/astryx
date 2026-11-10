@@ -1,0 +1,14 @@
+{
+ "id": "theme_build_theme.ts_--out",
+ "args": [
+  "theme",
+  "build",
+  "theme.ts",
+  "--out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '-o, --out <path>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

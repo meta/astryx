@@ -1,0 +1,19 @@
+{
+ "id": "component_TypeaheadItem_--dense_@large",
+ "args": [
+  "component",
+  "TypeaheadItem",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TypeaheadItem\n\nDefault dropdown item renderer. Label w/ optional icon, description, avatar. Exported for custom renderItem.\n\n**Import:** `import {TypeaheadItem} from '@astryxdesign/core/Typeahead';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `item` | `SearchableItem` | - | Search result item to render. **(required)** |\n| `icon` | `ReactNode` | - | Icon/avatar before label. |\n| `description` | `string` | - | Text below label. |\n| `isDisabled` | `boolean` | `false` | Visually disabled. |\n| `group` | `string` | - | No effect. Group results via `item.auxiliaryData.group` in the search source. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

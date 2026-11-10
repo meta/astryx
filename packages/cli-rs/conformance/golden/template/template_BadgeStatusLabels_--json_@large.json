@@ -1,0 +1,13 @@
+{
+ "id": "template_BadgeStatusLabels_--json_@large",
+ "args": [
+  "template",
+  "BadgeStatusLabels",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BadgeStatusLabels\",\n    \"description\": \"Show the state of an item like Active, Pending, or Failed. Use in table rows, list items, or detail pages where users need to see status at a glance.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Badge\",\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Badge} from '@astryxdesign/core/Badge';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function BadgeStatusLabels() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={6}>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          System status\\n        </Text>\\n        <Stack direction=\\\"horizontal\\\" gap={2} vAlign=\\\"center\\\">\\n          <Badge variant=\\\"success\\\" label=\\\"Active\\\" />\\n          <Badge variant=\\\"warning\\\" label=\\\"Pending\\\" />\\n          <Badge variant=\\\"error\\\" label=\\\"Failed\\\" />\\n        </Stack>\\n      </Stack>\\n      <Stack direction=\\\"vertical\\\" gap={2}>\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          Workflow\\n        </Text>\\n        <Stack direction=\\\"horizontal\\\" gap={2} vAlign=\\\"center\\\">\\n          <Badge variant=\\\"neutral\\\" label=\\\"Draft\\\" />\\n          <Badge variant=\\\"info\\\" label=\\\"In Review\\\" />\\n        </Stack>\\n      </Stack>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

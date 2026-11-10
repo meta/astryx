@@ -1,0 +1,13 @@
+{
+ "id": "ex_doctor_integration_validate_@empty",
+ "args": [
+  "doctor",
+  "integration",
+  "validate"
+ ],
+ "fixture": "empty",
+ "stdout": "Nothing was validated: no package.json found. Run this command inside a package directory.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

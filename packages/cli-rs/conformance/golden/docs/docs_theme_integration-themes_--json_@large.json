@@ -1,0 +1,14 @@
+{
+ "id": "docs_theme_integration-themes_--json_@large",
+ "args": [
+  "docs",
+  "theme",
+  "integration-themes",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Integration themes\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install an integration and Astryx discovers its themes automatically. Import one with `astryx theme add <name> --package <integration>`. Use `theme eject` only for an independent source fork. For the full walkthrough, see `astryx docs use-a-theme`.\"\n      }\n    ],\n    \"id\": \"integration-themes\",\n    \"links\": {\n      \"up\": \"astryx docs theme --index\",\n      \"previous\": \"astryx docs theme light-dark-mode\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

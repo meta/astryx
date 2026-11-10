@@ -1,0 +1,20 @@
+{
+ "id": "w_-acme-kit-AcmeCard---detail-brief_@integration",
+ "args": [
+  "discover",
+  "@acme/kit/AcmeCard",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "integration",
+ "stdout": "package: @acme/kit\n\nAcmeCard(tone: calm|loud)\n  A zorblax card that groups one topic.\n  title: string\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_map_--set",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "--set"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--set <name>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

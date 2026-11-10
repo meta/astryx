@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_drpdownmenudivider",
+ "args": [
+  "search",
+  "drpdownmenudivider"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"drpdownmenudivider\" (1)\n\nname:        DropdownMenuDivider\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: A horizontal rule separating groups of rows in a compound menu. Renders role=\"separator\", so it is never a stop in the arrow-key order. The data-driven equivalent is the `{type: \"divider\"}` entry in `items`; both modes render this component, so they look and theme identically. Host attributes and DOM handlers (id, data-*, aria-*) reach the separator; its role and orientation stay component-owned.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuDivider\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover drpdownmenudivider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

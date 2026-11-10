@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatComposerInput_--blocks_@large",
+ "args": [
+  "component",
+  "ChatComposerInput",
+  "--blocks"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: ChatComposerInput\n\nExamples\n\nname:        ChatComposerInputControlledInput\ndescription: Controlled chat input with live value display. Use controlled mode when you need to read or transform the input value outside the composer.\n\nname:        ChatComposerInputDisabled\ndescription: Composer in a disabled state. Use when the input should be visible but not interactive, such as during streaming or when a prerequisite is unmet.\n\nname:        ChatComposerInputMentionTrigger\ndescription: Chat input with an @ trigger that opens a typeahead menu for mentioning users. Selected names appear as inline tokens.\n\nname:        ChatComposerInputMultipleTriggers\ndescription: Chat input with both @ mentions and / commands. Each trigger type renders tokens in a distinct color so users can tell them apart at a glance.\n\nname:        ChatComposerInputSlashCommands\ndescription: Chat input with a / trigger for command selection. Use for AI assistants or bots that support structured commands.\n\nRelated: 2 blocks that use ChatComposerInput\n\n- ChatDictationButtonBasic\n- ChatDictationButtonShowcase\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

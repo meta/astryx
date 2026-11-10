@@ -1,0 +1,12 @@
+{
+ "id": "w_-astryxdesign-lab_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/lab"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@astryxdesign/lab\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

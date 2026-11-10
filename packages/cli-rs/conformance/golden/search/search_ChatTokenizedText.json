@@ -1,0 +1,18 @@
+{
+ "id": "search_ChatTokenizedText",
+ "args": [
+  "search",
+  "ChatTokenizedText"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"ChatTokenizedText\" (4)\n\nname:        ChatTokenizedText\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: Use ChatTokenizedText inside a chat message when stored plain text contains serialized token values that should be projected as inline badges or caller-rendered token content. Unmatched text is preserved exactly and empty token values are ignored so rendering always finishes.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatTokenizedText\n\nname:        ChatTokenizedTextBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatTokenizedText - Basic\nkind:        block\ndescription: A message with @mention tokens. Each matching pattern is replaced with its display name badge.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatTokenizedTextBasic --type block\n\nname:        ChatTokenizedTextColors\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatTokenizedText - Colors\nkind:        block\ndescription: Tokens with different color variants to distinguish mentions, bugs, and features. Use variant colors to create a visual taxonomy: blue for people, red for bugs, green for features.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatTokenizedTextColors --type block\n\nname:        ai-chat\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AI Chat Conversation\nkind:        page\ndescription: Transcript of alternating turns carrying mixed rich content inline (markdown, code blocks, collapsible tool-call output) beside a resizable artifact panel that holds generated output while the stream keeps scrolling.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat --type page\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ChatTokenizedText\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

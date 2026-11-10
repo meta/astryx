@@ -1,0 +1,20 @@
+{
+ "id": "ex_experimental_icon_new-set_heroicons_--from_-heroicons-react-24-outline_--variants_outline-solid_--default-variant_out~4",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "heroicons",
+  "--from",
+  "@heroicons/react/24/outline",
+  "--variants",
+  "outline,solid",
+  "--default-variant",
+  "outline"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: \"@heroicons/react/24/outline\" does not resolve from large-app. Install it as a dependency, or check the specifier.\n",
+ "exit": 1,
+ "files": []
+}

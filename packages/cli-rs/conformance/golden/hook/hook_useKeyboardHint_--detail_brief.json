@@ -1,0 +1,20 @@
+{
+ "id": "hook_useKeyboardHint_--detail_brief",
+ "args": [
+  "hook",
+  "useKeyboardHint",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseKeyboardHint(options?: UseKeyboardHintOptions): { hintElement, onFocus, onBlur, onKeyDown }  <- from '@astryxdesign/core/hooks'\n  Shows an ephemeral \"← → to navigate\" hint anchored to the focused item the fi...\n  Related: Toolbar, TabList, SegmentedControl\n  options\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Toolbar, TabList, SegmentedControl\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

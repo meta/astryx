@@ -1,0 +1,20 @@
+{
+ "id": "component_LineClamp_--detail_compact_@large",
+ "args": [
+  "component",
+  "LineClamp",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# LineClamp\n\nClamps arbitrary content to a fixed number of lines with an ellipsis. Text's maxLines clamps a Text element; LineClamp clamps whatever it wraps and adds no typography of its own, so it suits mixed inline content and nested elements without changing their font, color or wrapping. Truncation detection reuses useTruncation (the same hook Text uses), so overflow is measured correctly even while -webkit-line-clamp clips scrollHeight.\n\n## Import\n\n```tsx\nimport { LineClamp } from '@astryxdesign/lab';\n```\n\n## Best Practices\n\n- **Do:** Use LineClamp when clamping a block of mixed or composed content (not a single Text node).\n- **Do:** Use Text's own maxLines prop when clamping a single Text node — no need to wrap it in LineClamp.\n- **Do:** Disable the tooltip (hasTruncateTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.\n- **Do:** LineClamp makes a focusable descendant inert only when both hold: (1) it is in the clamp's own flow. A positioned element is in that flow when its containing block is an element inside the clamp that is itself in the flow, as a control's own positioned wrapper is; the line test then applies to that containing block's box. A fixed element, an absolute element whose containing block is the clamp itself or lies outside it, a top-layer element (a popover or dialog), and anything rendered elsewhere through a portal each start a subtree that is never made inert, at any depth. (2) its box lies wholly beyond the clamp's last visible line. A control any part of which is visible stays reachable. A focusable with no box when LineClamp checks is treated as beyond the last line until it gains a box; LineClamp re-checks then. LineClamp re-checks when its size, its content or its fonts change. Gap: an absolutely placed control that the clamp itself clips stays a tab stop; the author owns positioned content inside a clamp. Inert takes such a control out of the Tab order and the accessibility tree. LineClamp never rewrites your own tabIndex or aria-hidden, and the element that holds focus is never made inert.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Content to clamp: mixed inline content, nested elements, anything you would rather not wrap in a single Text. **(required)** |\n| `maxLines` | `number` | - | Maximum number of lines to show before clamping with an ellipsis. **(required)** |\n| `hasTruncateTooltip` | `boolean` | `true` | Show a tooltip with the full text content on hover or keyboard focus when clamped. A clamped root is focusable (tabindex 0) so keyboard users can reach the tooltip; a tabIndex you pass wins. The tooltip props follow Text's: when Text's hasTruncateTooltip is renamed in a minor, LineClamp follows. |\n| `truncateTooltipPlacement` | `'above' \\| 'below' \\| 'start' \\| 'end'` | `'above'` | Where the truncation tooltip opens. |\n| `as` | `'div' \\| 'span' \\| 'p'` | `'div'` | HTML element to render. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

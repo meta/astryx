@@ -1,0 +1,15 @@
+{
+ "id": "w_--type-icon-set-glyph---json_@discover-iconsets",
+ "args": [
+  "discover",
+  "--type",
+  "icon-set",
+  "glyph",
+  "--json"
+ ],
+ "fixture": "discover-iconsets",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"glyph\",\n    \"matches\": [\n      {\n        \"package\": \"@acme/glyphs\",\n        \"component\": \"glyphs\",\n        \"kind\": \"icon-set\",\n        \"installed\": true\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_hover-card_--json",
+ "args": [
+  "theme",
+  "targets",
+  "hover-card",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"hover-card\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"hover-card\",\n        \"className\": \"astryx-hover-card\",\n        \"component\": \"HoverCard\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

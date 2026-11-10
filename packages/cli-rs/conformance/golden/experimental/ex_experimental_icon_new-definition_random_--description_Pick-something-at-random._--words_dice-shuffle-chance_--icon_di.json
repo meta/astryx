@@ -1,0 +1,20 @@
+{
+ "id": "ex_experimental_icon_new-definition_random_--description_Pick-something-at-random._--words_dice-shuffle-chance_--icon_di",
+ "args": [
+  "experimental",
+  "icon",
+  "new-definition",
+  "random",
+  "--description",
+  "Pick something at random.",
+  "--words",
+  "dice,shuffle,chance",
+  "--icon",
+  "dice-5"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

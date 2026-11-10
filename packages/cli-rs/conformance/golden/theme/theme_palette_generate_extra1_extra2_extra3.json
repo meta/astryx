@@ -1,0 +1,16 @@
+{
+ "id": "theme_palette_generate_extra1_extra2_extra3",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: extra1\n",
+ "exit": 1,
+ "files": []
+}

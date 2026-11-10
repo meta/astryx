@@ -1,0 +1,19 @@
+{
+ "id": "docs_illustrations_when-to-use_@large",
+ "args": [
+  "docs",
+  "illustrations",
+  "when-to-use"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## When to Use\n\nConsistent illustration usage reinforces brand identity and helps users understand context at a glance. Use illustrations in these contexts:\n\nContext            | Examples                                              \n------------------ | ------------------------------------------------------\nEmpty states       | No data, first-time experience, search with no results\nOnboarding         | Welcome screens, feature introduction, setup wizards  \nFeature highlights | New feature announcements, upgrade prompts            \nError states       | Permission denied, not found, service unavailable     \n\nUp: npx @astryxdesign/cli@0.7.12 docs illustrations --index\nNext: npx @astryxdesign/cli@0.7.12 docs illustrations guidelines\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "hook_useTableFilterState_--json",
+ "args": [
+  "hook",
+  "useTableFilterState",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableFilterState\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableFilterState\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"Managed state hook for table filtering. Returns the current filter map and an onChange handler. Pass the result directly to useTableFiltering.\",\n    \"props\": [\n      {\n        \"name\": \"initialState\",\n        \"type\": \"TableFilterState\",\n        \"description\": \"Optional initial filter state map.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

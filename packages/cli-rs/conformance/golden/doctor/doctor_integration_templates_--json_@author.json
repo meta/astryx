@@ -1,0 +1,14 @@
+{
+ "id": "doctor_integration_templates_--json_@author",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "--json"
+ ],
+ "fixture": "author",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.template-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/widgets\",\n    \"version\": \"0.1.0\",\n    \"conflicts\": [],\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

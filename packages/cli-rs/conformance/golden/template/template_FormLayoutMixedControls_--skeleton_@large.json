@@ -1,0 +1,19 @@
+{
+ "id": "template_FormLayoutMixedControls_--skeleton_@large",
+ "args": [
+  "template",
+  "FormLayoutMixedControls",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# FormLayoutMixedControls - Form with different control types: text input, selector, and checkboxes\n# Components: CheckboxList, FormLayout, Selector, TextInput\n\n<FormLayout>\n  <TextInput />\n  <Selector />\n  <CheckboxList />\n  <CheckboxListItem />\n  <CheckboxListItem />\n  <CheckboxListItem />\n</FormLayout>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

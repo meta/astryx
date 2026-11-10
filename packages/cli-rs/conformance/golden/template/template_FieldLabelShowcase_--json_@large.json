@@ -1,0 +1,13 @@
+{
+ "id": "template_FieldLabelShowcase_--json_@large",
+ "args": [
+  "template",
+  "FieldLabelShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"FieldLabelShowcase\",\n    \"description\": \"Standalone field labels demonstrating required, optional, tooltip, and icon variations.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"FieldLabel\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {FieldLabel} from '@astryxdesign/core/Field';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nconst LockIcon = (props: React.SVGProps<SVGSVGElement>) => (\\n  <svg\\n    viewBox=\\\"0 0 24 24\\\"\\n    fill=\\\"none\\\"\\n    stroke=\\\"currentColor\\\"\\n    strokeWidth={1.5}\\n    strokeLinecap=\\\"round\\\"\\n    strokeLinejoin=\\\"round\\\"\\n    {...props}>\\n    <rect x=\\\"3\\\" y=\\\"11\\\" width=\\\"18\\\" height=\\\"11\\\" rx=\\\"2\\\" />\\n    <path d=\\\"M7 11V7a5 5 0 0 1 10 0v4\\\" />\\n  </svg>\\n);\\n\\nexport default function FieldLabelShowcase() {\\n  return (\\n    <VStack gap={4}>\\n      <FieldLabel label=\\\"Email address\\\" inputID=\\\"email-input\\\" isRequired />\\n      <FieldLabel\\n        label=\\\"Phone number\\\"\\n        inputID=\\\"phone-input\\\"\\n        isOptional\\n        description=\\\"Include country code for international numbers\\\"\\n      />\\n      <FieldLabel\\n        label=\\\"API key\\\"\\n        inputID=\\\"api-input\\\"\\n        labelTooltip=\\\"Your API key can be found in the developer settings\\\"\\n        labelIcon={LockIcon}\\n      />\\n      <FieldLabel label=\\\"Disabled field\\\" inputID=\\\"disabled-input\\\" isDisabled />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

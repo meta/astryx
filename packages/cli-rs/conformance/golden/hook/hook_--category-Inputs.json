@@ -1,0 +1,12 @@
+{
+ "id": "hook_--category-Inputs",
+ "args": [
+  "hook",
+  "--category=Inputs"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown category \"Inputs\"\n\n  Accessibility  (valid category)\n  Focus  (valid category)\n  Interaction  (valid category)\n  Layout  (valid category)\n  Link  (valid category)\n  Media  (valid category)\n  Motion & gestures  (valid category)\n  Navigation  (valid category)\n  Streaming  (valid category)\n  Utilities  (valid category)\n  Utility  (valid category)\n  Other  (valid category)\n",
+ "exit": 1,
+ "files": []
+}

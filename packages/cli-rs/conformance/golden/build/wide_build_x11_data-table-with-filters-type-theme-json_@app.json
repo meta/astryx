@@ -1,0 +1,15 @@
+{
+ "id": "wide_build_x11_data-table-with-filters-type-theme-json_@app",
+ "args": [
+  "build",
+  "data table with filters",
+  "--type",
+  "theme",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"build.kit\",\n  \"data\": {\n    \"query\": \"data table with filters\",\n    \"hasResults\": false,\n    \"matchCount\": 0,\n    \"directMatch\": false,\n    \"start\": null,\n    \"pages\": [],\n    \"blocks\": [],\n    \"domain\": [],\n    \"frame\": [\n      \"AppShell\",\n      \"TopNav\",\n      \"SideNav\",\n      \"Layout\"\n    ],\n    \"foundation\": [\n      \"VStack\",\n      \"HStack\",\n      \"Grid\",\n      \"StackItem\",\n      \"Card\",\n      \"Section\",\n      \"Text\",\n      \"Heading\",\n      \"Button\",\n      \"Icon\",\n      \"Badge\",\n      \"Divider\"\n    ],\n    \"hint\": {\n      \"reason\": \"Few matches. This is keyword search, not semantic — try other wordings.\",\n      \"commands\": [\n        \"component --list\",\n        \"template --list\"\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

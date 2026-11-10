@@ -1,0 +1,14 @@
+{
+ "id": "docs_principles_design-philosophy_--json_@large",
+ "args": [
+  "docs",
+  "principles",
+  "design-philosophy",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Design Philosophy\",\n    \"category\": \"guide\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"A design system that prioritizes consistency, adaptability, and developer experience. Every decision flows from a few core ideas:\"\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"unordered\",\n        \"items\": [\n          \"Components over primitives: use components for everything they cover before reaching for raw HTML\",\n          \"Semantic tokens over hardcoded values: colors, spacing, and radii are named by purpose, not appearance\",\n          \"Theme-agnostic code: your app code never references specific colors or measurements, so themes and dark mode work automatically\",\n          \"Open internals: every primitive is exported and composable, so you can build on top of it without fighting it\"\n        ]\n      }\n    ],\n    \"id\": \"design-philosophy\",\n    \"links\": {\n      \"up\": \"astryx docs principles --index\",\n      \"next\": \"astryx docs principles rules\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

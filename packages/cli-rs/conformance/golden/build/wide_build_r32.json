@@ -1,0 +1,18 @@
+{
+ "id": "wide_build_r32",
+ "args": [
+  "build",
+  "setup showing list settings inside the for and message upload of palette"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"setup showing list settings inside the for and message upload of palette\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nNo template matched, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        settings-sidebar\npackage:     @astryxdesign/core\ndescription: Preferences split into nav-switched panels: a persistent section list swaps the pane beside it, and rows edit in place rather than opening a separate form.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings-sidebar --type page <path>\n\nname:        settings\npackage:     @astryxdesign/core\ndescription: Preferences as one continuously scrolling form, sections stacked in order with no navigation between them.\ncommand:     npx @astryxdesign/cli@0.7.12 template settings --type page <path>\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        CommandPaletteEmptyBasic\npackage:     @astryxdesign/core\ndescription: A command palette with no results, showing a custom empty message via emptyBootstrapText.\n\nname:        CommandPaletteEmptyShowcase\npackage:     @astryxdesign/core\ndescription: Command palette empty state shown when no commands are available.\n\nname:        CommandPaletteCustomFooter\npackage:     @astryxdesign/core\ndescription: Command palette with a custom footer tip message.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        Thumbnail\npackage:     @astryxdesign/core\ndescription: Thumbnail displays a compact, square preview of an image attachment.\n\nname:        useContainerReveal\npackage:     @astryxdesign/core\ndescription: A headless hover/focus reveal primitive.\n\nname:        Banner\npackage:     @astryxdesign/core\ndescription: Banner shows a persistent message at the top of a page or section.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

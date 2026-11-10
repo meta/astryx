@@ -1,0 +1,13 @@
+{
+ "id": "shell_help_theme_--json_@empty",
+ "args": [
+  "help",
+  "theme",
+  "--json"
+ ],
+ "fixture": "empty",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx theme\",\n    \"description\": \"Add, switch, build, and author themes\",\n    \"usage\": \"astryx theme [options] [command]\",\n    \"options\": [],\n    \"subcommands\": [\n      {\n        \"name\": \"palette\",\n        \"description\": \"Create and work with theme-owned color palettes\"\n      },\n      {\n        \"name\": \"build\",\n        \"description\": \"Compile standalone themes or one keyed theme family\"\n      },\n      {\n        \"name\": \"list\",\n        \"description\": \"List themes available to add\"\n      },\n      {\n        \"name\": \"add\",\n        \"description\": \"Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.\"\n      },\n      {\n        \"name\": \"remove\",\n        \"description\": \"Remove a non-default theme from the app\"\n      },\n      {\n        \"name\": \"use\",\n        \"description\": \"Choose the app default from its added themes\"\n      },\n      {\n        \"name\": \"eject\",\n        \"description\": \"Fork a theme as editable local source\"\n      },\n      {\n        \"name\": \"template\",\n        \"description\": \"Write the annotated theme template into your project\"\n      },\n      {\n        \"name\": \"targets\",\n        \"description\": \"List the component theming targets a theme can override\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

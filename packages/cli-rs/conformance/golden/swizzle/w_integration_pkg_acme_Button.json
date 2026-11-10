@@ -1,0 +1,14 @@
+{
+ "id": "w_integration_pkg_acme_Button",
+ "args": [
+  "swizzle",
+  "Button",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Component \"Button\" is not provided by package \"@acme/kit\".\n\n  @astryxdesign/core  (provides this component)\n",
+ "exit": 1,
+ "files": []
+}

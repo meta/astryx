@@ -1,0 +1,13 @@
+{
+ "id": "integration_verify_--bogus-flag",
+ "args": [
+  "integration",
+  "verify",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

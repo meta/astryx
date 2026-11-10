@@ -1,0 +1,12 @@
+{
+ "id": "w_-x_@integration",
+ "args": [
+  "discover",
+  "@/x"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Package \"@/x\" not found\n\n  @acme/kit  (available package)\n",
+ "exit": 1,
+ "files": []
+}

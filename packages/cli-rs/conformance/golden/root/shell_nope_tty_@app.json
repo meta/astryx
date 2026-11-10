@@ -1,0 +1,11 @@
+{
+ "id": "shell_nope_tty_@app",
+ "args": [
+  "nope"
+ ],
+ "fixture": "app",
+ "stdout": "Error: unknown command 'nope'\r\n\r\n  docs  (did you mean this?)\r\n  hook  (did you mean this?)\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

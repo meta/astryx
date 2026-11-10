@@ -1,0 +1,1 @@
+ERROR Cannot update agentDocs safely: it is not a static object literal.

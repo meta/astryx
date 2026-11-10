@@ -1,0 +1,12 @@
+{
+ "id": "component_nosuchsub",
+ "args": [
+  "component",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"nosuchsub\"\n",
+ "exit": 1,
+ "files": []
+}

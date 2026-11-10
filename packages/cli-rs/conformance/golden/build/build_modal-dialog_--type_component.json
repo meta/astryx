@@ -1,0 +1,20 @@
+{
+ "id": "build_modal-dialog_--type_component",
+ "args": [
+  "build",
+  "modal dialog",
+  "--type",
+  "component"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"modal dialog\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        AlertDialog\npackage:     @astryxdesign/core\ndescription: AlertDialog asks the user to confirm a destructive or irreversible action before it happens.\n\nname:        BottomSheet\npackage:     @astryxdesign/core\ndescription: A mobile touch surface for filters, actions, forms, and detail views that should rise from the bottom of the viewport.\n\nname:        CommandPalette\npackage:     @astryxdesign/core\ndescription: CommandPalette is a searchable dialog for quick access to commands, navigation, and actions.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

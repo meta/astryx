@@ -1,0 +1,35 @@
+{
+ "id": "ex_integration_add_template_acme-dashboard_@large",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "acme-dashboard"
+ ],
+ "fixture": "large",
+ "stdout": "template contribution added\n\n[ok] acme-dashboard\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dashboard.doc.mjs\n- templates/acme-dashboard.tsx\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "large/templates/acme-dashboard.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'acme-dashboard',\n  displayName: 'Acme Dashboard',\n  description: 'Acme Dashboard template.',\n};\n"
+  },
+  {
+   "path": "large/templates/acme-dashboard.tsx",
+   "status": "created",
+   "text": "export default function AcmeDashboard() {\n  return <div>Acme Dashboard</div>;\n}\n"
+  }
+ ]
+}

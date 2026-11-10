@@ -1,0 +1,20 @@
+{
+ "id": "template_hero_--type_block_@integration",
+ "args": [
+  "template",
+  "hero",
+  "--type",
+  "block"
+ ],
+ "fixture": "integration",
+ "stdout": "export default function Hero() { return <section>zorblax</section>; }\n\n",
+ "stderr": "package: @acme/kit\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

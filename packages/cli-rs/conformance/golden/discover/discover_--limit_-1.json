@@ -1,0 +1,13 @@
+{
+ "id": "discover_--limit_-1",
+ "args": [
+  "discover",
+  "--limit",
+  "-1"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --limit must be a positive integer, not \"-1\"\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "theme_palette_generate_@empty",
+ "args": [
+  "theme",
+  "palette",
+  "generate"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'config'\n",
+ "exit": 1,
+ "files": []
+}

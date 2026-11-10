@@ -1,0 +1,26 @@
+[
+ {
+  "transform": "v0.6.0/remove-focus-isrtl-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useGridFocus as useGrid} from '@astryxdesign/core/hooks';\nconst focus = useGrid({columns: 3, isRtl: forceRtl, hasRovingTabIndex: true});",
+  "output": "import {useGridFocus as useGrid} from '@astryxdesign/core/hooks';\nconst focus = useGrid({\n  columns: 3,\n  hasRovingTabIndex: true\n});",
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/remove-focus-isrtl-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useListFocus} from '@astryxdesign/core';\nconst config = {isRtl: true};\nconst focus = useListFocus(config);\nconst unrelated = {isRtl: false};",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.6.0/remove-focus-isrtl-option",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useListFocus} from '@astryxdesign/core';\nfunction wrapper(useListFocus) {\n  return useListFocus({isRtl: true, keep: 1});\n}",
+  "output": null,
+  "error": null
+ }
+]

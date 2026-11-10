@@ -1,0 +1,18 @@
+{
+ "id": "search_use-integrations",
+ "args": [
+  "search",
+  "use-integrations"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"use-integrations\" (1)\n\nname:        use-integrations\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Use integrations\ndescription: Install, discover, and use integration packages that add components, templates, themes, and docs to your app.\ncommand:     npx @astryxdesign/cli@0.7.12 docs use-integrations --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover use-integrations\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

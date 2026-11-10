@@ -1,0 +1,82 @@
+[
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const icon = useXDSIcon('close');",
+  "output": "const icon = getIcon('close');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSIcon} from '@xds/core';\nconst icon = useXDSIcon('close');",
+  "output": "import {getIcon} from '@xds/core';\nconst icon = getIcon('close');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSIcon} from '../Icon/IconRegistry';\nconst icon = useXDSIcon('close');",
+  "output": "import {getIcon} from \"../Icon/globalIconRegistry\";\nconst icon = getIcon('close');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {IconRegistryContext, useXDSIcon} from '@xds/core';\nconst icon = useXDSIcon('close');",
+  "output": "import { getIcon } from '@xds/core';\nconst icon = getIcon('close');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {IconRegistryContext} from '@xds/core';",
+  "output": "",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<IconRegistryContext.Provider value={icons}>\n  <App />\n</IconRegistryContext.Provider>",
+  "output": "<>\n  <App />\n</>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSIcon as getMyIcon} from '@xds/core';\nconst icon = getMyIcon('close');",
+  "output": "import {getIcon as getMyIcon} from '@xds/core';\nconst icon = getMyIcon('close');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const icon = getIcon('close');",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSIcon} from '@xds/core';\nconst close = useXDSIcon('close');\nconst check = useXDSIcon('check');",
+  "output": "import {getIcon} from '@xds/core';\nconst close = getIcon('close');\nconst check = getIcon('check');",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/migrate-useXDSIcon-to-getIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {useXDSIcon} from './IconRegistry';\nconst icon = useXDSIcon('close');",
+  "output": "import {getIcon} from \"./globalIconRegistry\";\nconst icon = getIcon('close');",
+  "error": null
+ }
+]

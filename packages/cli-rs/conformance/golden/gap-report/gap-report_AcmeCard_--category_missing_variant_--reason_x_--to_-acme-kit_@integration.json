@@ -1,0 +1,18 @@
+{
+ "id": "gap-report_AcmeCard_--category_missing_variant_--reason_x_--to_-acme-kit_@integration",
+ "args": [
+  "gap-report",
+  "AcmeCard",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "x",
+  "--to",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: No gap-report destination \"@acme/kit\": no loaded integration names an issues URL. Leave out --to for the default.\n",
+ "exit": 1,
+ "files": []
+}

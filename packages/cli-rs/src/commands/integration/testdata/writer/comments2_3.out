@@ -1,0 +1,14 @@
+export default {
+  // components live here
+  components: './c',
+
+  /* the docs */
+  // inline
+  docs: './d',
+
+  templates: './t' /* after */,
+
+  agentDocs: {
+    append: ['Run acme verify before finishing.']
+  }
+};

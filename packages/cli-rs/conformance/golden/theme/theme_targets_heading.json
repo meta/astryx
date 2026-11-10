@@ -1,0 +1,19 @@
+{
+ "id": "theme_targets_heading",
+ "args": [
+  "theme",
+  "targets",
+  "heading"
+ ],
+ "fixture": "app",
+ "stdout": "Theming targets\n10 across 9 components\n(key - component - props - states - className)\n\ncommand-palette-group-heading   CommandPalette - astryx-command-palette-group-heading\ndropdown-menu-section-heading   DropdownMenu - astryx-dropdown-menu-section-heading\nheading                         Text - level, color, type, weight - astryx-heading\nmarkdown-heading                Markdown - density, level - astryx-markdown-heading\nmulti-selector-section-heading  MultiSelector - astryx-multi-selector-section-heading\nnav-heading-menu                NavHeadingMenu - size - astryx-nav-heading-menu\nnav-heading-menu-item           NavHeadingMenu - size - astryx-nav-heading-menu-item\nselector-section-heading        Selector - astryx-selector-section-heading\nside-nav-heading                SideNav - astryx-side-nav-heading\ntop-nav-heading                 TopNav - astryx-top-nav-heading\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

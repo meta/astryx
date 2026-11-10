@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_navigationscreen_@large",
+ "args": [
+  "component",
+  "navigationscreen"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"navigationscreen\"\n\n  SideNav  (keyword \"navigation\")\n  MobileNav  (keyword \"navigation\")\n  TopNav  (keyword \"navigation\")\n  Breadcrumbs  (keyword \"navigation\")\n  ClickableCard  (keyword \"navigation\")\n",
+ "exit": 1,
+ "files": []
+}

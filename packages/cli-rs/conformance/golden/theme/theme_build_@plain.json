@@ -1,0 +1,12 @@
+{
+ "id": "theme_build_@plain",
+ "args": [
+  "theme",
+  "build"
+ ],
+ "fixture": "plain",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'files'\n",
+ "exit": 1,
+ "files": []
+}

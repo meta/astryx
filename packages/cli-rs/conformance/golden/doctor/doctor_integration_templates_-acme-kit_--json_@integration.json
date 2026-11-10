@@ -1,0 +1,15 @@
+{
+ "id": "doctor_integration_templates_-acme-kit_--json_@integration",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "@acme/kit",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.template-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/kit\",\n    \"version\": \"1.2.3\",\n    \"conflicts\": [],\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

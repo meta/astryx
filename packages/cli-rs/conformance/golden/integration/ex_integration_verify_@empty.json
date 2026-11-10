@@ -1,0 +1,12 @@
+{
+ "id": "ex_integration_verify_@empty",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "empty",
+ "stdout": "Integration package check failed\n\n[fail] local package\n\n- [fail] No package.json found. Run this command inside an integration package.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 1,
+ "files": []
+}

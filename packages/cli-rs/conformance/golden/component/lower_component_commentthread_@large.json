@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_commentthread_@large",
+ "args": [
+  "component",
+  "commentthread"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"commentthread\"\n\n  TextArea  (keyword \"comment\")\n",
+ "exit": 1,
+ "files": []
+}

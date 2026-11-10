@@ -1,0 +1,19 @@
+{
+ "id": "docs_author-a-theme_adaptation-rules_@large",
+ "args": [
+  "docs",
+  "author-a-theme",
+  "adaptation-rules"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Adaptation order and validation\n\nPrecedence follows rule order. Root theme values apply first, then every matching rule in declaration order. A later rule may deliberately restore a root value. `onDark` and `onLight` media-surface overrides apply after adaptations and win on the same leaf.\n\n`extends` preserves the base rule order and appends child rules. Inherited conditions use the child's effective breakpoint map. An empty child rule is a no-op, not a removal operator.\n\nA rule may replace a theme-local token only when the exact name is already enrolled by root `localTokens` or an enrolled base. Component writes in a rule are validated exactly like root `components`: same targets, axes, and value domains. The one addition is that a rule may not be the only place a custom value is enrolled: a value that is valid only because a theme enrolls it generates unconditional type augmentation, so declare it on the root theme first and let rules restyle it. Built-in values need no root declaration. When rules can match together, their ordered portable and local token writes are validated as one effective graph; any reachable cycle fails before CSS is emitted.\n\nAdaptations compile to CSS media queries with no resize listener or styling rerender. Runtime and `npx @astryxdesign/cli@0.7.12 theme build` use the same compiler, but only a built theme is present at first paint in an SSR app.\n\nUp: npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs author-a-theme theme-adaptations\nNext: npx @astryxdesign/cli@0.7.12 docs author-a-theme building-themes-for-production\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

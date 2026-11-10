@@ -1,0 +1,19 @@
+{
+ "id": "docs_theme_light-dark-mode_@large",
+ "args": [
+  "docs",
+  "theme",
+  "light-dark-mode"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Dark mode\n\nLight, dark, and system modes: `npx @astryxdesign/cli@0.7.12 docs use-a-theme`.\n\nLight/dark tuple:\n```tsx\n'--color-accent': ['#0064E0', '#2694FE'],\n//                   ^light     ^dark\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs theme icon-sizes\nNext: npx @astryxdesign/cli@0.7.12 docs theme integration-themes\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

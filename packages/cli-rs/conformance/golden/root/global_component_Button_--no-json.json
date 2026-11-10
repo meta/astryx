@@ -1,0 +1,13 @@
+{
+ "id": "global_component_Button_--no-json",
+ "args": [
+  "component",
+  "Button",
+  "--no-json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--no-json'\n(Did you mean --json?)\n",
+ "exit": 1,
+ "files": []
+}

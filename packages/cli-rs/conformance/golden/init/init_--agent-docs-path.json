@@ -1,0 +1,12 @@
+{
+ "id": "init_--agent-docs-path",
+ "args": [
+  "init",
+  "--agent-docs-path"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--agent-docs-path <path...>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

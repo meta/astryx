@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-bad-color-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/bad-color.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Invalid color: blue\n",
+ "exit": 1,
+ "files": []
+}

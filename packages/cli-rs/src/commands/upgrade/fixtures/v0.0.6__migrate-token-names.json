@@ -1,0 +1,202 @@
+[
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-accent-deemphasized'];",
+  "output": "const x = colorVars[\"--color-accent-muted\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-accent'];",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-positive'];",
+  "output": "const x = colorVars[\"--color-success\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-negative'];",
+  "output": "const x = colorVars[\"--color-error\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-educational'];",
+  "output": "const x = colorVars[\"--color-info\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-positive-deemphasized'],\n      b: colorVars['--color-negative-deemphasized'],\n      c: colorVars['--color-warning-deemphasized'],\n      d: colorVars['--color-educational-deemphasized'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-success-muted\"],\n      b: colorVars[\"--color-error-muted\"],\n      c: colorVars[\"--color-warning-muted\"],\n      d: colorVars[\"--color-info-muted\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-hover-overlay'],\n      b: colorVars['--color-pressed-overlay'],\n      c: colorVars['--color-disabled-overlay'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-overlay-hover\"],\n      b: colorVars[\"--color-overlay-pressed\"],\n      c: colorVars[\"--color-overlay-disabled\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-focus-outline'],\n      b: colorVars['--color-focus-outline-error'],\n      c: colorVars['--color-focus-outline-success'],\n      d: colorVars['--color-focus-outline-warning'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-ring-focus\"],\n      b: colorVars[\"--color-ring-focus-error\"],\n      c: colorVars[\"--color-ring-focus-success\"],\n      d: colorVars[\"--color-ring-focus-warning\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-divider'],\n      b: colorVars['--color-divider-high-contrast'],\n      c: colorVars['--color-divider-emphasized'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-border\"],\n      b: colorVars[\"--color-border-strong\"],\n      c: colorVars[\"--color-border-emphasized\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-glimmer'];",
+  "output": "const x = colorVars[\"--color-skeleton\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-shadow-elevation'];",
+  "output": "const x = colorVars[\"--color-shadow\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-text-on-media'],\n      b: colorVars['--color-icon-on-media'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-text-on-dark-media\"],\n      b: colorVars[\"--color-icon-on-dark-media\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-accent-text'];",
+  "output": "const x = colorVars[\"--color-text-link\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-text-placeholder'];",
+  "output": "const x = colorVars[\"--color-text-secondary\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-icon-tertiary'];",
+  "output": "const x = colorVars[\"--color-icon-secondary\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = 'var(--color-divider)';",
+  "output": "const x = \"var(--color-border)\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const css = `color: var(--color-educational)`;",
+  "output": "const css = `color: var(--color-info)`;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "defineTheme({\n      tokens: {\n        '--color-accent': ['#0064E0', '#2694FE'],\n        '--color-positive': ['#0D8626', '#0D8626'],\n        '--color-divider': ['#05365919', '#F2F4F619'],\n      }\n    })",
+  "output": "defineTheme({\n      tokens: {\n        '--color-accent': ['#0064E0', '#2694FE'],\n        \"--color-success\": ['#0D8626', '#0D8626'],\n        \"--color-border\": ['#05365919', '#F2F4F619'],\n      }\n    })",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-accent'],\n      b: colorVars['--color-success'],\n      c: colorVars['--color-error'],\n      d: colorVars['--color-border'],\n    };",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-text-primary'],\n      b: colorVars['--color-surface'],\n      c: colorVars['--color-warning'],\n      d: colorVars['--color-blue-background'],\n    };",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-accent';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-accent-text'],\n      b: colorVars['--color-accent'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-text-link\"],\n      b: colorVars['--color-accent'],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: shadowVars['--insetshadow-border-hover'],\n      b: shadowVars['--insetshadow-border-accent'],\n      c: shadowVars['--insetshadow-border-positive'],\n      d: shadowVars['--insetshadow-border-warning'],\n      e: shadowVars['--insetshadow-border-negative'],\n    };",
+  "output": "const x = {\n      a: shadowVars[\"--inset-shadow-border-hover\"],\n      b: shadowVars[\"--inset-shadow-border-accent\"],\n      c: shadowVars[\"--inset-shadow-border-positive\"],\n      d: shadowVars[\"--inset-shadow-border-warning\"],\n      e: shadowVars[\"--inset-shadow-border-negative\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = easeVars['--easing-standard'];",
+  "output": "const x = easeVars[\"--ease-standard\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.6/migrate-token-names",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"--color-positive-custom\";",
+  "output": null,
+  "error": null
+ }
+]

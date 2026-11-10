@@ -1,0 +1,12 @@
+{
+ "id": "shell_upgrade_--integration_@empty",
+ "args": [
+  "upgrade",
+  "--integration"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: option '--integration <package>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

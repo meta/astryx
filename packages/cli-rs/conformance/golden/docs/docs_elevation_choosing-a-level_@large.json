@@ -1,0 +1,19 @@
+{
+ "id": "docs_elevation_choosing-a-level_@large",
+ "args": [
+  "docs",
+  "elevation",
+  "choosing-a-level"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Choosing a level\n\nPick the level by how far the surface sits from the page, not by how much shadow you want. Elevation encodes stacking order: a higher level means the surface is layered over more of the UI. Use exactly one level per surface, and only raise a surface above `none` when it actually sits above other content.\n\nLevel | When to use                                                                                                                                                                                                                                      | Examples                                              \n----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------\nnone  | The component is flat and embedded in the surface; it is part of the page, not layered above it. This is the default for every surface except ChatComposer.                                                                                      | A Card in a grid, an inline Banner, a standard Button \nlow   | The component is in the normal page flow but should read as distinct from the background. Use for emphasis or to separate the component from the surface behind it; the component still sits on the page, it is not floating over other content. | A raised Card that needs emphasis, a ChatComposer     \nmed   | The component sits over other content on the same page; it floats above nearby elements but not the whole screen.                                                                                                                                | A Popover, a floating Banner, a floating action Button\nhigh  | The component is placed over the entire UI; it is the topmost layer and typically has a backdrop or takes focus from everything else.                                                                                                            | A modal Dialog, a full-screen overlay surface         \n\nIf two surfaces overlap, the one on top takes the higher level. If a surface does not overlap anything, it is `none` or `low`; never `med` or `high`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs elevation --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs elevation elevation-scale\nNext: npx @astryxdesign/cli@0.7.12 docs elevation the-elevation-prop\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

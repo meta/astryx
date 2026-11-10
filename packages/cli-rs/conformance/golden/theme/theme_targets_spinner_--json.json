@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_spinner_--json",
+ "args": [
+  "theme",
+  "targets",
+  "spinner",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"spinner\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"spinner\",\n        \"className\": \"astryx-spinner\",\n        \"component\": \"Spinner\",\n        \"props\": [\n          \"size\",\n          \"shade\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

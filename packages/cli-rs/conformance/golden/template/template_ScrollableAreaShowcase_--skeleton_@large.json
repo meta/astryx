@@ -1,0 +1,19 @@
+{
+ "id": "template_ScrollableAreaShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "ScrollableAreaShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ScrollableAreaShowcase - A fixed-height file panel that scrolls on the block axis; the heading sits inside the viewport, so it scrolls away with the content.\n# Components: Card, Grid, ScrollableArea\n\n<Card padding={0} width={380}>\n  <ScrollableArea padding={4} role=\"region\" height={300} />\n  <VStack gap={4}>\n    <VStack gap={0.5}>\n      <Heading />\n      <Text />\n    </VStack>\n    <VStack gap={2}>\n      <Text />\n      <Grid gap={2} columns={2}>\n        <Card padding={3} variant=\"muted\">\n          <VStack gap={1}>\n            <Text />\n            <Text />\n          </VStack>\n        </Card>\n      </Grid>\n    </VStack>\n  </VStack>\n</Card>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

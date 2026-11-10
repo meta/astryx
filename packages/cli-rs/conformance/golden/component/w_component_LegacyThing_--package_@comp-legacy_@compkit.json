@@ -1,0 +1,20 @@
+{
+ "id": "w_component_LegacyThing_--package_@comp-legacy_@compkit",
+ "args": [
+  "component",
+  "LegacyThing",
+  "--package",
+  "@comp/legacy"
+ ],
+ "fixture": "compkit",
+ "stdout": "package: @comp/legacy\n\n# LegacyThing\n\nA component documented the old way.\n\n**Import:** `import {LegacyThing} from '@comp/legacy';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `size` | `'sm' \\| 'lg'` | - | Size. |\n\n",
+ "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/compkit\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

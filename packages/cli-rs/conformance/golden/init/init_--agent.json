@@ -1,0 +1,12 @@
+{
+ "id": "init_--agent",
+ "args": [
+  "init",
+  "--agent"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--agent <tool>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

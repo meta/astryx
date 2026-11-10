@@ -1,0 +1,19 @@
+{
+ "id": "component_BreadcrumbItem_--zh_@large",
+ "args": [
+  "component",
+  "BreadcrumbItem",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# BreadcrumbItem\n\nBreadcrumbItem represents one destination, action, current location, or sibling-menu trigger inside a Breadcrumbs trail.\n\n**Import:** `import {BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 面包屑项的标签内容。 **(required)** |\n| `href` | `string` | - | 面包屑链接的 URL；不可导航的项目请省略。 |\n| `onClick` | `(e: MouseEvent) => void` | - | 面包屑项的点击处理函数。 |\n| `isCurrent` | `boolean` | - | 将此项标记为当前页面，应用 aria-current=\"page\"。省略时，如果没有显式的当前项，则自动将最后一项标记为当前项；传入 false 可退出自动检测。 |\n| `startIcon` | `ReactNode` | - | 在项目标签前渲染的图标。 |\n| `menu` | `DropdownMenuOption[] \\| ReactNode` | - | 激活项目时打开的菜单，使用与 DropdownMenu/MoreMenu/ContextMenu 相同的项目 API（DropdownMenuOption[] 数组或组合的 DropdownMenuItem 子元素）。渲染为带 chevron 和 aria-haspopup=\"menu\" 的链接样式触发器。优先于 href/onClick。 |\n| `menuSize` | `'sm' \\| 'md' \\| 'lg'` | - | 传递给菜单项的尺寸。默认根据面包屑变体推断（'supporting' → 'sm'，否则 'md'）。 |\n| `as` | `LinkComponentType` | - | 自定义链接组件，代替 <a> 渲染。覆盖 LinkProvider 设置的默认值。仅适用于非当前项。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

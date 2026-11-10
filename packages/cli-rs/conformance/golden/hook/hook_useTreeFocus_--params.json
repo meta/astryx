@@ -1,0 +1,19 @@
+{
+ "id": "hook_useTreeFocus_--params",
+ "args": [
+  "hook",
+  "useTreeFocus",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseTreeFocusOptions` | - | Configuration object for tree focus behavior. |\n| `options.itemSelector` | `string` | `'[role=\"treeitem\"]'` | Selector for visible treeitems within the tree, in DOM order. |\n| `options.isItemDisabled` | `(item: HTMLElement) => boolean` | - | Predicate for whether a treeitem is disabled and must be skipped during navigation. Defaults to reading `data-tree-disabled` / `aria-disabled`. |\n| `options.getLevel` | `(item: HTMLElement) => number` | - | Reads the 1-based nesting level of a treeitem. Defaults to the `aria-level` attribute. |\n| `options.onToggleExpand` | `(id: string) => void` | - | Called to expand/collapse the treeitem with the given id (ArrowRight on a collapsed parent, ArrowLeft on an expanded parent, Enter/Space on a parent without its own action). |\n| `options.onActivate` | `(item: HTMLElement, id: string \\| undefined) => boolean \\| void` | - | Called when Enter/Space activates a treeitem. Return true when handled; return false/undefined to let the hook fall back to toggling expansion. |\n| `options.onActiveChange` | `(id: string \\| undefined) => void` | - | Notified when the hook moves focus to a treeitem. Consumers use this to move a single roving tab stop. |\n| `options.hasRovingTabIndex` | `boolean` | `false` | When true, the hook owns a single roving tab stop across the visible treeitems (stamps tabindex 0/-1, repairs on mount, moves with navigation). Preserves an existing tabindex=\"0\" seed on mount. Attach the returned `handleFocus` to keep the stop in sync after clicks. |\n| `options.typeahead` | `boolean` | `true` | Whether typeahead (jump to next item whose text starts with the typed characters, ignoring case, accents, the stroked letters đ ł ø ħ ŧ ƀ and Turkish ı/İ in every locale) is enabled. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

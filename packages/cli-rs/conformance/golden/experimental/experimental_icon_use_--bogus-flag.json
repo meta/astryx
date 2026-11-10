@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_use_--bogus-flag",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "--bogus-flag"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus-flag'\n",
+ "exit": 1,
+ "files": []
+}

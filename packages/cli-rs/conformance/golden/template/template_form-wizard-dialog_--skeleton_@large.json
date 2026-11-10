@@ -1,0 +1,19 @@
+{
+ "id": "template_form-wizard-dialog_--skeleton_@large",
+ "args": [
+  "template",
+  "form-wizard-dialog",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# form-wizard-dialog - Step through a short flow in a dialog, overlay, or popup launched from the page underneath, which stays where it was. Compact step markers and a pinned action row inside a constrained width, rather than the full page a wizard usually gets. Best for two to four short steps - setup, invite, schedule, onboarding - where losing the context underneath would cost more than the flow is worth.\n# Components: Banner, Center, CheckboxList, DateInput, Dialog, Divider, Field, FieldStatus, FormLayout, Layout, MetadataList, MultiSelector, RadioList, SegmentedControl, Selector, Step, Stepper, Switch, TextArea, TextInput, TimeInput\n\n<Center height=\"100dvh\">\n  <Dialog width={620}>\n    <Layout padding={4} height=\"fill\" width>\n      /* header: */\n      <DialogHeader hasDivider={false} />\n      <LayoutHeader hasDivider={false}>\n        <Stepper density=\"compact\" />\n        <Step />\n      </LayoutHeader>\n      /* content: */\n      <LayoutContent>\n        <VStack gap={5}>\n          <FormLayout>\n            <TextInput />\n            <Selector />\n            <CheckboxList density=\"compact\" />\n            <CheckboxListItem />\n          </FormLayout>\n          <FormLayout>\n            <Field />\n            <SegmentedControl />\n            <SegmentedControlItem />\n            <SegmentedControlItem />\n            <SegmentedControlItem />\n            <Selector />\n            <FormLayout>\n              <TimeInput />\n              <Selector />\n            </FormLayout>\n            <DateInput />\n            <Banner />\n          </FormLayout>\n          <FormLayout>\n            <MultiSelector />\n            <RadioList />\n            ...\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

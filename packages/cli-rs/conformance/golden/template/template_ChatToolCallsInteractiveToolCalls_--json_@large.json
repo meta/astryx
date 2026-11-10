@@ -1,0 +1,13 @@
+{
+ "id": "template_ChatToolCallsInteractiveToolCalls_--json_@large",
+ "args": [
+  "template",
+  "ChatToolCallsInteractiveToolCalls",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ChatToolCallsInteractiveToolCalls\",\n    \"description\": \"Tool calls with expandable result details showing diffs and command output in code blocks. Click a row to reveal its result.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ChatToolCalls\",\n      \"CodeBlock\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ChatToolCalls} from '@astryxdesign/core/Chat';\\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\\n\\nconst editDiff = `--- a/src/utils/formatDate.ts\\n+++ b/src/utils/formatDate.ts\\n@@ -8,7 +8,11 @@\\n-export function formatDate(date: Date): string {\\n-  return date.toLocaleDateString();\\n-}\\n+export function formatDate(\\n+  date: Date,\\n+  locale = 'en-US',\\n+  options?: Intl.DateTimeFormatOptions,\\n+): string {\\n+  return new Intl.DateTimeFormat(locale, options).format(date);\\n+}`;\\n\\nconst testOutput = `$ yarn test\\n PASS  src/utils/formatDate.test.ts\\n PASS  src/components/DatePicker.test.tsx\\n\\nTest Suites: 2 passed, 2 total\\nTests:       14 passed, 14 total\\nTime:        1.8s`;\\n\\nexport default function ChatToolCallsInteractiveToolCalls() {\\n  return (\\n    <ChatToolCalls\\n      defaultIsExpanded\\n      calls={[\\n        {\\n          name: 'edit',\\n          target: 'src/utils/formatDate.ts',\\n          status: 'complete',\\n          duration: '85ms',\\n          node: 'cli:remote-server',\\n          additions: 6,\\n          deletions: 3,\\n          resultDetail: (\\n            <CodeBlock code={editDiff} language=\\\"typescript\\\" maxHeight=\\\"50vh\\\" />\\n          ),\\n        },\\n        {\\n          name: 'bash',\\n          target: 'yarn test',\\n          status: 'complete',\\n          duration: '1.8s',\\n          node: 'cli:remote-server',\\n          resultDetail: (\\n            <CodeBlock code={testOutput} language=\\\"bash\\\" maxHeight=\\\"50vh\\\" />\\n          ),\\n        },\\n        {\\n          name: 'web_search',\\n          target: 'Intl.DateTimeFormat locale options',\\n          status: 'complete',\\n          duration: '1.2s',\\n        },\\n      ]}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

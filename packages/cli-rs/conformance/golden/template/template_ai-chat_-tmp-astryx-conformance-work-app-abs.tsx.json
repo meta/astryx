@@ -1,0 +1,13 @@
+{
+ "id": "template_ai-chat_-tmp-astryx-conformance-work-app-abs.tsx",
+ "args": [
+  "template",
+  "ai-chat",
+  "/tmp/astryx-conformance/work/app/abs.tsx"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid template target path \"/tmp/astryx-conformance/work/app/abs.tsx\": absolute paths are not allowed. Use a path relative to the project root.\n",
+ "exit": 1,
+ "files": []
+}

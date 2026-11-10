@@ -1,0 +1,19 @@
+{
+ "id": "component_TopNavMegaMenu_--zh_@large",
+ "args": [
+  "component",
+  "TopNavMegaMenu",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TopNavMegaMenu\n\n导航项，在悬停时显示全宽超级菜单面板。使用插槽 API（items 和 featured）。TopNavMegaMenuItem 在桌面和移动抽屉模式中自行渲染。\n\n**Import:** `import {TopNavMegaMenu} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 触发按钮的可见标签。 **(required)** |\n| `items` | `ReactNode` | - | 菜单项插槽，通常为 TopNavMegaMenuItem 组件，但接受任何 ReactNode。 |\n| `featured` | `ReactNode` | - | 特色内容插槽，桌面端显示在右侧面板，移动抽屉中显示在项目下方。 |\n| `delay` | `number` | `150` | 悬停时显示菜单前的延迟（毫秒）。 |\n| `hideDelay` | `number` | `250` | 鼠标离开后隐藏菜单的延迟（毫秒）。 |\n| `onOpenChange` | `(isOpen: boolean) => void` | - | 超级菜单打开或关闭时触发的回调。用于协调包装器样式。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

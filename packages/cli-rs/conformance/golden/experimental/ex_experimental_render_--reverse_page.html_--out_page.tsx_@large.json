@@ -1,0 +1,16 @@
+{
+ "id": "ex_experimental_render_--reverse_page.html_--out_page.tsx_@large",
+ "args": [
+  "experimental",
+  "render",
+  "--reverse",
+  "page.html",
+  "--out",
+  "page.tsx"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: page.html does not exist\n",
+ "exit": 1,
+ "files": []
+}

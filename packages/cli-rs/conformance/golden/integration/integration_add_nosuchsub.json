@@ -1,0 +1,13 @@
+{
+ "id": "integration_add_nosuchsub",
+ "args": [
+  "integration",
+  "add",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'name'\n",
+ "exit": 1,
+ "files": []
+}

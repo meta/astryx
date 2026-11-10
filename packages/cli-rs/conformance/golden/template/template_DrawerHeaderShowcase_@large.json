@@ -1,0 +1,18 @@
+{
+ "id": "template_DrawerHeaderShowcase_@large",
+ "args": [
+  "template",
+  "DrawerHeaderShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @input Static header content: title, subtitle, a no-op close handler, and a divider\n * @output The DrawerHeader row at the top of a square-cornered, drawer-width panel, visible without opening an overlay\n * @position DrawerHeader's docsite showcase. Drawer has no inline mode\n *   like Dialog's isInline, so a plain panel stands in for the drawer; in an\n *   app, compose DrawerHeader in a Layout header slot inside a Drawer.\n */\n\nimport * as stylex from '@stylexjs/stylex';\nimport {DrawerHeader} from '@astryxdesign/core/Drawer';\nimport {\n  Layout,\n  LayoutContent,\n  overlayPaddingReset,\n} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport {\n  borderVars,\n  colorVars,\n  spacingVars,\n} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  // A card-like panel with square corners, matching the drawer's own corners.\n  panel: {\n    width: 360,\n    maxWidth: '100%',\n    boxSizing: 'border-box',\n    backgroundColor: colorVars['--color-background-card'],\n    borderWidth: borderVars['--border-width'],\n    borderStyle: 'solid',\n    borderColor: colorVars['--color-border'],\n    borderRadius: 0,\n  },\n  body: {\n    padding: spacingVars['--spacing-4'],\n    backgroundColor: colorVars['--color-background-muted'],\n    borderRadius: 0,\n  },\n});\n\nexport default function DrawerHeaderShowcase() {\n  return (\n    // Like the Drawer root, the panel is a padding boundary, so the Layout\n    // regions inset by their own --spacing-4 default: the drawer's inset.\n    <div {...stylex.props(styles.panel, overlayPaddingReset.reset)}>\n      <Layout\n        height=\"auto\"\n        header={\n          <DrawerHeader\n            title=\"Host details\"\n            subtitle=\"web-prod-04\"\n            onOpenChange={() => {}}\n            hasDivider\n          />\n        }\n        content={\n          <LayoutContent>\n            <div {...stylex.props(styles.body)}>\n              <Text type=\"body\" color=\"secondary\">\n                Drawer body content goes here.\n              </Text>\n            </div>\n          </LayoutContent>\n        }\n      />\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

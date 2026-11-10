@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--additional-context",
+ "args": [
+  "gap-report",
+  "--additional-context"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--additional-context <text>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

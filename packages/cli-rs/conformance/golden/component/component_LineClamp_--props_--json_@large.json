@@ -1,0 +1,14 @@
+{
+ "id": "component_LineClamp_--props_--json_@large",
+ "args": [
+  "component",
+  "LineClamp",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content to clamp: mixed inline content, nested elements, anything you would rather not wrap in a single Text.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"maxLines\",\n      \"type\": \"number\",\n      \"description\": \"Maximum number of lines to show before clamping with an ellipsis.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"hasTruncateTooltip\",\n      \"type\": \"boolean\",\n      \"description\": \"Show a tooltip with the full text content on hover or keyboard focus when clamped. A clamped root is focusable (tabindex 0) so keyboard users can reach the tooltip; a tabIndex you pass wins. The tooltip props follow Text's: when Text's hasTruncateTooltip is renamed in a minor, LineClamp follows.\",\n      \"default\": \"true\"\n    },\n    {\n      \"name\": \"truncateTooltipPlacement\",\n      \"type\": \"'above' | 'below' | 'start' | 'end'\",\n      \"description\": \"Where the truncation tooltip opens.\",\n      \"default\": \"'above'\"\n    },\n    {\n      \"name\": \"as\",\n      \"type\": \"'div' | 'span' | 'p'\",\n      \"description\": \"HTML element to render.\",\n      \"default\": \"'div'\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

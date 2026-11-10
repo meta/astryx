@@ -1,0 +1,16 @@
+{
+ "id": "w_user_with_features",
+ "args": [
+  "init",
+  "--user",
+  "--features",
+  "agents",
+  "--agent",
+  "claude"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\nError: `--user` cannot be combined with --features, --agent: it writes one skill file for every agent on the computer, linked into the folders agents read, with no features, agents, or path to choose.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_subfolder_remove",
+ "args": [
+  "init",
+  "--remove-agents"
+ ],
+ "fixture": "app",
+ "stdout": "[ok] Nothing to remove: no Astryx agent-docs block was found.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

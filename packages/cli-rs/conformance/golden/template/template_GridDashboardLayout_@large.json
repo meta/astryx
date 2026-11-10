@@ -1,0 +1,18 @@
+{
+ "id": "template_GridDashboardLayout_@large",
+ "args": [
+  "template",
+  "GridDashboardLayout"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Grid, GridSpan} from '@astryxdesign/core/Grid';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst metrics = [\n  {label: 'Revenue', value: '$48,290'},\n  {label: 'Active Users', value: '12,841'},\n  {label: 'Conversion', value: '3.2%'},\n  {label: 'Avg Response', value: '245ms'},\n];\n\nexport default function GridDashboardLayout() {\n  return (\n    <Grid columns={4} gap={4} width=\"100%\" style={{maxWidth: 500}}>\n      <GridSpan columns={2} rows={2}>\n        <Card>\n          <Text type=\"label\" display=\"block\">\n            Weekly Traffic\n          </Text>\n          <Text type=\"supporting\" display=\"block\">\n            Page views and unique visitors over the last 7 days\n          </Text>\n        </Card>\n      </GridSpan>\n      {metrics.map(m => (\n        <Card key={m.label}>\n          <Text type=\"supporting\" display=\"block\">\n            {m.label}\n          </Text>\n          <Text type=\"label\" display=\"block\">\n            {m.value}\n          </Text>\n        </Card>\n      ))}\n      <GridSpan columns=\"full\">\n        <Card>\n          <Text type=\"label\" display=\"block\">\n            Recent Activity\n          </Text>\n          <Text type=\"supporting\" display=\"block\">\n            Latest events across all projects\n          </Text>\n        </Card>\n      </GridSpan>\n    </Grid>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

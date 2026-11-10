@@ -1,0 +1,18 @@
+{
+ "id": "build_MetadataList",
+ "args": [
+  "build",
+  "MetadataList"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"MetadataList\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nSearch matched `detail-page`, `file-explorer`, `form-wizard` only loosely, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nKeyword search matched these page templates: detail-page (@astryxdesign/core), file-explorer (@astryxdesign/core), form-wizard (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        MetadataListBasicMetadata\npackage:     @astryxdesign/core\ndescription: Single-column key-value metadata list.\n\nname:        MetadataListCollapsibleMetadata\npackage:     @astryxdesign/core\ndescription: Metadata list with a show-more toggle after a set number of items.\n\nname:        MetadataListMultiColumnMetadata\npackage:     @astryxdesign/core\ndescription: Multi-column metadata grid with token tags.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        MetadataList\npackage:     @astryxdesign/core\ndescription: MetadataList displays key-value pairs for object attributes like quality, condition, and status, in a structured layout.\n\nname:        MetadataListItem\npackage:     @astryxdesign/core\ndescription: A single labeled metadata value within an MetadataList.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

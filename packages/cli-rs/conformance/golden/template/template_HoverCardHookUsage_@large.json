@@ -1,0 +1,18 @@
+{
+ "id": "template_HoverCardHookUsage_@large",
+ "args": [
+  "template",
+  "HoverCardHookUsage"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useHoverCard} from '@astryxdesign/core/HoverCard';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Center} from '@astryxdesign/core/Center';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function HoverCardHookUsage() {\n  const hoverCard = useHoverCard({\n    placement: 'below',\n    delay: 100,\n    isDefaultOpen: true,\n    label: 'Alex Morgan',\n  });\n\n  return (\n    <Center height={220}>\n      <Button\n        label=\"Hover profile\"\n        ref={hoverCard.ref}\n        aria-haspopup=\"dialog\"\n        aria-controls={hoverCard.isOpen ? hoverCard.id : undefined}\n        aria-expanded={hoverCard.isOpen}\n      />\n      {hoverCard.renderHoverCard(\n        <VStack gap={1}>\n          <Text type=\"body\" weight=\"bold\">\n            Alex Morgan\n          </Text>\n          <Text type=\"body\" color=\"secondary\">\n            Staff designer · Product systems\n          </Text>\n          <Text type=\"body\" color=\"secondary\">\n            Owns interaction patterns for overlays and navigation.\n          </Text>\n        </VStack>,\n        {placement: 'below', alignment: 'center'},\n      )}\n    </Center>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

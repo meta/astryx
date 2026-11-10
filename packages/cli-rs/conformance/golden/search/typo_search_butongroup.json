@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_butongroup",
+ "args": [
+  "search",
+  "butongroup"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"butongroup\" (6)\n\nname:        ButtonGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ButtonGroup\ndescription: ButtonGroup joins related actions into a single connected control. Use it when multiple buttons represent related choices or operations that belong together visually, like copy/cut/paste, or undo/redo.\ncommand:     npx @astryxdesign/cli@0.7.12 component ButtonGroup\n\nname:        ButtonGroupBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ButtonGroup - Basic\nkind:        block\ndescription: Three related actions joined into a single connected control. Provide a group label for accessibility and keep all buttons the same variant so they read as one unit.\ncommand:     npx @astryxdesign/cli@0.7.12 template ButtonGroupBasic --type block\n\nname:        ButtonGroupFloating\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ButtonGroup - Floating\nkind:        block\ndescription: A grouped action bar raised with `elevation=\"med\"`. The connected buttons share one surface, so the shadow lifts them as a unit.\ncommand:     npx @astryxdesign/cli@0.7.12 template ButtonGroupFloating --type block\n\nname:        ButtonGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ButtonGroup\nkind:        block\ncommand:     npx @astryxdesign/cli@0.7.12 template ButtonGroupShowcase --type block\n\nname:        SegmentedControl\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/SegmentedControl\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options. Use SegmentedControl when all options should be visible at once and the selection controls a value or mode, not page navigation. Under a finger, on a touch device (a coarse primary pointer), the selection slides to the new segment, whether a tap, an arrow key or a new value moved it; with Reduce Motion nothing travels: the old selection fades out as the new one fades in. There, dragging the selected segment carries the selection along with the selected label's colour following it, and the segment under the finger is chosen when it lets go (letting go outside the control selects nothing); a tap selects through the browser's click; a pressed segment shows the shared pressed overlay, and nothing lifts or dims. With a mouse or a pen every change, a click included, slides on the theme's duration and easing, and dragging the selected segment carries it as a finger does.\ncommand:     npx @astryxdesign/cli@0.7.12 component SegmentedControl\n\nname:        ToggleButton\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/ToggleButton\ndescription: ToggleButton switches between selected and unselected states to represent a persistent on/off choice. Use it standalone for binary actions like bold, mute, or favorite, or inside a ToggleButtonGroup for single-select or multi-select toolbar controls.\ncommand:     npx @astryxdesign/cli@0.7.12 component ToggleButton\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover butongroup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

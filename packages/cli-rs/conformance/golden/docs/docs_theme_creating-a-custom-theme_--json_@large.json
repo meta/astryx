@@ -1,0 +1,14 @@
+{
+ "id": "docs_theme_creating-a-custom-theme_--json_@large",
+ "args": [
+  "docs",
+  "theme",
+  "creating-a-custom-theme",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"creating-a-custom-theme\",\n    \"title\": \"Create a custom theme\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Use `defineTheme` with token overrides, scale configs, and component style overrides. For the full guide — palette generation, extending themes, adaptations, custom variants, and production builds — see `astryx docs author-a-theme`.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx theme add stone   # use an existing theme\\nastryx theme eject stone # fork its source to customize\\nastryx theme build src/themes/stone/stoneTheme.ts\",\n        \"label\": \"Quick start\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"For a new coordinated color system, run `astryx theme palette generate palette.config.json --out palette.generated.ts`. Review and commit the generated palette module and receipt, import its `palette` export, then reference stable stops from semantic tokens. Regenerating an accepted palette updates every mapped token that keeps those references; generation does not rewrite the theme.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import {defineTheme} from '@astryxdesign/core/theme';\\nimport {palette} from './palette.generated';\\n\\nconst myTheme = defineTheme({\\n  name: 'my-theme',\\n  tokens: {\\n    '--color-background-surface': [\\n      palette.neutral.light[100],\\n      palette.neutral.dark[15],\\n    ],\\n  },\\n});\",\n        \"label\": \"Map semantic tokens to generated palette stops\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs theme --index\",\n      \"previous\": \"astryx docs theme quick-start\",\n      \"next\": \"astryx docs theme icon-sizes\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

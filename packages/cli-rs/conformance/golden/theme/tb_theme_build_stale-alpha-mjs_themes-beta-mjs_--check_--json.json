@@ -1,0 +1,16 @@
+{
+ "id": "tb_theme_build_stale-alpha-mjs_themes-beta-mjs_--check_--json",
+ "args": [
+  "theme",
+  "build",
+  "stale/alpha.mjs",
+  "themes/beta.mjs",
+  "--check",
+  "--json"
+ ],
+ "fixture": "themes",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build.batch\",\n  \"data\": {\n    \"count\": 2,\n    \"results\": [\n      {\n        \"file\": \"stale/alpha.mjs\",\n        \"receipt\": {\n          \"type\": \"theme.build.check\",\n          \"data\": {\n            \"name\": \"alpha\",\n            \"upToDate\": false,\n            \"stale\": [\n              {\n                \"path\": \"stale/alpha.css\",\n                \"reason\": \"outdated\"\n              },\n              {\n                \"path\": \"stale/alpha.js\",\n                \"reason\": \"outdated\"\n              },\n              {\n                \"path\": \"stale/alpha.d.ts\",\n                \"reason\": \"missing\"\n              }\n            ],\n            \"checked\": [\n              \"stale/alpha.css\",\n              \"stale/alpha.js\",\n              \"stale/alpha.d.ts\"\n            ]\n          }\n        }\n      },\n      {\n        \"file\": \"themes/beta.mjs\",\n        \"receipt\": {\n          \"type\": \"theme.build.check\",\n          \"data\": {\n            \"name\": \"beta\",\n            \"upToDate\": false,\n            \"stale\": [\n              {\n                \"path\": \"themes/beta.css\",\n                \"reason\": \"missing\"\n              },\n              {\n                \"path\": \"themes/beta.js\",\n                \"reason\": \"missing\"\n              },\n              {\n                \"path\": \"themes/beta.d.ts\",\n                \"reason\": \"missing\"\n              }\n            ],\n            \"checked\": [\n              \"themes/beta.css\",\n              \"themes/beta.js\",\n              \"themes/beta.d.ts\"\n            ]\n          }\n        }\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

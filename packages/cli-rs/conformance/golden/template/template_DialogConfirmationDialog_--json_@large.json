@@ -1,0 +1,13 @@
+{
+ "id": "template_DialogConfirmationDialog_--json_@large",
+ "args": [
+  "template",
+  "DialogConfirmationDialog",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"DialogConfirmationDialog\",\n    \"description\": \"Asks the user to confirm a destructive action before it happens. Use before deleting projects, removing team members, revoking API keys, or any irreversible operation.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Dialog\",\n      \"Layout\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  Dialog,\\n  DialogHeader,\\n  useImperativeDialog,\\n} from '@astryxdesign/core/Dialog';\\nimport {\\n  Layout,\\n  LayoutContent,\\n  LayoutFooter,\\n  HStack,\\n} from '@astryxdesign/core/Layout';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nfunction Content({onClose}: {onClose: () => void}) {\\n  return (\\n    <Layout\\n      header={\\n        <DialogHeader title=\\\"Delete project?\\\" onOpenChange={() => onClose()} />\\n      }\\n      content={\\n        <LayoutContent>\\n          <Text type=\\\"body\\\">\\n            This will permanently delete &quot;Marketing Dashboard&quot; and all\\n            of its data. This action cannot be undone.\\n          </Text>\\n        </LayoutContent>\\n      }\\n      footer={\\n        <LayoutFooter>\\n          <HStack gap={2} hAlign=\\\"end\\\">\\n            <Button label=\\\"Cancel\\\" variant=\\\"secondary\\\" onClick={onClose} />\\n            <Button label=\\\"Delete\\\" variant=\\\"destructive\\\" onClick={onClose} />\\n          </HStack>\\n        </LayoutFooter>\\n      }\\n    />\\n  );\\n}\\n\\n// Remove isInline for production — dialogs should be modal.\\nexport default function DialogConfirmationDialog() {\\n  const dialog = useImperativeDialog({width: 400, purpose: 'form'});\\n\\n  return (\\n    <>\\n      <Dialog\\n        isOpen\\n        isInline\\n        onOpenChange={() => {}}\\n        width={400}\\n        purpose=\\\"form\\\">\\n        <Content\\n          onClose={() => dialog.show(<Content onClose={() => dialog.hide()} />)}\\n        />\\n      </Dialog>\\n      {dialog.element}\\n    </>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

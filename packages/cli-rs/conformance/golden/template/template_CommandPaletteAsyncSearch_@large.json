@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPaletteAsyncSearch_@large",
+ "args": [
+  "template",
+  "CommandPaletteAsyncSearch"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {\n  CommandPalette,\n  CommandPaletteInput,\n} from '@astryxdesign/core/CommandPalette';\nimport type {SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst allFiles = [\n  {id: 'readme', label: 'README.md'},\n  {id: 'package', label: 'package.json'},\n  {id: 'tsconfig', label: 'tsconfig.json'},\n  {id: 'index', label: 'src/index.ts'},\n  {id: 'app', label: 'src/App.tsx'},\n];\n\nexport default function CommandPaletteAsyncSearch() {\n  const source = useMemo<SearchSource>(\n    () => ({\n      async search(query: string) {\n        await new Promise(r => setTimeout(r, 400));\n        return allFiles.filter(f =>\n          f.label.toLowerCase().includes(query.toLowerCase()),\n        );\n      },\n      bootstrap() {\n        return [];\n      },\n    }),\n    [],\n  );\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n      input={\n        <CommandPaletteInput\n          label=\"Search files\"\n          placeholder=\"Search files...\"\n        />\n      }\n      emptyBootstrapText=\"Type a filename to search\"\n      emptySearchText=\"No files found\"\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

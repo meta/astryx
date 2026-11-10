@@ -1,0 +1,20 @@
+{
+ "id": "hook_useLayer_--detail_brief",
+ "args": [
+  "hook",
+  "useLayer",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseLayer(mode: 'context' | 'fixed', onShow?: () => void, onHide?: () => void, lightDismiss?: boolean, lazyMount?: boolean): { ref, anchorId, show, hide, isOpen, id, render }  <- from '@astryxdesign/core/Layer'\n  Core positioning hook for rendering overlay content using CSS Anchor Position...\n  Related: LayerProvider, Popover, HoverCard, Tooltip\n  mode: 'context', onShow, onHide, lightDismiss, lazyMount\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for LayerProvider, Popover, HoverCard, Tooltip\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

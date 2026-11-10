@@ -1,0 +1,19 @@
+{
+ "id": "component_SideNavCollapseButton_--zh_@large",
+ "args": [
+  "component",
+  "SideNavCollapseButton",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# SideNavCollapseButton\n\n侧边栏折叠切换按钮。放置在 SideNav 内部（自动读取上下文）或外部（向两者传入同一个受控 collapsible 配置）。默认渲染为仅图标的 ghost 按钮。\n\n**Import:** `import {SideNavCollapseButton} from '@astryxdesign/core/SideNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `collapsible` | `{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void, defaultIsCollapsed?: boolean, hasButton?: boolean, buttonLabel?: string}` | - | 与 SideNav 相同的受控 collapsible 配置，包含其全部键。仅在按钮渲染在侧边栏外部、无法读取折叠上下文时需要。 |\n| `handleRef` | `RefObject<SideNavImperativeCollapseHandle \\| null>` | - | 已废弃。来自 SideNav 的命令式折叠句柄；请改用 collapsible。 |\n| `label` | `string` | - | 自定义按钮标签。提供时渲染为带箭头的文本按钮。省略时渲染为仅图标按钮。 |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | - | 按钮尺寸。默认使用容器级联的尺寸（SideNav 页脚内为 'sm'），无容器时为 'md'。当按钮位于已设定尺寸的容器之外且需要与相邻元素保持一致时显式设置。 |\n| `children` | `ReactNode` | - | 自定义按钮内容。覆盖默认的箭头图标和标签。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

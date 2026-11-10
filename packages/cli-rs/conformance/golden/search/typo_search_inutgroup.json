@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_inutgroup",
+ "args": [
+  "search",
+  "inutgroup"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"inutgroup\" (4)\n\nname:        InputGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/InputGroup\ndescription: InputGroup connects an input with prefix/suffix addons in a single visual unit. Use it for URL fields, currency inputs, search fields with action buttons, or any input that needs contextual decorations.\ncommand:     npx @astryxdesign/cli@0.7.12 component InputGroup\n\nname:        InputGroupBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InputGroup - Basic\nkind:        block\ndescription: A currency field with static prefix and suffix addons around a TextInput. Use InputGroupText to clarify units or input format.\ncommand:     npx @astryxdesign/cli@0.7.12 template InputGroupBasic --type block\n\nname:        InputGroupShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: InputGroup\nkind:        block\ncommand:     npx @astryxdesign/cli@0.7.12 template InputGroupShowcase --type block\n\nname:        SelectorOptionDescriptions\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Selector - Option descriptions\nkind:        block\ndescription: Options carry a description, so the dropdown draws a two-line row. The closed trigger is sized by padding, so it is the size token for a one-line value and exactly one line taller for a two-line one; both on the 4px rhythm. An InputGroup pins the row, so the value folds back onto one line there.\ncommand:     npx @astryxdesign/cli@0.7.12 template SelectorOptionDescriptions --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover inutgroup\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

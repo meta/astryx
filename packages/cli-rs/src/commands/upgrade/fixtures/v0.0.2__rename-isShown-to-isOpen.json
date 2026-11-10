@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog isShown={isShown} onOpenChange={handleChange}>Content</XDSDialog>",
+  "output": "<XDSDialog isOpen={isShown} onOpenChange={handleChange}>Content</XDSDialog>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSPopover isShown={open} onOpenChange={setOpen} content={<div />}><button /></XDSPopover>",
+  "output": "<XDSPopover isOpen={open} onOpenChange={setOpen} content={<div />}><button /></XDSPopover>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Modal isShown={true} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTooltip isShown={true}><span /></XDSTooltip>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog isShown={shown} onOpenChange={setShown} width={600} purpose=\"info\">Content</XDSDialog>",
+  "output": "<XDSDialog isOpen={shown} onOpenChange={setShown} width={600} purpose=\"info\">Content</XDSDialog>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSDialog isShown={a} onOpenChange={setA}>Dialog</XDSDialog>\n        <XDSPopover isShown={c} onOpenChange={setC} content={<div />}><button /></XDSPopover>\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSDialog isOpen={a} onOpenChange={setA}>Dialog</XDSDialog>\n        <XDSPopover isOpen={c} onOpenChange={setC} content={<div />}><button /></XDSPopover>\n      </div>\n    ",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog isOpen={open} onOpenChange={setOpen}>Content</XDSDialog>",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog isShown={true} onOpenChange={() => {}}>Content</XDSDialog>",
+  "output": "<XDSDialog isOpen={true} onOpenChange={() => {}}>Content</XDSDialog>",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-isShown-to-isOpen",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog isShown={condition ? true : false} onOpenChange={handler}>Content</XDSDialog>",
+  "output": "<XDSDialog isOpen={condition ? true : false} onOpenChange={handler}>Content</XDSDialog>",
+  "error": null
+ }
+]

@@ -1,0 +1,18 @@
+{
+ "id": "lower_component_blockquote_@large",
+ "args": [
+  "component",
+  "blockquote"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Blockquote\n\nA quotation block with a rule on its inline-start edge and secondary text color. Use to highlight quoted content, testimonials, or excerpts. The rule and padding are logical, so they move to the right edge in right-to-left locales.\n\n**Import:** `import {Blockquote} from '@astryxdesign/core/Blockquote';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Rule | Yes | The border on the inline-start edge, drawn with --color-border-emphasized. |\n| Quotation | Yes | The quoted content, passed as children. Renders inside the <blockquote> element. |\n| Attribution | No | The source, passed as cite. Renders as a <cite> element below the quotation. |\n\n## Best Practices\n\n- **Do:** Use for quoted text, testimonials, or highlighted excerpts from external sources.\n- **Do:** Provide a cite prop when the source of the quote is known.\n- **Do:** Pass the source through cite rather than typing it into children, so it renders as a semantic <cite> element that assistive technology can distinguish from the quotation.\n- **Don't:** Use for callout boxes or informational notes; use Banner for those.\n- **Don't:** Wrap the attribution in your own <footer>. A <footer> inside a <blockquote> becomes a contentinfo document landmark, and a page with several quotes then reports several page footers.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Content of the blockquote. **(required)** |\n| `cite` | `ReactNode` | - | Optional attribution for the quote. Rendered in a <cite> element after the quoted content. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-blockquote` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'blockquote': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

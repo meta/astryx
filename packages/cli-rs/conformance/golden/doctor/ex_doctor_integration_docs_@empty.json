@@ -1,0 +1,13 @@
+{
+ "id": "ex_doctor_integration_docs_@empty",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "empty",
+ "stdout": "Nothing was checked: no astryx.integration.* found next to package.json, and this folder is outside a project.\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

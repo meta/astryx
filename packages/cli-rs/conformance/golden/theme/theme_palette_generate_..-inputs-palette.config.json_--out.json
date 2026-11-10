@@ -1,0 +1,15 @@
+{
+ "id": "theme_palette_generate_..-inputs-palette.config.json_--out",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '-o, --out <path>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

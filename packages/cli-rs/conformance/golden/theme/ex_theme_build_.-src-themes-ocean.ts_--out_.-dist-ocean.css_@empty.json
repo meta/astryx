@@ -1,0 +1,15 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--out_.-dist-ocean.css_@empty",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--out",
+  "./dist/ocean.css"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: File not found: /tmp/astryx-conformance/work/empty/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

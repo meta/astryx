@@ -1,0 +1,19 @@
+{
+ "id": "template_useFocusTrapHookUsage_--skeleton_@large",
+ "args": [
+  "template",
+  "useFocusTrapHookUsage",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# useFocusTrapHookUsage - A custom quick-edit panel, not built on Dialog, that traps focus with useFocusTrap: focusFirst moves focus to its field on open, Tab and Shift+Tab stay inside it, Escape closes it through onEscape, and closing returns focus to the Quick edit button.\n# Components: Card, TextInput\n\n<HStack gap={4}>\n  <VStack gap={2}>\n    <Text />\n    <Button />\n  </VStack>\n  <Card padding={4} role=\"dialog\" width={280}>\n    <VStack gap={3}>\n      <TextInput />\n      <HStack gap={2}>\n        <Button variant=\"secondary\" />\n        <Button variant=\"primary\" />\n      </HStack>\n    </VStack>\n  </Card>\n</HStack>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

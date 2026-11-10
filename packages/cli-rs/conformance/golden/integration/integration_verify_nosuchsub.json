@@ -1,0 +1,13 @@
+{
+ "id": "integration_verify_nosuchsub",
+ "args": [
+  "integration",
+  "verify",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "Integration package check failed\n\n[fail] app\n\n- [fail] No astryx.integration.{ts,mjs,js} found next to package.json.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

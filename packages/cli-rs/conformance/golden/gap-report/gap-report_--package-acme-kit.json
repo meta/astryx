@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--package-acme-kit",
+ "args": [
+  "gap-report",
+  "--package=@acme/kit"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

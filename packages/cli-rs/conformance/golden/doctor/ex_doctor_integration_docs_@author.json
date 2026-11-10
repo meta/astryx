@@ -1,0 +1,13 @@
+{
+ "id": "ex_doctor_integration_docs_@author",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "author",
+ "stdout": "Checking integration docs: @acme/widgets@0.1.0\n\n[ok] The docs tree and every link in these docs check out.\n\n[ok] No doc topics overlap with Core.\n\n[ok] No topic copies a passage from another.\n\n[ok] No filler phrases or low-density topics.\n\n[ok] Every pointer to a doc is a link.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

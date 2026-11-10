@@ -1,0 +1,19 @@
+{
+ "id": "w_-test-boards-pages-DialBoard---json_@discover-sources",
+ "args": [
+  "discover",
+  "@test/boards/pages/DialBoard",
+  "--json"
+ ],
+ "fixture": "discover-sources",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@test/boards\",\n  \"data\": {\n    \"package\": \"@test/boards\",\n    \"version\": \"1.0.0\",\n    \"kind\": \"template\",\n    \"name\": \"pages/DialBoard\",\n    \"installed\": false,\n    \"install\": \"npm install @test/boards\",\n    \"source\": \"Test catalog\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.cache/astryx/discover/e096dbd36355b805fa3c8b097f7bd71b.json",
+   "status": "created",
+   "text": "{\"savedAt\":\"2026-11-10T00:00:00.000Z\",\"catalog\":{\"schemaVersion\":1,\"source\":{\"name\":\"Test catalog\",\"generatedAt\":\"2026-09-30T00:00:00.000Z\",\"complete\":true},\"packages\":[{\"package\":\"@test/boards\",\"integration\":\"test-boards\",\"aliases\":[],\"latest\":\"1.0.0\",\"versions\":[{\"version\":\"1.0.0\",\"publishedAt\":\"2026-09-10T00:00:00.000Z\",\"prerelease\":false,\"status\":\"ok\"}],\"contributions\":[{\"kind\":\"template\",\"name\":\"pages/DialBoard\"}]}]}}"
+  }
+ ]
+}

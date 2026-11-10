@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_text_--json",
+ "args": [
+  "theme",
+  "targets",
+  "text",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"text\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"heading\",\n        \"className\": \"astryx-heading\",\n        \"component\": \"Text\",\n        \"props\": [\n          \"level\",\n          \"color\",\n          \"type\",\n          \"weight\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"text\",\n        \"className\": \"astryx-text\",\n        \"component\": \"Text\",\n        \"props\": [\n          \"type\",\n          \"size\",\n          \"color\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

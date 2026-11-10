@@ -1,0 +1,18 @@
+{
+ "id": "hook_usePowerSearchConfig",
+ "args": [
+  "hook",
+  "usePowerSearchConfig"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# usePowerSearchConfig\n\nMemoizes a PowerSearch configuration built from typed field definitions and returns it along with an applyFilters function for client-side filtering. Automatically maps field types (string, number, boolean, date, enum, etc.) to their canonical operators and provides an efficient predicate evaluator to filter datasets.\n\n## Best Practices\n\n- **Do:** Declare field definitions as const outside the component or memoize them so usePowerSearchConfig only recalculates when needed.\n- **Do:** Pass the returned config to PowerSearch and use applyFilters to compute the filtered data rows for a Table or List.\n- **Don't:** Recreate field definitions inline on every render without as const or memoization.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `definitions` | `ReadonlyArray<FieldDefinition>` | - | Typed field definitions (key, type, label, enumValues) used to build PowerSearch fields and operators. **(required)** |\n| `configName` | `string` | - | Optional name for the PowerSearchConfig object (defaults to \"PowerSearchConfig\"). |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `config` | `PowerSearchConfig` | Memoized PowerSearch configuration object with fields and type-appropriate operators. |\n| `applyFilters` | `<T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[]` | Client-side filtering helper that filters a dataset using the active PowerSearch filter rules. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for PowerSearch, Table\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

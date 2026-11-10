@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatReasoning_--zh_@large",
+ "args": [
+  "component",
+  "ChatReasoning",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatReasoning\n\nCompact collapsible container for displaying model reasoning or chain-of-thought details. Shows a single-line summary when collapsed and expands to reveal full reasoning text.\n\n**Import:** `import {ChatReasoning} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Reasoning content string or custom ReactNode. **(required)** |\n| `label` | `string` | `'Thinking'` | Header label displayed in the trigger line. |\n| `duration` | `string` | - | Duration string shown next to the label (e.g. \"12s\"). |\n| `isStreaming` | `boolean` | `false` | Whether reasoning content is actively streaming. Displays animated shimmer effect. |\n| `isExpanded` | `boolean` | - | Controlled expanded state. |\n| `defaultIsExpanded` | `boolean` | `false` | Default expanded state for uncontrolled usage. |\n| `onExpandedChange` | `(isExpanded: boolean) => void` | - | Callback fired when the expanded state changes. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "component_Button_--package_-astryxdesign-lab_@large",
+ "args": [
+  "component",
+  "Button",
+  "--package",
+  "@astryxdesign/lab"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component \"Button\" in package \"@astryxdesign/lab\"\n",
+ "exit": 1,
+ "files": []
+}

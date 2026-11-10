@@ -1,0 +1,74 @@
+[
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput, Selector, DateInput} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" xstyle={styles.input} className=\"name\" style={{width: 200}} />;\nconst b = <Selector label=\"Fruit\" options={options} xstyle={styles.selector} />;\nconst c = <DateInput label=\"Due\" className=\"due\" />;",
+  "output": "import {TextInput, Selector, DateInput} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" controlXstyle={styles.input} controlClassName=\"name\" controlStyle={{width: 200}} />;\nconst b = <Selector label=\"Fruit\" options={options} controlXstyle={styles.selector} />;\nconst c = <DateInput label=\"Due\" controlClassName=\"due\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Typeahead} from '@astryxdesign/core/Typeahead';\nimport {RadioList, Slider} from '@astryxdesign/core';\nconst a = <Typeahead label=\"Fruit\" xstyle={styles.wide} />;\nconst b = <RadioList label=\"Plan\" style={{marginTop: 8}}>{items}</RadioList>;\nconst c = <Slider label=\"Volume\" className=\"volume\" value={1} />;",
+  "output": "import {Typeahead} from '@astryxdesign/core/Typeahead';\nimport {RadioList, Slider} from '@astryxdesign/core';\nconst a = <Typeahead label=\"Fruit\" containerXstyle={styles.wide} />;\nconst b = <RadioList label=\"Plan\" containerStyle={{marginTop: 8}}>{items}</RadioList>;\nconst c = <Slider label=\"Volume\" containerClassName=\"volume\" value={1} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {InputGroup, Typeahead} from '@astryxdesign/core';\nconst a = (\n  <InputGroup label=\"Produce\">\n    <Typeahead label=\"Fruit\" className=\"grouped\" />\n  </InputGroup>\n);\nconst b = <Typeahead label=\"Fruit\" className=\"standalone\" />;",
+  "output": "import {InputGroup, Typeahead} from '@astryxdesign/core';\nconst a = (\n  <InputGroup label=\"Produce\">\n    <Typeahead label=\"Fruit\" controlClassName=\"grouped\" />\n  </InputGroup>\n);\nconst b = <Typeahead label=\"Fruit\" containerClassName=\"standalone\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextArea as Notes} from '@astryxdesign/core';\nimport * as Astryx from '@astryxdesign/core';\nconst a = <Notes label=\"Notes\" className=\"notes\" />;\nconst b = <Astryx.Tokenizer label=\"Tags\" xstyle={styles.tags} />;",
+  "output": "import {TextArea as Notes} from '@astryxdesign/core';\nimport * as Astryx from '@astryxdesign/core';\nconst a = <Notes label=\"Notes\" controlClassName=\"notes\" />;\nconst b = <Astryx.Tokenizer label=\"Tags\" containerXstyle={styles.tags} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput} from 'some-other-library';\nimport {Button, NumberInput} from '@astryxdesign/core';\nconst a = <TextInput className=\"kept\" />;\nconst b = <Button xstyle={styles.button} />;\nconst c = <NumberInput label=\"Qty\" {...rest} startIcon={<Icon className=\"icon\" />} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput} from '@astryxdesign/core';\nimport * as Astryx from '@astryxdesign/core';\nfunction Row({TextInput}) {\n  return <TextInput className=\"kept\" />;\n}\nfunction Other(Astryx) {\n  return <Astryx.Typeahead className=\"kept\" />;\n}",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" className=\"old\" controlClassName=\"new\" />;",
+  "output": "import {TextInput} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" /* TODO(astryx upgrade): root styling is no longer accepted here; merge it into `controlClassName`. */\nclassName=\"old\" controlClassName=\"new\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput, CheckboxList} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" className=\"old\" controlClassName=\"new\" />;\nconst b = <TextInput label=\"Email\" xstyle={styles.email} />;\nconst c = <CheckboxList label=\"Prefs\" style={{margin: 4}}>{items}</CheckboxList>;",
+  "output": "import {TextInput, CheckboxList} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" /* TODO(astryx upgrade): root styling is no longer accepted here; merge it into `controlClassName`. */\nclassName=\"old\" controlClassName=\"new\" />;\nconst b = <TextInput label=\"Email\" controlXstyle={styles.email} />;\nconst c = <CheckboxList label=\"Prefs\" containerStyle={{margin: 4}}>{items}</CheckboxList>;",
+  "error": null
+ },
+ {
+  "transform": "v0.7.0/migrate-field-input-styling",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {TextInput, CheckboxList} from '@astryxdesign/core';\nconst a = <TextInput label=\"Name\" /* TODO(astryx upgrade): root styling is no longer accepted here; merge it into `controlClassName`. */\nclassName=\"old\" controlClassName=\"new\" />;\nconst b = <TextInput label=\"Email\" controlXstyle={styles.email} />;\nconst c = <CheckboxList label=\"Prefs\" containerStyle={{margin: 4}}>{items}</CheckboxList>;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,20 @@
+{
+ "id": "hook_useCollapsible_--detail_brief",
+ "args": [
+  "hook",
+  "useCollapsible",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseCollapsible(isCollapsible?: boolean | CollapsibleConfig, value?: string): { isEnabled, isOpen, toggle }  <- from '@astryxdesign/core/Collapsible'\n  Reusable hook that encapsulates the collapsible state machine. Supports three...\n  Related: Collapsible, Card, Section\n  isCollapsible, value\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Collapsible, Card, Section\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

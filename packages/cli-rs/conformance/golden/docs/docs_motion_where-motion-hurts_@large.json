@@ -1,0 +1,19 @@
+{
+ "id": "docs_motion_where-motion-hurts_@large",
+ "args": [
+  "docs",
+  "motion",
+  "where-motion-hurts"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Where Motion Hurts\n\nTable row hovers. List item highlights. Anything the user does dozens of times per minute. Adding perceptible duration to these interactions makes the interface feel like it's catching up to the cursor. Keep these fast enough that the user never notices a delay.\n\nAnimations that block interaction are worse. If a user has to wait for a panel to finish sliding before they can click something inside it, the animation has become an obstacle. Motion should never stand between the user and their next action.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion where-motion-helps\nNext: npx @astryxdesign/cli@0.7.12 docs motion movement-principles\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

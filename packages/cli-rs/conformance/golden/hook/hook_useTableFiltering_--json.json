@@ -1,0 +1,13 @@
+{
+ "id": "hook_useTableFiltering_--json",
+ "args": [
+  "hook",
+  "useTableFiltering",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useTableFiltering\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"useTableFiltering\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"Table plugin that adds inline column filters with popover or inline controls. Pairs with useTableFilterState for managed state. Supports text, select, multi-select, date, and number filter types via PowerSearch field definitions.\",\n    \"props\": [\n      {\n        \"name\": \"filters\",\n        \"type\": \"TableFilterState\",\n        \"description\": \"Current filter state: map from column key to filter value.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"onFilterChange\",\n        \"type\": \"(columnKey: string, value: TableFilterValue | null) => void\",\n        \"description\": \"Called when the user changes a filter value. null clears the filter.\",\n        \"required\": true\n      },\n      {\n        \"name\": \"variant\",\n        \"type\": \"'popover' | 'inline' | 'inline-compact'\",\n        \"description\": \"Display variant for filter controls.\",\n        \"default\": \"'popover'\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

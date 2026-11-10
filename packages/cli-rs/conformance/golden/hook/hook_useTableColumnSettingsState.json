@@ -1,0 +1,18 @@
+{
+ "id": "hook_useTableColumnSettingsState",
+ "args": [
+  "hook",
+  "useTableColumnSettingsState"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useTableColumnSettingsState\n\nHeadless column visibility and ordering state management for Table. Manages which columns are active, provides toggle and reset operations, and produces a config object that feeds directly into useTableColumnSettings. Renderer-agnostic and pairs with any column picker UI.\n\n## Best Practices\n\n- **Do:** Pass columnSettingsConfig directly to useTableColumnSettings and give the resulting plugin to Table.\n- **Do:** Mark essential identifier columns (like name or ID) with isAlwaysVisible: true so users cannot accidentally hide them.\n- **Don't:** Mutate activeColumnKeys array directly; use toggleColumn, showAllColumns, or resetToDefault.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `config` | `UseTableColumnSettingsStateConfig<TColumnKey>` | - | The columns to configure and active keys state management. **(required)** |\n| `config.columns` | `ReadonlyArray<ColumnSettingsOption<TColumnKey>>` | - | All available columns with metadata (key, label, isAlwaysVisible, group) for the settings UI. **(required)** |\n| `config.activeColumnKeys` | `ReadonlyArray<TColumnKey>` | - | Currently active column keys, in display order. Only columns in this list render in the table. **(required)** |\n| `config.onChangeActiveColumnKeys` | `(keys: ReadonlyArray<TColumnKey>) => void` | - | Called when active columns change (via toggle, show all, or reset) to update consumer state. **(required)** |\n| `config.defaultColumnKeys` | `ReadonlyArray<TColumnKey>` | - | Default column set restored by resetToDefault. When omitted, resetToDefault activates all columns. |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `columnSettingsConfig` | `UseTableColumnSettingsStateConfig<TColumnKey>` | Ready-to-use config to pass directly to useTableColumnSettings(columnSettingsConfig). |\n| `activeColumnKeys` | `ReadonlyArray<TColumnKey>` | Pass-through of currently active column keys in display order. |\n| `toggleColumn` | `(key: TColumnKey) => void` | Toggles column visibility: removes an active column or appends an inactive column. No-op for isAlwaysVisible columns. |\n| `isColumnActive` | `(key: TColumnKey) => boolean` | Whether a specific column is currently in the active column keys list. |\n| `isColumnToggleable` | `(key: TColumnKey) => boolean` | Whether a specific column can be toggled (returns false if isAlwaysVisible is true). |\n| `showAllColumns` | `() => void` | Activates all configured columns in the table. |\n| `resetToDefault` | `() => void` | Resets active column keys to defaultColumnKeys (or all columns if defaultColumnKeys is omitted). |\n| `setActiveColumnKeys` | `(keys: string[]) => void` | Sets active column keys from a list of key strings, enforcing that isAlwaysVisible columns remain active. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Table\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

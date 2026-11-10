@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-bad-stops-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/bad-stops.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Stops must be unique and strictly increasing.\n",
+ "exit": 1,
+ "files": []
+}

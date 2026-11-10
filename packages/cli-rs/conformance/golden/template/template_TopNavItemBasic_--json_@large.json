@@ -1,0 +1,13 @@
+{
+ "id": "template_TopNavItemBasic_--json_@large",
+ "args": [
+  "template",
+  "TopNavItemBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TopNavItemBasic\",\n    \"description\": \"Navigation links inside a TopNav with one item marked as selected. Use for top-level pages of an application.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"TopNav\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';\\n\\nexport default function TopNavItemBasic() {\\n  return (\\n    <TopNav\\n      label=\\\"Main navigation\\\"\\n      heading={<TopNavHeading heading=\\\"App\\\" />}\\n      startContent={\\n        <>\\n          <TopNavItem label=\\\"Dashboard\\\" href=\\\"#\\\" isSelected />\\n          <TopNavItem label=\\\"Projects\\\" href=\\\"#\\\" />\\n          <TopNavItem label=\\\"Reports\\\" href=\\\"#\\\" />\\n        </>\\n      }\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

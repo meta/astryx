@@ -1,0 +1,15 @@
+{
+ "id": "ex_theme_build_.-src-themes-ocean.ts_--out_.-dist-ocean.css_@integration",
+ "args": [
+  "theme",
+  "build",
+  "./src/themes/ocean.ts",
+  "--out",
+  "./dist/ocean.css"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: File not found: /tmp/astryx-conformance/work/integration/src/themes/ocean.ts\n",
+ "exit": 1,
+ "files": []
+}

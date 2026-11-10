@@ -1,0 +1,19 @@
+{
+ "id": "component_Toast_--dense_@large",
+ "args": [
+  "component",
+  "Toast",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Toast\n\nBrief non-blocking notification for action confirmations and temporary info. Use where user needs feedback not decisions: saves, deletes, status changes. useToast() hook for production (safe-area positioning, responsive message wrapping, stacking, auto-dismiss, dedup via ToastViewport). Enters, exits, or swipe-dismisses toward configured edge; touch is claimed only after dominant edge-directed intent; swipe reports manual. Pen uses the direct-contact gesture; mouse drag stays off to preserve text selection and the close control remains available. Set isAutoHide false explicitly for must-remain actions/messages. Toast renders inline for previews/docs/static showcases.\n\n**Import:** `import {Toast} from '@astryxdesign/core/Toast';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Body | Yes | The primary message text describing what happened or what the user should know. |\n| End content | No | A trailing action like an Undo button or a link, placed after the body text. |\n| Dismiss button | Yes | A close button that lets the user manually dismiss the toast before auto-hide. |\n\n## Best Practices\n\n- **Do:** Short messages, a few words: \"Changes saved\", \"Message sent\".\n- **Do:** Short Undo action in endContent for reversible ops; set isAutoHide false when it must remain available.\n- **Do:** uniqueID to dedup repeated action toasts.\n- **Do:** Error type for failures needing attention; persists until dismissed.\n- **Don't:** Don't use for critical blocking errors. Use Banner for persistent in-context messaging.\n- **Don't:** Don't put long/multi-line content; disappears in 5s, user may not finish reading.\n- **Don't:** Don't show form validation errors. Use inline field validation instead.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `body` | `ReactNode` | - | primary message content **(required)** |\n| `type` | `'info' \\| 'error'` | `'info'` | toast type; controls bg color; error persists until dismissed |\n| `isAutoHide` | `boolean` | - | auto-dismiss; true for info, false for error |\n| `autoHideDuration` | `number` | `5000` | ms before auto-dismiss; timed content must satisfy WCAG 2.2.1 |\n| `endContent` | `ReactNode` | - | trailing end content (undo btn, link); keep action labels short |\n| `uniqueID` | `string` | - | unique id for dedup |\n| `collisionBehavior` | `'overwrite' \\| 'ignore'` | `'overwrite'` | behavior when matching uniqueID exists |\n| `onHide` | `(reason: \"auto\" \\| \"manual\") => void` | - | callback when toast removed |\n| `onDismiss` | `(reason: \"auto\" \\| \"manual\") => void` | - | Callback fired when the toast is dismissed. **(required)** |\n| `renderContent` | `(toast: ToastContentRenderProps) => ReactNode` | - | custom inner layout; receives content, resolved settings + dismiss callback; no injected fallback control |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-toast` | `data-type` | type | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'toast': {\n    base: { /* CSS properties */ },\n    'type:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

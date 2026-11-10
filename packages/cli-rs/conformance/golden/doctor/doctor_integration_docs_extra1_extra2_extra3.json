@@ -1,0 +1,16 @@
+{
+ "id": "doctor_integration_docs_extra1_extra2_extra3",
+ "args": [
+  "doctor",
+  "integration",
+  "docs",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "Checking integration docs: extra1\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"extra1\" at /tmp/astryx-conformance/work/app/node_modules/extra1/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

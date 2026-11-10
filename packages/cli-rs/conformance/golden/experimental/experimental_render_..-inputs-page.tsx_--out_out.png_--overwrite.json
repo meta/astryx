@@ -1,0 +1,16 @@
+{
+ "id": "experimental_render_..-inputs-page.tsx_--out_out.png_--overwrite",
+ "args": [
+  "experimental",
+  "render",
+  "../inputs/page.tsx",
+  "--out",
+  "out.png",
+  "--overwrite"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --overwrite applies only to --reverse; rendering replaces an existing HTML file only when a render wrote it\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,15 @@
+{
+ "id": "shell_theme_add_a_b_c",
+ "args": [
+  "theme",
+  "add",
+  "a",
+  "b",
+  "c"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: too many arguments for 'add'. Expected 1 argument but got 3.\n",
+ "exit": 1,
+ "files": []
+}

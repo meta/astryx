@@ -1,0 +1,12 @@
+{
+ "id": "shell_postinstall_--help_@empty",
+ "args": [
+  "postinstall",
+  "--help"
+ ],
+ "fixture": "empty",
+ "stdout": "Usage: astryx postinstall [options]\n\nPrint the welcome message shown after install\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n\nExamples:\n  # Print the welcome box\n  npx @astryxdesign/cli@0.7.12 postinstall\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/postinstall\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "template_TopNavMegaMenuItemBasic_--json_@large",
+ "args": [
+  "template",
+  "TopNavMegaMenuItemBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TopNavMegaMenuItemBasic\",\n    \"description\": \"Rich link items with an icon, title, and description. Use inside the items slot of a TopNavMegaMenu to describe each destination.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"BoltIcon\",\n      \"CircleStackIcon\",\n      \"Grid\",\n      \"TopNavMegaMenu\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {TopNavMegaMenuItem} from '@astryxdesign/core/TopNav';\\nimport {Grid} from '@astryxdesign/core/Grid';\\nimport {BoltIcon, CircleStackIcon} from '@heroicons/react/24/outline';\\n\\nexport default function TopNavMegaMenuItemBasic() {\\n  return (\\n    <Grid columns={2} gap={2}>\\n      <TopNavMegaMenuItem\\n        title=\\\"Edge Functions\\\"\\n        description=\\\"Run serverless code at the network edge\\\"\\n        icon={<BoltIcon width={20} height={20} />}\\n        href=\\\"#edge\\\"\\n      />\\n      <TopNavMegaMenuItem\\n        title=\\\"Storage\\\"\\n        description=\\\"Object and file storage for your application\\\"\\n        icon={<CircleStackIcon width={20} height={20} />}\\n        href=\\\"#storage\\\"\\n      />\\n    </Grid>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

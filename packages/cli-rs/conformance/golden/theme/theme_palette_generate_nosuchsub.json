@@ -1,0 +1,14 @@
+{
+ "id": "theme_palette_generate_nosuchsub",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: nosuchsub\n",
+ "exit": 1,
+ "files": []
+}

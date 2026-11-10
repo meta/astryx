@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_use_@plain",
+ "args": [
+  "experimental",
+  "icon",
+  "use"
+ ],
+ "fixture": "plain",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'set'\n",
+ "exit": 1,
+ "files": []
+}

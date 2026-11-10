@@ -1,0 +1,19 @@
+{
+ "id": "component_ChatReactionBar_--dense_@large",
+ "args": [
+  "component",
+  "ChatReactionBar",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/lab\n\n# ChatReactionBar\n\nemoji reaction pills under a message; own reactions accent-tinted w/ aria-pressed; onAdd renders trailing add button opening ChatEmojiPicker popover\n\n**Import:** `import {ChatReactionBar} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `reactions` | `{emoji: string; count: number; isSelected?: boolean; label?: string}[]` | - | {emoji,count,isSelected?,label?}[]; label doubles as tooltip + aria label **(required)** |\n| `onToggle` | `(emoji: string) => void` | - | (emoji)=>void on pill click |\n| `onAdd` | `(emoji: string) => void` | - | (emoji)=>void from picker; enables add button |\n| `emojis` | `readonly ChatEmojiOption[]` | - | picker option override; default DEFAULT_CHAT_EMOJIS |\n| `addLabel` | `string` | `'Add reaction'` | add button + picker dialog label |\n| `label` | `string` | `'Reactions'` | group aria label |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "hook_useMergedRefs_--json",
+ "args": [
+  "hook",
+  "useMergedRefs",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useMergedRefs\",\n    \"displayName\": \"useMergedRefs\",\n    \"keywords\": [\n      \"ref\",\n      \"refs\",\n      \"merge\",\n      \"forwardRef\",\n      \"callback ref\",\n      \"stable ref\"\n    ],\n    \"params\": [\n      {\n        \"name\": \"refs\",\n        \"type\": \"Array<Ref<T> | undefined>\",\n        \"description\": \"Up to six refs that should all receive the same element.\",\n        \"required\": true\n      }\n    ],\n    \"returns\": [\n      {\n        \"name\": \"ref\",\n        \"type\": \"RefCallback<T>\",\n        \"description\": \"A merged callback ref that remains stable until an input ref changes.\"\n      }\n    ],\n    \"usage\": {\n      \"description\": \"Combines multiple object or callback refs into one stable callback ref. Use it when a component must forward a consumer ref while also attaching internal refs. Unlike calling mergeRefs during render, the callback identity stays stable across unrelated rerenders, so React does not detach and reattach the element.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Use useMergedRefs when one element must receive both a forwarded ref and one or more internal refs.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Call mergeRefs directly in a JSX ref prop; that creates a new callback on every render and forces unnecessary detach and attach work.\"\n        }\n      ]\n    },\n    \"relatedComponents\": [],\n    \"relatedHooks\": [],\n    \"importPath\": \"@astryxdesign/core/hooks\",\n    \"category\": \"utility\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

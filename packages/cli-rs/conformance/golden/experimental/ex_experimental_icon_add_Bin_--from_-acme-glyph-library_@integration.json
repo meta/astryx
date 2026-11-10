@@ -1,0 +1,16 @@
+{
+ "id": "ex_experimental_icon_add_Bin_--from_-acme-glyph-library_@integration",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Bin",
+  "--from",
+  "@acme/glyph-library"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: This package ships no icon set. Add one first.\n\n  npx @astryxdesign/cli@0.7.12 experimental icon new-set <name>  (add an icon set)\n",
+ "exit": 1,
+ "files": []
+}

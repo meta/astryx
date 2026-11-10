@@ -1,0 +1,19 @@
+{
+ "id": "template_PopoverBottomSheetAlternative_--skeleton_@large",
+ "args": [
+  "template",
+  "PopoverBottomSheetAlternative",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# PopoverBottomSheetAlternative - Opt-in BottomSheet alternative for compact touch surfaces where actions should use a modal presentation anchored to the bottom edge.\n# Components: BottomSheet, List, Section\n\n<Button />\n<BottomSheet height=\"hug\" />\n<Section>\n  <VStack gap={3}>\n    <VStack gap={1}>\n      <Heading />\n      <Text />\n    </VStack>\n    <List density=\"spacious\">\n      <ListItem />\n      <Icon />\n    </List>\n  </VStack>\n</Section>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

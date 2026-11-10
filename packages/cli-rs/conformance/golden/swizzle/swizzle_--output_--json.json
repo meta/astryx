@@ -1,0 +1,13 @@
+{
+ "id": "swizzle_--output_--json",
+ "args": [
+  "swizzle",
+  "--output",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"option '--output <dir>' argument missing\",\n  \"code\": \"ERR_UNKNOWN\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

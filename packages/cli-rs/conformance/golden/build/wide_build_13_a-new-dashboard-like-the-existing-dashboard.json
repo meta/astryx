@@ -1,0 +1,18 @@
+{
+ "id": "wide_build_13_a-new-dashboard-like-the-existing-dashboard",
+ "args": [
+  "build",
+  "a new dashboard like the existing dashboard"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"a new dashboard like the existing dashboard\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nMatches the idea. Scaffold it, then replace its content. Keep its layout and spacing.\n\nname:        dashboard\npackage:     @astryxdesign/core\ndescription: Three-band analytics: a row of headline tiles, then charts, then supporting tables, all re-reading from one global filter bar.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard --type page <path>\n\nInstall missing dependencies: npm install recharts@\"^3.9.2\" @heroicons/react@\"^2.2.0\"\n\nOTHER TEMPLATES\nIf the layout is wrong, scaffold one of these instead. All page templates: npx @astryxdesign/cli@0.7.12 template --list --type page\n\nname:        dashboard-alert-rail\npackage:     @astryxdesign/core\ndescription: Always-on analytics with a triage rail: status-colored tiles with sparklines, multi-series time charts over a switchable window, and an independently scrolling alert column that folds into the content when narrow.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-alert-rail --type page <path>\n\nname:        dashboard-progress\npackage:     @astryxdesign/core\ndescription: Status analytics mixing progress and time-axis shapes: a completion donut, a horizontal timeline of dated bars against a today marker, a per-owner table with progress and status, an at-risk list, and a burndown.\ncommand:     npx @astryxdesign/cli@0.7.12 template dashboard-progress --type page <path>\n\nKeyword search matched these page templates: dashboard (@astryxdesign/core), dashboard-alert-rail (@astryxdesign/core), dashboard-cohort-funnel (@astryxdesign/core).\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 4; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        GridDashboardLayout\npackage:     @astryxdesign/core\ndescription: Dashboard layout with mixed-size widgets and a full-width summary row\n\nname:        EmptyStateContainer\npackage:     @astryxdesign/core\ndescription: Empty state wrapped in a Card for first-time setup or onboarding.\n\nname:    GridShowcase\npackage: @astryxdesign/core\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 5; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        SegmentedControl\npackage:     @astryxdesign/core\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options.\n\nname:        ChatToolCalls\npackage:     @astryxdesign/core\ndescription: ChatToolCalls displays tool or function call invocations from an LLM response.\n\nname:        DateRangeInput\npackage:     @astryxdesign/core\ndescription: DateRangeInput lets users select a start and end date from a dual-month calendar popover.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

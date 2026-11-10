@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_typeahead-empty-state_--json",
+ "args": [
+  "theme",
+  "targets",
+  "typeahead-empty-state",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"typeahead-empty-state\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"typeahead-empty-state\",\n        \"className\": \"astryx-typeahead-empty-state\",\n        \"component\": \"Typeahead\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

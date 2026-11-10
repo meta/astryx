@@ -1,0 +1,13 @@
+{
+ "id": "template_CodeVariousContent_--json_@large",
+ "args": [
+  "template",
+  "CodeVariousContent",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CodeVariousContent\",\n    \"description\": \"Inline code used for variables, terminal commands, CSS properties, file paths, and keyboard shortcuts. Shows how Code adapts to different kinds of technical content.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Code\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Code} from '@astryxdesign/core/CodeBlock';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {VStack} from '@astryxdesign/core/Stack';\\n\\nexport default function CodeVariousContent() {\\n  return (\\n    <VStack gap={3}>\\n      <Text type=\\\"body\\\">\\n        Variable: <Code>const count = 0</Code>\\n      </Text>\\n      <Text type=\\\"body\\\">\\n        Terminal: <Code>yarn build --watch</Code>\\n      </Text>\\n      <Text type=\\\"body\\\">\\n        CSS property: <Code>border-radius: 8px</Code>\\n      </Text>\\n      <Text type=\\\"body\\\">\\n        File path: <Code>packages/core/src/CodeBlock/Code.tsx</Code>\\n      </Text>\\n      <Text type=\\\"body\\\">\\n        Keyboard shortcut: <Code>Ctrl+Shift+P</Code>\\n      </Text>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

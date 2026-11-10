@@ -1,0 +1,19 @@
+{
+ "id": "component_--category_Button",
+ "args": [
+  "component",
+  "--category",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "Button\n\nname:   Button\nimport: @astryxdesign/core/Button\n\nname:   ButtonGroup\nimport: @astryxdesign/core/ButtonGroup\n\nname:   IconButton\nimport: @astryxdesign/core/IconButton\n\nname:   ToggleButton\nimport: @astryxdesign/core/ToggleButton\n\nname:   ToggleButtonGroup\nimport: @astryxdesign/core/ToggleButton\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

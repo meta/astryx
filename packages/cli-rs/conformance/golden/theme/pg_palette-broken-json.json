@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-broken-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/broken.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Could not parse palette config: Expected double-quoted property name in JSON at position 28 (line 2 column 14)\n",
+ "exit": 1,
+ "files": []
+}

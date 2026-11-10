@@ -1,0 +1,30 @@
+{
+ "id": "ex_integration_add_doc_deploying_@large",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "deploying"
+ ],
+ "fixture": "large",
+ "stdout": "doc contribution added\n\n[ok] deploying\n\nDeclare doc root ./docs in astryx.integration.mjs.\n\n- docs/deploying.doc.mjs\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  docs: './docs'\n};\n"
+  },
+  {
+   "path": "large/docs/deploying.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Deploying documentation.',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Deploying documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

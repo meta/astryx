@@ -1,0 +1,19 @@
+{
+ "id": "component_Divider_--zh_@large",
+ "args": [
+  "component",
+  "Divider",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Divider\n\nA visual separator that divides content into distinct sections. Use to create clear boundaries between groups of related content, or to demarcate interactive regions within a layout.\n\n**Import:** `import {Divider} from '@astryxdesign/core/Divider';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Divider group | Yes | Separator group that arranges one or two rules around an optional label. |\n| Rule | Yes | Painted line segment; a second segment renders when a label is present. |\n| Label | No | Optional content displayed between two rule segments. |\n\n## Best Practices\n\n- **Do:** Use subtle dividers between related content sections and strong dividers for high-contrast boundaries.\n- **Do:** Add a label to the divider when sections need a visible category heading.\n- **Don't:** Overuse dividers; rely on spacing and layout to separate content when possible.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `orientation` | `'horizontal' \\| 'vertical'` | `'horizontal'` | 分隔线的方向。 |\n| `label` | `ReactNode` | - | 居中显示在分隔线上的可选标签。数字 0 会保留；null、布尔值和空字符串不渲染标签。 |\n| `variant` | `'subtle' \\| 'strong'` | `'subtle'` | 分隔线的视觉粗细。 |\n| `isFullBleed` | `boolean` | `false` | 通过负边距将分隔线延伸至容器边缘。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式（边距、定位、尺寸）。必须是 stylex.create() 的值，不能是 style={{}} 这样的内联样式对象。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-divider` | `data-orientation`, `data-variant` | subtle, strong | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'divider': {\n    base: { /* CSS properties */ },\n    'orientation:value': { /* variant-specific */ },\n  },\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

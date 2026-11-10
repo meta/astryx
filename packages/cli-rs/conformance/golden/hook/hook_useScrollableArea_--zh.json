@@ -1,0 +1,19 @@
+{
+ "id": "hook_useScrollableArea_--zh",
+ "args": [
+  "hook",
+  "useScrollableArea",
+  "--zh"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n# useScrollableArea\n\nAdds canonical axis-aware scroll behavior to structure owned by the caller. An axis is effective only when its computed overflow is scroll-capable and geometry exceeds the shared 1px tolerance. Both viewport and content boxes are observed.\n\n## Best Practices\n\n- **Do:** Pass already-resolved props and refs through both prop getters, then spread each returned object once.\n- **Do:** Use viewport keyboard ownership only when the viewport itself should enter the tab order; provide a concise accessible label.\n- **Do:** Use contentOrViewport to delegate forward Tab entry to the first sequential native link or button when it preserves native scroll keys. Inputs, composite widgets, and nested scroll areas retain the named viewport stop. Shift+Tab from the delegated first child skips the viewport; pointer and programmatic focus stay on it.\n- **Do:** Use content keyboard ownership when your integration already supplies keyboard access to the full scroll range. Automatic delegation checks current content at each keyboard entry without continuously tracking its focusability.\n- **Do:** Pass caller `xstyle` through `getViewportProps`; the getter composes it with fitting clip, active overflow, and Sticky containment.\n- **Do:** Give a viewport-owned tab stop a visible focus indicator; compose `focusOutlineStyles.focusVisible` (or an equivalent) into the viewport `xstyle`, as ScrollableArea does.\n- **Don't:** Attach only the viewport getter. A real observed content box is required for live overflow changes.\n- **Don't:** Declare overflow through caller props on the viewport; the getter owns overflow declarations and strips conflicting inline values.\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseScrollableAreaOptions` | - | Logical scroll intent, fixed or automatic keyboard owner, overscroll policy, and fitting Sticky containment. **(required)** |\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `getViewportProps` | `<E extends HTMLElement>(props?: ScrollableElementProps<E>) => ScrollableElementProps<E>` | Consumes caller viewport props, xstyle, and refs; composes fitting/active overflow, Sticky containment, accessibility, chaining, and owner registration. |\n| `getContentProps` | `<E extends HTMLElement>(props?: ScrollableElementProps<E>) => ScrollableElementProps<E>` | Composes caller content-box props, xstyle, and refs with content observation. |\n| `state` | `ScrollableAreaState` | Stable inline and block effective-scroll and logical-edge state. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for ScrollableArea\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "tb_theme_build_stale-alpha-mjs_--check",
+ "args": [
+  "theme",
+  "build",
+  "stale/alpha.mjs",
+  "--check"
+ ],
+ "fixture": "themes",
+ "stdout": "\nBuilding theme from stale/alpha.mjs...\n",
+ "stderr": "\n[fail] 3 theme output(s) are out of date with stale/alpha.mjs:\n  stale: stale/alpha.css\n  stale: stale/alpha.js\n  missing: stale/alpha.d.ts\n\n  Rebuild with: astryx theme build stale/alpha.mjs\n",
+ "exit": 1,
+ "files": []
+}

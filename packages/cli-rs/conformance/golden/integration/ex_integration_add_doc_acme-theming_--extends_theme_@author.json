@@ -1,0 +1,22 @@
+{
+ "id": "ex_integration_add_doc_acme-theming_--extends_theme_@author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "acme-theming",
+  "--extends",
+  "theme"
+ ],
+ "fixture": "author",
+ "stdout": "doc contribution added\n\n[ok] acme-theming\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/acme-theming.doc.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "author/docs/acme-theming.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'acme-theming',\n  title: 'Acme Theming',\n  description: 'Acme Theming documentation.',\n  extends: 'theme',\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: 'Acme Theming documentation.' },\n      ],\n    },\n  ],\n};\n"
+  }
+ ]
+}

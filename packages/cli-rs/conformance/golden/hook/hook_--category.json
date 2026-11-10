@@ -1,0 +1,12 @@
+{
+ "id": "hook_--category",
+ "args": [
+  "hook",
+  "--category"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--category <category>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

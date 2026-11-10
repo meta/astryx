@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--to",
+ "args": [
+  "gap-report",
+  "--to"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--to <package>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

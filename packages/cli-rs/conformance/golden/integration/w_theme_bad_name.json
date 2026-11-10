@@ -1,0 +1,14 @@
+{
+ "id": "w_theme_bad_name",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "Ocean"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid theme name \"Ocean\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

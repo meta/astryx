@@ -1,0 +1,19 @@
+{
+ "id": "component_TableHeaderCell_--dense_@large",
+ "args": [
+  "component",
+  "TableHeaderCell",
+  "--dense"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# TableHeaderCell\n\n<th> wrapper; reads TableContext for density padding, semibold weight, secondary color, dividers.\n\n**Import:** `import {TableHeaderCell} from '@astryxdesign/core/Table';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Header cell content. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

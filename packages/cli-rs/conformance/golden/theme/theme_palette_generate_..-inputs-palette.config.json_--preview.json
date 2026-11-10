@@ -1,0 +1,15 @@
+{
+ "id": "theme_palette_generate_..-inputs-palette.config.json_--preview",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "../inputs/palette.config.json",
+  "--preview"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--preview <path>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

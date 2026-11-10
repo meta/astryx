@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_hook_Thing_--dry-run_@author",
+ "args": [
+  "integration",
+  "add",
+  "hook",
+  "Thing",
+  "--dry-run"
+ ],
+ "fixture": "author",
+ "stdout": "",
+ "stderr": "Error: Unknown contribution kind \"hook\". Choose component, doc, template, codemod, agent-doc, or theme.\n",
+ "exit": 1,
+ "files": []
+}

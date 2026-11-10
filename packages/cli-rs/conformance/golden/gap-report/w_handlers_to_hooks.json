@@ -1,0 +1,24 @@
+{
+ "id": "w_handlers_to_hooks",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--to",
+  "@acme/hooks"
+ ],
+ "fixture": "gapreport",
+ "stdout": "Gap report route\n\nstatus:          routed_only\npackage:         @astryxdesign/core\nissuesUrl:       https://example.com/hooks/issues\nfiledCount:      0\nroutedOnlyCount: 1\nDeliveries\n\nhandlerType: fallback\nhandler:     issuesUrl\nstatus:      routed_only\nurl:         https://example.com/hooks/issues\nmessage:     No automatic handler is available; open the routed URL to file this report.\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/gapreport\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

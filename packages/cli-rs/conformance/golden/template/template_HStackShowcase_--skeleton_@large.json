@@ -1,0 +1,19 @@
+{
+ "id": "template_HStackShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "HStackShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# HStackShowcase - Demonstrates HStack arranging items horizontally with different gaps and alignments.\n# Components: Badge\n\n<VStack gap={6} width=\"100%\">\n  <VStack gap={2}>\n    <Text />\n    <HStack gap={2}>\n      <Badge />\n      <Badge />\n      <Badge />\n    </HStack>\n  </VStack>\n  <VStack gap={2}>\n    <Text />\n    <HStack gap={4}>\n      <Badge />\n      <Badge />\n      <Badge />\n    </HStack>\n  </VStack>\n  <VStack gap={2}>\n    <Text />\n    <HStack gap={2}>\n      <Badge />\n      <Badge />\n      <Badge />\n    </HStack>\n  </VStack>\n</VStack>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

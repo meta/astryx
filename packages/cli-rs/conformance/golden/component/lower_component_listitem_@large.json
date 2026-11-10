@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_listitem_@large",
+ "args": [
+  "component",
+  "listitem"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"listitem\"\n\n  ListItem  (same name)\n  Item  (another name for it)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "w_-astryxdesign-richtext-richtexteditor---json_@integration",
+ "args": [
+  "discover",
+  "@astryxdesign/richtext/richtexteditor",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@astryxdesign/richtext\",\n  \"data\": {\n    \"package\": \"@astryxdesign/richtext\",\n    \"version\": \"0.7.12\",\n    \"kind\": \"component\",\n    \"name\": \"RichTextEditor\",\n    \"installed\": false,\n    \"install\": \"npm install @astryxdesign/richtext@0.7.12\",\n    \"source\": \"Astryx\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

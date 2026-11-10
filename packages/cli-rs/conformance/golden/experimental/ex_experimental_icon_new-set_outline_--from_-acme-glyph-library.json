@@ -1,0 +1,16 @@
+{
+ "id": "ex_experimental_icon_new-set_outline_--from_-acme-glyph-library",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "outline",
+  "--from",
+  "@acme/glyph-library"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: \"@acme/glyph-library\" does not resolve from app. Install it as a dependency, or check the specifier.\n",
+ "exit": 1,
+ "files": []
+}

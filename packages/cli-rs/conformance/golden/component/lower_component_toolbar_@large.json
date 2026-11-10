@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_toolbar_@large",
+ "args": [
+  "component",
+  "toolbar"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"toolbar\"\n\n  Toolbar  (same name)\n  ButtonGroup  (keyword \"toolbar\")\n  LayoutHeader  (another name for it)\n  ToggleButton  (keyword \"toolbar\")\n  IconButton  (keyword \"toolbar\")\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_IconSizes_@large",
+ "args": [
+  "template",
+  "IconSizes"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function IconSizes() {\n  return (\n    <HStack gap={4}>\n      <VStack gap={1} hAlign=\"center\">\n        <Icon icon=\"search\" size=\"xsm\" />\n        <Text type=\"supporting\">xsm</Text>\n      </VStack>\n      <VStack gap={1} hAlign=\"center\">\n        <Icon icon=\"search\" size=\"sm\" />\n        <Text type=\"supporting\">sm</Text>\n      </VStack>\n      <VStack gap={1} hAlign=\"center\">\n        <Icon icon=\"search\" size=\"md\" />\n        <Text type=\"supporting\">md</Text>\n      </VStack>\n      <VStack gap={1} hAlign=\"center\">\n        <Icon icon=\"search\" size=\"lg\" />\n        <Text type=\"supporting\">lg</Text>\n      </VStack>\n    </HStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

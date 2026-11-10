@@ -1,0 +1,8 @@
+export default {
+  agentDocs: {},
+  'agentDocs': {},
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

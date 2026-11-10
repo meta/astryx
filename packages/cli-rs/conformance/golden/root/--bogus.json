@@ -1,0 +1,11 @@
+{
+ "id": "--bogus",
+ "args": [
+  "--bogus"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown option '--bogus'\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,35 @@
+{
+ "id": "w_integration_template",
+ "args": [
+  "integration",
+  "add",
+  "template",
+  "acme-dash"
+ ],
+ "fixture": "integration",
+ "stdout": "template contribution added\n\n[ok] acme-dash\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dash.doc.mjs\n- templates/acme-dash.tsx\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "integration/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "integration/templates/acme-dash.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'acme-dash',\n  displayName: 'Acme Dash',\n  description: 'Acme Dash template.',\n};\n"
+  },
+  {
+   "path": "integration/templates/acme-dash.tsx",
+   "status": "created",
+   "text": "export default function AcmeDash() {\n  return <div>Acme Dash</div>;\n}\n"
+  }
+ ]
+}

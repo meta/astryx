@@ -1,0 +1,18 @@
+{
+ "id": "template_TypeaheadShowcase_@large",
+ "args": [
+  "template",
+  "TypeaheadShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Typeahead} from '@astryxdesign/core/Typeahead';\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst fruits: SearchableItem[] = [\n  {id: '1', label: 'Apple'},\n  {id: '2', label: 'Banana'},\n  {id: '3', label: 'Cherry'},\n  {id: '4', label: 'Date'},\n  {id: '5', label: 'Elderberry'},\n  {id: '6', label: 'Fig'},\n  {id: '7', label: 'Grape'},\n  {id: '8', label: 'Honeydew'},\n];\n\nconst fruitSource: SearchSource = {\n  search: (query: string) =>\n    fruits.filter(f => f.label.toLowerCase().includes(query.toLowerCase())),\n  bootstrap: () => fruits.slice(0, 5),\n};\n\nexport default function TypeaheadShowcase() {\n  const [value, setValue] = useState<SearchableItem | null>(null);\n  return (\n    <div style={{width: 320}}>\n      <Typeahead\n        label=\"Fruit\"\n        placeholder=\"Search fruits...\"\n        searchSource={fruitSource}\n        value={value}\n        onChange={setValue}\n      />\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

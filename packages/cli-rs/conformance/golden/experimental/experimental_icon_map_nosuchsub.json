@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_map_nosuchsub",
+ "args": [
+  "experimental",
+  "icon",
+  "map",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Name the icon id to map it to, or pass --remove\n",
+ "exit": 1,
+ "files": []
+}

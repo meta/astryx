@@ -1,0 +1,12 @@
+{
+ "id": "w_dot",
+ "args": [
+  "swizzle",
+  ".hidden"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \".hidden\": must not start with '.'.\n",
+ "exit": 1,
+ "files": []
+}

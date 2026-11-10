@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-glyphs-glyphs_@discover-iconsets",
+ "args": [
+  "discover",
+  "@acme/glyphs/glyphs"
+ ],
+ "fixture": "discover-iconsets",
+ "stdout": "package:     @acme/glyphs\nversion:     1.0.0\nkind:        icon-set\nname:        glyphs\ntitle:       Acme glyphs\nsummary:     Hand-drawn test icons.\nlicense:     MIT\niconCount:   4\ndefault:     [object Object]\ndefinitions: close, search\ncommand:     astryx experimental icon <words> --set @acme/glyphs/glyphs\ninstalled:   true\n\nIts package: npx @astryxdesign/cli@0.7.12 discover @acme/glyphs\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

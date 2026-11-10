@@ -1,0 +1,14 @@
+{
+ "id": "component_extra1_extra2_extra3",
+ "args": [
+  "component",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "Component batch\n\ncount: 3\n\nResults\n\nextra1\n\nselector: extra1\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"extra1\"\n\nextra2\n\nselector: extra2\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"extra2\"\n\nextra3\n\nselector: extra3\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"extra3\"\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

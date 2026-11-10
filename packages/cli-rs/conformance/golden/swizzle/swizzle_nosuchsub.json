@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_nosuchsub",
+ "args": [
+  "swizzle",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Component \"nosuchsub\" not found.\n\n  AlertDialog\n  AppShell\n  AspectRatio\n  Avatar\n  AvatarGroup\n  Badge\n  Banner\n  Blockquote\n  BottomSheet\n  Breadcrumbs\n",
+ "exit": 1,
+ "files": []
+}

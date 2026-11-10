@@ -1,0 +1,15 @@
+{
+ "id": "experimental_extra1_extra2_extra3_--json",
+ "args": [
+  "experimental",
+  "extra1",
+  "extra2",
+  "extra3",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"unknown subcommand 'experimental extra1'\",\n  \"code\": \"ERR_UNKNOWN_SUBCOMMAND\",\n  \"suggestions\": [\n    {\n      \"name\": \"icon\",\n      \"reason\": \"available subcommand\"\n    },\n    {\n      \"name\": \"render\",\n      \"reason\": \"available subcommand\"\n    }\n  ]\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

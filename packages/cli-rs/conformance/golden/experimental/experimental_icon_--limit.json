@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_--limit",
+ "args": [
+  "experimental",
+  "icon",
+  "--limit"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--limit <n>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

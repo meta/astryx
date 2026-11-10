@@ -1,0 +1,11 @@
+{
+ "id": "shell_nope_@nocore",
+ "args": [
+  "nope"
+ ],
+ "fixture": "nocore",
+ "stdout": "",
+ "stderr": "Error: unknown command 'nope'\n\n  docs  (did you mean this?)\n  hook  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

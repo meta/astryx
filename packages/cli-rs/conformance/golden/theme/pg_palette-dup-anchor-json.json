@@ -1,0 +1,14 @@
+{
+ "id": "pg_palette-dup-anchor-json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette/dup-anchor.json"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: x: Duplicate anchor for light stop 50.\n",
+ "exit": 1,
+ "files": []
+}

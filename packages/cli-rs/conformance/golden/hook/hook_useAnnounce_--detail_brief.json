@@ -1,0 +1,20 @@
+{
+ "id": "hook_useAnnounce_--detail_brief",
+ "args": [
+  "hook",
+  "useAnnounce",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseAnnounce(options?: UseAnnounceOptions): { announce }  <- from '@astryxdesign/core/hooks'\n  Imperatively announces a message to screen readers through a visually-hidden ...\n  Related: VisuallyHidden, Toast\n  options\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for VisuallyHidden, Toast\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

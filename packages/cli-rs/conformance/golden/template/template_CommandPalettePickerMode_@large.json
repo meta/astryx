@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPalettePickerMode_@large",
+ "args": [
+  "template",
+  "CommandPalettePickerMode"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState, useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\nexport default function CommandPalettePickerMode() {\n  const [theme, setTheme] = useState('light');\n  const source = useMemo(\n    () =>\n      createStaticSource([\n        {id: 'light', label: 'Light'},\n        {id: 'dark', label: 'Dark'},\n        {id: 'system', label: 'System'},\n      ]),\n    [],\n  );\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n      value={theme}\n      onValueChange={setTheme}\n      renderItem={(item, isSelected) => (\n        <>\n          <Text type=\"body\" style={{flex: 1}}>\n            {item.label}\n          </Text>\n          {isSelected && <Icon icon=\"check\" size=\"sm\" />}\n        </>\n      )}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

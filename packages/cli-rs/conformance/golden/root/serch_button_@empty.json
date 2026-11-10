@@ -1,0 +1,12 @@
+{
+ "id": "serch_button_@empty",
+ "args": [
+  "serch",
+  "button"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown command 'serch'\n\n  search  (did you mean this?)\n",
+ "exit": 1,
+ "files": []
+}

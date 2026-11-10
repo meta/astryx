@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_pagination_--json",
+ "args": [
+  "theme",
+  "targets",
+  "pagination",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"pagination\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"pagination\",\n        \"className\": \"astryx-pagination\",\n        \"component\": \"Pagination\",\n        \"props\": [\n          \"size\",\n          \"variant\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"pagination-dot\",\n        \"className\": \"astryx-pagination-dot\",\n        \"component\": \"Pagination\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": [\n          \"active\"\n        ]\n      },\n      {\n        \"key\": \"pagination-input-label\",\n        \"className\": \"astryx-pagination-input-label\",\n        \"component\": \"Pagination\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"pagination-input-total\",\n        \"className\": \"astryx-pagination-input-total\",\n        \"component\": \"Pagination\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

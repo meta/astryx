@@ -1,0 +1,13 @@
+{
+ "id": "experimental_icon_--set",
+ "args": [
+  "experimental",
+  "icon",
+  "--set"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--set <name>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

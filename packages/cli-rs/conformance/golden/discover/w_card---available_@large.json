@@ -1,0 +1,13 @@
+{
+ "id": "w_card---available_@large",
+ "args": [
+  "discover",
+  "card",
+  "--available"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"card\" not found\n\n  @astryxdesign/charts/Chart  (similar name)\n",
+ "exit": 1,
+ "files": []
+}

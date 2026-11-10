@@ -1,0 +1,20 @@
+{
+ "id": "component_Code_--detail_compact_@large",
+ "args": [
+  "component",
+  "Code",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Code\n\nCode marks short inline references such as function names, variables, file paths, and command-line flags. Use CodeBlock for standalone or multi-line snippets.\n\nAnatomy: Container\n\n## Import\n\n```tsx\nimport { Code } from '@astryxdesign/core/Code';\n```\n\n## Best Practices\n\n- **Do:** Use Code for short technical terms inside prose, such as a function name, prop, file path, or command-line flag.\n- **Do:** Set size to 'inherit' when inline code should match the surrounding text size and line height.\n- **Don't:** Use Code for multi-line or standalone snippets. Use CodeBlock instead so readers get appropriate block formatting and syntax support.\n- **Don't:** Use Code as an interactive copy or navigation control. Pair it with the appropriate Button or Link when an action is required.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | The inline code content. **(required)** |\n| `color` | `'primary' \\| 'secondary' \\| 'inherit'` | `'primary'` | Text color. Use 'inherit' to take the surrounding text color. |\n| `size` | `'inherit'` | - | Set to 'inherit' to take the surrounding font size and line height. Omit it to use the code type-scale size. |\n| `ref` | `React.Ref<HTMLElement>` | - | Ref forwarded to the semantic code element. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. Must be a stylex.create() value, not an inline style object like style={{}}. |\n| `className` | `string` | - | CSS class name for the root element. Prefer xstyle for styling. |\n| `style` | `CSSProperties` | - | Inline styles for the root element. Prefer xstyle for StyleX-optimized styling. |\n| `data-testid` | `string` | - | Test selector for automated testing frameworks. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "id": "d_user_then_remove",
+ "args": [
+  "init",
+  "--user",
+  "--remove-agents"
+ ],
+ "fixture": "initdone",
+ "stdout": "[ok] Removed ~/.agents/skills/astryx/SKILL.md\n[ok] Removed ~/.claude/skills/astryx\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/settings.json",
+   "status": "created",
+   "text": "{\n  \"computerAgentText\": {\n    \"install\": false,\n    \"links\": []\n  }\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"agentText\": {\n    \"writtenBy\": \"0.7.12\"\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_traversal",
+ "args": [
+  "swizzle",
+  "../etc"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"../etc\": must not contain path separators ('/' or '\\\\').\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,8 @@
+export default {
+  name: 'x',
+  b: 'y',
+
+  experimental: {
+    iconSets: './icons'
+  }
+};

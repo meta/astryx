@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_chtmessage",
+ "args": [
+  "search",
+  "chtmessage"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"chtmessage\" (7)\n\nname:        ChatMessage\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: Sender context wrapper: handles avatar, name, metadata, and alignment based on sender role.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatMessage\n\nname:        ChatMessageAvatarName\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessage - Avatar & Name\nkind:        block\ndescription: Messages with avatars and sender names. Place the name on the bubble when using bubbles, or on the message wrapper for raw content.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageAvatarName --type block\n\nname:        ChatMessageBubbleCustomContent\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageBubble - Custom Content\nkind:        block\ndescription: Custom in-message content aligned to the bubble text column. An artifact card is wrapped in a ghost bubble with width=\"100%\", so its left edge matches the bubble text and it spans the full message column instead of the default bubble width cap; the timestamp rides the bubble metadata slot.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageBubbleCustomContent --type block\n\nname:        ChatMessageBubbleShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessageBubble\nkind:        block\ndescription: Grouped user bubbles with filled styling and a ghost-variant agent response, with timestamps and delivery status.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageBubbleShowcase --type block\n\nname:        ChatMessageGhost\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessage - Ghost\nkind:        block\ndescription: Ghost variant for messages without visible bubble boundaries. Keeps padding for alignment but renders a transparent background, useful for AI-style responses.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageGhost --type block\n\nname:        ChatMessageMultiBubble\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessage - Multi-Bubble\nkind:        block\ndescription: Grouped bubbles using the group prop for corner radius reduction. Use first, middle, and last to visually connect related bubbles from the same sender.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageMultiBubble --type block\n\nname:        ChatMessageShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: ChatMessage\nkind:        block\ndescription: A user multi-bubble group with delivery status and an assistant ghost response with avatar, name, timestamp, and model info.\ncommand:     npx @astryxdesign/cli@0.7.12 template ChatMessageShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover chtmessage\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

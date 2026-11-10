@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_icon_--set_outline_--all-icons_@large",
+ "args": [
+  "experimental",
+  "icon",
+  "--set",
+  "outline",
+  "--all-icons"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"outline\"\n",
+ "exit": 1,
+ "files": []
+}

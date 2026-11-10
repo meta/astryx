@@ -1,0 +1,13 @@
+{
+ "id": "template_RadioListItemBasic_--json_@large",
+ "args": [
+  "template",
+  "RadioListItemBasic",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"RadioListItemBasic\",\n    \"description\": \"Radio items with labels and descriptions inside a controlled RadioList. Use for single-choice option groups like shipping methods.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"RadioList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';\\n\\nexport default function RadioListItemBasic() {\\n  const [value, setValue] = useState('standard');\\n\\n  return (\\n    <RadioList label=\\\"Shipping method\\\" value={value} onChange={setValue}>\\n      <RadioListItem\\n        label=\\\"Standard\\\"\\n        value=\\\"standard\\\"\\n        description=\\\"5–7 business days\\\"\\n      />\\n      <RadioListItem\\n        label=\\\"Express\\\"\\n        value=\\\"express\\\"\\n        description=\\\"2–3 business days\\\"\\n      />\\n      <RadioListItem\\n        label=\\\"Overnight\\\"\\n        value=\\\"overnight\\\"\\n        description=\\\"Next business day\\\"\\n      />\\n    </RadioList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

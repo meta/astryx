@@ -1,0 +1,14 @@
+{
+ "id": "swizzle_extra1_extra2_extra3",
+ "args": [
+  "swizzle",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Component \"extra1\" not found.\n\n  AlertDialog\n  AppShell\n  AspectRatio\n  Avatar\n  AvatarGroup\n  Badge\n  Banner\n  Blockquote\n  BottomSheet\n  Breadcrumbs\n",
+ "exit": 1,
+ "files": []
+}

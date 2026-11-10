@@ -1,0 +1,4 @@
+export default {
+  agentDocs: {replace: false},
+  docs: './docs'
+};

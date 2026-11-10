@@ -1,0 +1,50 @@
+[
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner endButton={<button>Close</button>} />",
+  "output": "<XDSBanner endContent={<button>Close</button>} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner endButton={closeBtn} variant=\"info\" />",
+  "output": "<XDSBanner endContent={closeBtn} variant=\"info\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Banner endButton={<button>X</button>} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDialog endButton={btn} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner endContent={btn} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-banner-endButton-to-endContent",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSBanner variant=\"warning\" endButton={btn} title=\"Alert\" />",
+  "output": "<XDSBanner variant=\"warning\" endContent={btn} title=\"Alert\" />",
+  "error": null
+ }
+]

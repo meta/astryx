@@ -1,0 +1,13 @@
+{
+ "id": "theme_add_y2k",
+ "args": [
+  "theme",
+  "add",
+  "y2k"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Theme package \"@astryxdesign/theme-y2k\" is not installed. Run `npm install @astryxdesign/theme-y2k` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add y2k`.\n",
+ "exit": 1,
+ "files": []
+}

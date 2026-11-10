@@ -1,0 +1,13 @@
+{
+ "id": "w_component_Nope_--showcase",
+ "args": [
+  "component",
+  "Nope",
+  "--showcase"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No showcase found for \"Nope\"\n",
+ "exit": 1,
+ "files": []
+}

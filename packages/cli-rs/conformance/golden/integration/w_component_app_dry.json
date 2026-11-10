@@ -1,0 +1,21 @@
+{
+ "id": "w_component_app_dry",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "AcmeWidget",
+  "--dry-run"
+ ],
+ "fixture": "app",
+ "stdout": "component contribution plan\n\n[plan] AcmeWidget\n\nDeclare component root ./components in astryx.integration.mjs.\n\n- components/AcmeWidget.doc.mjs\n- components/AcmeWidget.tsx\n- astryx.integration.mjs\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

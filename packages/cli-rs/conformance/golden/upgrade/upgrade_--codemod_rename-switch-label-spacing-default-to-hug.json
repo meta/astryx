@@ -1,0 +1,13 @@
+{
+ "id": "upgrade_--codemod_rename-switch-label-spacing-default-to-hug",
+ "args": [
+  "upgrade",
+  "--codemod",
+  "rename-switch-label-spacing-default-to-hug"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

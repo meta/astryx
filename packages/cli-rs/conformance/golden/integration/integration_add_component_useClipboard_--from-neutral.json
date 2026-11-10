@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_component_useClipboard_--from-neutral",
+ "args": [
+  "integration",
+  "add",
+  "component",
+  "useClipboard",
+  "--from=neutral"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Option \"from\" does not apply to integration kind \"component\".\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,5 @@
+const k = 'docs';
+export default {
+  [k]: './x',
+  ['agentDocs']: {append: ['It\'s "quoted" \\ back']},
+};

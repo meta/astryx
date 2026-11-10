@@ -1,0 +1,12 @@
+{
+ "id": "w_component_core-Button",
+ "args": [
+  "component",
+  "core/Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: External package \"core\" not found\n",
+ "exit": 1,
+ "files": []
+}

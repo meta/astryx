@@ -1,0 +1,20 @@
+{
+ "id": "w_ocean---type-theme_@integration",
+ "args": [
+  "discover",
+  "ocean",
+  "--type",
+  "theme"
+ ],
+ "fixture": "integration",
+ "stdout": "Found 1 match for \"ocean\"\n\n- npx @astryxdesign/cli@0.7.12 discover @acme/kit/ocean  (theme)\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

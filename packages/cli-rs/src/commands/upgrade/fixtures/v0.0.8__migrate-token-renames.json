@@ -1,0 +1,274 @@
+[
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-secondary';",
+  "output": "const x = \"--color-neutral\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-text-link'];",
+  "output": "const x = colorVars[\"--color-text-accent\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-text-on-dark-media';",
+  "output": "const x = \"--color-on-dark\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-wash'],\n      b: colorVars['--color-surface'],\n      c: colorVars['--color-card'],\n      d: colorVars['--color-popover'],\n      e: colorVars['--color-muted'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-background-body\"],\n      b: colorVars[\"--color-background-surface\"],\n      c: colorVars[\"--color-background-card\"],\n      d: colorVars[\"--color-background-popover\"],\n      e: colorVars[\"--color-background-muted\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-hover-tint';",
+  "output": "const x = \"--color-tint-hover\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-ring-focus'],\n      b: colorVars['--color-ring-focus-error'],\n      c: colorVars['--color-ring-focus-success'],\n      d: colorVars['--color-ring-focus-warning'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-accent\"],\n      b: colorVars[\"--color-error\"],\n      c: colorVars[\"--color-success\"],\n      d: colorVars[\"--color-warning\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: colorVars['--color-blue-background'],\n      b: colorVars['--color-red-text'],\n      c: colorVars['--color-green-icon'],\n      d: colorVars['--color-gray-border'],\n    };",
+  "output": "const x = {\n      a: colorVars[\"--color-background-blue\"],\n      b: colorVars[\"--color-text-red\"],\n      c: colorVars[\"--color-icon-green\"],\n      d: colorVars[\"--color-border-gray\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = sizeVars['--size-sm'];",
+  "output": "const x = sizeVars[\"--size-element-sm\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: radiusVars['--radius-0'],\n      b: radiusVars['--radius-1'],\n      c: radiusVars['--radius-2'],\n      d: radiusVars['--radius-3'],\n      e: radiusVars['--radius-rounded'],\n    };",
+  "output": "const x = {\n      a: radiusVars[\"--radius-none\"],\n      b: radiusVars[\"--radius-inner\"],\n      c: radiusVars[\"--radius-element\"],\n      d: radiusVars[\"--radius-container\"],\n      e: radiusVars[\"--radius-full\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--radius-4';",
+  "output": "const x = \"--radius-container\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: shadowVars['--shadow-base'],\n      b: shadowVars['--shadow-menu'],\n      c: shadowVars['--shadow-hover'],\n      d: shadowVars['--shadow-dialog'],\n    };",
+  "output": "const x = {\n      a: shadowVars[\"--shadow-low\"],\n      b: shadowVars[\"--shadow-low\"],\n      c: shadowVars[\"--shadow-med\"],\n      d: shadowVars[\"--shadow-high\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = {\n      a: shadowVars['--inset-shadow-border-hover'],\n      b: shadowVars['--inset-shadow-border-accent'],\n      c: shadowVars['--inset-shadow-border-positive'],\n      d: shadowVars['--inset-shadow-border-warning'],\n      e: shadowVars['--inset-shadow-border-negative'],\n    };",
+  "output": "const x = {\n      a: shadowVars[\"--shadow-inset-hover\"],\n      b: shadowVars[\"--shadow-inset-selected\"],\n      c: shadowVars[\"--shadow-inset-success\"],\n      d: shadowVars[\"--shadow-inset-warning\"],\n      e: shadowVars[\"--shadow-inset-error\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = 'var(--font-heading)';",
+  "output": "const x = \"var(--font-family-heading)\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = textSizeVars['--text-base'];",
+  "output": "const x = textSizeVars[\"--font-size-base\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--text-xsm';",
+  "output": "const x = \"--font-size-xs\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = 'var(--heading-1-size)';",
+  "output": "const x = \"var(--text-heading-1-size)\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = colorVars['--color-info'];",
+  "output": "const x = colorVars[\"--color-icon-purple\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-info-muted';",
+  "output": "const x = \"--color-background-purple\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = lineHeightVars['--leading-base'];",
+  "output": "const x = typeScaleVars[\"--text-body-leading\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { lineHeightVars } from '@xds/core/theme/tokens.stylex';\nconst x = lineHeightVars['--leading-snug'];",
+  "output": "import { typeScaleVars } from '@xds/core/theme/tokens.stylex';\nconst x = typeScaleVars[\"--text-label-leading\"];",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { lineHeightDefaults } from '@xds/core';\nconst tokens = { ...lineHeightDefaults };",
+  "output": "import { typeScaleDefaults } from '@xds/core';\nconst tokens = { ...typeScaleDefaults };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const styles = {\n      a: lineHeightVars['--leading-base'],\n      b: lineHeightVars['--leading-snug'],\n      c: lineHeightVars['--leading-normal'],\n      d: lineHeightVars['--leading-tight'],\n      e: lineHeightVars['--leading-relaxed'],\n    };",
+  "output": "const styles = {\n      a: typeScaleVars[\"--text-body-leading\"],\n      b: typeScaleVars[\"--text-label-leading\"],\n      c: typeScaleVars[\"--text-large-leading\"],\n      d: typeScaleVars[\"--text-heading-1-leading\"],\n      e: typeScaleVars[\"--text-supporting-leading\"],\n    };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--leading-normal';",
+  "output": "const x = \"--text-large-leading\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const css = `color: var(--color-wash)`;",
+  "output": "const css = `color: var(--color-background-body)`;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-background-body';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = '--color-accent';",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const qs = params.toString();\nconst x = '--color-wash';",
+  "output": "const qs = params.toString();\nconst x = \"--color-background-body\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const n = count.toLocaleString();\nconst x = '--shadow-base';",
+  "output": "const n = count.toLocaleString();\nconst x = \"--shadow-low\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const ok = obj.hasOwnProperty('key');\nconst x = '--radius-0';",
+  "output": "const ok = obj.hasOwnProperty('key');\nconst x = \"--radius-none\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const v = date.valueOf();\nconst x = '--font-body';",
+  "output": "const v = date.valueOf();\nconst x = \"--font-family-body\";",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { lineHeightDefaults, typeScaleDefaults } from '@xds/core/theme';\nconst x = { ...lineHeightDefaults, ...typeScaleDefaults };",
+  "output": "import { typeScaleDefaults } from '@xds/core/theme';\nconst x = { ...typeScaleDefaults, ...typeScaleDefaults };",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { lineHeightDefaults } from '@xds/core/theme';\nconst x = lineHeightDefaults;",
+  "output": "import { typeScaleDefaults } from '@xds/core/theme';\nconst x = typeScaleDefaults;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import { lineHeightVars, typeScaleVars } from '@xds/core/theme';\nconst a = lineHeightVars;\nconst b = typeScaleVars;",
+  "output": "import { typeScaleVars } from '@xds/core/theme';\nconst a = typeScaleVars;\nconst b = typeScaleVars;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.8/migrate-token-renames",
+  "path": "test.tsx",
+  "options": null,
+  "source": "const x = \"--color-wash-custom\";",
+  "output": null,
+  "error": null
+ }
+]

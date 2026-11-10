@@ -1,0 +1,19 @@
+{
+ "id": "component_Carousel_--showcase_@large",
+ "args": [
+  "component",
+  "Carousel",
+  "--showcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Carousel} from '@astryxdesign/core/Carousel';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nconst ITEMS = [\n  {title: 'Design', body: 'Create wireframes and prototypes.'},\n  {title: 'Develop', body: 'Build components and pages.'},\n  {title: 'Test', body: 'Write tests and fix bugs.'},\n  {title: 'Deploy', body: 'Ship to production.'},\n  {title: 'Monitor', body: 'Track performance and errors.'},\n];\n\nexport default function CarouselShowcase() {\n  return (\n    <Carousel\n      gap={2}\n      hasSnap\n      hasButtons={false}\n      aria-label=\"Workflow steps\"\n      style={{maxWidth: 500}}>\n      {ITEMS.map(item => (\n        <Card key={item.title} padding={3} style={{minWidth: 200}}>\n          <Stack direction=\"vertical\" gap={1}>\n            <Heading level={5}>{item.title}</Heading>\n            <Text type=\"supporting\" color=\"secondary\">\n              {item.body}\n            </Text>\n          </Stack>\n        </Card>\n      ))}\n    </Carousel>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "shell_integration_add",
+ "args": [
+  "integration",
+  "add"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'kind'\n",
+ "exit": 1,
+ "files": []
+}

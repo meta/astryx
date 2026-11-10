@@ -1,0 +1,14 @@
+{
+ "id": "integration_add_theme_Thing_@author",
+ "args": [
+  "integration",
+  "add",
+  "theme",
+  "Thing"
+ ],
+ "fixture": "author",
+ "stdout": "",
+ "stderr": "Error: Invalid theme name \"Thing\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

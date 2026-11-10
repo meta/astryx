@@ -1,0 +1,20 @@
+{
+ "id": "component_AcmeCard_--package_-acme-kit_@integration",
+ "args": [
+  "component",
+  "AcmeCard",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "integration",
+ "stdout": "package: @acme/kit\n\n# AcmeCard\n\nA zorblax card that groups one topic.\n\n**Import:** `import {AcmeCard} from '@acme/kit';`\n\n## Best Practices\n\n- **Do:** Keep one idea per card.\n- **Don't:** Do not nest cards.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `string` | - | Heading text. **(required)** |\n| `tone` | `'calm' \\| 'loud'` | `'calm'` | Visual weight. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

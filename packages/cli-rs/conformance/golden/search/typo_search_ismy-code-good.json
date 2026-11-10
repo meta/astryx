@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_ismy-code-good",
+ "args": [
+  "search",
+  "ismy-code-good"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"ismy-code-good\" (1)\n\nname:        is-my-code-good\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Is my Astryx code good?\ndescription: Check whether a product surface fits its app and uses Astryx well, require evidence for every claim, and improve it with a repeatable agent review.\ncommand:     npx @astryxdesign/cli@0.7.12 docs is-my-code-good --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ismy-code-good\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

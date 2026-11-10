@@ -1,0 +1,9 @@
+export default {
+  experimental: {
+    other: 1,
+  },
+
+  agentDocs: {
+    append: ['It\'s "quoted" \\ back']
+  }
+};

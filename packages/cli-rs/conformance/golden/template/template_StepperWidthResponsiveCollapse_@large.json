@@ -1,0 +1,18 @@
+{
+ "id": "template_StepperWidthResponsiveCollapse_@large",
+ "args": [
+  "template",
+  "StepperWidthResponsiveCollapse"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Stepper, Step} from '@astryxdesign/core/Stepper';\n\nexport default function StepperWidthResponsiveCollapse() {\n  const [active, setActive] = useState(1);\n\n  return (\n    <div style={{width: 320}}>\n      <Stepper\n        activeStep={active}\n        orientation=\"horizontal\"\n        onStepClick={setActive}\n        horizontalOptions={{\n          minimumStepWidth: 112,\n          collapsedVariant: 'withLabelAndControls',\n        }}>\n        <Step step={0} label=\"Cart\" />\n        <Step step={1} label=\"Shipping\" description=\"Where it goes\" />\n        <Step step={2} label=\"Delivery\" />\n        <Step step={3} label=\"Payment\" />\n      </Stepper>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

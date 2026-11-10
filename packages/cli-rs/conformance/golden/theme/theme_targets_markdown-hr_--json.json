@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_markdown-hr_--json",
+ "args": [
+  "theme",
+  "targets",
+  "markdown-hr",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"markdown-hr\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"markdown-hr\",\n        \"className\": \"astryx-markdown-hr\",\n        \"component\": \"Markdown\",\n        \"props\": [\n          \"density\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

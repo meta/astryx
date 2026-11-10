@@ -1,0 +1,11 @@
+{
+ "id": "search",
+ "args": [
+  "search"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'query'\n",
+ "exit": 1,
+ "files": []
+}

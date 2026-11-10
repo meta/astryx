@@ -1,0 +1,13 @@
+{
+ "id": "template_ListShowcase_--json_@large",
+ "args": [
+  "template",
+  "ListShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ListShowcase\",\n    \"description\": \"\",\n    \"type\": \"block\",\n    \"components\": [\n      \"List\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {List, ListItem} from '@astryxdesign/core/List';\\n\\nexport default function ListShowcase() {\\n  return (\\n    <List>\\n      <ListItem label=\\\"Notifications\\\" description=\\\"Manage your alerts\\\" />\\n      <ListItem label=\\\"Privacy\\\" description=\\\"Control your data\\\" />\\n      <ListItem label=\\\"Security\\\" description=\\\"Password and 2FA\\\" />\\n    </List>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

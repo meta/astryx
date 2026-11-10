@@ -1,0 +1,11 @@
+const base = {a: 1};
+export default {
+  ...base,
+  name: 'x',
+
+  agentDocs: {
+    append: [
+      'long guidance long guidance long guidance long guidance long guidance long guidance long guidance long guidance '
+    ]
+  }
+};

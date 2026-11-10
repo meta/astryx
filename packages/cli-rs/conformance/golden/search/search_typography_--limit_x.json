@@ -1,0 +1,14 @@
+{
+ "id": "search_typography_--limit_x",
+ "args": [
+  "search",
+  "typography",
+  "--limit",
+  "x"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"NaN\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "ex_doctor_integration_templates_-acme-widgets_@large",
+ "args": [
+  "doctor",
+  "integration",
+  "templates",
+  "@acme/widgets"
+ ],
+ "fixture": "large",
+ "stdout": "Checking integration templates: @acme/widgets\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"@acme/widgets\" at /tmp/astryx-conformance/work/large/node_modules/@acme/widgets/package.json. Install it first.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "upgrade_--integration",
+ "args": [
+  "upgrade",
+  "--integration"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--integration <package>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

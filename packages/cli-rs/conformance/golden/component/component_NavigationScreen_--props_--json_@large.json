@@ -1,0 +1,14 @@
+{
+ "id": "component_NavigationScreen_--props_--json_@large",
+ "args": [
+  "component",
+  "NavigationScreen",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"title\",\n      \"type\": \"string\",\n      \"description\": \"Shown in the bar while the screen is on top, and read first when it arrives.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"backTitle\",\n      \"type\": \"string\",\n      \"description\": \"What Back reads on the screen pushed on top of this one. Defaults to title.\"\n    },\n    {\n      \"name\": \"titleDisplayMode\",\n      \"type\": \"'large' | 'inline'\",\n      \"description\": \"How the title shows. 'large' puts it above the content in a large bold type, scrolling with the content; once it has scrolled under the bar, the bar shows the title instead. Use it for a top-level screen, as iOS does.\",\n      \"default\": \"'inline'\"\n    },\n    {\n      \"name\": \"endContent\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content at the end of the bar while the screen is on top.\"\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"The screen's content. It scrolls on its own and keeps its scroll position while covered.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

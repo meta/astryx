@@ -1,0 +1,20 @@
+{
+ "id": "search_tabel_--limit_1",
+ "args": [
+  "search",
+  "tabel",
+  "--limit",
+  "1"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"tabel\" (1 of 6)\n\nname:        Badge\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Badge\ndescription: Badge highlights a status or category at a glance. Use it sparingly: only when a value represents a distinct state (Active, Failed) or a grouping tag (Engineering, Design). Most metadata (dates, durations, counts, descriptions) should be plain description text, not badges.\ncommand:     npx @astryxdesign/cli@0.7.12 component Badge\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover tabel\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

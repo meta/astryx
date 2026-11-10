@@ -1,0 +1,11 @@
+{
+ "id": "gap-report_@large",
+ "args": [
+  "gap-report"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

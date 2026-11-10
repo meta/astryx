@@ -1,0 +1,14 @@
+{
+ "id": "docs_shape_overview_--json_@large",
+ "args": [
+  "docs",
+  "shape",
+  "overview",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Overview\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"The radius scale uses a semantic naming system: inner → element → container → page. Each level fits a specific context. Themes can multiply the entire scale via a radius multiplier, with --radius-none and --radius-full as fixed anchors.\"\n      }\n    ],\n    \"id\": \"overview\",\n    \"links\": {\n      \"up\": \"astryx docs shape --index\",\n      \"next\": \"astryx docs shape radius-scale\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

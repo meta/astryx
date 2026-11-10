@@ -1,0 +1,12 @@
+{
+ "id": "w_home_json",
+ "args": [
+  "init",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.run\",\n  \"data\": {\n    \"mode\": \"default\",\n    \"features\": [\n      \"agents\"\n    ],\n    \"docsWritten\": [],\n    \"docsError\": {\n      \"kind\": \"install-failed\",\n      \"message\": \"Agent docs are not written into the home folder, or into a settings folder in it outside a project (/tmp/astryx-conformance/work/home): agents read the files there in every project. Run init inside a project folder.\"\n    },\n    \"theme\": false,\n    \"themeTemplate\": null,\n    \"themeTemplatePath\": null,\n    \"template\": null,\n    \"templatePath\": null,\n    \"nextSteps\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

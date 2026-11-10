@@ -1,0 +1,15 @@
+{
+ "id": "theme_eject_neutral_--overwrite_--help",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--overwrite",
+  "--help"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx theme eject [options] <slug> [path]\n\nFork a theme as editable local source\n\nOptions:\n  -f, --overwrite      Replace existing files. Without it, an existing file fails with ERR_FILE_EXISTS and nothing is written\n  --package <package>  Select the package that owns the theme\n  -h, --help           display help for command\n\nExit codes:\n  0  all source and descriptor files are written\n  1  the theme is unknown or ambiguous, a path escapes, a source file is missing, or a destination exists\n\nExamples:\n  # Fork a theme into the local root\n  npx @astryxdesign/cli@0.7.12 theme eject ocean\n  # Fork one package theme elsewhere\n  npx @astryxdesign/cli@0.7.12 theme eject ocean src/themes/my-ocean --package @acme/themes\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-eject\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "experimental_render_page.tsx_--reverse",
+ "args": [
+  "experimental",
+  "render",
+  "page.tsx",
+  "--reverse"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --reverse reads a rendered .html file; page.tsx is not one\n\n  npx @astryxdesign/cli@0.7.12 experimental render page.tsx  (render the page instead)\n",
+ "exit": 1,
+ "files": []
+}

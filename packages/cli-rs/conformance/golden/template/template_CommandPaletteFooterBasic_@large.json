@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPaletteFooterBasic_@large",
+ "args": [
+  "template",
+  "CommandPaletteFooterBasic"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {\n  CommandPalette,\n  CommandPaletteFooter,\n} from '@astryxdesign/core/CommandPalette';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\nexport default function CommandPaletteFooterBasic() {\n  const source = useMemo(\n    () =>\n      createStaticSource([\n        {id: 'new-file', label: 'New File'},\n        {id: 'open-recent', label: 'Open Recent'},\n        {id: 'save-all', label: 'Save All'},\n      ]),\n    [],\n  );\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n      footer={<CommandPaletteFooter />}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

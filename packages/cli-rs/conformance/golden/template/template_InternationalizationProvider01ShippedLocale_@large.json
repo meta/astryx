@@ -1,0 +1,18 @@
+{
+ "id": "template_InternationalizationProvider01ShippedLocale_@large",
+ "args": [
+  "template",
+  "InternationalizationProvider01ShippedLocale"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {InternationalizationProvider} from '@astryxdesign/core/i18n';\nimport frFR from '@astryxdesign/core/locales/fr-FR.generated.js';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {\n  SegmentedControl,\n  SegmentedControlItem,\n} from '@astryxdesign/core/SegmentedControl';\nimport {Selector} from '@astryxdesign/core/Selector';\n\ntype Locale = 'en' | 'fr-FR';\n\nexport default function InternationalizationProviderShippedLocale() {\n  const [locale, setLocale] = useState<Locale>('en');\n  const [value, setValue] = useState<string | null>(null);\n  return (\n    <InternationalizationProvider locale={locale} messages={{'fr-FR': frFR}}>\n      <Stack direction=\"vertical\" gap={4} hAlign=\"center\">\n        <SegmentedControl\n          label=\"Language\"\n          value={locale}\n          onChange={nextLocale => setLocale(nextLocale as Locale)}\n          size=\"sm\">\n          <SegmentedControlItem value=\"en\" label=\"EN\" />\n          <SegmentedControlItem value=\"fr-FR\" label=\"FR\" />\n        </SegmentedControl>\n        <Selector\n          controlStyle={{width: 300}}\n          label=\"Billing region\"\n          options={[\n            {value: 'americas', label: 'Americas'},\n            {value: 'emea', label: 'EMEA'},\n            {value: 'apac', label: 'APAC'},\n          ]}\n          value={value}\n          onChange={setValue}\n          hasClear\n        />\n      </Stack>\n    </InternationalizationProvider>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

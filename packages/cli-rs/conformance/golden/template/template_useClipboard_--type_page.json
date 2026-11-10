@@ -1,0 +1,14 @@
+{
+ "id": "template_useClipboard_--type_page",
+ "args": [
+  "template",
+  "useClipboard",
+  "--type",
+  "page"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"useClipboard\"\n\n  useClipboardHookUsage  (block template)\n",
+ "exit": 1,
+ "files": []
+}

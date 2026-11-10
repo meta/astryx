@@ -1,0 +1,17 @@
+{
+ "id": "experimental_icon_new-set_useClipboard_--description_hello-world_--json",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--description",
+  "hello world",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Invalid icon set name \\\"useClipboard\\\": use lowercase kebab-case starting with a letter.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

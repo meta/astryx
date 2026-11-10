@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_switch_@large",
+ "args": [
+  "component",
+  "switch"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"switch\"\n\n  Switch  (same name)\n  SegmentedControl  (keyword \"switch\")\n",
+ "exit": 1,
+ "files": []
+}

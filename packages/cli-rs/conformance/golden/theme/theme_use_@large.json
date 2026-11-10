@@ -1,0 +1,12 @@
+{
+ "id": "theme_use_@large",
+ "args": [
+  "theme",
+  "use"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'slug'\n",
+ "exit": 1,
+ "files": []
+}

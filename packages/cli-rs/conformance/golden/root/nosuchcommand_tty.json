@@ -1,0 +1,11 @@
+{
+ "id": "nosuchcommand_tty",
+ "args": [
+  "nosuchcommand"
+ ],
+ "fixture": "app",
+ "stdout": "Error: unknown command 'nosuchcommand'\r\n\r\n  init  (available command)\r\n  component  (available command)\r\n  docs  (available command)\r\n  blog  (available command)\r\n  swizzle  (available command)\r\n  gap-report  (available command)\r\n  template  (available command)\r\n  upgrade  (available command)\r\n  theme  (available command)\r\n  integration  (available command)\r\n  hook  (available command)\r\n  discover  (available command)\r\n  search  (available command)\r\n  build  (available command)\r\n  doctor  (available command)\r\n  experimental  (available command)\r\n  manifest  (available command)\r\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

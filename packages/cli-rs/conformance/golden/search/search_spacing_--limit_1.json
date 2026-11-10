@@ -1,0 +1,20 @@
+{
+ "id": "search_spacing_--limit_1",
+ "args": [
+  "search",
+  "spacing",
+  "--limit",
+  "1"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"spacing\" (1 of 111)\n\nname:        spacing\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Foundations › Spacing\ndescription: Spacing scale tokens for padding, gap, and margin: the rhythmic foundation of design system layouts.\ncommand:     npx @astryxdesign/cli@0.7.12 docs spacing --index\nparent:      npx @astryxdesign/cli@0.7.12 docs foundations\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover spacing\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

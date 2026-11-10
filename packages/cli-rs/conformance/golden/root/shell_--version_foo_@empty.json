@@ -1,0 +1,12 @@
+{
+ "id": "shell_--version_foo_@empty",
+ "args": [
+  "--version",
+  "foo"
+ ],
+ "fixture": "empty",
+ "stdout": "0.7.12\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
+ "exit": 0,
+ "files": []
+}

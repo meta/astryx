@@ -1,0 +1,14 @@
+{
+ "id": "docs_elevation_overview_--json_@large",
+ "args": [
+  "docs",
+  "elevation",
+  "overview",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Overview\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Elevation tokens create depth through box-shadow. Three levels (low, med, high) establish a visual hierarchy for floating elements. Inset shadows provide focus and selection rings for interactive components.\"\n      }\n    ],\n    \"id\": \"overview\",\n    \"links\": {\n      \"up\": \"astryx docs elevation --index\",\n      \"next\": \"astryx docs elevation elevation-scale\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

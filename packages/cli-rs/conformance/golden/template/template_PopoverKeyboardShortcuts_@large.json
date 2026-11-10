@@ -1,0 +1,18 @@
+{
+ "id": "template_PopoverKeyboardShortcuts_@large",
+ "args": [
+  "template",
+  "PopoverKeyboardShortcuts"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Popover} from '@astryxdesign/core/Popover';\nimport {Button} from '@astryxdesign/core/Button';\nimport {VStack, HStack} from '@astryxdesign/core/Layout';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {Divider} from '@astryxdesign/core/Divider';\nconst shortcuts = [\n  {key: '⌘K', action: 'Command palette'},\n  {key: '⌘/', action: 'Toggle sidebar'},\n  {key: '⌘.', action: 'Quick actions'},\n];\n\nexport default function PopoverKeyboardShortcuts() {\n  return (\n    <Popover\n      placement=\"below\"\n      label=\"Keyboard shortcuts\"\n      width={260}\n      content={\n        <VStack gap={2}>\n          <Heading level={4}>Keyboard shortcuts</Heading>\n          <Divider />\n          {shortcuts.map(s => (\n            <HStack key={s.key} gap={3}>\n              <Text type=\"body\" weight=\"bold\">\n                {s.key}\n              </Text>\n              <Text type=\"body\">{s.action}</Text>\n            </HStack>\n          ))}\n        </VStack>\n      }>\n      <Button label=\"Shortcuts\">Shortcuts</Button>\n    </Popover>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

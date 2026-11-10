@@ -1,0 +1,14 @@
+{
+ "id": "w_doctor_integration_validate_build_large",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "@astryxdesign/build"
+ ],
+ "fixture": "large",
+ "stdout": "Validating integration: @astryxdesign/build@0.7.12\n\nseverity: [fail]\ncode:     missing_manifest\nmessage:  No astryx.integration.{ts,mjs,js} found next to package.json in /tmp/astryx-conformance/work/large/node_modules/@astryxdesign/build.\n\nSummary: 1 error, 0 warnings\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "w_-acme-kit-9.9.9_@integration",
+ "args": [
+  "discover",
+  "@acme/kit@9.9.9"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Version \"9.9.9\" of @acme/kit not found\n\n  @acme/kit@1.2.3  (published version)\n",
+ "exit": 1,
+ "files": []
+}

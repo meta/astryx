@@ -1,0 +1,14 @@
+{
+ "id": "upgrade_--codemod_rename-authoring-doctypes_--apply",
+ "args": [
+  "upgrade",
+  "--codemod",
+  "rename-authoring-doctypes",
+  "--apply"
+ ],
+ "fixture": "app",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
+ "exit": 1,
+ "files": []
+}

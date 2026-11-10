@@ -1,0 +1,14 @@
+{
+ "id": "w_integration_pkg_core_AcmeCard",
+ "args": [
+  "swizzle",
+  "AcmeCard",
+  "--package",
+  "@astryxdesign/core"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: Component \"AcmeCard\" is not provided by package \"@astryxdesign/core\".\n\n  @acme/kit  (provides this component)\n",
+ "exit": 1,
+ "files": []
+}

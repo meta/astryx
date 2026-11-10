@@ -1,0 +1,13 @@
+{
+ "id": "template_ToolbarWithTabs_--json_@large",
+ "args": [
+  "template",
+  "ToolbarWithTabs",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ToolbarWithTabs\",\n    \"description\": \"A toolbar with tabs in the start slot and an action button at the end. Use as a card or section header when content is split into tabs with a primary action alongside.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Section\",\n      \"Tab\",\n      \"TabList\",\n      \"Toolbar\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState, type CSSProperties} from 'react';\\nimport {Toolbar} from '@astryxdesign/core/Toolbar';\\nimport {Button} from '@astryxdesign/core/Button';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {TabList, Tab} from '@astryxdesign/core/TabList';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Section} from '@astryxdesign/core/Section';\\nimport {PlusIcon} from '@heroicons/react/24/outline';\\n\\nconst card: CSSProperties = {\\n  width: '100%',\\n  maxWidth: 500,\\n  height: '100%',\\n  marginTop: 200,\\n};\\n\\nexport default function ToolbarWithTabs() {\\n  const [tab, setTab] = useState('overview');\\n  return (\\n    <Card style={card}>\\n      <Toolbar\\n        label=\\\"Section navigation\\\"\\n        dividers={['bottom']}\\n        startContent={\\n          <TabList value={tab} onChange={setTab}>\\n            <Tab value=\\\"overview\\\" label=\\\"Overview\\\" />\\n            <Tab value=\\\"analytics\\\" label=\\\"Analytics\\\" />\\n            <Tab value=\\\"settings\\\" label=\\\"Settings\\\" />\\n          </TabList>\\n        }\\n        endContent={\\n          <Button label=\\\"New item\\\" icon={<Icon icon={PlusIcon} />} isIconOnly />\\n        }\\n      />\\n      <Section />\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "shell_swizzle_--output_@empty",
+ "args": [
+  "swizzle",
+  "--output"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: option '--output <dir>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

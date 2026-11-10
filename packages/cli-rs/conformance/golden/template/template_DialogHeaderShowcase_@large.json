@@ -1,0 +1,18 @@
+{
+ "id": "template_DialogHeaderShowcase_@large",
+ "args": [
+  "template",
+  "DialogHeaderShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';\nimport {Layout, LayoutContent, Card} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function DialogHeaderShowcase() {\n  return (\n    <Dialog isOpen isInline onOpenChange={() => {}}>\n      <Layout\n        header={\n          <DialogHeader\n            title=\"Edit Profile\"\n            subtitle=\"Update your personal information\"\n            onOpenChange={() => {}}\n          />\n        }\n        content={\n          <LayoutContent>\n            <Card variant=\"muted\">\n              <Text type=\"body\" color=\"secondary\">\n                Dialog body content goes here.\n              </Text>\n            </Card>\n          </LayoutContent>\n        }\n      />\n    </Dialog>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

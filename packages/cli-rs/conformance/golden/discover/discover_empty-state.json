@@ -1,0 +1,18 @@
+{
+ "id": "discover_empty-state",
+ "args": [
+  "discover",
+  "empty state"
+ ],
+ "fixture": "app",
+ "stdout": "Installed\n\nNone yet.\n\nAvailable\nfrom Astryx\n\nname:        @astryxdesign/richtext\npackage:     @astryxdesign/richtext\ncomponents:  RichTextEditor, RichTextEditorAutoLinkPlugin, RichTextEditorToolbar, RichTextView\nversion:     0.7.12\ndescription: Astryx rich text - a Lexical-based rich text editor and viewer, styled with Astryx design tokens.\ntemplates:   RichTextEditorShowcase\nsource:      Astryx\ninstall:     npm install @astryxdesign/richtext@0.7.12\n\nname:        @astryxdesign/theme-butter\npackage:     @astryxdesign/theme-butter\nversion:     0.7.12\ndescription: Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\nthemes:      butter\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-butter@0.7.12\n\nname:        @astryxdesign/theme-chocolate\npackage:     @astryxdesign/theme-chocolate\nversion:     0.7.12\ndescription: Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\nthemes:      chocolate\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-chocolate@0.7.12\n\nname:        @astryxdesign/theme-gothic\npackage:     @astryxdesign/theme-gothic\nversion:     0.7.12\ndescription: Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\nthemes:      gothic\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-gothic@0.7.12\n\nname:        @astryxdesign/theme-matcha\npackage:     @astryxdesign/theme-matcha\nversion:     0.7.12\ndescription: Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.\nthemes:      matcha\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-matcha@0.7.12\n\nname:        @astryxdesign/theme-neutral\npackage:     @astryxdesign/theme-neutral\nversion:     0.7.12\ndescription: Restrained warm grays. Minimal and quiet, so the content stays the focus.\nthemes:      neutral\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-neutral@0.7.12\n\nname:        @astryxdesign/theme-stone\npackage:     @astryxdesign/theme-stone\nversion:     0.7.12\ndescription: Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\nthemes:      stone\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-stone@0.7.12\n\nname:        @astryxdesign/theme-y2k\npackage:     @astryxdesign/theme-y2k\nversion:     0.7.12\ndescription: Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.\nthemes:      y2k\nsource:      Astryx\ninstall:     npm install @astryxdesign/theme-y2k@0.7.12\n\nThis project loads no integration and has no discover source of its own, so discover lists everything instead of answering \"empty state\".\n\nTo add a package, run its install command.\nThen use a theme it adds: npx @astryxdesign/cli@0.7.12 theme add <theme>, for example npx @astryxdesign/cli@0.7.12 theme add butter\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

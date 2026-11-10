@@ -1,0 +1,14 @@
+{
+ "id": "theme_eject_neutral_--package-acme-kit",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--package=@acme/kit"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown theme \"neutral\" in package \"@acme/kit\"\n\n  butter --package @astryxdesign/cli  (bundled theme)\n  chocolate --package @astryxdesign/cli  (bundled theme)\n  gothic --package @astryxdesign/cli  (bundled theme)\n  matcha --package @astryxdesign/cli  (bundled theme)\n  neutral --package @astryxdesign/cli  (bundled theme)\n  stone --package @astryxdesign/cli  (bundled theme)\n  y2k --package @astryxdesign/cli  (bundled theme)\n",
+ "exit": 1,
+ "files": []
+}

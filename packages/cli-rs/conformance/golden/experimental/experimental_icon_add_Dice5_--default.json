@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_add_Dice5_--default",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "Dice5",
+  "--default"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Pass --from with the module the icon is exported from: a package, a package subpath, or a relative path in this package.\n",
+ "exit": 1,
+ "files": []
+}

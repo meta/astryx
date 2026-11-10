@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_linkx",
+ "args": [
+  "search",
+  "linkx"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"linkx\" (3)\n\nname:        authoring/building-blocks/docs\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Docs\ndescription: Write docs that ship with your package and that people and agents find by search or one level at a time.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks\n\nname:        authoring/building-blocks/docs/links\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Building Blocks › Docs › Links\ndescription: Link one doc to another so the link keeps working when the doc moves.\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs/links --index\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/docs\n\nname:        cli/api/functions/docs\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › API › Functions › docs()\ndescription: Read the reference docs: list every topic, one topic's sections, one section, or a whole topic.\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/api/functions/docs\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/api/functions\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover linkx\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

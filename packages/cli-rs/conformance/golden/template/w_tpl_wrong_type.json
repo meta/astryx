@@ -1,0 +1,14 @@
+{
+ "id": "w_tpl_wrong_type",
+ "args": [
+  "template",
+  "login",
+  "--type",
+  "block"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"login\"\n\n  login  (page template)\n  login-card  (page template)\n  login-split  (page template)\n  login-sso  (page template)\n",
+ "exit": 1,
+ "files": []
+}

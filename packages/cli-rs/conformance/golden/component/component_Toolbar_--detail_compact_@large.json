@@ -1,0 +1,20 @@
+{
+ "id": "component_Toolbar_--detail_compact_@large",
+ "args": [
+  "component",
+  "Toolbar",
+  "--detail",
+  "compact"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Toolbar\n\nToolbar is a horizontal bar with left, center, and right areas. Use it for contextual actions within a content area (above a table, inside a card, or in a panel), not as a page-level header. Set the size once on the toolbar and all buttons, inputs, and tabs inside it match automatically.\n\nAnatomy: Outer chrome, Toolbar\n\n## Import\n\n```tsx\nimport { Toolbar } from '@astryxdesign/core/Toolbar';\n```\n\n## Best Practices\n\n- **Do:** Put secondary actions like \"Back\" on the left, and primary actions like \"Save\" on the right.\n- **Do:** Make temporary toolbars like bulk selection visually distinct so users can tell they're contextual, for example with a background color or border.\n- **Do:** Visually separate the toolbar from the content below it, with a divider, a background variant, or both.\n- **Do:** Use Toolbar as a card header when the header has interactive actions like filter or add; it gives you slot layout, keyboard navigation, and size cascading. If the header is just a title with no actions, a LayoutHeader or Section is enough.\n- **Don't:** Put too many actions in one toolbar; move less common items into a MoreMenu.\n- **Don't:** Set size on individual child buttons; set it once on the toolbar and it cascades automatically.\n- **Don't:** Use Toolbar for app-wide navigation like main menu links or sign out; use TopNav or LayoutHeader for that.\n\n### Toolbar\n\nGeneral-purpose toolbar container with three content slots and roving tabindex.\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Accessible label for the toolbar, applied as aria-label. **(required)** |\n| `startContent` | `ReactNode` | - | Content aligned to the start (left in LTR). |\n| `centerContent` | `ReactNode` | - | Centered content. Switches to the three-lane layout: centered while each side lane fits in half of the width it leaves, and the row wraps when the lanes do not fit. |\n| `endContent` | `ReactNode` | - | Content aligned to the end (right in LTR). |\n| `size` | `'sm' \\| 'md' \\| 'lg'` | `'md'` | Size of the toolbar. Controls minimum height and coordinates with Button, TextInput, TabList, and Selector; children inherit this size as their default via SizeContext. |\n| `gap` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `1` | Gap between items within each slot. |\n| `orientation` | `'horizontal' \\| 'vertical'` | `'horizontal'` | Orientation for keyboard navigation. Controls arrow key direction. |\n| `variant` | `SectionVariant` | `'transparent'` | Visual variant passed to Section. |\n| `dividers` | `Array<'top' \\| 'bottom' \\| 'start' \\| 'end'>` | - | Borders/dividers rendered around the toolbar. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. Must be a stylex.create() value. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

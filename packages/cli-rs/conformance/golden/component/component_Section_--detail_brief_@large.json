@@ -1,0 +1,20 @@
+{
+ "id": "component_Section_--detail_brief_@large",
+ "args": [
+  "component",
+  "Section",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\nSection(variant: section|transparent|muted, dividers: Array<top|bottom|start|end>)  <- from '@astryxdesign/core/Section'\n  Section is the correct way to create page regions and group related content o...\n  Derived: padding -> container tokens\n  Targets: astryx-section preferred attrs: data-variant variants: variant\n  width, height, maxWidth, minHeight, children, padding, paddingInline, paddingInlineStart, paddingInlineEnd, paddingBlock, paddingBlockStart, paddingBlockEnd, xstyle\n  import * as stylex from '@stylexjs/stylex';\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_toast_@large",
+ "args": [
+  "component",
+  "toast"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"toast\"\n\n  Toast  (same name)\n  Banner  (keyword \"toast\")\n",
+ "exit": 1,
+ "files": []
+}

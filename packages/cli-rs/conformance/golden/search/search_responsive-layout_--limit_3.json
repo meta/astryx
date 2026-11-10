@@ -1,0 +1,20 @@
+{
+ "id": "search_responsive-layout_--limit_3",
+ "args": [
+  "search",
+  "responsive layout",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"responsive layout\" (3 of 486)\n\nname:        layout\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Layout\ndescription: Build an app layout outside-in: scaffold the regions, structure the content, tune the spacing, then adapt across widths.\ncommand:     npx @astryxdesign/cli@0.7.12 docs layout\nparent:      npx @astryxdesign/cli@0.7.12 docs\n\nname:        AppShell\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/AppShell\ndescription: AppShell is the page shell for an application. It provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.\ncommand:     npx @astryxdesign/cli@0.7.12 component AppShell\n\nname:        Grid\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Grid\ndescription: A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. For columns that reflow on small screens, use `columns={{minWidth, max}}`; a numeric `columns` is exactly N columns at every width and never reflows.\ncommand:     npx @astryxdesign/cli@0.7.12 component Grid\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'responsive layout'\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

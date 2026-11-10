@@ -1,0 +1,13 @@
+{
+ "id": "w_tpl_cdn_traversal",
+ "args": [
+  "template",
+  "--cdn",
+  "../x.html"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid cdn template path \"../x.html\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
+ "exit": 1,
+ "files": []
+}

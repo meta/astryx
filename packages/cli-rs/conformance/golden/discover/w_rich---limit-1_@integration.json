@@ -1,0 +1,20 @@
+{
+ "id": "w_rich---limit-1_@integration",
+ "args": [
+  "discover",
+  "rich",
+  "--limit",
+  "1"
+ ],
+ "fixture": "integration",
+ "stdout": "Found 8 matches for \"rich\"\nshowing the first 1\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditor  (not installed)\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/integration\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

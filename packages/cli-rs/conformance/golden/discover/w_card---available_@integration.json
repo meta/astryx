@@ -1,0 +1,13 @@
+{
+ "id": "w_card---available_@integration",
+ "args": [
+  "discover",
+  "card",
+  "--available"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: \"card\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

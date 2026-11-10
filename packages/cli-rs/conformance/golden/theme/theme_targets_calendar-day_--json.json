@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_calendar-day_--json",
+ "args": [
+  "theme",
+  "targets",
+  "calendar-day",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"calendar-day\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"calendar-day\",\n        \"className\": \"astryx-calendar-day\",\n        \"component\": \"Calendar\",\n        \"props\": [],\n        \"states\": [\n          \"selected\",\n          \"today\",\n          \"disabled\",\n          \"in-range\",\n          \"marker\"\n        ]\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

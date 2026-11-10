@@ -1,0 +1,12 @@
+{
+ "id": "d_button",
+ "args": [
+  "swizzle",
+  "Button"
+ ],
+ "fixture": "initdone",
+ "stdout": "",
+ "stderr": "Error: Refusing to overwrite 1 existing file(s) in components/astryx/Button/. Re-run with --overwrite (or -f) to replace them.\n",
+ "exit": 1,
+ "files": []
+}

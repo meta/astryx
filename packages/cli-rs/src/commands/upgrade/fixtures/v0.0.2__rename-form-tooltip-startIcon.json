@@ -1,0 +1,122 @@
+[
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSField tooltip=\"Help text\" />",
+  "output": "<XDSField labelTooltip=\"Help text\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSFieldLabel tooltip=\"Info\" />",
+  "output": "<XDSFieldLabel labelTooltip=\"Info\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSNumberInput tooltip=\"Enter a number\" />",
+  "output": "<XDSNumberInput labelTooltip=\"Enter a number\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSCheckboxInput tooltip=\"Check this\" />",
+  "output": "<XDSCheckboxInput labelTooltip=\"Check this\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSSwitch tooltip=\"Toggle feature\" />",
+  "output": "<XDSSwitch labelTooltip=\"Toggle feature\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSDateInput tooltip=\"Pick a date\" />",
+  "output": "<XDSDateInput labelTooltip=\"Pick a date\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTimeInput tooltip=\"Pick a time\" />",
+  "output": "<XDSTimeInput labelTooltip=\"Pick a time\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSField startIcon={<Icon />} />",
+  "output": "<XDSField labelIcon={<Icon />} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSNumberInput startIcon={icon} />",
+  "output": "<XDSNumberInput labelIcon={icon} />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSField tooltip=\"Help\" startIcon={icon} label=\"Name\" />",
+  "output": "<XDSField labelTooltip=\"Help\" labelIcon={icon} label=\"Name\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSTooltip tooltip=\"Hover me\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<Field tooltip=\"Help\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton startIcon={icon} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSField labelTooltip=\"Help\" labelIcon={icon} />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.2/rename-form-tooltip-startIcon",
+  "path": "test.tsx",
+  "options": null,
+  "source": "\n      <div>\n        <XDSField tooltip=\"Name help\" startIcon={nameIcon} />\n        <XDSSwitch tooltip=\"Enable feature\" />\n        <XDSDateInput startIcon={calendarIcon} />\n      </div>\n    ",
+  "output": "\n      <div>\n        <XDSField labelTooltip=\"Name help\" labelIcon={nameIcon} />\n        <XDSSwitch labelTooltip=\"Enable feature\" />\n        <XDSDateInput labelIcon={calendarIcon} />\n      </div>\n    ",
+  "error": null
+ }
+]

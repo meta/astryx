@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_selector-search_--json",
+ "args": [
+  "theme",
+  "targets",
+  "selector-search",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"selector-search\",\n    \"componentCount\": 2,\n    \"targets\": [\n      {\n        \"key\": \"multi-selector-search\",\n        \"className\": \"astryx-multi-selector-search\",\n        \"component\": \"MultiSelector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-search\",\n        \"className\": \"astryx-selector-search\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

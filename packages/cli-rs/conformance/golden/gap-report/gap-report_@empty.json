@@ -1,0 +1,11 @@
+{
+ "id": "gap-report_@empty",
+ "args": [
+  "gap-report"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: component is required.\n",
+ "exit": 1,
+ "files": []
+}

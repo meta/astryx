@@ -1,0 +1,12 @@
+{
+ "id": "gap-report_--category-Layout",
+ "args": [
+  "gap-report",
+  "--category=Layout"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

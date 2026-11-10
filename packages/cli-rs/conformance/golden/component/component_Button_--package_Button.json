@@ -1,0 +1,14 @@
+{
+ "id": "component_Button_--package_Button",
+ "args": [
+  "component",
+  "Button",
+  "--package",
+  "Button"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: External package \"Button\" not found\n",
+ "exit": 1,
+ "files": []
+}

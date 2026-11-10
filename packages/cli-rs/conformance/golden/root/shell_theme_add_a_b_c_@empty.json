@@ -1,0 +1,15 @@
+{
+ "id": "shell_theme_add_a_b_c_@empty",
+ "args": [
+  "theme",
+  "add",
+  "a",
+  "b",
+  "c"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: too many arguments for 'add'. Expected 1 argument but got 3.\n",
+ "exit": 1,
+ "files": []
+}

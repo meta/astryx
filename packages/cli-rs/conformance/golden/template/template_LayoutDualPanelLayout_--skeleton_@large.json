@@ -1,0 +1,19 @@
+{
+ "id": "template_LayoutDualPanelLayout_--skeleton_@large",
+ "args": [
+  "template",
+  "LayoutDualPanelLayout",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# LayoutDualPanelLayout - A file browser style layout with start panel for folders, main content for files, and end panel for details.\n# Components: Card, Layout, List\n\n<Card width=\"100%\">\n  <Layout hasDivider>\n    /* header: */\n    <LayoutHeader hasDivider>\n      <Heading />\n    </LayoutHeader>\n    /* start: */\n    <LayoutPanel hasDivider width={120}>\n      <VStack gap={1}>\n        <Text />\n        <List>\n          <ListItem />\n          <ListItem />\n          <ListItem />\n        </List>\n      </VStack>\n    </LayoutPanel>\n    /* content: */\n    <LayoutContent>\n      <VStack gap={2}>\n        <Text />\n        <Card variant=\"muted\">\n          <Text />\n        </Card>\n      </VStack>\n    </LayoutContent>\n    /* end: */\n    <LayoutPanel hasDivider width={120}>\n      <VStack gap={2}>\n        <Text />\n        <Text />\n      </VStack>\n    </LayoutPanel>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

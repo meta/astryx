@@ -1,0 +1,458 @@
+[
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createConfig} from '@astryxdesign/core/config';\nexport default createConfig({integrations: ['@acme/widgets']});\n",
+  "output": "export default {integrations: ['@acme/widgets']};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createIntegration} from '@astryxdesign/core/authoring';\nexport default createIntegration({components: './src'});\n",
+  "output": "export default {components: './src'};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'component'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createFunctionDoc} from '@astryxdesign/core/authoring';\nexport default createFunctionDoc({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'function'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createDoc} from '@astryxdesign/core/authoring';\nexport default createDoc({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'generic'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createPageTemplate} from '@astryxdesign/core/authoring';\nexport default createPageTemplate({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'page'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createBlockTemplate} from '@astryxdesign/core/authoring';\nexport default createBlockTemplate({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'block'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createCodemod} from '@astryxdesign/core/authoring';\nexport default createCodemod({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'code'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createConfigCodemod} from '@astryxdesign/core/authoring';\nexport default createConfigCodemod({name: 'X', description: 'd'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'd',\n  type: 'config'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createDoc as mkDoc} from '@astryxdesign/cli/doc';\nexport default mkDoc({name: 'Theming', description: 'How theming works.'});\n",
+  "output": "export default {\n  name: 'Theming',\n  description: 'How theming works.',\n  type: 'generic'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc, type ComponentDoc} from '@astryxdesign/core/authoring';\nconst doc: ComponentDoc = createComponentDoc({name: 'Widget', props: []});\nexport default doc;\n",
+  "output": "import { type ComponentDoc } from '@astryxdesign/core/authoring';\nconst doc: ComponentDoc = {\n  name: 'Widget',\n  props: [],\n  type: 'component'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc(baseDoc);\n",
+  "output": "export default {\n  ...baseDoc,\n  type: 'component'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc({type: 'wrong', name: 'Widget', props: []});\n",
+  "output": "export default {type: 'component', name: 'Widget', props: []};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nconst type = someVar;\nexport default createComponentDoc({name: 'Widget', type});\n",
+  "output": "const type = someVar;\nexport default {name: 'Widget', type: 'component'};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createConfig} from '@astryxdesign/cli/config';\nexport default createConfig();\n",
+  "output": "export default {};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc();\n",
+  "output": "export default {\n  type: 'component'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createConfig} from '@acme/eslint';\nexport default createConfig({strict: true});\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {createConfig as createLintConfig} from '@acme/eslint';\nimport {createDoc} from '@astryxdesign/cli/doc';\nexport const lintConfig = createLintConfig({strict: true});\nexport const doc = createDoc({name: 'Theming', description: 'How theming works.'});\n",
+  "output": "import {createConfig as createLintConfig} from '@acme/eslint';\nexport const lintConfig = createLintConfig({strict: true});\nexport const doc = {\n  name: 'Theming',\n  description: 'How theming works.',\n  type: 'generic'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "test.ts",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nexport default Button;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createConfig} from '@astryxdesign/core/config';\nimport type {AstryxConfig} from '@astryxdesign/core/config';\nconst config: AstryxConfig = createConfig({integrations: ['@acme/widgets'], issuesUrl: 'https://example.com/i'});\nexport default config;\n",
+  "output": "import type {AstryxConfig} from '@astryxdesign/core/config';\nconst config: AstryxConfig = {integrations: ['@acme/widgets'], issuesUrl: 'https://example.com/i'};\nexport default config;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createIntegration} from '@astryxdesign/core/authoring';\nimport type {AstryxIntegration} from '@astryxdesign/core/authoring';\nconst integration: AstryxIntegration = createIntegration({components: './components', codemods: './codemods'});\nexport default integration;\n",
+  "output": "import type {AstryxIntegration} from '@astryxdesign/core/authoring';\nconst integration: AstryxIntegration = {components: './components', codemods: './codemods'};\nexport default integration;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nimport type {ComponentDoc} from '@astryxdesign/core/authoring';\nconst doc: ComponentDoc = createComponentDoc({name: 'AcmeCarousel', displayName: 'Acme Carousel', usage: {description: 'Cycle related media.'}, props: [{name: 'slides', type: 'ReactNode[]', description: 'Slides.'}]});\nexport default doc;\n",
+  "output": "import type {ComponentDoc} from '@astryxdesign/core/authoring';\nconst doc: ComponentDoc = {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  usage: {description: 'Cycle related media.'},\n  props: [{name: 'slides', type: 'ReactNode[]', description: 'Slides.'}],\n  type: 'component'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createFunctionDoc} from '@astryxdesign/core/authoring';\nimport type {HookDoc} from '@astryxdesign/core/authoring';\nconst doc: HookDoc = createFunctionDoc({name: 'useCarousel', displayName: 'useCarousel', usage: {description: 'Drive carousel state.'}, params: [{name: 'count', type: 'number', description: 'Count.'}], returns: [{name: 'index', type: 'number', description: 'Index.'}]});\nexport default doc;\n",
+  "output": "import type {HookDoc} from '@astryxdesign/core/authoring';\nconst doc: HookDoc = {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  usage: {description: 'Drive carousel state.'},\n  params: [{name: 'count', type: 'number', description: 'Count.'}],\n  returns: [{name: 'index', type: 'number', description: 'Index.'}],\n  type: 'function'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createDoc} from '@astryxdesign/core/authoring';\nimport type {ReferenceDoc} from '@astryxdesign/core/authoring';\nconst doc: ReferenceDoc = createDoc({name: 'theming', title: 'Theming', description: 'How theming works.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Themes cascade.'}]}]});\nexport default doc;\n",
+  "output": "import type {ReferenceDoc} from '@astryxdesign/core/authoring';\nconst doc: ReferenceDoc = {\n  name: 'theming',\n  title: 'Theming',\n  description: 'How theming works.',\n  sections: [{title: 'Overview', content: [{type: 'prose', text: 'Themes cascade.'}]}],\n  type: 'generic'\n};\nexport default doc;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createPageTemplate} from '@astryxdesign/core/authoring';\nimport type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = createPageTemplate({name: 'Landing', displayName: 'Landing', description: 'A landing page.'});\nexport default t;\n",
+  "output": "import type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = {\n  name: 'Landing',\n  displayName: 'Landing',\n  description: 'A landing page.',\n  type: 'page'\n};\nexport default t;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createBlockTemplate} from '@astryxdesign/core/authoring';\nimport type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = createBlockTemplate({name: 'Hero', displayName: 'Hero', exampleFor: 'Button', aspectRatio: 1.5, description: 'A hero block.'});\nexport default t;\n",
+  "output": "import type {TemplateDoc} from '@astryxdesign/core/authoring';\nconst t: TemplateDoc = {\n  name: 'Hero',\n  displayName: 'Hero',\n  exampleFor: 'Button',\n  aspectRatio: 1.5,\n  description: 'A hero block.',\n  type: 'block'\n};\nexport default t;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "f.ts",
+  "options": null,
+  "source": "import {createCodemod} from '@astryxdesign/cli/codemod';\nimport type {AstryxCodemodTransform} from '@astryxdesign/cli/codemod';\nconst transform: AstryxCodemodTransform = file => file.source.replace(/a/g, 'b');\nexport default createCodemod({title: 'Rename', transform});\n",
+  "output": "import type {AstryxCodemodTransform} from '@astryxdesign/cli/codemod';\nconst transform: AstryxCodemodTransform = file => file.source.replace(/a/g, 'b');\nexport default {\n  title: 'Rename',\n  transform,\n  type: 'code'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createConfig} from '@astryxdesign/core/config';\n\nexport default createConfig({\n  integrations: ['@acme/widgets', '@acme/charts'],\n  issuesUrl: 'https://github.com/acme/app/issues',\n  hooks: {postCodemod: [{name: 'reinstall', buildCommand: () => ({command: 'pnpm', args: ['install']})}]},\n  experimental: {xle: {components: {KpiCard: {from: '@/components/KpiCard', default: true}}}},\n});\n",
+  "output": "export default {\n  integrations: ['@acme/widgets', '@acme/charts'],\n  issuesUrl: 'https://github.com/acme/app/issues',\n  hooks: {postCodemod: [{name: 'reinstall', buildCommand: () => ({command: 'pnpm', args: ['install']})}]},\n  experimental: {xle: {components: {KpiCard: {from: '@/components/KpiCard', default: true}}}},\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  integrations: ['@acme/widgets', '@acme/charts'],\n  issuesUrl: 'https://github.com/acme/app/issues',\n  hooks: {postCodemod: [{name: 'reinstall', buildCommand: () => ({command: 'pnpm', args: ['install']})}]},\n  experimental: {xle: {components: {KpiCard: {from: '@/components/KpiCard', default: true}}}},\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createIntegration} from '@astryxdesign/core/authoring';\n\nexport default createIntegration({\n  components: './components',\n  templates: './templates',\n  codemods: './codemods',\n  issuesUrl: 'https://github.com/acme/widgets/issues',\n});\n",
+  "output": "export default {\n  components: './components',\n  templates: './templates',\n  codemods: './codemods',\n  issuesUrl: 'https://github.com/acme/widgets/issues',\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  components: './components',\n  templates: './templates',\n  codemods: './codemods',\n  issuesUrl: 'https://github.com/acme/widgets/issues',\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\n\nexport default createComponentDoc({\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  description: 'A carousel that cycles through slides.',\n  category: 'Content',\n  keywords: ['carousel', 'slider', 'gallery'],\n  props: [\n    {name: 'slides', type: 'ReactNode[]', description: 'The slides to render.', required: true},\n    {name: 'autoPlay', type: 'boolean', description: 'Advance automatically.', default: 'false'},\n  ],\n  usage: {description: 'Use to cycle related media.', bestPractices: [{guidance: true, description: 'Keep slides consistent in size.'}]},\n  examples: [{label: 'Basic', code: '<AcmeCarousel slides={slides} />'}],\n});\n",
+  "output": "export default {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  description: 'A carousel that cycles through slides.',\n  category: 'Content',\n  keywords: ['carousel', 'slider', 'gallery'],\n\n  props: [\n    {name: 'slides', type: 'ReactNode[]', description: 'The slides to render.', required: true},\n    {name: 'autoPlay', type: 'boolean', description: 'Advance automatically.', default: 'false'},\n  ],\n\n  usage: {description: 'Use to cycle related media.', bestPractices: [{guidance: true, description: 'Keep slides consistent in size.'}]},\n  examples: [{label: 'Basic', code: '<AcmeCarousel slides={slides} />'}],\n  type: 'component'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'AcmeCarousel',\n  displayName: 'Acme Carousel',\n  description: 'A carousel that cycles through slides.',\n  category: 'Content',\n  keywords: ['carousel', 'slider', 'gallery'],\n\n  props: [\n    {name: 'slides', type: 'ReactNode[]', description: 'The slides to render.', required: true},\n    {name: 'autoPlay', type: 'boolean', description: 'Advance automatically.', default: 'false'},\n  ],\n\n  usage: {description: 'Use to cycle related media.', bestPractices: [{guidance: true, description: 'Keep slides consistent in size.'}]},\n  examples: [{label: 'Basic', code: '<AcmeCarousel slides={slides} />'}],\n  type: 'component'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createFunctionDoc} from '@astryxdesign/core/authoring';\n\nexport default createFunctionDoc({\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  description: 'Drives carousel state.',\n  params: [{name: 'count', type: 'number', description: 'Slide count.', required: true}],\n  returns: [{name: 'index', type: 'number', description: 'Active slide index.'}],\n});\n",
+  "output": "export default {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  description: 'Drives carousel state.',\n  params: [{name: 'count', type: 'number', description: 'Slide count.', required: true}],\n  returns: [{name: 'index', type: 'number', description: 'Active slide index.'}],\n  type: 'function'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'useCarousel',\n  displayName: 'useCarousel',\n  description: 'Drives carousel state.',\n  params: [{name: 'count', type: 'number', description: 'Slide count.', required: true}],\n  returns: [{name: 'index', type: 'number', description: 'Active slide index.'}],\n  type: 'function'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createDoc} from '@astryxdesign/core/authoring';\n\nexport default createDoc({\n  name: 'Theming',\n  displayName: 'Theming',\n  description: 'How theming works in this package.',\n});\n",
+  "output": "export default {\n  name: 'Theming',\n  displayName: 'Theming',\n  description: 'How theming works in this package.',\n  type: 'generic'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Theming',\n  displayName: 'Theming',\n  description: 'How theming works in this package.',\n  type: 'generic'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createPageTemplate} from '@astryxdesign/core/authoring';\n\nexport default createPageTemplate({\n  name: 'Acme Landing',\n  description: 'A marketing landing page.',\n  category: 'Marketing',\n  componentsUsed: ['AcmeCarousel', 'Button'],\n  preview: {image: './preview.png', aspectRatio: '16 / 9'},\n});\n",
+  "output": "export default {\n  name: 'Acme Landing',\n  description: 'A marketing landing page.',\n  category: 'Marketing',\n  componentsUsed: ['AcmeCarousel', 'Button'],\n  preview: {image: './preview.png', aspectRatio: '16 / 9'},\n  type: 'page'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Acme Landing',\n  description: 'A marketing landing page.',\n  category: 'Marketing',\n  componentsUsed: ['AcmeCarousel', 'Button'],\n  preview: {image: './preview.png', aspectRatio: '16 / 9'},\n  type: 'page'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createBlockTemplate} from '@astryxdesign/core/authoring';\n\nexport default createBlockTemplate({\n  name: 'Acme Hero',\n  description: 'A hero block.',\n  componentsUsed: ['AcmeCarousel'],\n});\n",
+  "output": "export default {\n  name: 'Acme Hero',\n  description: 'A hero block.',\n  componentsUsed: ['AcmeCarousel'],\n  type: 'block'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  name: 'Acme Hero',\n  description: 'A hero block.',\n  componentsUsed: ['AcmeCarousel'],\n  type: 'block'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createCodemod} from '@astryxdesign/cli/codemod';\n\nexport default createCodemod({\n  title: 'Rename slides prop to items',\n  description: 'v2 renamed AcmeCarousel.slides to items.',\n  transform: (file) => file.source.replace(/slides=/g, 'items='),\n});\n",
+  "output": "export default {\n  title: 'Rename slides prop to items',\n  description: 'v2 renamed AcmeCarousel.slides to items.',\n  transform: (file) => file.source.replace(/slides=/g, 'items='),\n  type: 'code'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  title: 'Rename slides prop to items',\n  description: 'v2 renamed AcmeCarousel.slides to items.',\n  transform: (file) => file.source.replace(/slides=/g, 'items='),\n  type: 'code'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createConfigCodemod} from '@astryxdesign/cli/codemod';\n\nexport default createConfigCodemod({\n  title: 'Bump acme integration id',\n  transform: (file) => file.source.replace('@acme/old', '@acme/new'),\n});\n",
+  "output": "export default {\n  title: 'Bump acme integration id',\n  transform: (file) => file.source.replace('@acme/old', '@acme/new'),\n  type: 'config'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "export default {\n  title: 'Bump acme integration id',\n  transform: (file) => file.source.replace('@acme/old', '@acme/new'),\n  type: 'config'\n};\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createDoc as mkDoc} from '@astryxdesign/core/authoring';\nexport default mkDoc({name: 'X', description: 'y'});\n",
+  "output": "export default {\n  name: 'X',\n  description: 'y',\n  type: 'generic'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createComponentDoc, type ComponentDoc} from '@astryxdesign/core/authoring';\nconst d: ComponentDoc = createComponentDoc({name: 'X', props: []});\nexport default d;\n",
+  "output": "import { type ComponentDoc } from '@astryxdesign/core/authoring';\nconst d: ComponentDoc = {\n  name: 'X',\n  props: [],\n  type: 'component'\n};\nexport default d;\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc(baseDoc);\n",
+  "output": "export default {\n  ...baseDoc,\n  type: 'component'\n};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createComponentDoc} from '@astryxdesign/core/authoring';\nexport default createComponentDoc({type: 'wrong', name: 'X', props: []});\n",
+  "output": "export default {type: 'component', name: 'X', props: []};\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {createDoc, createComponentDoc} from '@astryxdesign/core/authoring';\nexport const a = createDoc({name: 'A', description: 'a'});\nexport const b = createComponentDoc({name: 'B', props: []});\nexport {ComponentDoc} from '@astryxdesign/cli/doc';\n",
+  "output": "export const a = {\n  name: 'A',\n  description: 'a',\n  type: 'generic'\n};\nexport const b = {\n  name: 'B',\n  props: [],\n  type: 'component'\n};\nexport {ComponentDoc} from '@astryxdesign/cli/doc';\n",
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "type C = import('@astryxdesign/cli/config').AstryxConfig;\nconst m = await import('@astryxdesign/cli/codemod');\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/config';\nexport const x: T = null;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/doc';\nexport const x: T = null;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/integration';\nexport const x: T = null;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/template';\nexport const x: T = null;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import type {T} from '@astryxdesign/cli/codemod';\nexport const x: T = null;\n",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.3.0/unwrap-authoring-factories",
+  "path": "input.ts",
+  "options": null,
+  "source": "import {Button} from '@astryxdesign/core';\nexport const x = <Button />;\n",
+  "output": null,
+  "error": null
+ }
+]

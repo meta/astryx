@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPaletteRichItems_@large",
+ "args": [
+  "template",
+  "CommandPaletteRichItems"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Kbd} from '@astryxdesign/core/Kbd';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\nimport type {SearchableItem} from '@astryxdesign/core/Typeahead';\n\ntype RichCommand = SearchableItem<{\n  group?: string;\n  shortcut?: string;\n}>;\n\nconst commands: RichCommand[] = [\n  {\n    id: 'settings',\n    label: 'Open Settings',\n    auxiliaryData: {group: 'Navigation', shortcut: 'mod+,'},\n  },\n  {\n    id: 'profile',\n    label: 'View Profile',\n    auxiliaryData: {group: 'Navigation'},\n  },\n  {\n    id: 'new-file',\n    label: 'Create New File',\n    auxiliaryData: {group: 'Actions', shortcut: 'mod+n'},\n  },\n  {\n    id: 'search',\n    label: 'Search Files',\n    auxiliaryData: {group: 'Actions', shortcut: 'mod+p'},\n  },\n];\n\nexport default function CommandPaletteRichItems() {\n  const source = useMemo(() => createStaticSource(commands), []);\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n      renderItem={(item: RichCommand) => (\n        <>\n          <Text type=\"body\" style={{flex: 1}}>\n            {item.label}\n          </Text>\n          {item.auxiliaryData?.shortcut && (\n            <Kbd keys={item.auxiliaryData.shortcut} />\n          )}\n        </>\n      )}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

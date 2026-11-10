@@ -1,0 +1,18 @@
+{
+ "id": "w_handlers_to_unknown",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--to",
+  "@acme/nope"
+ ],
+ "fixture": "gapreport",
+ "stdout": "",
+ "stderr": "Error: No gap-report destination \"@acme/nope\". Choose one of: @acme/hooks, @acme/broken; or leave out --to for the default.\n\n  @acme/hooks  (https://example.com/hooks/issues)\n  @acme/broken  (https://github.com/acme/broken/issues)\n",
+ "exit": 1,
+ "files": []
+}

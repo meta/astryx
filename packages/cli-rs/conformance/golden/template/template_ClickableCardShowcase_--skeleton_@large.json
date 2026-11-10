@@ -1,0 +1,19 @@
+{
+ "id": "template_ClickableCardShowcase_--skeleton_@large",
+ "args": [
+  "template",
+  "ClickableCardShowcase",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# ClickableCardShowcase - A clickable card that navigates on click. Nested interactive elements work independently.\n# Components: ClickableCard, Stack\n\n<ClickableCard width={320} />\n<Stack gap={2} />\n<Heading />\n<Text />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

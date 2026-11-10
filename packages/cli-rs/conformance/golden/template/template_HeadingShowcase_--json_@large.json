@@ -1,0 +1,13 @@
+{
+ "id": "template_HeadingShowcase_--json_@large",
+ "args": [
+  "template",
+  "HeadingShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"HeadingShowcase\",\n    \"description\": \"\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Heading} from '@astryxdesign/core/Text';\\n\\nexport default function HeadingShowcase() {\\n  return (\\n    <VStack gap={2} hAlign=\\\"start\\\">\\n      <Heading level={1}>Heading Level 1</Heading>\\n      <Heading level={2}>Heading Level 2</Heading>\\n      <Heading level={3}>Heading Level 3</Heading>\\n      <Heading level={4}>Heading Level 4</Heading>\\n      <Heading level={5}>Heading Level 5</Heading>\\n      <Heading level={6}>Heading Level 6</Heading>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

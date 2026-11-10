@@ -1,0 +1,18 @@
+{
+ "id": "template_CommandPaletteShowcase_@large",
+ "args": [
+  "template",
+  "CommandPaletteShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\n// Remove isInline for production — command palettes should be modal.\nexport default function CommandPaletteShowcase() {\n  const source = useMemo(\n    () =>\n      createStaticSource([\n        {id: 'home', label: 'Home'},\n        {id: 'settings', label: 'Settings'},\n        {id: 'profile', label: 'Profile'},\n        {id: 'dashboard', label: 'Dashboard'},\n        {id: 'help', label: 'Help'},\n      ]),\n    [],\n  );\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n    />\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

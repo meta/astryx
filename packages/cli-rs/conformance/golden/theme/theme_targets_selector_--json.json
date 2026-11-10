@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_selector_--json",
+ "args": [
+  "theme",
+  "targets",
+  "selector",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"selector\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"selector\",\n        \"className\": \"astryx-selector\",\n        \"component\": \"Selector\",\n        \"props\": [\n          \"variant\",\n          \"size\",\n          \"status\"\n        ],\n        \"states\": [\n          \"disabled\",\n          \"readonly\"\n        ]\n      },\n      {\n        \"key\": \"selector-check\",\n        \"className\": \"astryx-selector-check\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-empty-state\",\n        \"className\": \"astryx-selector-empty-state\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-indicator-icon\",\n        \"className\": \"astryx-selector-indicator-icon\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": [\n          \"state\"\n        ]\n      },\n      {\n        \"key\": \"selector-option\",\n        \"className\": \"astryx-selector-option\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-option-row\",\n        \"className\": \"astryx-selector-option-row\",\n        \"component\": \"Selector\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": [\n          \"selected\",\n          \"disabled\"\n        ]\n      },\n      {\n        \"key\": \"selector-popup\",\n        \"className\": \"astryx-selector-popup\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-search\",\n        \"className\": \"astryx-selector-search\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      },\n      {\n        \"key\": \"selector-section-heading\",\n        \"className\": \"astryx-selector-section-heading\",\n        \"component\": \"Selector\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,14 @@
+{
+ "id": "docs_illustrations_guidelines_--json_@large",
+ "args": [
+  "docs",
+  "illustrations",
+  "guidelines",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Guidelines\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Keep illustrations consistent in style across the product.\",\n          \"Use simple, flat illustrations that work in both light and dark mode.\",\n          \"Size illustrations proportionally to the container, typically 120–240px.\",\n          \"Place illustrations centered with supporting text below.\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Mix illustration styles from different sources.\",\n          \"Use illustrations as decoration without purpose.\"\n        ]\n      }\n    ],\n    \"id\": \"guidelines\",\n    \"links\": {\n      \"up\": \"astryx docs illustrations --index\",\n      \"previous\": \"astryx docs illustrations when-to-use\",\n      \"next\": \"astryx docs illustrations placement\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

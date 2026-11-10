@@ -1,0 +1,18 @@
+{
+ "id": "template_TokenizerShowcase_@large",
+ "args": [
+  "template",
+  "TokenizerShowcase"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Tokenizer} from '@astryxdesign/core/Tokenizer';\nimport type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';\n\nconst tags: SearchableItem[] = [\n  {id: '1', label: 'Design'},\n  {id: '2', label: 'Engineering'},\n  {id: '3', label: 'Marketing'},\n  {id: '4', label: 'Product'},\n  {id: '5', label: 'Research'},\n  {id: '6', label: 'Sales'},\n];\n\nconst source: SearchSource = {\n  search: (query: string) =>\n    tags.filter(tag => tag.label.toLowerCase().includes(query.toLowerCase())),\n  bootstrap: () => tags,\n};\n\nexport default function TokenizerShowcase() {\n  const [value, setValue] = useState<SearchableItem[]>([tags[0], tags[1]]);\n  return (\n    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>\n      <Tokenizer\n        label=\"Tags\"\n        placeholder=\"Search...\"\n        searchSource={source}\n        value={value}\n        onChange={setValue}\n      />\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

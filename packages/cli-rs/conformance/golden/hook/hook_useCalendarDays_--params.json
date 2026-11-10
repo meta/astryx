@@ -1,0 +1,19 @@
+{
+ "id": "hook_useCalendarDays_--params",
+ "args": [
+  "hook",
+  "useCalendarDays",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseCalendarDaysOptions` | - | The month to lay out and how. **(required)** |\n| `options.year` | `number` | - | Year of the month to lay out, as options.calendar numbers it. **(required)** |\n| `options.month` | `number` | - | The month's position in its year under options.calendar, 1-based. In the Gregorian calendar 1 is January and 12 is December; other calendars number months as Temporal.PlainDate does, so a Hebrew leap year runs from 1 to 13. **(required)** |\n| `options.weekStartsOn` | `DayOfWeek` | `0` | First day of the week, from 0 (Sunday) to 6 (Saturday). It sets the first column of both the grid and dayNames. |\n| `options.hasVariableRowCount` | `boolean` | `false` | Use only as many week rows as the month needs instead of a fixed 6-row grid. That is 4 to 6 for a Gregorian month, and 1 or 2 for the short thirteenth month of the Coptic and Ethiopic calendars. |\n| `options.calendar` | `CalendarSystem` | `'gregory'` | The calendar system that numbers year, month and each day's dayNumber. Every day keeps its Gregorian date and iso. The hook never reads the InternationalizationProvider calendar. Calendars other than gregory, iso8601, buddhist, roc and japanese need Temporal; without it the hook uses Gregorian numbers and warns once in development. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

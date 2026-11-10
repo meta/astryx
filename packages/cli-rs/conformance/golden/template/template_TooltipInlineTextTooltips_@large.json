@@ -1,0 +1,18 @@
+{
+ "id": "template_TooltipInlineTextTooltips_@large",
+ "args": [
+  "template",
+  "TooltipInlineTextTooltips"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Tooltip} from '@astryxdesign/core/Tooltip';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TooltipInlineTextTooltips() {\n  return (\n    <Text type=\"body\">\n      Learn more about our{' '}\n      <Tooltip\n        content=\"Your data is encrypted and never shared\"\n        placement=\"above\">\n        privacy policy\n      </Tooltip>{' '}\n      and{' '}\n      <Tooltip content=\"Standard 30-day agreement\" placement=\"above\">\n        terms of service\n      </Tooltip>\n      .\n    </Text>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

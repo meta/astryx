@@ -1,0 +1,15 @@
+{
+ "id": "ex_experimental_render_src-app-page.tsx_--out_page.html_@integration",
+ "args": [
+  "experimental",
+  "render",
+  "src/app/page.tsx",
+  "--out",
+  "page.html"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: src/app/page.tsx does not exist\n",
+ "exit": 1,
+ "files": []
+}

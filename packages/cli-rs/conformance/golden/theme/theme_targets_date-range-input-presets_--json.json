@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_date-range-input-presets_--json",
+ "args": [
+  "theme",
+  "targets",
+  "date-range-input-presets",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"date-range-input-presets\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"date-range-input-presets\",\n        \"className\": \"astryx-date-range-input-presets\",\n        \"component\": \"DateRangeInput\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

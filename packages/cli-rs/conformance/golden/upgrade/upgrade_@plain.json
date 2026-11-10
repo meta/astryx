@@ -1,0 +1,11 @@
+{
+ "id": "upgrade_@plain",
+ "args": [
+  "upgrade"
+ ],
+ "fixture": "plain",
+ "stdout": "\nUpgrade\nAborted\n\n",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nMissing required --from. This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.\n",
+ "exit": 1,
+ "files": []
+}

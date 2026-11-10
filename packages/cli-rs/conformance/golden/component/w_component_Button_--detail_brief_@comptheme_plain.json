@@ -1,0 +1,20 @@
+{
+ "id": "w_component_Button_--detail_brief_@comptheme_plain",
+ "args": [
+  "component",
+  "Button",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "comptheme",
+ "stdout": "package: @astryxdesign/core\n\nButton(variant: primary|secondary|ghost|destructive, size: sm|md|lg, elevation: none|low|med|high, type: button|submit|reset, value: string|number|readonly string[], endContent: ReactElement<IconProps>|ReactElement<BadgeProps>, clickAction: (e: MouseEvent) => void|Promise<void>)  <- from '@astryxdesign/core/Button'\n  Button triggers an action when clicked. Use it for form submissions, confirma...\n  Vars: --button-focus-offset (var(--focus-outline-offset)), --button-icon-only-aspect (1 / 1)\n  Derived: borderRadius -> --_button-radius\n  Targets: astryx-button preferred attrs: data-size, data-variant, data-elevation variants: size, variant, elevation\n  label: string, name, form, isLoading, isInterruptible, isDisabled, icon, isIconOnly, width, children, tooltip, onClick, href, as, target, rel\n  \n\n",
+ "stderr": "\nNext step: run `cd /tmp/astryx-conformance/work/comptheme`, then `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/comptheme\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

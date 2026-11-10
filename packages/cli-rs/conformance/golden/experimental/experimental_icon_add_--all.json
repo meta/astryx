@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_add_--all",
+ "args": [
+  "experimental",
+  "icon",
+  "add",
+  "--all"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --all adds one variant for every icon: pass --variant with the variant, such as solid.\n",
+ "exit": 1,
+ "files": []
+}

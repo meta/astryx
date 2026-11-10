@@ -1,0 +1,13 @@
+{
+ "id": "template_--package_-acme-kit",
+ "args": [
+  "template",
+  "--package",
+  "@acme/kit"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No templates found in package \"@acme/kit\".\n\n  @astryxdesign/core  (has templates)\n",
+ "exit": 1,
+ "files": []
+}

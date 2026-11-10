@@ -1,0 +1,15 @@
+{
+ "id": "tb_theme_build_themes-alpha-mjs_--out_-tmp-abs-outside-css",
+ "args": [
+  "theme",
+  "build",
+  "themes/alpha.mjs",
+  "--out",
+  "/tmp/abs-outside.css"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Output path \"/tmp/abs-outside.css\" is outside the working directory (/tmp/astryx-conformance/work/themes). Pass an --out path inside it.\n",
+ "exit": 1,
+ "files": []
+}

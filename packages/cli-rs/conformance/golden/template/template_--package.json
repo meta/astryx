@@ -1,0 +1,12 @@
+{
+ "id": "template_--package",
+ "args": [
+  "template",
+  "--package"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--package <pkg>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

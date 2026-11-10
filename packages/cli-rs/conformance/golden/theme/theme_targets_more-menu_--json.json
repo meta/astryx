@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_more-menu_--json",
+ "args": [
+  "theme",
+  "targets",
+  "more-menu",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"more-menu\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"more-menu\",\n        \"className\": \"astryx-more-menu\",\n        \"component\": \"MoreMenu\",\n        \"props\": [],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_ChatLayoutPanelChat_@large",
+ "args": [
+  "template",
+  "ChatLayoutPanelChat"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  ChatLayout,\n  ChatMessageList,\n  ChatMessage,\n  ChatMessageBubble,\n  ChatSystemMessage,\n  ChatComposer,\n} from '@astryxdesign/core/Chat';\nimport {Markdown} from '@astryxdesign/core/Markdown';\nimport type {CSSProperties} from 'react';\n\nconst panel: CSSProperties = {\n  width: 450,\n  height: 600,\n  borderRadius: 8,\n  overflow: 'hidden',\n  border: '1px solid var(--color-border)',\n};\n\nexport default function ChatLayoutPanelChat() {\n  return (\n    <div style={panel}>\n      <ChatLayout\n        composer={\n          <ChatComposer onSubmit={() => {}} placeholder=\"Ask something...\" />\n        }>\n        <ChatMessageList>\n          <ChatSystemMessage variant=\"divider\">Today</ChatSystemMessage>\n\n          <ChatMessage sender=\"user\">\n            <ChatMessageBubble>\n              Can you review the Button component and fix the focus ring?\n            </ChatMessageBubble>\n          </ChatMessage>\n\n          <ChatMessage sender=\"assistant\">\n            <Markdown density=\"compact\">{`I'll check the Button component now.\n\nFound the issue — the border radius was hardcoded. Replaced with the theme token.`}</Markdown>\n          </ChatMessage>\n\n          <ChatMessage sender=\"user\">\n            <ChatMessageBubble>\n              Nice, can you also check the Card component?\n            </ChatMessageBubble>\n          </ChatMessage>\n\n          <ChatMessage sender=\"assistant\">\n            <Markdown density=\"compact\">{`Checking the component now.\n\nFound the issue — the border radius was hardcoded. Replaced with the theme token.`}</Markdown>\n          </ChatMessage>\n        </ChatMessageList>\n      </ChatLayout>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

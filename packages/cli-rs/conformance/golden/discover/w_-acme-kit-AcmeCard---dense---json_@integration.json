@@ -1,0 +1,14 @@
+{
+ "id": "w_-acme-kit-AcmeCard---dense---json_@integration",
+ "args": [
+  "discover",
+  "@acme/kit/AcmeCard",
+  "--dense",
+  "--json"
+ ],
+ "fixture": "integration",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail.doc\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"AcmeCard\",\n    \"displayName\": \"Acme Card\",\n    \"category\": \"Layout\",\n    \"keywords\": [\n      \"zorblax\",\n      \"card\"\n    ],\n    \"usage\": {\n      \"description\": \"A zorblax card that groups one topic.\",\n      \"bestPractices\": [\n        {\n          \"guidance\": true,\n          \"description\": \"Keep one idea per card.\"\n        },\n        {\n          \"guidance\": false,\n          \"description\": \"Do not nest cards.\"\n        }\n      ]\n    },\n    \"props\": [\n      {\n        \"name\": \"title\",\n        \"type\": \"string\",\n        \"required\": true,\n        \"description\": \"Heading text.\"\n      },\n      {\n        \"name\": \"tone\",\n        \"type\": \"'calm' | 'loud'\",\n        \"default\": \"'calm'\",\n        \"description\": \"Visual weight.\"\n      }\n    ],\n    \"playground\": {\n      \"defaults\": {\n        \"tone\": \"calm\"\n      }\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

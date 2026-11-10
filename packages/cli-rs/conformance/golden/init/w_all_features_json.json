@@ -1,0 +1,15 @@
+{
+ "id": "w_all_features_json",
+ "args": [
+  "init",
+  "--all",
+  "--features",
+  "agents",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"`--all` and `--features` cannot be used together: `--all` installs every feature, so a feature list is redundant.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

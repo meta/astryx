@@ -1,0 +1,13 @@
+{
+ "id": "theme_remove_Neutral_@large",
+ "args": [
+  "theme",
+  "remove",
+  "Neutral"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Error: Theme \"Neutral\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add Neutral` first.\n",
+ "exit": 1,
+ "files": []
+}

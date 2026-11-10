@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_--title",
+ "args": [
+  "experimental",
+  "render",
+  "--title"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--title <text>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

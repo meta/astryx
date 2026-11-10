@@ -1,0 +1,19 @@
+{
+ "id": "template_StepStates_--skeleton_@large",
+ "args": [
+  "template",
+  "StepStates",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# StepStates - Every state a single Step can land in, each shown as one Step in its own Stepper. Completed, current, and upcoming are derived by comparing the step index against the parent activeStep, so they are never set directly; isDisabled and status are the two a step declares itself. Status is a separate axis from progress, which is why a completed step can still carry a warning.\n# Components: Step, Stepper\n\n/* div: gap: 32 */\n<Text />\n<Stepper />\n<Step />\n<Text />\n<Stepper />\n<Step />\n<Text />\n<Stepper />\n<Step />\n<Text />\n<Stepper />\n<Step />\n<Text />\n<Stepper />\n<Step />\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

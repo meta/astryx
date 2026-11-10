@@ -1,0 +1,20 @@
+{
+ "id": "w_hook_useFocusTrap_--detail_brief",
+ "args": [
+  "hook",
+  "useFocusTrap",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseFocusTrap(options: UseFocusTrapOptions): { containerRef, focusFirst }  <- from '@astryxdesign/core/hooks'\n  Traps focus within a container element following the WAI-ARIA dialog focus tr...\n  Related: Dialog, DatePicker\n  options: UseFocusTrapOptions\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Dialog, DatePicker\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

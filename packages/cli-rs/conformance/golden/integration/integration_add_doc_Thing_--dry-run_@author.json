@@ -1,0 +1,15 @@
+{
+ "id": "integration_add_doc_Thing_--dry-run_@author",
+ "args": [
+  "integration",
+  "add",
+  "doc",
+  "Thing",
+  "--dry-run"
+ ],
+ "fixture": "author",
+ "stdout": "doc contribution plan\n\n[plan] Thing\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/Thing.doc.mjs\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

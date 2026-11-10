@@ -1,0 +1,14 @@
+{
+ "id": "theme_eject_neutral_--package",
+ "args": [
+  "theme",
+  "eject",
+  "neutral",
+  "--package"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--package <package>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

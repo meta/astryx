@@ -1,0 +1,18 @@
+{
+ "id": "template_ToastTypes_@large",
+ "args": [
+  "template",
+  "ToastTypes"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n// In production, use useToast() hook for proper positioning, stacking, and lifecycle.\n\nimport {Toast} from '@astryxdesign/core/Toast';\nimport {useToast} from '@astryxdesign/core/Toast';\nimport {Button} from '@astryxdesign/core/Button';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function ToastTypes() {\n  const toast = useToast();\n\n  return (\n    <VStack gap={3}>\n      <Toast\n        type=\"info\"\n        body=\"Changes saved successfully.\"\n        endContent={\n          <Button\n            label=\"Show toast\"\n            variant=\"ghost\"\n            size=\"sm\"\n            onClick={() =>\n              toast({body: 'Changes saved successfully.', type: 'info'})\n            }\n          />\n        }\n        isAutoHide={false}\n        autoHideDuration={5000}\n        isExiting={false}\n        onDismiss={() => {}}\n      />\n      <Toast\n        type=\"error\"\n        body=\"Failed to save changes.\"\n        endContent={\n          <Button\n            label=\"Show toast\"\n            variant=\"ghost\"\n            size=\"sm\"\n            onClick={() =>\n              toast({body: 'Failed to save changes.', type: 'error'})\n            }\n          />\n        }\n        isAutoHide={false}\n        autoHideDuration={5000}\n        isExiting={false}\n        onDismiss={() => {}}\n      />\n    </VStack>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

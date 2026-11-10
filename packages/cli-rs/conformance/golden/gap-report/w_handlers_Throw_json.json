@@ -1,0 +1,17 @@
+{
+ "id": "w_handlers_Throw_json",
+ "args": [
+  "gap-report",
+  "Throw",
+  "--category",
+  "missing_variant",
+  "--reason",
+  "Need a compact size",
+  "--json"
+ ],
+ "fixture": "gapreport",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"gap-report.file\",\n  \"data\": {\n    \"status\": \"partial\",\n    \"package\": \"@astryxdesign/core\",\n    \"issuesUrl\": \"https://github.com/meta/astryx/issues/new\",\n    \"deliveries\": [\n      {\n        \"handlerType\": \"project\",\n        \"handler\": \"project\",\n        \"audience\": \"internal\",\n        \"status\": \"failed\",\n        \"url\": null,\n        \"message\": \"project handler broke\"\n      },\n      {\n        \"handlerType\": \"integration\",\n        \"handler\": \"@acme/hooks\",\n        \"audience\": \"public\",\n        \"status\": \"consent_required\",\n        \"url\": null,\n        \"message\": \"Rerun with --confirm-public to file this report.\"\n      },\n      {\n        \"handlerType\": \"integration\",\n        \"handler\": \"@acme/broken\",\n        \"audience\": null,\n        \"status\": \"failed\",\n        \"url\": null,\n        \"message\": \"Integration @acme/broken named export \\\"gapReport\\\" is invalid: audience: Invalid option: expected one of \\\"internal\\\"|\\\"public\\\"; handle: Expected a function\"\n      }\n    ],\n    \"filedCount\": 0,\n    \"routedOnlyCount\": 0,\n    \"destinations\": [\n      {\n        \"to\": null,\n        \"default\": true,\n        \"issuesUrl\": null\n      },\n      {\n        \"to\": \"@acme/hooks\",\n        \"default\": false,\n        \"issuesUrl\": \"https://example.com/hooks/issues\"\n      },\n      {\n        \"to\": \"@acme/broken\",\n        \"default\": false,\n        \"issuesUrl\": \"https://github.com/acme/broken/issues\"\n      }\n    ],\n    \"ask\": \"Ask the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "gap-report: delivery to project failed: project handler broke\ngap-report: delivery to @acme/broken failed: Integration @acme/broken named export \"gapReport\" is invalid: audience: Invalid option: expected one of \"internal\"|\"public\"; handle: Expected a function\n",
+ "exit": 1,
+ "files": []
+}

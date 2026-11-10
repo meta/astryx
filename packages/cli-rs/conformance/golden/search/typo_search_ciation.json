@@ -1,0 +1,18 @@
+{
+ "id": "typo_search_ciation",
+ "args": [
+  "search",
+  "ciation"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"ciation\" (5)\n\nname:        Citation\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Citation\ndescription: Citations display inline references to external sources. Use them to attribute information within AI-generated responses, articles, or anywhere provenance and source links are needed.\ncommand:     npx @astryxdesign/cli@0.7.12 component Citation\n\nname:        Blockquote\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Blockquote\ndescription: A quotation block with a rule on its inline-start edge and secondary text color. Use to highlight quoted content, testimonials, or excerpts. The rule and padding are logical, so they move to the right edge in right-to-left locales.\ncommand:     npx @astryxdesign/cli@0.7.12 component Blockquote\n\nname:        CitationInlineText\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Citation - Inline Text\nkind:        block\ndescription: Citations embedded within a paragraph of text, showing how they flow inline with surrounding content.\ncommand:     npx @astryxdesign/cli@0.7.12 template CitationInlineText --type block\n\nname:        CitationShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Citation - Showcase\nkind:        block\ndescription: All citation variants at a glance: label chips and numbered badges, with and without icons and links.\ncommand:     npx @astryxdesign/cli@0.7.12 template CitationShowcase --type block\n\nname:        CitationSourceList\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Citation - Source List\nkind:        block\ndescription: A list of citation sources with icons, as you might show at the end of an AI-generated response or article footer.\ncommand:     npx @astryxdesign/cli@0.7.12 template CitationSourceList --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ciation\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

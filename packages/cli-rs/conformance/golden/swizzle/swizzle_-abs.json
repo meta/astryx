@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_-abs",
+ "args": [
+  "swizzle",
+  "/abs"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"/abs\": must not contain path separators ('/' or '\\\\').\n",
+ "exit": 1,
+ "files": []
+}

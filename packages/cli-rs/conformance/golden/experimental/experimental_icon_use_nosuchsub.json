@@ -1,0 +1,14 @@
+{
+ "id": "experimental_icon_use_nosuchsub",
+ "args": [
+  "experimental",
+  "icon",
+  "use",
+  "nosuchsub"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No installed icon set named \"nosuchsub\"\n",
+ "exit": 1,
+ "files": []
+}

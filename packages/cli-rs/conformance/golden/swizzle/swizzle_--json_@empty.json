@@ -1,0 +1,12 @@
+{
+ "id": "swizzle_--json_@empty",
+ "args": [
+  "swizzle",
+  "--json"
+ ],
+ "fixture": "empty",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.\",\n  \"code\": \"ERR_CORE_NOT_FOUND\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

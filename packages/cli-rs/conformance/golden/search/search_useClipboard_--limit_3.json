@@ -1,0 +1,20 @@
+{
+ "id": "search_useClipboard_--limit_3",
+ "args": [
+  "search",
+  "useClipboard",
+  "--limit",
+  "3"
+ ],
+ "fixture": "app",
+ "stdout": "Results for \"useClipboard\" (2)\n\nname:        useClipboard\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Copy-to-clipboard behavior: the clipboard write, a transient isCopied flag with its own reset timer, and an optional polite screen-reader announcement. Extracted so every copy affordance is a thin control over one implementation instead of re-deriving the timer and announcement. Rapid re-copies restart the reset timer so the confirmation always lasts the full duration, and the timer is cleaned up on unmount. CodeBlock and Timestamp build their built-in copy buttons on it; reach for it directly when building a copy affordance that is not a plain icon button (a menu item, a labeled text button, a copy-on-click value chip).\ncommand:     npx @astryxdesign/cli@0.7.12 hook useClipboard\n\nname:        useClipboardHookUsage\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: useClipboard - Share Link\nkind:        block\ndescription: A share card that copies its invite link with useClipboard: the Copy button reads \"Copied\" while isCopied is true, a screen reader hears \"Link copied\", and a second press restarts the reset timer.\ncommand:     npx @astryxdesign/cli@0.7.12 template useClipboardHookUsage --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover useClipboard\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

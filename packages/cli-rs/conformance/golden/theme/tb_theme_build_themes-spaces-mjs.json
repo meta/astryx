@@ -1,0 +1,13 @@
+{
+ "id": "tb_theme_build_themes-spaces-mjs",
+ "args": [
+  "theme",
+  "build",
+  "themes/spaces.mjs"
+ ],
+ "fixture": "themes",
+ "stdout": "",
+ "stderr": "Error: Invalid theme name \"my theme\": only letters, digits, '.', '_', and '-' are allowed.\n",
+ "exit": 1,
+ "files": []
+}

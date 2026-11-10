@@ -1,0 +1,12 @@
+{
+ "id": "shell_theme_help",
+ "args": [
+  "theme",
+  "help"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: unknown subcommand 'theme help'\n\n  palette  (available subcommand)\n  build  (available subcommand)\n  list  (available subcommand)\n  add  (available subcommand)\n  remove  (available subcommand)\n  use  (available subcommand)\n  eject  (available subcommand)\n  template  (available subcommand)\n  targets  (available subcommand)\n",
+ "exit": 1,
+ "files": []
+}

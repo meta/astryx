@@ -1,0 +1,13 @@
+{
+ "id": "gap-report_--reason_Need-a-compact-size",
+ "args": [
+  "gap-report",
+  "--reason",
+  "Need a compact size"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: component is required.\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,12 @@
+{
+ "id": "shell_help_theme_tty_@app",
+ "args": [
+  "help",
+  "theme"
+ ],
+ "fixture": "app",
+ "stdout": "Usage: astryx theme [options] [command]\r\n\r\nAdd, switch, build, and author themes\r\n\r\nOptions:\r\n  -h, --help                     display help for command\r\n\r\nCommands:\r\n  palette                        Create and work with theme-owned color palettes\r\n  build [options] <files...>     Compile standalone themes or one keyed theme family\r\n  list [options]                 List themes available to add\r\n  add [options] [slug]           Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.\r\n  remove <slug>                  Remove a non-default theme from the app\r\n  use <slug>                     Choose the app default from its added themes\r\n  eject [options] <slug> [path]  Fork a theme as editable local source\r\n  template [options] [path]      Write the annotated theme template into your project\r\n  targets [filter]               List the component theming targets a theme can override\r\n\r\nExit codes:\r\n  0  help is shown or a subcommand succeeds\r\n  1  an unknown subcommand or a subcommand failure\r\n\r\nExamples:\r\n  # List available and added themes\r\n  npx @astryxdesign/cli@0.7.12 theme list\r\n  # Import a theme into the app\r\n  npx @astryxdesign/cli@0.7.12 theme add ocean\r\n  # Choose the default\r\n  npx @astryxdesign/cli@0.7.12 theme use ocean\r\n  # Fork source to customize\r\n  npx @astryxdesign/cli@0.7.12 theme eject ocean\r\n  # Generate a palette candidate\r\n  npx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json\r\n  # See what a theme can override\r\n  npx @astryxdesign/cli@0.7.12 theme targets\r\n\r\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme\r\n\r\nComponent style overrides:\r\n  npx @astryxdesign/cli@0.7.12 theme targets            Every themeable class, with its props and states\r\n  npx @astryxdesign/cli@0.7.12 component <Name>         One component's theming table\r\n  npx @astryxdesign/cli@0.7.12 docs theme               How component overrides work\r\n\r\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

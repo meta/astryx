@@ -1,0 +1,19 @@
+{
+ "id": "component_Card_--props_@large",
+ "args": [
+  "component",
+  "Card",
+  "--props"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `width` | `SizeValue` | - | Width of the card (number = pixels, string = used as-is). In a flex row or grid track this is the preferred width: the card shrinks below it when the row is narrower. To hold the width in a flex row, wrap the card in StackItem (static by default) and let the row wrap or scroll. In Grid, set a consumer minWidth on the Card and size the track accordingly. |\n| `height` | `SizeValue` | - | Height of the card (number = pixels, string = used as-is). |\n| `maxWidth` | `SizeValue` | - | Maximum width of the card. |\n| `minHeight` | `SizeValue` | - | Minimum height of the card. |\n| `children` | `ReactNode` | - | Content to render inside the card. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | `the theme's card padding (spacing step 4 with no theme)` | Internal padding using the spacing scale. Omit it and the card takes the theme's card padding rather than a step, so passing a step is a decision to override the theme, not a way to restate the default. |\n| `variant` | `'default' \\| 'transparent' \\| 'muted' \\| 'blue' \\| 'cyan' \\| 'gray' \\| 'green' \\| 'orange' \\| 'pink' \\| 'purple' \\| 'red' \\| 'teal' \\| 'yellow'` | `'default'` | Background color variant. `default` uses the standard card background. `transparent` drops the background entirely. `muted` uses the muted background for de-emphasised cards. The non-semantic variants use the corresponding `--color-background-<name>` token. |\n| `elevation` | `'none' \\| 'low' \\| 'med' \\| 'high'` | `'none'` | Resting shadow depth. `none` is flat; `low`/`med`/`high` map to the shadow token scale. Raise a card only when it needs to float above surrounding content. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

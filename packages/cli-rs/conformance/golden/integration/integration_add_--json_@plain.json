@@ -1,0 +1,13 @@
+{
+ "id": "integration_add_--json_@plain",
+ "args": [
+  "integration",
+  "add",
+  "--json"
+ ],
+ "fixture": "plain",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"missing required argument 'kind'\",\n  \"code\": \"ERR_MISSING_ARGUMENT\"\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

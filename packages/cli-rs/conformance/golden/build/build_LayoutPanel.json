@@ -1,0 +1,18 @@
+{
+ "id": "build_LayoutPanel",
+ "args": [
+  "build",
+  "LayoutPanel"
+ ],
+ "fixture": "app",
+ "stdout": "Build kit for \"LayoutPanel\"\n\nStart from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\nChanging a page you already have? Keep it, and use only the blocks and components.\n\nTEMPLATE\nNo template matched, so start from the app shell. Scaffold it, then put blocks inside it.\n\nname:        shell-top-nav\npackage:     @astryxdesign/core\ndescription: Application frame with horizontal navigation only: a centered bar whose items open full-width mega-menu panels, over placeholder content that keeps the entire width.\ncommand:     npx @astryxdesign/cli@0.7.12 template shell-top-nav --type page <path>\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n\nBLOCKS\nReady-made sections for parts the template lacks (top 3 of 5; --verbose for all). Print one: npx @astryxdesign/cli@0.7.12 template <name>\n\nname:        LayoutDualPanelLayout\npackage:     @astryxdesign/core\ndescription: A file browser style layout with start panel for folders, main content for files, and end panel for details.\n\nname:        LayoutPanelNavigation\npackage:     @astryxdesign/core\ndescription: A fixed-width side panel holding a navigation list next to the main content.\n\nname:        LayoutPanelShowcase\npackage:     @astryxdesign/core\ndescription: LayoutPanel is a sidebar slot within a Layout, used for navigation, detail views, or secondary content alongside the main content area.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        LayoutPanel\npackage:     @astryxdesign/core\ndescription: Sidebar for navigation, settings, or inspector panels.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

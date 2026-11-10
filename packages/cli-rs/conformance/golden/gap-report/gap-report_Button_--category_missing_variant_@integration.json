@@ -1,0 +1,14 @@
+{
+ "id": "gap-report_Button_--category_missing_variant_@integration",
+ "args": [
+  "gap-report",
+  "Button",
+  "--category",
+  "missing_variant"
+ ],
+ "fixture": "integration",
+ "stdout": "",
+ "stderr": "Error: reason is required.\n",
+ "exit": 1,
+ "files": []
+}

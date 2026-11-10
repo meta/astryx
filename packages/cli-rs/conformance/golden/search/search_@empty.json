@@ -1,0 +1,11 @@
+{
+ "id": "search_@empty",
+ "args": [
+  "search"
+ ],
+ "fixture": "empty",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: missing required argument 'query'\n",
+ "exit": 1,
+ "files": []
+}

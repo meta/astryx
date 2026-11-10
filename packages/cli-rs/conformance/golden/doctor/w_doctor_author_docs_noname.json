@@ -1,0 +1,13 @@
+{
+ "id": "w_doctor_author_docs_noname",
+ "args": [
+  "doctor",
+  "integration",
+  "docs"
+ ],
+ "fixture": "doctor-author",
+ "stdout": "Checking integration docs: (local package)\n\n[ok] The docs tree and every link in these docs check out.\n\n[ok] No doc topics overlap with Core.\n\n[ok] No topic copies a passage from another.\n\n[ok] No filler phrases or low-density topics.\n\n[ok] Every pointer to a doc is a link.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

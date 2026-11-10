@@ -1,0 +1,12 @@
+{
+ "id": "init_--features",
+ "args": [
+  "init",
+  "--features"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--features <list>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

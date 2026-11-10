@@ -1,0 +1,12 @@
+{
+ "id": "w_badchars",
+ "args": [
+  "swizzle",
+  "Bu tton"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid component name \"Bu tton\": only letters, digits, '.', '_', and '-' are allowed.\n",
+ "exit": 1,
+ "files": []
+}

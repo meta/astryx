@@ -1,0 +1,19 @@
+{
+ "id": "hook_useTableColumnSettingsState_--params",
+ "args": [
+  "hook",
+  "useTableColumnSettingsState",
+  "--params"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `config` | `UseTableColumnSettingsStateConfig<TColumnKey>` | - | The columns to configure and active keys state management. **(required)** |\n| `config.columns` | `ReadonlyArray<ColumnSettingsOption<TColumnKey>>` | - | All available columns with metadata (key, label, isAlwaysVisible, group) for the settings UI. **(required)** |\n| `config.activeColumnKeys` | `ReadonlyArray<TColumnKey>` | - | Currently active column keys, in display order. Only columns in this list render in the table. **(required)** |\n| `config.onChangeActiveColumnKeys` | `(keys: ReadonlyArray<TColumnKey>) => void` | - | Called when active columns change (via toggle, show all, or reset) to update consumer state. **(required)** |\n| `config.defaultColumnKeys` | `ReadonlyArray<TColumnKey>` | - | Default column set restored by resetToDefault. When omitted, resetToDefault activates all columns. |\n\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

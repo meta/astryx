@@ -1,0 +1,12 @@
+{
+ "id": "ex_integration_verify_@large",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "large",
+ "stdout": "Integration package check failed\n\n[fail] large-app\n\n- [fail] No astryx.integration.{ts,mjs,js} found next to package.json.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": []
+}

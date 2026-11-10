@@ -1,0 +1,13 @@
+{
+ "id": "wide_build_19_tic-tac-toe-game-board_--json",
+ "args": [
+  "build",
+  "tic-tac-toe game board",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"build.kit\",\n  \"data\": {\n    \"query\": \"tic-tac-toe game board\",\n    \"hasResults\": true,\n    \"matchCount\": 4,\n    \"directMatch\": false,\n    \"start\": {\n      \"name\": \"kanban-board\",\n      \"package\": \"@astryxdesign/core\",\n      \"displayName\": \"Kanban Board\",\n      \"description\": \"Horizontal lanes of draggable cards where the column itself is the status, so drag and drop between lanes is the state change. Fixed columns, variable-height cards.\",\n      \"command\": \"astryx template kanban-board --type page <path>\",\n      \"basis\": \"closest\",\n      \"reason\": \"The closest template; none is exactly this page.\",\n      \"alternatives\": [],\n      \"notes\": [\n        \"Install missing dependencies: npm install @heroicons/react@\\\"^2.2.0\\\"\",\n        \"This template uses StyleX. Your project needs a StyleX compiler plugin — see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\"\n      ]\n    },\n    \"pages\": [],\n    \"blocks\": [],\n    \"domain\": [],\n    \"frame\": [\n      \"AppShell\",\n      \"TopNav\",\n      \"SideNav\",\n      \"Layout\"\n    ],\n    \"foundation\": [\n      \"VStack\",\n      \"HStack\",\n      \"Grid\",\n      \"StackItem\",\n      \"Card\",\n      \"Section\",\n      \"Text\",\n      \"Heading\",\n      \"Button\",\n      \"Icon\",\n      \"Badge\",\n      \"Divider\"\n    ],\n    \"hint\": {\n      \"reason\": \"Few matches. This is keyword search, not semantic — try other wordings.\",\n      \"commands\": [\n        \"component --list\",\n        \"template --list\"\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

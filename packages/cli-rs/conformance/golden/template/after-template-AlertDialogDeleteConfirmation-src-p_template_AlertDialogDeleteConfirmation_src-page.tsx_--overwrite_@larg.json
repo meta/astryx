@@ -1,0 +1,25 @@
+{
+ "id": "after-template-AlertDialogDeleteConfirmation-src-p_template_AlertDialogDeleteConfirmation_src-page.tsx_--overwrite_@larg",
+ "args": [
+  "template",
+  "AlertDialogDeleteConfirmation",
+  "src/page.tsx",
+  "--overwrite"
+ ],
+ "fixture": "large",
+ "stdout": "Copied template to src/page.tsx\n\npackage: @astryxdesign/core\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  },
+  {
+   "path": "large/src/page.tsx",
+   "status": "created",
+   "text": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  AlertDialog,\n  useImperativeAlertDialog,\n} from '@astryxdesign/core/AlertDialog';\n\n// Remove isInline for production — alert dialogs should be modal.\nexport default function AlertDialogDeleteConfirmation() {\n  const alert = useImperativeAlertDialog();\n\n  const alertProps = {\n    title: 'Delete item?',\n    description:\n      'This action cannot be undone. The item and all its data will be permanently removed.',\n    actionLabel: 'Delete',\n  } as const;\n\n  return (\n    <>\n      <AlertDialog\n        isOpen\n        isInline\n        onOpenChange={() => {}}\n        {...alertProps}\n        onAction={() =>\n          alert.show({...alertProps, onAction: () => alert.hide()})\n        }\n      />\n      {alert.element}\n    </>\n  );\n}\n"
+  }
+ ]
+}

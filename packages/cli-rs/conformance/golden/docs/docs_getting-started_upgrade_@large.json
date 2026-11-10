@@ -1,0 +1,19 @@
+{
+ "id": "docs_getting-started_upgrade_@large",
+ "args": [
+  "docs",
+  "getting-started",
+  "upgrade"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/cli\n\n## Upgrade\n\nUpgrade every Astryx package your app lists in one command, to the same release. Each theme names the exact Core release it works with, so a theme left on an older release no longer matches the new Core.\n\nTerminal:\n```bash\nnpm install @astryxdesign/core@latest @astryxdesign/theme-neutral@latest @astryxdesign/cli@latest\nnpx @astryxdesign/cli@0.7.12 upgrade --from <old Core version> --apply\n```\n\nAdd every other Astryx package your app lists to the same command, and pass the Core version you had before to `--from`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope; in pnpm, `minimumReleaseAgeExclude: ['@astryxdesign/*']`. Exempting only some of its packages installs packages from different releases side by side.\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs getting-started install\nNext: npx @astryxdesign/cli@0.7.12 docs getting-started install-once\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

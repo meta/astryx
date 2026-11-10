@@ -1,0 +1,14 @@
+{
+ "id": "component_ButtonGroup_--props_--json_@large",
+ "args": [
+  "component",
+  "ButtonGroup",
+  "--props",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Button or IconButton children.\",\n      \"required\": true,\n      \"slotElements\": [\n        {\n          \"__element\": \"Button\",\n          \"props\": {\n            \"label\": \"Action\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the group (aria-label).\",\n      \"required\": true\n    },\n    {\n      \"name\": \"orientation\",\n      \"type\": \"'horizontal' | 'vertical'\",\n      \"description\": \"Layout direction of the button group.\",\n      \"default\": \"'horizontal'\"\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'sm' | 'md' | 'lg'\",\n      \"description\": \"Default size for buttons in the group. Individual buttons can override.\",\n      \"default\": \"'md'\"\n    },\n    {\n      \"name\": \"isDisabled\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether all buttons in the group are disabled.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"elevation\",\n      \"type\": \"'none' | 'low' | 'med' | 'high'\",\n      \"description\": \"Resting shadow depth for the whole group. The connected buttons share one surface, so the shadow lifts them as a unit. Use for a group that floats above content.\",\n      \"default\": \"'none'\"\n    },\n    {\n      \"name\": \"ref\",\n      \"type\": \"React.Ref<HTMLDivElement>\",\n      \"description\": \"Ref forwarded to the root element.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization. Must be a stylex.create() value.\"\n    },\n    {\n      \"name\": \"data-testid\",\n      \"type\": \"string\",\n      \"description\": \"Test selector for automated testing frameworks.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

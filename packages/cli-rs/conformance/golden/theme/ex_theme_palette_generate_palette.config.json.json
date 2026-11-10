@@ -1,0 +1,14 @@
+{
+ "id": "ex_theme_palette_generate_palette.config.json",
+ "args": [
+  "theme",
+  "palette",
+  "generate",
+  "palette.config.json"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Palette config not found: palette.config.json\n",
+ "exit": 1,
+ "files": []
+}

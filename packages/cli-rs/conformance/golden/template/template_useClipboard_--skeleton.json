@@ -1,0 +1,13 @@
+{
+ "id": "template_useClipboard_--skeleton",
+ "args": [
+  "template",
+  "useClipboard",
+  "--skeleton"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Unknown template \"useClipboard\"\n\n  useClipboardHookUsage  (block template)\n",
+ "exit": 1,
+ "files": []
+}

@@ -1,0 +1,18 @@
+{
+ "id": "template_TableInCard_@large",
+ "args": [
+  "template",
+  "TableInCard"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Table, proportional} from '@astryxdesign/core/Table';\nimport type {TableColumn} from '@astryxdesign/core/Table';\nimport {Card} from '@astryxdesign/core/Card';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Heading} from '@astryxdesign/core/Text';\n\ninterface User extends Record<string, unknown> {\n  id: string;\n  name: string;\n  role: string;\n  email: string;\n}\n\nconst users: User[] = [\n  {\n    id: '1',\n    name: 'Alice Johnson',\n    role: 'Engineer',\n    email: 'alice@example.com',\n  },\n  {id: '2', name: 'Bob Smith', role: 'Designer', email: 'bob@example.com'},\n  {id: '3', name: 'Charlie Brown', role: 'PM', email: 'charlie@example.com'},\n  {id: '4', name: 'Diana Prince', role: 'Engineer', email: 'diana@example.com'},\n];\n\nconst columns: TableColumn<User>[] = [\n  {key: 'name', header: 'Name', width: proportional(1)},\n  {key: 'role', header: 'Role', width: proportional(1)},\n  {key: 'email', header: 'Email', width: proportional(2)},\n];\n\nexport default function TableInCard() {\n  return (\n    <Card width={520}>\n      <VStack gap={3}>\n        <Heading level={3}>Team Members</Heading>\n        <Table data={users} columns={columns} idKey=\"id\" hasHover />\n      </VStack>\n    </Card>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

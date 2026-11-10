@@ -1,0 +1,90 @@
+[
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@astryxdesign/core';\nconst a = <StatusDot variant=\"positive\" />;\nconst b = <StatusDot variant={'negative'} />;\nconst c = <StatusDot variant={ready ? 'info' : 'positive'} />;",
+  "output": "import {StatusDot} from '@astryxdesign/core';\nconst a = <StatusDot variant='success' />;\nconst b = <StatusDot variant={'error'} />;\nconst c = <StatusDot variant={ready ? 'accent' : 'success'} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@astryxdesign/core';\nconst view = <StatusDot variant={'positive' satisfies StatusDotVariant} />;",
+  "output": "import {StatusDot} from '@astryxdesign/core';\nconst view = <StatusDot variant={'success' satisfies StatusDotVariant} />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {\n  Icon,\n  SVGIcon,\n  AvatarStatusDot,\n  ProgressBar,\n} from '@astryxdesign/core';\nconst view = <>\n  <Icon color=\"negative\" />\n  <SVGIcon color=\"positive\" />\n  <AvatarStatusDot variant=\"negative\" />\n  <ProgressBar variant=\"positive\" />\n</>;",
+  "output": "import {\n  Icon,\n  SVGIcon,\n  AvatarStatusDot,\n  ProgressBar,\n} from '@astryxdesign/core';\nconst view = <>\n  <Icon color='error' />\n  <SVGIcon color='success' />\n  <AvatarStatusDot variant='error' />\n  <ProgressBar variant='success' />\n</>;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot as Dot} from '@xds/core';\nimport IconGlyph from '@astryxdesign/core/Icon';\nconst view = <><Dot variant=\"positive\" /><IconGlyph color=\"negative\" /></>;",
+  "output": "import {StatusDot as Dot} from '@xds/core';\nimport IconGlyph from '@astryxdesign/core/Icon';\nconst view = <><Dot variant='success' /><IconGlyph color='error' /></>;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import * as Core from '@astryxdesign/core';\nconst view = <Core.StatusDot variant=\"info\" />;",
+  "output": "import * as Core from '@astryxdesign/core';\nconst view = <Core.StatusDot variant='accent' />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {Badge} from '@astryxdesign/core';\nconst view = <>\n  <Badge variant=\"info\" />\n  <Badge variant=\"positive\" />\n  <Badge variant=\"negative\" />\n</>;",
+  "output": "import {Badge} from '@astryxdesign/core';\nconst view = <>\n  <Badge variant=\"info\" />\n  <Badge variant='success' />\n  <Badge variant='error' />\n</>;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@astryxdesign/core';\ntype CellTone = 'positive' | 'negative' | 'info';\nconst args = {variant: 'positive'};\nconst options = ['positive', 'negative', 'info'];\nfunction tone() { return 'negative' as const; }\nconst view = <StatusDot variant={tone()} />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@astryxdesign/core';\nconst view = <StatusDot variant=\"positive\" label=\"positive\" />;",
+  "output": "import {StatusDot} from '@astryxdesign/core';\nconst view = <StatusDot variant='success' label=\"positive\" />;",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@other/core';\nconst view = <StatusDot variant=\"positive\" />;",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot as Dot} from '@xds/core';\nconst migrated = <Dot variant=\"positive\" />;\nfunction Local(Dot) { return <Dot variant=\"negative\" />; }",
+  "output": "import {StatusDot as Dot} from '@xds/core';\nconst migrated = <Dot variant='success' />;\nfunction Local(Dot) { return <Dot variant=\"negative\" />; }",
+  "error": null
+ },
+ {
+  "transform": "v0.0.14/rename-status-variants",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import {StatusDot} from '@astryxdesign/core';\nconst view = <StatusDot variant=\"success\" />;",
+  "output": null,
+  "error": null
+ }
+]

@@ -1,0 +1,18 @@
+{
+ "id": "template_TextInputTypes_@large",
+ "args": [
+  "template",
+  "TextInputTypes"
+ ],
+ "fixture": "large",
+ "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function TextInputTypes() {\n  const [password, setPassword] = useState('hunter42');\n  const [email, setEmail] = useState('sarah@example.com');\n  const [tooltip, setTooltip] = useState('');\n  const [required, setRequired] = useState('');\n  const [optional, setOptional] = useState('');\n  const [described, setDescribed] = useState('');\n\n  return (\n    <div style={{width: 300}}>\n      <Stack direction=\"vertical\" gap={3}>\n        <TextInput\n          label=\"Default field\"\n          value={described}\n          onChange={setDescribed}\n          placeholder=\"Enter your email\"\n          description=\"Descriptions can be used to provide additional information about a field.\"\n        />\n        <TextInput\n          type=\"password\"\n          label=\"Password field\"\n          value={password}\n          onChange={setPassword}\n          placeholder=\"Enter a value\"\n        />\n        <TextInput\n          type=\"email\"\n          label=\"Email field\"\n          value={email}\n          onChange={setEmail}\n          placeholder=\"Enter a value\"\n        />\n        <TextInput\n          label=\"Field tooltip\"\n          value={tooltip}\n          onChange={setTooltip}\n          placeholder=\"Enter your API key\"\n          labelTooltip=\"Your unique API key for authentication. Keep this secret!\"\n        />\n        <TextInput\n          label=\"Required field\"\n          value={required}\n          onChange={setRequired}\n          placeholder=\"Enter your username\"\n          isRequired\n        />\n        <TextInput\n          label=\"Optional field\"\n          value={optional}\n          onChange={setOptional}\n          placeholder=\"Enter your nickname\"\n          isOptional\n        />\n      </Stack>\n    </div>\n  );\n}\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "id": "experimental_render_--out",
+ "args": [
+  "experimental",
+  "render",
+  "--out"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: option '--out <file>' argument missing\n",
+ "exit": 1,
+ "files": []
+}

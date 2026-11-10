@@ -1,0 +1,12 @@
+{
+ "id": "w_component_MenuItemHeader",
+ "args": [
+  "component",
+  "MenuItemHeader"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No component named \"MenuItemHeader\"\n\n  Item  (name part \"item\")\n",
+ "exit": 1,
+ "files": []
+}

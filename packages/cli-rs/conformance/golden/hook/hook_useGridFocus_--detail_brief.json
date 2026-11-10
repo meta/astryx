@@ -1,0 +1,20 @@
+{
+ "id": "hook_useGridFocus_--detail_brief",
+ "args": [
+  "hook",
+  "useGridFocus",
+  "--detail",
+  "brief"
+ ],
+ "fixture": "app",
+ "stdout": "package: @astryxdesign/core\n\nuseGridFocus(options: UseGridFocusOptions): { gridRef, handleKeyDown, handleFocus, focusCell, focusFirst, focusLast }  <- from '@astryxdesign/core/hooks'\n  Manages keyboard navigation within a 2D grid following the WAI-ARIA grid patt...\n  Related: Calendar\n  options: UseGridFocusOptions\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Calendar\n",
+ "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "theme_targets_stack_--json",
+ "args": [
+  "theme",
+  "targets",
+  "stack",
+  "--json"
+ ],
+ "fixture": "app",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"stack\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"stack\",\n        \"className\": \"astryx-stack\",\n        \"component\": \"Stack\",\n        \"props\": [\n          \"direction\",\n          \"gap\",\n          \"wrap\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"stack-item\",\n        \"className\": \"astryx-stack-item\",\n        \"component\": \"Stack\",\n        \"props\": [\n          \"size\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

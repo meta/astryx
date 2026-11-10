@@ -1,0 +1,12 @@
+{
+ "id": "template_--package-nope-pkg",
+ "args": [
+  "template",
+  "--package=nope-pkg"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: No templates found in package \"nope-pkg\".\n\n  @astryxdesign/core  (has templates)\n",
+ "exit": 1,
+ "files": []
+}

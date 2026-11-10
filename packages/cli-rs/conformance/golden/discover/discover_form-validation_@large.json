@@ -1,0 +1,12 @@
+{
+ "id": "discover_form-validation_@large",
+ "args": [
+  "discover",
+  "form validation"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: \"form validation\" not found in any package\n",
+ "exit": 1,
+ "files": []
+}

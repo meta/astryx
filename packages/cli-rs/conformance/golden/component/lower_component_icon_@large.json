@@ -1,0 +1,12 @@
+{
+ "id": "lower_component_icon_@large",
+ "args": [
+  "component",
+  "icon"
+ ],
+ "fixture": "large",
+ "stdout": "",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"icon\"\n\n  Icon  (same name)\n  IconButton  (keyword \"icon\")\n  InfoTip  (keyword \"icon\")\n",
+ "exit": 1,
+ "files": []
+}

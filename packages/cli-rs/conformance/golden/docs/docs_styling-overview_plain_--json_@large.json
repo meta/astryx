@@ -1,0 +1,14 @@
+{
+ "id": "docs_styling-overview_plain_--json_@large",
+ "args": [
+  "docs",
+  "styling-overview",
+  "plain",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"plain\",\n    \"title\": \"Plain CSS\",\n    \"content\": [\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral\",\n        \"label\": \"Install\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"css\",\n        \"code\": \"@import \\\"@astryxdesign/core/reset.css\\\";\\n@import \\\"@astryxdesign/core/astryx.css\\\";\\n@import \\\"@astryxdesign/theme-neutral/theme.css\\\";\",\n        \"label\": \"globals.css\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Done. Components work out of the box — style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`astryx theme list` shows what's available).\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs styling-overview --index\",\n      \"previous\": \"astryx docs styling-overview pick-a-path\",\n      \"next\": \"astryx docs styling-overview tailwind\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

@@ -1,0 +1,13 @@
+{
+ "id": "search_table_--limit-abc",
+ "args": [
+  "search",
+  "table",
+  "--limit=abc"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid limit \"NaN\". Must be a positive integer.\n",
+ "exit": 1,
+ "files": []
+}

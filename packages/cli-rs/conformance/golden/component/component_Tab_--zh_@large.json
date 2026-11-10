@@ -1,0 +1,19 @@
+{
+ "id": "component_Tab_--zh_@large",
+ "args": [
+  "component",
+  "Tab",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# Tab\n\n单个标签项，渲染为按钮或锚点链接，具有选中状态样式和可选图标。\n\n**Import:** `import {Tab} from '@astryxdesign/core/TabList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `value` | `string` | - | 此标签的唯一值，与 TabListContext.value 进行匹配。 **(required)** |\n| `label` | `string` | - | 此标签的无障碍标签。默认作为可见文本使用；当 isLabelHidden 为 true 时用作 aria-label。 **(required)** |\n| `isLabelHidden` | `boolean` | `false` | 是否在视觉上隐藏标签。为 true 时，仅显示图标和 endContent，并将 label 用作无障碍 aria-label。 |\n| `href` | `string` | - | 要导航到的 URL；提供时，标签渲染为锚点元素。 |\n| `panelId` | `string` | - | Id of the panel this tab controls, wired up as aria-controls where the TabList speaks the tabs pattern. Put the same id on the panel element. No effect under the navigation pattern, and a development warning says so. |\n| `as` | `LinkComponentType` | - | 用于替代 <a> 渲染链接标签的自定义组件。覆盖 LinkProvider 的默认值。仅在提供 href 时生效。 |\n| `icon` | `ReactNode` | - | 标签未选中时显示的图标元素。 |\n| `selectedIcon` | `ReactNode` | - | 标签选中时显示的图标元素；未提供时回退到 icon。 |\n| `endContent` | `ReactNode` | - | 在标签文本之后渲染的内容，例如徽章计数或状态点。标签本身是一个按钮，因此 endContent 只能放非交互内容：不能放按钮、链接、InfoTip 或其他可聚焦控件。要说明一个标签，请通过 ref 把 Tooltip 锚定在 Tab 上，把它渲染在 TabList 之后，并在这里放一个装饰性的信息 Icon。 |\n| `xstyle` | `StyleXStyles` | - | StyleX 样式，用于布局自定义（边距、定位、尺寸）。必须是 stylex.create() 的值，而非内联样式对象如 style={{}}。 |\n\n## Examples\n\n### Describe a tab with help text\n\n```tsx\nimport {useRef, useState} from 'react';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Tab, TabList} from '@astryxdesign/core/TabList';\nimport {Tooltip} from '@astryxdesign/core/Tooltip';\n\n// The tab is one button, so its help text is a Tooltip anchored on the Tab\n// through its ref, not a second button inside it. The tooltip describes the\n// tab itself. Render it after the TabList: the strip holds only tabs. The\n// info glyph in endContent is decorative.\nfunction SettingsTabs() {\n  const [value, setValue] = useState('general');\n  const generalRef = useRef(null);\n  return (\n    <>\n      <TabList value={value} onChange={setValue} role=\"tablist\" aria-label=\"Settings\">\n        <Tab\n          ref={generalRef}\n          value=\"general\"\n          label=\"General\"\n          panelId=\"panel-general\"\n          endContent={<Icon icon=\"info\" size=\"sm\" />}\n        />\n        <Tab value=\"advanced\" label=\"Advanced\" panelId=\"panel-advanced\" />\n      </TabList>\n      <Tooltip\n        content=\"Name, language, and time zone for this workspace.\"\n        anchorRef={generalRef}\n      />\n      <div id=\"panel-general\" role=\"tabpanel\" hidden={value !== 'general'}>\n        …\n      </div>\n      <div id=\"panel-advanced\" role=\"tabpanel\" hidden={value !== 'advanced'}>\n        …\n      </div>\n    </>\n  );\n}\n```\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

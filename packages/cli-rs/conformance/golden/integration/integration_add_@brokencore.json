@@ -1,0 +1,12 @@
+{
+ "id": "integration_add_@brokencore",
+ "args": [
+  "integration",
+  "add"
+ ],
+ "fixture": "brokencore",
+ "stdout": "",
+ "stderr": "Error: missing required argument 'kind'\n",
+ "exit": 1,
+ "files": []
+}

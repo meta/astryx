@@ -1,0 +1,15 @@
+{
+ "id": "experimental_render_extra1_extra2_extra3",
+ "args": [
+  "experimental",
+  "render",
+  "extra1",
+  "extra2",
+  "extra3"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: render reads a page module (.tsx, .jsx, .ts, .js, .mjs); extra1 is not one\n",
+ "exit": 1,
+ "files": []
+}

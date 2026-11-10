@@ -1,0 +1,9 @@
+import type {AstryxIntegration} from '@astryxdesign/cli/authoring';
+
+export default {
+  docs: './docs',
+
+  agentDocs: {
+    append: ['Run acme verify before finishing.']
+  }
+} satisfies AstryxIntegration;

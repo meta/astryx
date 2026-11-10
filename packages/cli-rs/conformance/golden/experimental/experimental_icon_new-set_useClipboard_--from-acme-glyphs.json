@@ -1,0 +1,15 @@
+{
+ "id": "experimental_icon_new-set_useClipboard_--from-acme-glyphs",
+ "args": [
+  "experimental",
+  "icon",
+  "new-set",
+  "useClipboard",
+  "--from=@acme/glyphs"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: Invalid icon set name \"useClipboard\": use lowercase kebab-case starting with a letter.\n",
+ "exit": 1,
+ "files": []
+}

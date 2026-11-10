@@ -1,0 +1,19 @@
+{
+ "id": "template_useTranslatorHookUsage_--skeleton_@large",
+ "args": [
+  "template",
+  "useTranslatorHookUsage",
+  "--skeleton"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# useTranslatorHookUsage - A \"Load more\" footer under a list that gets its button label and its \"Showing 3 of 9\" count from the function useTranslator returns, with app message keys supplied per locale through InternationalizationProvider, so switching the provider to French changes both strings.\n# Components: Card, InternationalizationProvider, List, SegmentedControl\n\n<InternationalizationProvider />\n<Card padding={4} width={360}>\n  <VStack gap={3}>\n    <SegmentedControl />\n    <SegmentedControlItem />\n    <SegmentedControlItem />\n    <InvoiceList />\n  </VStack>\n</Card>\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

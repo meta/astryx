@@ -1,0 +1,19 @@
+{
+ "id": "component_GridSpan_--zh_@large",
+ "args": [
+  "component",
+  "GridSpan",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# GridSpan\n\n可跨越多列或多行的网格项。\n\n**Import:** `import {GridSpan} from '@astryxdesign/core/Grid';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `columns` | `number \\| 'full'` | - | 要跨越的列数；使用 `'full'` 跨越所有显式列。 |\n| `rows` | `number` | - | 要跨越的行数。 |\n| `children` | `ReactNode` | - | 内容。 |\n| `xstyle` | `StyleXStyles` | - | 应用于跨度包装元素的 StyleX 样式。必须是 stylex.create() 的值，而不是 style={{}} 这样的内联样式对象。 |\n| `className` | `string` | - | 应用于跨度包装元素的 CSS 类名。 |\n| `style` | `React.CSSProperties` | - | 应用于跨度包装元素的内联样式。设置 `columns` 或 `rows` 时，其 `grid-column` 或 `grid-row` 会替换 `style` 中的同名属性。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到跨度包装元素的 Ref。 |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

@@ -1,0 +1,130 @@
+[
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStatusDot variant=\"positive\" label=\"Online\" size=\"sm\" />",
+  "output": "<XDSStatusDot variant=\"positive\" label=\"Online\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStatusDot variant=\"positive\" label=\"Online\" size=\"md\" />",
+  "output": "<XDSStatusDot variant=\"positive\" label=\"Online\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStatusDot variant=\"positive\" label=\"Online\" size={dotSize} />",
+  "output": "<XDSStatusDot variant=\"positive\" label=\"Online\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSProgressBar value={50} label=\"Progress\" size=\"md\" />",
+  "output": "<XDSProgressBar value={50} label=\"Progress\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSProgressBar value={50} label=\"Progress\" size=\"sm\" />",
+  "output": "<XDSProgressBar value={50} label=\"Progress\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSProgressBar value={50} label=\"Progress\" size=\"lg\" />",
+  "output": "<XDSProgressBar value={50} label=\"Progress\" />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStatusDot variant=\"warning\" label=\"Away\" size=\"sm\" isPulsing />",
+  "output": "<XDSStatusDot variant=\"warning\" label=\"Away\" isPulsing />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSProgressBar value={75} label=\"Upload\" size=\"lg\" variant=\"positive\" hasValueLabel />",
+  "output": "<XDSProgressBar value={75} label=\"Upload\" variant=\"positive\" hasValueLabel />",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSButton size=\"md\" label=\"Click\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSAvatar size={48} name=\"Test\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSStatusDot, XDSStatusDotProps, XDSStatusDotSize } from '@xds/core/StatusDot';",
+  "output": "import type { XDSStatusDot, XDSStatusDotProps } from '@xds/core/StatusDot';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSProgressBar, XDSProgressBarSize } from '@xds/core/ProgressBar';",
+  "output": "import type { XDSProgressBar } from '@xds/core/ProgressBar';",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "import type { XDSStatusDotSize } from '@xds/core/StatusDot';",
+  "output": "",
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSStatusDot variant=\"positive\" label=\"Online\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<XDSProgressBar value={50} label=\"Test\" />",
+  "output": null,
+  "error": null
+ },
+ {
+  "transform": "v0.0.10/remove-size-props",
+  "path": "test.tsx",
+  "options": null,
+  "source": "<>\n  <XDSStatusDot variant=\"positive\" label=\"Online\" size=\"sm\" />\n  <XDSStatusDot variant=\"negative\" label=\"Offline\" size=\"md\" />\n</>",
+  "output": "<>\n  <XDSStatusDot variant=\"positive\" label=\"Online\" />\n  <XDSStatusDot variant=\"negative\" label=\"Offline\" />\n</>",
+  "error": null
+ }
+]

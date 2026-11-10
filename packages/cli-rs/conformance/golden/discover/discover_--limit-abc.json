@@ -1,0 +1,12 @@
+{
+ "id": "discover_--limit-abc",
+ "args": [
+  "discover",
+  "--limit=abc"
+ ],
+ "fixture": "app",
+ "stdout": "",
+ "stderr": "Error: --limit must be a positive integer, not \"NaN\"\n",
+ "exit": 1,
+ "files": []
+}

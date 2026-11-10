@@ -1,0 +1,13 @@
+{
+ "id": "template_CalendarShowcase_--json_@large",
+ "args": [
+  "template",
+  "CalendarShowcase",
+  "--json"
+ ],
+ "fixture": "large",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CalendarShowcase\",\n    \"description\": \"An interactive single-date calendar with a selected date. Click any day to change the selection.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Calendar\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Calendar} from '@astryxdesign/core/Calendar';\\nimport type {ISODateString} from '@astryxdesign/core/Calendar';\\n\\nexport default function CalendarShowcase() {\\n  const [value, setValue] = useState<ISODateString | undefined>('2026-04-15');\\n\\n  return <Calendar mode=\\\"single\\\" value={value} onChange={setValue} />;\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

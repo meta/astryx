@@ -1,0 +1,19 @@
+{
+ "id": "component_CollapsibleGroup_--zh_@large",
+ "args": [
+  "component",
+  "CollapsibleGroup",
+  "--zh"
+ ],
+ "fixture": "large",
+ "stdout": "package: @astryxdesign/core\n\n# CollapsibleGroup\n\n协调多个 Collapsible 实例，使同一时间只有一个（single 模式）或任意数量（multiple 模式）可以展开。除非启用 dividers，否则不渲染包裹 DOM 元素。\n\n**Import:** `import {CollapsibleGroup} from '@astryxdesign/core/Collapsible';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `type` | `'single' \\| 'multiple'` | `'single'` | 是否允许同时展开一个或多个项目。 |\n| `defaultValue` | `string \\| string[]` | - | 非受控模式下默认展开的项目。single 模式使用字符串，multiple 模式使用数组。 |\n| `value` | `string \\| string[]` | - | 受控展开的项目。 |\n| `onChange` | `(value: string \\| string[]) => void` | - | 展开项目集合变更时调用的回调。 |\n| `hasDividers` | `boolean` | `false` | 是否在组项目之间绘制细线分隔线。启用后组会渲染一个包裹 div，且项目默认使用 'balanced' 密度。适合搭配裸 Collapsible 子项使用；用 Card 包裹的项目自带视觉分隔。 |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | - | 控制组内项目触发器和内容块内边距的行密度。显示分隔线时默认为 'balanced'；否则项目保持默认的无内边距外观。 |\n| `chevronPosition` | `'start' \\| 'end'` | `'end'` | 组内直接 Collapsible 项目的逻辑箭头位置。`end` 是默认的尾随指示器；`start` 是前置展开箭头，折叠时指向内容（RTL 下镜像），展开时向下。单个 Collapsible 仍可覆盖此设置。 |\n| `children` | `ReactNode` | - | 需要协调的 Collapsible 实例。 **(required)** |\n| `ref` | `React.Ref<HTMLElement>` | - | Ref forwarded to the group wrapper when hasDividers renders one. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for the group wrapper when hasDividers renders one. Must be a stylex.create() value. |\n| `className` | `string` | - | CSS class name for the group wrapper when hasDividers renders one. Prefer xstyle for styling. |\n| `style` | `CSSProperties` | - | Inline styles for the group wrapper when hasDividers renders one. Prefer xstyle for StyleX-optimized styling. |\n| `data-testid` | `string` | - | Test selector forwarded to the group wrapper when hasDividers renders one. |\n\n",
+ "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
+ "exit": 0,
+ "files": [
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/large\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}
