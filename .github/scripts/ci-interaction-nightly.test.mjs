@@ -75,7 +75,7 @@ describe("main's nightly full interaction run in ci.yml", () => {
       'interaction-full',
     );
     expect(ci['run-name']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || '' }}",
+      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || '' }}",
     );
   });
 
@@ -135,10 +135,14 @@ describe("main's nightly full interaction run in ci.yml", () => {
       );
       expect(value(scope['outside-pull-request'])).toBe('skip');
     }
-    // The WebKit lane keeps its own scope.
-    expect(
-      scopeOf('interaction-legs', 'scope-webkit')['outside-pull-request'],
-    ).toBe('skip');
+    // The WebKit lane keeps its own scope: it plans outside a pull request
+    // only for the weekly full WebKit run.
+    const webkit = scopeOf('interaction-legs', 'scope-webkit')[
+      'outside-pull-request'
+    ];
+    expect(value(webkit, 'interaction-full')).toBe('skip');
+    expect(value(webkit)).toBe('skip');
+    expect(value(webkit, 'webkit-weekly')).toBe('run');
   });
 
   it('uploads the Storybook build the proofs download', () => {
