@@ -128,6 +128,23 @@ const lightningcssTargets = {
 
 const viteBuildTargets = ['chrome123', 'firefox120', 'safari17.5'];
 
+// The files the babel wrapper compiles with the library class prefix. CLI
+// templates render here from source and land in the library layer
+// (`libraryPattern` below), so they take the library prefix too. With the
+// product prefix, a story's identical atomic class in the later product layer
+// would override a template's conditional rule, such as a focus ring. The
+// legacy wrapper passes every `stylexOptions` key to the babel wrapper; the
+// key is outside StyleX's option type, so it is spread in.
+const babelWrapperOptions = {
+  libraryPatterns: [
+    'packages/core/',
+    'packages/themes/',
+    'packages/lab/',
+    'packages/cli/assets/templates/',
+    'node_modules/@astryxdesign/',
+  ],
+};
+
 const config: StorybookConfig = {
   stories: [
     '../stories/**/*.mdx',
@@ -196,6 +213,7 @@ const config: StorybookConfig = {
             lightningcssOptions: {
               targets: lightningcssTargets,
             },
+            ...babelWrapperOptions,
           },
           libraryPattern: 'packages/',
         }),

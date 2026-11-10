@@ -29,6 +29,7 @@ import {
   drag,
   frames,
   markElement,
+  MARKER_RGB,
   openStory,
   pinch,
   pooledBusyProof,
@@ -38,7 +39,7 @@ import {
   type TouchDriver,
   type TouchScript,
   touchStoryboard,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
   withStorybook,
@@ -577,6 +578,22 @@ async function recordTrackRuns(
 const SETTLE_TEMPO = 5;
 
 /**
+ * The part of a busy page-settle test's time its pool leaves free, ms. It
+ * covers the browser's setup before the test's own code and the work after
+ * the pool. It also covers a settle a little slower than the ones before it.
+ */
+const POOL_RESERVE_MS = 12_000;
+
+/** The middle value, or the mean of the two middle ones. */
+function median(values: ReadonlyArray<number>): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/**
  * Where a run's judgment starts. It is the block's start, or just after the
  * block's first presented frame when that frame shows the photo unmoved. A
  * compositor can present a frame it began before the block. Only that one
@@ -674,6 +691,7 @@ async function pooledSettleProof(
   {
     start = 'shown',
     onFirst,
+    deadline,
   }: {
     start?: 'shown' | 'after-lift';
     onFirst?: (
@@ -681,13 +699,35 @@ async function pooledSettleProof(
       tracked: BusyRun['tracked'],
       block: BlockedWindow,
     ) => Promise<void>;
+    /**
+     * When the pool must be done, epoch ms. A settle that would not fit
+     * before it is not started: the pool fails by name.
+     */
+    deadline?: number;
   } = {},
 ): Promise<PooledSettles> {
   const trackRuns = await recordTrackRuns(g.track);
   const runs: BusyRun[] = [];
   const blocks: BlockedWindow[] = [];
   const settles: TrackRun[] = [];
+  // How long each settle took, its first storyboard left out.
+  const settleMs: number[] = [];
   for (const direction of toward) {
+    // A settle takes about as long as the ones before it. When the slowest
+    // so far no longer fits, the machine is too slow for the pool. The run
+    // then fails by name, and the test's timeout never ends it.
+    if (deadline != null && settleMs.length > 0) {
+      const slowest = Math.max(...settleMs);
+      const left = deadline - Date.now();
+      if (slowest > left) {
+        const seconds = (ms: number) => (ms / 1000).toFixed(1);
+        throw new Error(
+          `pooledSettleProof: too slow for the pool: ${settleMs.length} of ${toward.length} settles took ${seconds(settleMs.reduce((a, b) => a + b, 0))} s, up to ${seconds(slowest)} s each, and ${seconds(Math.max(0, left))} s of the test's time remain`,
+        );
+      }
+    }
+    const settleStarted = Date.now();
+    let storyboardMs = 0;
     // The tracked photo keeps its left edge on screen as the page settles.
     // Toward the next page it is the next photo, which slides in from the
     // right. Back, it is the current one, which slides out to the right. A box
@@ -730,10 +770,13 @@ async function pooledSettleProof(
     if (settle == null) {
       throw new Error('no settle recorded');
     }
-    const tracked = await trackMarker(page, castFrames);
+    // One decode of each frame finds the photo's marker and the control.
+    const [tracked, control] = await trackMarkers(page, castFrames, {
+      colors: [MARKER_RGB, CONTROL_RGB],
+    });
     runs.push({
       tracked,
-      control: await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
+      control,
       window: {
         from: afterInFlightFrame(tracked, block.from),
         to: Math.min(block.to, settle.from + settle.curveMs),
@@ -742,10 +785,13 @@ async function pooledSettleProof(
     blocks.push(block);
     settles.push(settle);
     if (runs.length === 1) {
+      const storyboardStarted = Date.now();
       await onFirst?.(castFrames, tracked, block);
+      storyboardMs = Date.now() - storyboardStarted;
     }
     await waitForRest(g.track);
     await unmark();
+    settleMs.push(Date.now() - settleStarted - storyboardMs);
   }
   // The settle slows at its end. Near the end a 60 Hz frame moves less than
   // one cast step, so the cast shows plateaus there. Judging stops 12 cast
@@ -760,6 +806,11 @@ async function pooledSettleProof(
 test('the page settle keeps advancing every frame while the main thread is blocked', async ({
   page,
 }, testInfo) => {
+  // With no test timeout (0, as under --debug) the pool has no deadline.
+  const deadline =
+    testInfo.timeout > 0
+      ? Date.now() + testInfo.timeout - POOL_RESERVE_MS
+      : undefined;
   const g = await openGallery(page);
   // A compositor-only control animation in the same windows: what the
   // compositor presented while the main thread spun, on this machine.
@@ -777,6 +828,7 @@ test('the page settle keeps advancing every frame while the main thread is block
     g,
     ['next', 'next', 'next', 'previous', 'previous', 'previous'],
     {
+      deadline,
       onFirst: async (castFrames, tracked, block) => {
         const film = await castStoryboard(page, castFrames, {
           name: 'lightbox-page-settle-busy-main-thread',
@@ -915,23 +967,59 @@ for (const late of ['two frames', '450 ms'] as const) {
     const g = await openGallery(page);
     await startBusyControl(page);
     await slowViewer(page, SETTLE_TEMPO);
-    // A settle judged first gives this machine's numbers: how long after a
-    // settle starts its block starts, and the cast's frame interval. The
-    // delayed settle then stays still for that long, then for two frames and
-    // a little more or for 450 ms. That is past the one frame the proof
-    // skips.
-    const first = await pooledSettleProof(page, g, ['next']);
-    const blockAfterMs = first.blocks[0].from - first.settles[0].from;
-    // A run the pool left out has no frame interval to measure by.
-    const cadenceMs = first.proof.runs[0]?.cadenceMs;
-    expect(cadenceMs, first.proof.summary).toBeGreaterThan(0);
-    const stillMs = late === 'two frames' ? 2.2 * (cadenceMs ?? 0) : 450;
-    await breakSettle(g, 'delayed', blockAfterMs + stillMs);
-    const {proof} = await pooledSettleProof(page, g, ['next', 'next']);
-    // The photo misses a frame the control moved on, past the in-flight one.
-    expect(proof.verdict.failures.join('\n'), proof.summary).toMatch(
-      /moved on \d+ of the \d+ frames the control moved/,
+    // Three settles first give this machine's numbers, judged as one pool.
+    // Their blocks show how long after a settle starts its block starts, and
+    // their casts give the frame interval during a block. One run can hold
+    // too few control frames to judge, in WebKit or on a loaded machine.
+    // Three runs together hold enough. One settle can start its block late,
+    // such as the first in a new gallery. A delay read from it would push the
+    // motion past the block. So 450 ms counts from the earliest block, and two
+    // frames from the median one. The delayed settle then stays still for
+    // that long, then for two frames and a little more or for 450 ms. That is
+    // past the one frame the proof skips.
+    const calibration = await pooledSettleProof(page, g, [
+      'next',
+      'next',
+      'previous',
+    ]);
+    const lags = calibration.blocks.map(
+      (block, i) => block.from - calibration.settles[i].from,
     );
+    const blockAfterMs =
+      late === 'two frames' ? median(lags) : Math.min(...lags);
+    // Only the runs the pool judged give a frame interval.
+    const cadences = calibration.proof.runs.flatMap((run, i) =>
+      run != null && calibration.proof.judged[i] ? [run.cadenceMs] : [],
+    );
+    expect(cadences.length, calibration.proof.summary).toBeGreaterThan(0);
+    const stillMs = late === 'two frames' ? 2.2 * median(cadences) : 450;
+    const delayMs = blockAfterMs + stillMs;
+    await breakSettle(g, 'delayed', delayMs);
+    const {proof, blocks, settles} = await pooledSettleProof(page, g, [
+      'next',
+      'next',
+    ]);
+    // A run whose delayed motion began outside its block tests nothing. When
+    // the proof misses the stall, these lines name such a run.
+    const missed = settles.flatMap((settle, i) => {
+      const moves = settle.from + delayMs;
+      if (moves >= blocks[i].to) {
+        return [
+          `run ${i + 1}: calibration missed: the delayed motion began ${Math.round(moves - blocks[i].to)} ms after the block`,
+        ];
+      }
+      if (moves <= blocks[i].from) {
+        return [
+          `run ${i + 1}: calibration missed: the delayed motion began ${Math.round(blocks[i].from - moves)} ms before the block`,
+        ];
+      }
+      return [];
+    });
+    // The photo misses a frame the control moved on, past the in-flight one.
+    expect(
+      proof.verdict.failures.join('\n'),
+      [...missed, proof.summary].join('\n'),
+    ).toMatch(/moved on \d+ of the \d+ frames the control moved/);
   });
 }
 

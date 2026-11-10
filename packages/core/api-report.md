@@ -112,6 +112,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop ariaLabelledBy?: string
   prop debounceMs?: number = 150
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasEntriesOnFocus?: boolean = false
   prop inputId?: string
@@ -120,6 +121,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop isDisabled?: boolean = false
   prop isFocusableDisabled?: boolean = false
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1 — every non-empty query is searched.
   prop onChange: (item: T | null) => void
@@ -1521,6 +1523,7 @@ component List(props: ListProps)
   prop header?: ReactNode
   prop listStyle?: ListMarkerStyle = 'none'
   prop ref?: React.Ref<HTMLUListElement | HTMLOListElement>
+  prop reorderable?: Reorderable
   prop start?: number = 1
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -2656,6 +2659,7 @@ component Tokenizer(props: TokenizerProps)
   prop labelTooltip?: string
   prop maxEntries?: number
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1
   prop onBlur?: (e: React.FocusEvent) => void
@@ -2663,6 +2667,7 @@ component Tokenizer(props: TokenizerProps)
   prop onChangeQuery?: (query: string) => void
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
+  prop onOpenChange?: (isOpen: boolean) => void
   prop placeholder?: string
   prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
@@ -2807,6 +2812,7 @@ component Typeahead(props: TypeaheadProps)
   prop description?: string
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = true
   prop hasEntriesOnFocus?: boolean = false
@@ -2817,6 +2823,7 @@ component Typeahead(props: TypeaheadProps)
   prop label: string
   prop labelTooltip?: string
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop minQueryLength?: number = 1
   prop onChange: (item: T | null) => void
   prop onChangeQuery?: (query: string) => void
@@ -3013,6 +3020,7 @@ function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createReorderable: <TKey extends string | number = string | number, TTo = number>(options: ReorderableOptions<TKey, TTo>) => Reorderable<TKey, TTo>
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -3636,6 +3644,19 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   virtualization?: TableVirtualizationCapability
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface BaseTypeaheadDialogMenuInfo
+  close: () => void
+  query: string
+interface BaseTypeaheadHandle
+  close: () => void
+  open: () => void
+interface BaseTypeaheadListboxMenuInfo
+  close: () => void
+  isBusy: boolean
+  isEmptySearch: boolean
+  listbox: ReactNode
+  query: string
+type BaseTypeaheadMenu = { role: 'listbox'; render?: (info: BaseTypeaheadListboxMenuInfo) => ReactNode } | { role: 'dialog'; label: string; render: (info: BaseTypeaheadDialogMenuInfo) => ReactNode }
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
 type BlockNode<Extension extends MarkdownExtensionNode = never> = LegacyBlockNodeKind<Extension> & BlockMetadata
 type BlockNodeWithMath<Extension extends MarkdownExtensionNode = never> = MathEnabledBlockNodeKind<Extension> & BlockMetadata
@@ -5088,6 +5109,15 @@ type RadiusVarName = keyof typeof radiusDefaults
 interface RelativeDateFilterPreset
   label: string
   value: string
+interface ReorderMove<TKey extends string | number = string | number, TTo = number>
+  key: TKey
+  to: TTo
+interface Reorderable<TKey extends string | number = string | number, TTo = number>
+  [reorderableBrand]: { readonly key: TKey; readonly to: TTo }
+  start: (key: TKey) => void
+interface ReorderableOptions<TKey extends string | number = string | number, TTo = number>
+  isReorderable?: (key: TKey) => boolean
+  onReorder: (move: ReorderMove<TKey, TTo>) => void
 interface ResizableConfig
   autoSaveId?: string
   defaultIsCollapsed?: boolean
@@ -5543,7 +5573,7 @@ interface TableTreeRowMeta
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
 interface TableVirtualizationCapability
-  [capabilityBrand]: Readonly<UseTableRowsVirtualizationConfig>
+  @astryxdesign/core/table-virtualization/v1: never
 interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
@@ -5737,7 +5767,9 @@ type TokenValue = string | [light: string, dark: string]
 type TokenizerChange<T extends SearchableItem> = { item: T; type: 'add' } | { item: T; type: 'create' } | { item: T; type: 'remove' } | { type: 'reorder' }
 interface TokenizerHandle
   blur: () => void
+  close: () => void
   focus: () => void
+  open: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
 type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
@@ -6255,8 +6287,8 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
 interface UseTableRowsVirtualizationConfig
+  initialViewportHeight: number
   rowHeight: number
-  viewportHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
@@ -9095,6 +9127,10 @@ TreeListVariantMap (.)
 
 ```text
 BaseTypeahead (.)
+BaseTypeaheadDialogMenuInfo (.)
+BaseTypeaheadHandle (.)
+BaseTypeaheadListboxMenuInfo (.)
+BaseTypeaheadMenu (.)
 BaseTypeaheadProps (.)
 CreateStaticSourceOptions (.)
 SearchContext (.)
