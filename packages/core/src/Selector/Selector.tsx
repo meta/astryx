@@ -77,7 +77,7 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
@@ -1222,7 +1222,10 @@ export function Selector<T extends SelectorOptionType>(
     containerClassName,
     containerStyle,
   });
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  const {
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+  } = useResolvedOptionality({isRequired, isOptional});
   const placeholder = placeholderFromProps ?? t('@astryx.selector.placeholder');
   const searchPlaceholder =
     searchPlaceholderFromProps ?? t('@astryx.selector.searchPlaceholder');
@@ -1251,6 +1254,7 @@ export function Selector<T extends SelectorOptionType>(
   const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
+  const requiredDescriptionId = useId();
   const searchId = useId();
   const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
@@ -1845,6 +1849,7 @@ export function Selector<T extends SelectorOptionType>(
         // option via aria-activedescendant (comboboxes-4). A bare searchbox
         // left the highlight silent to screen readers.
         role="combobox"
+        aria-required={isEffectivelyRequired || undefined}
         aria-expanded={surface.isOpen}
         aria-controls={listboxId}
         aria-autocomplete="list"
@@ -1906,6 +1911,7 @@ export function Selector<T extends SelectorOptionType>(
   }, [
     hasSearch,
     searchId,
+    isEffectivelyRequired,
     listboxId,
     searchQuery,
     hasQuery,
@@ -2123,6 +2129,17 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
+  // With search, the editable trigger is a role-less button, where
+  // aria-required is not allowed. The closed trigger states the required
+  // state in its name, through the Field label's visible marker, or else in
+  // its description; the search combobox carries aria-required while open.
+  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
+  const isLabelRequiredInName =
+    isLabelRequiredMarkerShown &&
+    !inputGroup &&
+    (callerAriaLabel == null || ariaLabelledByProp != null);
+  const hasRequiredDescription =
+    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2230,12 +2247,18 @@ export function Selector<T extends SelectorOptionType>(
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
-      undefined,
+      [
+        ariaDescribedByProp,
+        ariaDescribedBy,
+        hasRequiredDescription ? requiredDescriptionId : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required': isEffectivelyRequired ? 'true' : undefined,
+    'aria-required':
+      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
@@ -2328,6 +2351,11 @@ export function Selector<T extends SelectorOptionType>(
         {isEffectivelyReadOnly && (
           <VisuallyHidden id={readOnlyDescriptionId}>
             {t('@astryx.input.readOnly')}
+          </VisuallyHidden>
+        )}
+        {hasRequiredDescription && (
+          <VisuallyHidden id={requiredDescriptionId}>
+            {t('@astryx.field.required')}
           </VisuallyHidden>
         )}
         <button

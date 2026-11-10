@@ -26,11 +26,15 @@ function Bar({
   onReselect,
   onChange,
   badges = {},
+  hasPanels = false,
   ...props
 }: Partial<TabBarProps> & {
   initial?: string;
   badges?: Record<string, string | number | undefined>;
+  /** Each tab names a panel, `panel-<value>`. */
+  hasPanels?: boolean;
 }) {
+  const panelOf = (tab: string) => (hasPanels ? `panel-${tab}` : undefined);
   const [value, setValue] = useState(initial);
   return (
     <TabBar
@@ -43,12 +47,18 @@ function Bar({
       label="Sections"
       data-testid="bar"
       {...props}>
-      <TabBarItem value="home" label="Home" icon={<Glyph name="home" />} />
+      <TabBarItem
+        value="home"
+        label="Home"
+        icon={<Glyph name="home" />}
+        panelId={panelOf('home')}
+      />
       <TabBarItem
         value="library"
         label="Library"
         icon={<Glyph name="library" />}
         badge={badges.library}
+        panelId={panelOf('library')}
       />
       <TabBarItem
         value="browse"
@@ -86,6 +96,54 @@ function coarsePrimaryPointer(): () => void {
   } as unknown as MediaQueryList;
   window.matchMedia = (media: string) =>
     media.trim() === TOUCH_QUERY ? query : matchMedia(media);
+  return () => {
+    window.matchMedia = matchMedia;
+  };
+}
+
+/**
+ * A scroll area scrolled to `top`, with its `scrollTo` recorded: jsdom lays
+ * nothing out, so the offset and the sizes are set by hand. Its content is
+ * `content` px tall in a box `box` px tall and 400 px wide.
+ */
+function scrolledArea(
+  element: HTMLElement,
+  top: number,
+  content = 2000,
+  box = 600,
+) {
+  const scrollTo = vi.fn();
+  Object.defineProperty(element, 'scrollTop', {value: top, configurable: true});
+  Object.defineProperty(element, 'clientHeight', {
+    value: box,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'clientWidth', {
+    value: 400,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    value: content,
+    configurable: true,
+  });
+  element.scrollTo = scrollTo as unknown as typeof element.scrollTo;
+  return scrollTo;
+}
+
+/** Reduce Motion on, until the restore runs. */
+function reducedMotion(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (media: string) =>
+    ({
+      matches: media.includes('prefers-reduced-motion: reduce'),
+      media,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
   return () => {
     window.matchMedia = matchMedia;
   };
@@ -188,6 +246,120 @@ describe('TabBar', () => {
     fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
     expect(onReselect).toHaveBeenCalledWith('home');
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('scrolls the selected tab’s panel to its top when it is chosen again, gliding there', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="area" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const scrollTo = scrolledArea(screen.getByTestId('area'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('skips a row that scrolls only sideways and scrolls the list below it', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="chips" style={{overflowY: 'auto'}} />
+          <div data-testid="list" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    // A row with overflow-x: auto computes overflow-y: auto too; its content
+    // is no taller than the row.
+    const chips = scrolledArea(screen.getByTestId('chips'), 0, 600);
+    const list = scrolledArea(screen.getByTestId('list'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(chips).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('skips a row whose content overflows it by a pixel or less, as Core’s scroll test does', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="chips" style={{overflowY: 'auto'}} />
+          <div data-testid="list" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    // Chips 1 px taller than their row: 48 px of content in a 47 px box.
+    const chips = scrolledArea(screen.getByTestId('chips'), 0, 48, 47);
+    const list = scrolledArea(screen.getByTestId('list'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(chips).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('scrolls the panel itself when it is the scroll area, and jumps under Reduce Motion', () => {
+    restorePointer.push(reducedMotion());
+    render(
+      <>
+        <div id="panel-home" data-testid="panel" style={{overflowY: 'scroll'}}>
+          <div style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const scrollTo = scrolledArea(screen.getByTestId('panel'), 40);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'instant'});
+  });
+
+  it('scrolls nothing when the panel is at its top, has no scroll area, or the tab names none', () => {
+    const onReselect = vi.fn();
+    const {unmount} = render(
+      <>
+        <div id="panel-home">
+          <div data-testid="area" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels onReselect={onReselect} />
+      </>,
+    );
+    const atTop = scrolledArea(screen.getByTestId('area'), 0);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(atTop).not.toHaveBeenCalled();
+    unmount();
+    render(
+      <>
+        <div id="panel-home" data-testid="panel">
+          <p>Not a scroll area</p>
+        </div>
+        <Bar hasPanels onReselect={onReselect} />
+      </>,
+    );
+    const panel = scrolledArea(screen.getByTestId('panel'), 80);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(panel).not.toHaveBeenCalled();
+    // The reselect is still reported each time.
+    expect(onReselect).toHaveBeenCalledTimes(2);
+  });
+
+  it('scrolls nothing when another tab is chosen', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="home" style={{overflowY: 'auto'}} />
+        </div>
+        <div id="panel-library">
+          <div data-testid="library" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const home = scrolledArea(screen.getByTestId('home'), 120);
+    const library = scrolledArea(screen.getByTestId('library'), 60);
+    fireEvent.click(screen.getByRole('tab', {name: 'Library'}));
+    expect(home).not.toHaveBeenCalled();
+    expect(library).not.toHaveBeenCalled();
   });
 
   it('has one tab stop, on the selected tab, and arrow keys move between tabs', () => {

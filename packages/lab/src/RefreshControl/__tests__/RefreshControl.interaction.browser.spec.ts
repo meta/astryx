@@ -67,6 +67,7 @@ import {
   type TouchDriver,
   PEN_SKIP,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
 } from '@astryxdesign/interaction-harness';
 
 import {refreshControl} from '../refreshValues';
@@ -1189,12 +1190,6 @@ async function listScrollRest(page: Page, timeout = 3000): Promise<number> {
   );
 }
 
-/**
- * The pause that ends a vertical trackpad scroll's gesture, ms. The page's
- * clock counts whole ms, so a gap of 1 ms less is the longest within one.
- */
-const TRACKPAD_SCROLL_END_MS = 180;
-
 /** Why the trackpad proofs run in WebKit only. */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel step as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas";
@@ -1228,7 +1223,7 @@ test('with a trackpad, a two-finger scroll at the top pulls and refreshes as a f
       x: 200,
       y: 300,
       steps: Array.from({length: 30}, () => ({dy: -10})),
-      maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+      maxGapMs: WHEEL_SCROLL_END_MS.vertical,
     });
     // The scroll's gesture ends after its last step. The pull's release
     // starts the settle, and the content comes to rest on the inset.

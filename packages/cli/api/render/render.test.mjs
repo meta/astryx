@@ -1512,7 +1512,12 @@ export default function Page() {
   async function initialsOf(name) {
     await render(`initials/${name}.tsx`, {cwd: dir});
     const html = fs.readFileSync(path.join(dir, 'initials', `${name}.html`), 'utf8');
-    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(m => m[1].replace(/<[^>]+>/g, ''));
+    // Generated content draws the initials from a private inline custom
+    // property, not a text node. The plain string is the one not followed by
+    // its empty alternative text.
+    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(
+      m => /--[\w-]+:\s*(?:&quot;|")([^&"]*)(?:&quot;|")\s*(?:;|"|$)/.exec(m[1])?.[1] ?? '',
+    );
   }
 
   // On a Node build that crashes in Intl.Segmenter, both renders run without it.
