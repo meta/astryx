@@ -19,7 +19,7 @@ export function assert(condition, message) {
 /** Waits until the locator matches exactly one visible element. */
 export async function one(locator, description) {
   try {
-    await locator.first().waitFor({state: 'visible', timeout: STEP_TIMEOUT_MS});
+    await locator.filter({visible: true}).first().waitFor({state: 'visible', timeout: STEP_TIMEOUT_MS});
   } catch {
     throw new ProbeFailure(`${description}: not visible`);
   }
@@ -44,7 +44,7 @@ export async function press(page, key) {
  */
 export async function shown(locator, description) {
   try {
-    await locator.first().waitFor({state: 'visible', timeout: STEP_TIMEOUT_MS});
+    await locator.filter({visible: true}).first().waitFor({state: 'visible', timeout: STEP_TIMEOUT_MS});
   } catch {
     throw new ProbeFailure(`${description}: not visible`);
   }
