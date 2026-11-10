@@ -435,6 +435,36 @@ describe('PowerSearch', () => {
 
       expect(input).toHaveAttribute('aria-expanded', 'false');
     });
+
+    it('keeps the field list closed after a field whose editor sets the value', async () => {
+      const user = userEvent.setup();
+      render(<PowerSearchWrapper config={config} />);
+      const input = screen.getByRole('combobox', {name: 'Search'});
+      await user.click(input);
+      await user.click(
+        await screen.findByRole('option', {name: 'Status', hidden: true}),
+      );
+
+      await user.click(
+        await screen.findByRole('combobox', {name: 'Value', hidden: true}),
+      );
+      await user.click(
+        await screen.findByRole('option', {name: 'Open', hidden: true}),
+      );
+      const apply = screen.queryByRole('button', {name: 'Apply', hidden: true});
+      if (apply != null) {
+        await user.click(apply);
+      }
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(screen.getByText(/Open/)).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.queryByRole('option', {name: 'Status', hidden: true}),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('paste behavior', () => {

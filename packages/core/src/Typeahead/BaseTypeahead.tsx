@@ -956,10 +956,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // reloads a listbox or lets a dialog take focus.
   const pickKeptOpenRef = useRef(false);
   // The ids picked from a kept focus list since the last committed change.
-  // The caller's next committed change decides: when it adds one of them, the
-  // reload keeps the list that the commit's render already filtered, and does
-  // not ask the source again. Otherwise the list closes, as after any other
-  // pick. Typing, a close, or a pick that closes the list clears it.
+  // The caller's next committed change decides what happens to the list. When
+  // it adds one of these ids, the list keeps the rows that the commit's render
+  // filtered. The source is not asked again. Otherwise the list closes, as
+  // after any other pick. Typing, a close, or a pick that closes the list
+  // clears the set.
   const keptFocusListPicksRef = useRef<Set<string> | null>(null);
   // True while a list that a pick kept open is shown. That list closes when
   // the field becomes disabled.
@@ -1041,7 +1042,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
     isFocusListKeptRef.current = false;
-    keptFocusListPicksRef.current = null;
+    if (keptFocusListPicksRef.current != null) {
+      // The list closed before a commit decided a pick. Its rows drop, as
+      // after a pick that closes the list, so a later focus does not show
+      // them again.
+      keptFocusListPicksRef.current = null;
+      searchGenRef.current++;
+      replaceResults([]);
+      setHasSearched(false);
+    }
     openerAtRequestRef.current = null;
     outsidePress.stop();
     onOpenChange?.(false);
@@ -1049,7 +1058,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     searchSource.cancel?.();
-  }, [onOpenChange, searchSource, outsidePress]);
+  }, [onOpenChange, searchSource, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
     onShow: handleLayerShow,
@@ -1427,6 +1436,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         committedIds != null &&
         [...keptFocusListPicks].some(id => committedIds.has(id));
       if (!isPickCommitted || results.length === 0) {
+        // The close drops the rows, as after a pick that closes the list.
+        if (isShowingRef.current) {
+          keptFocusListPicksRef.current = keptFocusListPicks;
+        }
         hideList();
         return;
       }
