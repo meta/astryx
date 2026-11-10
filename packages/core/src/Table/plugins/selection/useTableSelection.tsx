@@ -152,8 +152,9 @@ function createSelectionStore<T extends Record<string, unknown>>(
 /**
  * Apply or remove selection styling on a <tr> element.
  *
- * `aria-selected` tracks selection on its own: it is the semantic half of
- * the state and stays correct whether or not the row is painted.
+ * `aria-selected` and the `table-row` target's `selected` state track
+ * selection on their own: they stay correct whether or not the row is
+ * painted, so a theme can restyle a selected row with the wash off.
  */
 function applyRowSelectionStyle(
   el: HTMLTableRowElement,
@@ -162,8 +163,10 @@ function applyRowSelectionStyle(
 ): void {
   if (isSelected) {
     el.setAttribute('aria-selected', 'true');
+    el.setAttribute('data-selected', 'selected');
   } else {
     el.removeAttribute('aria-selected');
+    el.removeAttribute('data-selected');
   }
   // Written on every pass, not just when painting: the flag can flip while a
   // row is already selected, and the wash has to come back off.
