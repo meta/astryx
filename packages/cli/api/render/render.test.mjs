@@ -5,7 +5,7 @@
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -1452,6 +1452,37 @@ describe('render(): a crash of Node itself', () => {
     expect(error.message).toContain(`Node ${process.version}`);
     expect(error.message).toContain('crashed (SIGSEGV)');
     expect(fs.existsSync(path.join(dir, 'crash.html'))).toBe(false);
+  }, 60_000);
+
+  // A page that loops forever must not outlive a CLI that is stopped by its
+  // process id, as a caller's own time limit stops it.
+  it.skipIf(process.platform === 'win32').each(['SIGTERM', 'SIGKILL'])('ends the page process when the CLI is stopped with %s', async signal => {
+    const name = `loop-${signal}`;
+    put(
+      `${name}.tsx`,
+      `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(path.join(dir, `${name}.pid`))}, String(process.pid));\nwhile (true) {}\nexport default () => <p>Hi</p>;\n`,
+    );
+    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'render', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
+    const pidFile = path.join(dir, `${name}.pid`);
+    const until = async (/** @type {() => boolean} */ done, /** @type {number} */ ms) => {
+      for (const start = Date.now(); !done() && Date.now() - start < ms; ) await new Promise(r => setTimeout(r, 50));
+      return done();
+    };
+    expect(await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8') !== '', 30_000)).toBe(true);
+    const pagePid = Number(fs.readFileSync(pidFile, 'utf8'));
+    expect(pagePid).not.toBe(cli.pid);
+    const alive = () => {
+      try {
+        process.kill(pagePid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    cli.kill(/** @type {NodeJS.Signals} */ (signal));
+    const ended = await until(() => !alive(), 10_000);
+    if (!ended) process.kill(pagePid, 'SIGKILL');
+    expect(ended).toBe(true);
   }, 60_000);
 });
 
