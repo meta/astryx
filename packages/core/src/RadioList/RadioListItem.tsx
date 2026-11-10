@@ -32,6 +32,7 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
@@ -52,8 +53,13 @@ registerBoxHold();
 // that paints it. See interactionOverlay.stylex.ts.
 const pressedOverlayImage = 'var(--_press-paint-image)';
 
-// The mouse press's paint, declared on the row and inherited by the layer
-// over the circle. Internal: not a theme hook.
+/** Written by the press controller while the row is pressed. */
+const PRESSED_ON = '[data-astryx-press="on"]';
+/** Written by the press controller for the press's release. */
+const PRESSED_FADING = '[data-astryx-press="fading"]';
+
+// The paint of a press the controller does not paint, declared on the row
+// and inherited by the layer over the circle. Internal: not a theme hook.
 const ROW_PRESS = '--_radio-row-press';
 
 const styles = stylex.create({
@@ -70,12 +76,13 @@ const styles = stylex.create({
   // row declares the mouse press's paint (`rowStyles.press`) and this layer
   // reads it. This owner-drawn layer also survives a theme replacing the
   // indicator component.
-  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
-  // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
-  // touch press controller writes `data-astryx-press` on the row, which this layer
-  // reads off the same scope marker as the hover tint. The controller paints
-  // the innermost pressable, so a nested link or button takes the press
-  // itself and the row never carries the attribute for it.
+  // The press controller writes its press attribute on the row for every
+  // pointer: a finger, a mouse and a pen. This layer reads it off the same
+  // scope marker as the hover tint. The controller paints the innermost pressable.
+  // It leaves a mouse press on a nested link or button to that control. So
+  // the row never carries the attribute for it.
+  // `:active` paints only a press the controller does not paint, and under a
+  // coarse pointer it is dropped.
   indicatorPressOverlay: {
     '::after': {
       content: '""',
@@ -84,21 +91,16 @@ const styles = stylex.create({
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
       backgroundColor: `var(${ROW_PRESS}, transparent)`,
-      // The touch press, as an image layer over the colour: an image change is
-      // discrete, so no transition can delay the onset, and the strength the
-      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
-      // what moves. Coarse pointers only, like the drop above.
+      // The controller's press paints as an image layer over the colour. An
+      // image change is discrete, so no transition can delay the onset. Only
+      // the strength moves: the row's `pressedAlpha` arms set it to 1 while
+      // on, and 1 → 0 over the release. This holds for every pointer, because
+      // the controller writes the attribute only for a press it paints.
       backgroundImage: {
         default: null,
-        [stylex.when.ancestor('[data-astryx-press="on"]', indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-        [stylex.when.ancestor('[data-astryx-press="fading"]', indicatorScope)]:
-          {
-            default: null,
-            '@media (pointer: coarse)': pressedOverlayImage,
-          },
+        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: pressedOverlayImage,
+        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]:
+          pressedOverlayImage,
       },
     },
   },
@@ -158,16 +160,16 @@ const rowStyles = stylex.create({
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
   },
-  // The mouse press (a finger's lives on `data-astryx-press`): the row is
-  // pressed, but not through a nested link or button, which keep their own
-  // action. The `:has()` is on the row itself and reaches no descendant
-  // selector, so a change inside the row re-checks the row alone; the circle's
-  // layer reads the paint through inheritance rather than a relation that
-  // would restyle everything under the row.
+  // A press the controller does not paint: the controller's own press lives
+  // on its attribute. The row is pressed, but not through a nested link or
+  // button. Those keep their own action. The `:has()` is on the row itself
+  // and reaches no descendant selector. So a change inside the row re-checks
+  // the row alone. The circle's layer reads the paint through inheritance. A
+  // relation would restyle everything under the row.
   press: {
     [ROW_PRESS]: {
       default: null,
-      ':active:not(:has(a:active,button:active,[role="button"]:active,[role="link"]:active))':
+      [`:active:not(${PRESSED_ON},${PRESSED_FADING}):not(:has(a:active,button:active,[role="button"]:active,[role="link"]:active))`]:
         {
           default: colorVars['--color-overlay-pressed'],
           '@media (pointer: coarse)': 'transparent',
@@ -409,6 +411,9 @@ export function RadioListItem({
     <Item
       ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
+      // A mouse's press paints through the controller too, so it fades on
+      // release as a finger's does.
+      {...pressFinePointerProps(!isDisabled)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
       // hover area) to the radio input. The input stays the option's sole

@@ -43,6 +43,7 @@ import {
   PRESS_SLOP_PX,
 } from './pressGesture';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
+import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -268,6 +269,101 @@ describe('the press reaches the surface the finger landed on', () => {
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
     expect(pressedRow()).toBe(-1);
+  });
+
+  it('paints a mouse press at once on a surface that declares the fine-pointer press, and fades it on release', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
+      rows[0].setAttribute(name, value);
+    }
+    // No delay, though the row sits in a scroller: a mouse press is not a
+    // scroll.
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[0], 'pointerup', 10, 10, 'mouse');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    // A surface that declares nothing keeps `:active`.
+    press(rows[1], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('leaves a right click to CSS on a fine-pointer surface, and a link nested in it takes its own press for every pointer', () => {
+    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
+      rows[0].setAttribute(name, value);
+    }
+    const rightClick = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.assign(rightClick, {
+      button: 2,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+    });
+    rows[0].dispatchEvent(rightClick);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    // The surface's activator comes first, as a RadioList row's radio does.
+    rows[0].appendChild(document.createElement('input'));
+    const link = document.createElement('a');
+    link.href = '#more';
+    const text = document.createElement('span');
+    link.appendChild(text);
+    rows[0].appendChild(link);
+    press(text, 'pointerdown', 10, 10, 'mouse');
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    // A finger on that link leaves the surface at rest too.
+    press(text, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends a mouse press on a fine-pointer surface at once on release under Reduce Motion', () => {
+    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
+      rows[0].setAttribute(name, value);
+    }
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      ...matchMedia(query),
+      matches:
+        query.includes('prefers-reduced-motion: reduce') ||
+        matchMedia(query).matches,
+    });
+    try {
+      press(rows[0], 'pointerdown', 10, 10, 'mouse');
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+      press(rows[0], 'pointerup', 10, 10, 'mouse');
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
+  it('presses at once for a pen on a fine-pointer surface, in a scroller too, and not for its barrel button', () => {
+    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
+      rows[0].setAttribute(name, value);
+    }
+    // A finger in the scroller waits out its scroll first.
+    press(rows[1], 'pointerdown', 10, 10, 'pen');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(rows[1], 'pointercancel', 10, 10, 'pen');
+    press(rows[0], 'pointerdown', 10, 10, 'pen');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[0], 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(PRESS_FADE_MS * 4);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    const barrel = new Event('pointerdown', {bubbles: true, cancelable: true});
+    Object.assign(barrel, {
+      button: 2,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'pen',
+    });
+    rows[0].dispatchEvent(barrel);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
   it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {

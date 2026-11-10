@@ -73,14 +73,16 @@ describe('the shipped RadioListItem mouse press', () => {
     ).toEqual([]);
   });
 
-  it('keeps the nested-control exclusion on the row itself', async () => {
+  it('keeps the nested-control exclusion on the row itself, and leaves a press the controller paints to its image', async () => {
     const css = await compiledCss('RadioListItem.tsx');
     const press = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match =>
       match[2].includes('--_radio-row-press:'),
     );
     expect(press.length).toBeGreaterThan(0);
     for (const [, selector] of press) {
-      expect(selector).toMatch(/:active:not\(:has\(a:active/);
+      expect(selector).toMatch(
+        /:active:not\(\[data-astryx-press="on"\],\s*\[data-astryx-press="fading"\]\):not\(:has\(a:active/,
+      );
       expect(selector).not.toMatch(/ \*/);
     }
   });
