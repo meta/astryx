@@ -1398,6 +1398,11 @@
       "aliases": []
     },
     {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
+      "aliases": []
+    },
+    {
       "name": "example-blockquote-testimonials",
       "path": "examples/blockquote/testimonials",
       "aliases": []
@@ -2374,6 +2379,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3777,6 +3787,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -4134,6 +4149,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
