@@ -35,6 +35,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {currentGesture} from '../Layer/gestureCounter';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {createModuleLoader} from '../utils/moduleLoader';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -73,8 +74,8 @@ function MenuUnavailable({onUnavailable}: LazyMenuProps): ReactNode {
   return null;
 }
 
-// React.lazy keeps a rejection, so a failed load resolves to MenuUnavailable
-// instead of throwing, and later renders get a new lazy that loads again.
+// React.lazy keeps a rejection. A failed load resolves to MenuUnavailable
+// instead of throwing. A cell mounted later gets a new lazy that loads again.
 function createLazyTableContextMenu() {
   return lazy(async () => {
     try {
@@ -99,26 +100,29 @@ type HeldInvocation = {
   | {kind: 'long-press'; point: {x: number; y: number}}
 );
 
-// One hold serves all cells. A later invocation replaces it, as a second
-// press closes the first menu after the load.
-let heldInvocation: HeldInvocation | null = null;
+// One hold serves all cells, in every copy of Core on the page. A later
+// invocation replaces it, as a second press closes the first menu after the
+// load.
+const hold = realmValue(sharedKey('table/context-menu-hold', 1), () => ({
+  current: null as HeldInvocation | null,
+}));
 
 function holdInvocation(held: HeldInvocation): void {
-  heldInvocation = held;
+  hold.current = held;
 }
 
 function dropHeldInvocation(owner: object): void {
-  if (heldInvocation?.owner === owner) {
-    heldInvocation = null;
+  if (hold.current?.owner === owner) {
+    hold.current = null;
   }
 }
 
 function takeHeldInvocation(owner: object): HeldInvocation | null {
-  const held = heldInvocation;
+  const held = hold.current;
   if (held?.owner !== owner) {
     return null;
   }
-  heldInvocation = null;
+  hold.current = null;
   return held;
 }
 
