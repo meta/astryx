@@ -6,11 +6,12 @@
  *   (Chromium CDP / WebKit's input command) and the interaction harness
  * @output Interaction and animation proofs for dragging the sheet to a detent.
  *   The drag follows the finger, and a slow release settles on the nearest
- *   detent. A flick dismisses. A softer flick lands on the half detent, also
- *   when one early move arrives late. The settle lands on the detent, its
- *   sampled curve recorded. It keeps advancing every frame through a blocked
- *   main thread, and does no Layout or Paint per frame. A storyboard shows the
- *   drag and the settle.
+ *   detent. A flick dismisses. Under Reduce Motion a drag that dismisses
+ *   fades the sheet out where the finger left it. A softer flick lands on the
+ *   half detent, also when one early move arrives late. The settle lands on
+ *   the detent, its sampled curve recorded. It keeps advancing every frame
+ *   through a blocked main thread, and does no Layout or Paint per frame. A
+ *   storyboard shows the drag and the settle.
  * @position The exemplar for `*.interaction.browser.spec.ts`: component lanes
  *   copy this shape. Each test names the instrument it uses from
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
@@ -48,9 +49,11 @@ import {
   markElement,
   openStory,
   readLongTasks,
+  readRelease,
   releaseAnimations,
   releaseVelocity,
   sampleCurve,
+  sampleRects,
   startBusyControl,
   startScreencast,
   thawPage,
@@ -66,20 +69,125 @@ import {
   waitForAnimation,
   waitForRest,
   writeEvidence,
+  type PlayedEvent,
   type TouchDriver,
+  type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {resolveSnapPoint} from '../../motion/resolveSnapPoint';
+import {sheet as uikitSheet} from '../../motion/uikit/sheet';
 
 const storybook = withStorybook(test);
 
-// How far a flick's release, as WebKit stamps its touches on arrival, may
-// stray from the script's before the play fails by name. Each keeps the
-// release where the test's landing holds.
-// 1,200 px/s from tall: the script reads 1,225. It lands on half from the
-// flick speed, 1,008, up to 2,048, where its projection passes half.
-const HALF_FLICK_TOLERANCE = 0.17;
-// 2,000 px/s from tall, 160 px of travel: the 0.1 s projection passes half
-// above 1,409 px/s.
+// How far the dismissing flick's release, as WebKit stamps its touches on
+// arrival, may stray from the script's before the play fails by name. 2,000
+// px/s from tall, 160 px of travel: the 0.1 s projection passes half above
+// 1,409 px/s, so the sheet dismisses.
 const DISMISS_FLICK_TOLERANCE = 0.29;
+
+// Core counts a release as a flick only after the drag moved more than this,
+// px.
+// SYNC: Keep equal to `DRAG_PROMOTION_SLOP` in ../useSheetGestures.ts.
+const DRAG_PROMOTION_SLOP_PX = 8;
+
+/** A downward release from tall, its positions in px below tall. */
+interface DownwardRelease {
+  /** Where the finger lets go. */
+  readonly travel: number;
+  /** The half detent. */
+  readonly half: number;
+  /** The dismissed position: the sheet's height on screen at tall. */
+  readonly closed: number;
+}
+
+const POSITIONS = ['tall', 'half', 'the dismissed position'] as const;
+
+/**
+ * Where Core's release rule lands a downward touch release from tall at
+ * `speed`, px/s. It calls `resolveSnapPoint` with the arguments
+ * `useSheetGestures` passes for a touch release.
+ */
+function landingOf(
+  speed: number,
+  {travel, half, closed}: DownwardRelease,
+): (typeof POSITIONS)[number] {
+  const {fastSpeed, minProjectionSpeed, projectionSeconds, detentTolerance} =
+    uikitSheet.release;
+  const {index} = resolveSnapPoint({
+    points: [0, half, closed],
+    position: travel,
+    velocity: speed,
+    flickThreshold:
+      travel > DRAG_PROMOTION_SLOP_PX ? fastSpeed : Number.POSITIVE_INFINITY,
+    tolerance: detentTolerance,
+    flickPastProjection: true,
+    projection: {seconds: projectionSeconds, minSpeed: minProjectionSpeed},
+    start: 0,
+  });
+  return POSITIONS[index];
+}
+
+/** How far down the script's finger travels before it lifts, in whole px. */
+function travelOf(script: TouchScript): number {
+  const ys = toTouchEvents(script)
+    .filter(step => step.type === 'touchStart' || step.type === 'touchMove')
+    .map(step => Math.round(step.changed[0].y));
+  return ys[ys.length - 1] - ys[0];
+}
+
+/**
+ * The release the page read, px/s, as Core's velocity tracker reads it. In
+ * WebKit the touch driver reads it from the page's own event stamps. A page
+ * whose listeners take a few ms reads a slower flick than the script's. In
+ * Chromium the page reads the script's stamps, so the release is the
+ * script's.
+ */
+function pageRelease(
+  script: TouchScript,
+  played: ReadonlyArray<PlayedEvent>,
+): number {
+  const read = played[played.length - 1]?.release;
+  if (read != null) {
+    return read.pagePxPerS;
+  }
+  const steps = toTouchEvents(script);
+  const reading = readRelease(
+    steps,
+    steps.map(step => ({stamp: step.t, handledAt: Number.NaN})),
+  );
+  return reading?.scriptPxPerS ?? Number.NaN;
+}
+
+/**
+ * Fails by name unless Core's release rule lands the release the page read
+ * on half.
+ */
+function expectLandsOnHalf(speed: number, release: DownwardRelease) {
+  const landing = landingOf(speed, release);
+  if (landing !== 'half') {
+    throw new Error(
+      `the page read a release of ${speed.toFixed(0)} px/s, which Core's release rule lands on ${landing}, not half`,
+    );
+  }
+}
+
+/**
+ * The slowest release, in whole px/s, from which Core's release rule lands on
+ * half for every speed up to `fastest`. The play takes it as a boundary. A
+ * page that read the release below it did not receive the soft flick. The
+ * play then fails by name, before the proof judges the landing.
+ */
+function halfFrom(fastest: number, release: DownwardRelease): number {
+  if (landingOf(fastest, release) !== 'half') {
+    throw new Error(
+      `the script's ${fastest.toFixed(0)} px/s lands on ${landingOf(fastest, release)}, so it proves no soft flick`,
+    );
+  }
+  let slowest = Math.floor(fastest);
+  while (slowest > 0 && landingOf(slowest - 1, release) === 'half') {
+    slowest -= 1;
+  }
+  return slowest;
+}
 
 // The settle's timing, from the theme the story renders in: `--ease-standard`
 // is the default cubic-bezier(0.24, 1, 0.4, 1), and `--duration-medium` is the
@@ -93,6 +201,8 @@ interface OpenSheet {
   /** Top of the sheet at its tall detent and at the half-viewport detent, CSS px. */
   tallTop: number;
   halfTop: number;
+  /** The viewport's height: a dismissed sheet's top, CSS px. */
+  screenHeight: number;
   handle: {x: number; y: number};
 }
 
@@ -126,6 +236,7 @@ async function openSheet(page: Page): Promise<OpenSheet> {
     tallTop: rect.y,
     // snapPoints={[0.5]}: the extra stop shows half the viewport.
     halfTop: viewport.height * 0.5,
+    screenHeight: viewport.height,
     handle: {x: rect.x + rect.width / 2, y: rect.y + 12},
   };
 }
@@ -204,10 +315,88 @@ test('a downward flick dismisses the sheet', async ({page}) => {
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
 });
 
+// How far a frame may move the sheet while a reduced-motion close fades it
+// out, CSS px: layout rounding, not motion.
+const IN_PLACE_PX = 2;
+
+test('under Reduce Motion a drag that dismisses fades the sheet out where the finger left it', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver, sheet, tallTop, screenHeight, handle} = await openSheet(page);
+  // Past the dismiss point, halfway from half to closed. The finger rests
+  // before the lift, so the release projects nothing and closes the sheet.
+  const script = slowDragTo(handle, Math.round(screenHeight * 0.85 - handle.y));
+  // Long enough to cover the play and the fade on a slow runner.
+  const sampled = sampleRects(sheet, 4_000);
+  const played = await driver.play(script);
+  const samples = await sampled;
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
+  const lift = played.find(event => event.type === 'touchEnd');
+  if (lift == null) {
+    throw new Error('the play has no lift');
+  }
+  // The frames from the lift on while the sheet still shows. WebKit's input
+  // command returns late, so the lift's dispatch bounds them. A frame before
+  // the lift can trail the last move, so the first of them is the release.
+  const closing = samples.filter(
+    s => s.t > lift.dispatchedAt && s.box != null && s.box.height > 0,
+  );
+  const released = closing[0]?.box;
+  if (released == null) {
+    throw new Error('no frame from the lift on');
+  }
+  expect(
+    released.y,
+    `the first frame from the lift shows the sheet ${Math.round(released.y - tallTop)} px below rest; the close did not hold it where the finger left it`,
+  ).toBeGreaterThan(tallTop + 100);
+  expect(
+    closing.some(s => s.opacity < 1),
+    'the close ran no fade under Reduce Motion',
+  ).toBe(true);
+  const moved = Math.max(
+    ...closing.map(s => Math.abs((s.box?.y ?? released.y) - released.y)),
+  );
+  const trace = closing.map(s => Math.round(s.box?.y ?? NaN)).join(' ');
+  expect(
+    moved,
+    `under Reduce Motion the close moved the sheet ${Math.round(moved)} px from where the finger left it (top ${Math.round(released.y)} px, rest ${Math.round(tallTop)} px) as it faded; it fades out in place (tops: ${trace})`,
+  ).toBeLessThanOrEqual(IN_PLACE_PX);
+  // A reopen paints the sheet at rest from its first frame: the close leaves
+  // no offset behind. A CSS locator reaches the sheet while it is hidden.
+  const trigger = page.getByRole('button', {name: 'Open nearby places'});
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  const reopening = sampleRects(
+    page
+      .locator('dialog[aria-label="Nearby places"] .astryx-bottom-sheet')
+      .first(),
+    1_500,
+  );
+  await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+  const shown = (await reopening).filter(
+    s => s.box != null && s.box.height > 0,
+  );
+  expect(shown.length, 'the reopen showed no frame').toBeGreaterThan(0);
+  const strayed = Math.max(
+    ...shown.map(s => Math.abs((s.box?.y ?? tallTop) - tallTop)),
+  );
+  const reopenTrace = shown.map(s => Math.round(s.box?.y ?? NaN)).join(' ');
+  expect(
+    strayed,
+    `the reopen painted the sheet ${Math.round(strayed)} px from its rest (top ${Math.round(tallTop)} px); the close left its offset behind (tops: ${reopenTrace})`,
+  ).toBeLessThanOrEqual(IN_PLACE_PX);
+  await waitForRest(sheet);
+  expect(await sheetTop(sheet)).toBeCloseTo(tallTop, 0);
+});
+
 test('a softer downward flick from the tall detent lands on the half detent', async ({
   page,
 }) => {
-  const {driver, sheet, handle, halfTop} = await openSheet(page);
+  const {driver, sheet, handle, tallTop, halfTop, screenHeight} =
+    await openSheet(page);
   // 1,200 px/s: a flick, whose projection stops short of the half detent, so
   // it goes one stop.
   const script = flick(handle, {
@@ -216,10 +405,20 @@ test('a softer downward flick from the tall detent lands on the half detent', as
     hz: 120,
   });
   expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
-  await driver.play(script, {
+  const release = {
+    travel: travelOf(script),
+    half: halfTop - tallTop,
+    closed: screenHeight - tallTop,
+  };
+  // Below the speed where the landing leaves half, the page did not receive
+  // the soft flick. The play then fails by name.
+  const played = await driver.play(script, {
     pacing: 'spacing',
-    releaseTolerance: HALF_FLICK_TOLERANCE,
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
   });
+  // The release the page read decides the landing, so the proof asks Core's
+  // release rule where that release lands.
+  expectLandsOnHalf(pageRelease(script, played), release);
   await waitForRest(sheet);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
@@ -233,27 +432,55 @@ test('a softer flick with one early move 70 ms late still lands on the half dete
     browserName !== 'webkit',
     'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
   );
-  const {driver, sheet, handle, halfTop} = await openSheet(page);
+  const {driver, sheet, handle, tallTop, halfTop, screenHeight} =
+    await openSheet(page);
   const script = flick(handle, {
     velocity: {x: 0, y: 1200},
     durationMs: 80,
     hz: 120,
   });
+  const release = {
+    travel: travelOf(script),
+    half: halfTop - tallTop,
+    closed: screenHeight - tallTop,
+  };
   // The move after this step reaches the page 70 ms late, as a stalled
   // dispatch delivers it. The last two moves keep their spacing.
   const late = toTouchEvents(script).length - 5;
-  await driver.play(script, {
+  const played = await driver.play(script, {
     pacing: 'spacing',
-    releaseTolerance: HALF_FLICK_TOLERANCE,
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
     onEvent: async (_, index) => {
       if (index === late) {
         await new Promise(resolve => setTimeout(resolve, 70));
       }
     },
   });
+  expectLandsOnHalf(pageRelease(script, played), release);
   await waitForRest(sheet);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
+test("the release check asks Core's rule with the sheet's arguments", () => {
+  const long = {travel: 96, half: 300, closed: 650};
+  // Below the flick speed the projection decides: 126 px stays nearer tall,
+  // 186 px nearer half.
+  expect(landingOf(300, long)).toBe('tall');
+  expect(landingOf(900, long)).toBe('half');
+  // A flick goes at least to half, and on once its projection passes half.
+  expect(landingOf(1500, long)).toBe('half');
+  expect(landingOf(3000, long)).toBe('the dismissed position');
+  // 32 px: a flick lands on half where its projection, 142 px, would not.
+  const short = {travel: 32, half: 300, closed: 650};
+  expect(landingOf(900, short)).toBe('tall');
+  expect(landingOf(1100, short)).toBe('half');
+  // 8 px is within Core's drag slop, so 1,100 px/s is no flick there.
+  expect(landingOf(1100, {travel: 8, half: 300, closed: 650})).toBe('tall');
+  // The boundary a soft flick's play takes: from 540 px/s the projection
+  // reaches nearer half. On 32 px only a flick, from 1,008 px/s, lands there.
+  expect(halfFrom(1200, long)).toBe(540);
+  expect(halfFrom(1100, short)).toBe(1008);
 });
 
 test('the settle lands on the detent, its curve recorded frame by frame', async ({

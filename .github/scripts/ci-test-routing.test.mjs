@@ -517,6 +517,7 @@ describe('ci.yml RTL package sharding', () => {
     );
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
+        'a11y-dependent-audits-plan',
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
@@ -761,8 +762,10 @@ describe('full component typechecks', () => {
     name => {
       const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
       expect(docs).toBe('tsc --project tsconfig.docs.json');
+      // Core's project runs in several programs (scripts/typecheck-sharded.mjs);
+      // each covers its whole tsconfig.json.
       expect(typecheck).toMatch(
-        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+        /^(tsc (--project tsconfig\.json )?--noEmit|node \.\.\/\.\.\/scripts\/typecheck-sharded\.mjs --project tsconfig\.json --shards \d+) && pnpm typecheck:docs$/,
       );
     },
   );
@@ -881,14 +884,16 @@ describe('ci.yml interaction proofs', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&
         candidate.with?.path === undefined,
     );
+    // Main's nightly full run checks the commit it runs on.
     expect(checkout?.with?.ref).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     const run = step('Run interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');

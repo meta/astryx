@@ -405,6 +405,35 @@ describe('Dialog', () => {
     );
   });
 
+  it('focuses the title of a header that mounts with the opening commit only after the dialog is modal', () => {
+    const order: string[] = [];
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      order.push(`showModal open=${this.open}`);
+      showModal.call(this);
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.tagName === 'H2') {
+          order.push(`title focus open=${this.closest('dialog')?.open}`);
+        }
+      });
+    function Harness({open}: {open: boolean}) {
+      return (
+        <Dialog isOpen={open} onOpenChange={() => {}}>
+          {open ? <DialogHeader title="Review" /> : null}
+        </Dialog>
+      );
+    }
+    const harness = render(<Harness open={false} />);
+    harness.rerender(<Harness open />);
+    focus.mockRestore();
+    expect(order).toEqual(['showModal open=false', 'title focus open=true']);
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
@@ -449,6 +478,65 @@ describe('Dialog', () => {
     // (now unmounted) title.
     harness.rerender(<Harness open={false} onOpenChange={setOpen} />);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('keeps the opener when StrictMode re-runs the capture on a dialog first mounted open', () => {
+    // StrictMode simulates an unmount/remount after the first commit, which
+    // re-runs the layout effect AFTER DialogHeader's own passive effect has
+    // already focused the title. Capturing on every run would take the title
+    // as the opener, and closing would return focus to a node about to unmount.
+    const opener = document.createElement('button');
+    opener.type = 'button';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const {rerender} = render(
+      <StrictMode>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader title="Review" />
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(screen.getByText('Review'));
+
+    rerender(
+      <StrictMode>
+        <Dialog isOpen={false} onOpenChange={() => {}}>
+          {null}
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('captures a fresh opener on each open, not only the first', () => {
+    const first = document.createElement('button');
+    const second = document.createElement('button');
+    for (const b of [first, second]) {
+      b.type = 'button';
+      document.body.appendChild(b);
+    }
+    // Content mounts only while open, as it does in the other opener test.
+    const dialog = (isOpen: boolean) => (
+      <Dialog isOpen={isOpen} onOpenChange={() => {}}>
+        {isOpen ? <DialogHeader title="Review" /> : null}
+      </Dialog>
+    );
+
+    first.focus();
+    const {rerender} = render(dialog(false));
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(first);
+
+    second.focus();
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(second);
+
+    first.remove();
+    second.remove();
   });
 
   it('renders when isOpen is true', () => {

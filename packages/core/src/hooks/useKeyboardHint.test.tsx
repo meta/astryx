@@ -67,7 +67,8 @@ describe('useKeyboardHint', () => {
     const {container} = render(<TestHint />);
     const hint = container.querySelector('[popover="manual"]') as HTMLElement;
 
-    expect(hint.className).toContain('useKeyboardHint__styles.hint');
+    // The surface of the anchored hint Core's keyboard hints share.
+    expect(hint.className).toContain('anchoredHint__styles.hint');
   });
 
   it('renders the "to navigate" label from the i18n catalog', () => {

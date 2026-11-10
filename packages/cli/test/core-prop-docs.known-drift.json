@@ -21,8 +21,6 @@
   "src/DropdownMenu/DropdownMenuCheckboxItem.doc.mjs DropdownMenuCheckboxItem.value required_mismatch",
   "src/FieldStatus/FieldStatus.doc.mjs FieldStatus.variant type_mismatch",
   "src/HoverCard/HoverCard.doc.mjs HoverCard.children required_mismatch",
-  "src/Layout/LayoutFooter.doc.mjs LayoutFooter.padding not_in_doc",
-  "src/Layout/LayoutHeader.doc.mjs LayoutHeader.padding not_in_doc",
   "src/Link/Link.doc.mjs Link.type not_in_doc",
   "src/List/List.doc.mjs List.children required_mismatch",
   "src/MobileNav/MobileNav.doc.mjs MobileNav.label not_in_doc",
