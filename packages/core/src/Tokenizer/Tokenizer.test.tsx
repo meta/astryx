@@ -1357,6 +1357,48 @@ describe('Tokenizer', () => {
       expect(bootstrap).toHaveBeenCalledTimes(1);
     });
 
+    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+      const user = userEvent.setup();
+      function Debounced() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            debounceMs={300}
+          />
+        );
+      }
+      render(<Debounced />);
+      const input = await openFocusList(user);
+
+      await user.type(input, 'i');
+      await waitFor(() => {
+        expect(option('Diana')).toBeInTheDocument();
+      });
+      // Clearing the text starts a focus-list reload that waits for the
+      // debounce. Enter acts before it runs.
+      await user.keyboard('{Backspace}{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 400));
+      });
+      await user.keyboard('{ArrowDown}');
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      expect(option('Bob')).toBeInTheDocument();
+      expect(option('Diana')).not.toBeInTheDocument();
+    });
+
     it('keeps the list open through picks in a row by keyboard', async () => {
       const user = userEvent.setup();
       const {source} = countingSource();

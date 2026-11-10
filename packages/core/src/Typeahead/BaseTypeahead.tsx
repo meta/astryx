@@ -1612,6 +1612,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         hasEntriesOnFocus &&
         query === '' &&
         !isLoading &&
+        searchTimeoutRef.current == null &&
         !isDialogMenu &&
         popover.isOpen &&
         resultsGenRef.current === searchGenRef.current &&
