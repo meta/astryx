@@ -24,6 +24,12 @@ import {contextMenu} from '../motion/uikit/contextMenu';
 const {commitMs, menuDisplayMs, allowableMovement} = contextMenu.press;
 
 /**
+ * How long the finger's moves may pause before the menu stops waiting for
+ * late ones, in ms: three frames at 60 Hz.
+ */
+const LATE_MOVE_GAP_MS = 50;
+
+/**
  * The foundation's own press timer, which this recognizer never lets fire:
  * the hold below commits instead. It is longer than any hold, and under the
  * window timer's 2^31 - 1 ms limit.
@@ -85,8 +91,16 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   private pressTouchId: number | null = null;
   /** Where the finger landed, while its hold runs. The drift counts from here. */
   private holdFrom: {x: number; y: number} | null = null;
+  /**
+   * The held finger's latest pointermove: when it came, on the event clock,
+   * and when the page got it.
+   */
+  private latestMove: {time: number; arrivedAt: number} | null = null;
   /** When the finger landed, on the arena's clock. The deadlines count from it. */
   private holdStart = 0;
+  /** The menu's moment passed while the finger's moves still came late. */
+  private isMenuWaiting = false;
+  private moveWait: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: ContextMenuPressRecognizerOptions = {}) {
     super({
@@ -145,6 +159,18 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   }
 
   /**
+   * ContextMenu's touch layer reports each pointermove of the held finger:
+   * the time it came, on the event clock. A move from the menu's moment on
+   * means no late move can still come before it.
+   */
+  followMove(time: number): void {
+    this.latestMove = {time, arrivedAt: performance.now()};
+    if (this.isMenuWaiting && time >= this.holdStart + menuDisplayMs) {
+      this.showMenu();
+    }
+  }
+
+  /**
    * Follows the finger during its hold. A drift past `allowableMovement` on
    * either axis ends the hold. Returns whether the hold still runs.
    */
@@ -165,7 +191,16 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
 
   private endHold(): void {
     this.clearTimer();
+    this.stopMoveWait();
     this.holdFrom = null;
+  }
+
+  private stopMoveWait(): void {
+    this.isMenuWaiting = false;
+    if (this.moveWait != null) {
+      clearTimeout(this.moveWait);
+      this.moveWait = null;
+    }
   }
 
   /** The hold's commit claims the finger, then waits for the menu's moment. */
@@ -186,12 +221,29 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
     }
   }
 
-  /** The finger is still down at the menu's moment: the menu is due. */
+  /**
+   * The finger is still down at the menu's moment: the menu is due. Under
+   * load, the finger's moves can reach the page after that moment, though
+   * they came before it. While they still come, the menu waits for them, so
+   * a drift in them still ends the hold.
+   */
   private showMenu(): void {
-    if (this.holdFrom != null && isActive(this.state)) {
-      this.isMenuDue = true;
-      this.setState('changed');
+    this.stopMoveWait();
+    if (this.holdFrom == null || !isActive(this.state)) {
+      return;
     }
+    const move = this.latestMove;
+    if (
+      move != null &&
+      move.time < this.holdStart + menuDisplayMs &&
+      performance.now() - move.arrivedAt < LATE_MOVE_GAP_MS
+    ) {
+      this.isMenuWaiting = true;
+      this.moveWait = setTimeout(() => this.showMenu(), LATE_MOVE_GAP_MS);
+      return;
+    }
+    this.isMenuDue = true;
+    this.setState('changed');
   }
 
   protected override reset(): void {
@@ -199,6 +251,7 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
     this.endHold();
     this.pressTouchId = null;
     this.press = null;
+    this.latestMove = null;
     this.isMenuDue = false;
   }
 }

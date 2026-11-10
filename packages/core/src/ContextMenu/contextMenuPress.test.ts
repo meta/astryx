@@ -97,6 +97,34 @@ describe('ContextMenuPressRecognizer', () => {
     expect(press.isMenuDue).toBe(false);
   });
 
+  it('waits at the menu’s moment for moves that came before it but reach the page late, and a drift in them cancels', () => {
+    const {harness, press, states} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    // The page has just handled a move from 450 ms: more may still come.
+    press.followMove(450);
+    harness.advance(DISPLAY);
+    expect(press.isMenuDue).toBe(false);
+    // A late move from before the moment, 14 px over: the hold ends.
+    finger.move(14, 0, DISPLAY + 10);
+    expect(states).toEqual([`began@${COMMIT}`, `cancelled@${DISPLAY + 10}`]);
+    expect(press.isMenuDue).toBe(false);
+    finger.up(DISPLAY + 300);
+  });
+
+  it('shows the menu once a move from its moment on reaches the page', () => {
+    const {harness, press, states} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    press.followMove(450);
+    harness.advance(DISPLAY);
+    expect(press.isMenuDue).toBe(false);
+    press.followMove(DISPLAY + 5);
+    expect(press.isMenuDue).toBe(true);
+    expect(states.at(-1)).toBe(`changed@${DISPLAY}`);
+    finger.up(DISPLAY + 300);
+  });
+
   it('lets the finger move freely once the menu is due', () => {
     const {harness, press, states} = setup();
     const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});

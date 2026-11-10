@@ -1361,6 +1361,41 @@ test('a finger that lifts before 400 ms makes a plain tap: one click and no menu
   expect(await clicks()).toBe(1);
 });
 
+/** Two frames on the page: a click the lift makes has reached it by then. */
+const afterTwoFrames = async (page: Page) =>
+  page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+
+test('a slow drift past 11.5 px late in the hold cancels it: no menu and no click (AST-094 FR21)', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  const clicks = await countTriggerClicks(page);
+  // The finger rests past the commit at 400 ms, then drifts 14 px in 250 ms.
+  // It crosses 11.5 px at about 655 ms, before the menu's moment, and it
+  // lifts well after that moment.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 14, y: center.y},
+      {holdMs: 450, durationMs: 250, restMs: 400},
+    ),
+  );
+  await touchStartedAt(page);
+  await afterTwoFrames(page);
+  expect(await menuShownAt(page)).toBeNull();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  // Only Chromium makes a click from a scripted touch, so only it can show
+  // that none came.
+  if (driver.drivesNativeGestures) {
+    expect(await clicks()).toBe(0);
+  }
+});
+
 test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({
   page,
 }) => {
