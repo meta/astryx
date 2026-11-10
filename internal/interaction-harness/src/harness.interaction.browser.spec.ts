@@ -265,6 +265,43 @@ async function waitForCastFrames(
   }
 }
 
+/**
+ * Starves the page across a `waitForRest` deadline. A long task runs from
+ * 250 ms before the deadline to `endsAfterMs` past it, timed from the wait's
+ * first read of `box`. A negative `endsAfterMs` ends it before the deadline.
+ * The first frame after the task comes before the wait's own deadline timer
+ * looks for starvation.
+ */
+async function starveAcrossDeadline(
+  box: ReturnType<Page['locator']>,
+  timeoutMs: number,
+  endsAfterMs = 5,
+) {
+  await box.evaluate(
+    (el, [ms, after]) => {
+      const read = window.getComputedStyle;
+      let isArmed = true;
+      window.getComputedStyle = function (
+        this: Window,
+        element: Element,
+        pseudo?: string | null,
+      ) {
+        if (isArmed && element === el) {
+          isArmed = false;
+          const from = performance.now();
+          setTimeout(() => {
+            while (performance.now() < from + ms + after) {
+              // the page's main thread is busy
+            }
+          }, ms - 250);
+        }
+        return read.call(this, element, pseudo);
+      } as typeof window.getComputedStyle;
+    },
+    [timeoutMs, endsAfterMs] as const,
+  );
+}
+
 test.describe('touch input', () => {
   test('the page receives trusted touches and pointers at the scripted positions and times', async ({
     page,
@@ -2416,7 +2453,8 @@ test.describe('frame evidence', () => {
   }) => {
     await page.setContent('<!doctype html><body></body>');
     // A coarsened clock with jitter, as WebKit's: its second reading is one
-    // ms behind its first, then it runs on.
+    // ms behind its first, then it runs on. So is its time origin, which
+    // WebKit floors to the ms.
     await page.evaluate(() => {
       const real = performance.now.bind(performance);
       let reads = 0;
@@ -2425,6 +2463,15 @@ test.describe('frame evidence', () => {
         const t = Math.floor(real());
         return reads === 2 ? t - 1 : t;
       };
+      const origin = Math.floor(performance.timeOrigin);
+      let originReads = 0;
+      Object.defineProperty(performance, 'timeOrigin', {
+        configurable: true,
+        get: () => {
+          originReads += 1;
+          return originReads === 2 ? origin - 1 : origin;
+        },
+      });
     });
     const busy = await blockMainThread(page, 50);
     expect(busy.to - busy.from).toBeGreaterThan(50 - 0.01);
@@ -2670,6 +2717,139 @@ test.describe('frame evidence', () => {
     expect(numbers.frames).toBeLessThan(3);
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
+  test('waitForRest whose frame past the deadline shows motion after a starved gap fails by name, with the last move', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // A move that ends 80 ms past the deadline: the gap outlasts what is left.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 580},
+      ),
+    );
+    await starveAcrossDeadline(box, 500);
+    const outcome = await waitForRest(box, {timeout: 500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(
+      /the element still moved at its last frame \(.+ → .+\)/,
+    );
+  });
+
+  test('waitForRest on an endless animation still says it is moving, across a starved gap too', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // Its curve never ends, so no gap explains the motion.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 400, iterations: Infinity},
+      ),
+    );
+    await starveAcrossDeadline(box, 500);
+    await expect(waitForRest(box, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+  });
+
+  test('waitForRest on endless script motion across a starved gap fails by name, and its message gives the last move', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // No animation drives it, so only the message tells it from a stop.
+    await box.evaluate(el => {
+      let x = 0;
+      const step = () => {
+        x = (x + 1) % 100;
+        (el as HTMLElement).style.transform = `translateX(${x}px)`;
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    await starveAcrossDeadline(box, 500);
+    const outcome = await waitForRest(box, {timeout: 500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const [, from, to] =
+      /the element still moved at its last frame \((.+?) → (.+?)\), where/.exec(
+        (outcome as Error).message,
+      ) ?? [];
+    expect(from).toBeDefined();
+    expect(to).not.toBe(from);
+  });
+
+  test('waitForRest on an element that stops in a starved gap ending just before the deadline fails by name', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // The move ends inside the gap, and the gap ends 20 ms before the
+    // deadline. Ten still frames cannot come in that time at any frame rate.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 400},
+      ),
+    );
+    await starveAcrossDeadline(box, 500, -20);
+    const outcome = await waitForRest(box, {timeout: 500, frames: 10}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+  });
+
+  test('waitForRest after a page freeze reads each curve on the page clock, so a long curve still says it is moving', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    // A thaw leaves the page clock behind the real one by the frozen time.
+    await freezePage(page);
+    await page.waitForTimeout(1500);
+    await thawPage(page);
+    // Its curve outlasts the starved gap, so the gap explains nothing.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 1000},
+      ),
+    );
+    await starveAcrossDeadline(box, 500);
+    await expect(waitForRest(box, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({

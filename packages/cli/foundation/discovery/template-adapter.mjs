@@ -2100,8 +2100,8 @@ export function extractComponents(pagePath) {
  */
 export function componentsInSource(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
-  // Templates author bare component names post un-prefix migration
-  // (P2380608025), so the `XDS` prefix is optional. Anchoring on the `<`
+  // Templates author bare component names post un-prefix migration,
+  // so the `XDS` prefix is optional. Anchoring on the `<`
   // JSX-tag boundary keeps this precise (avoids matching imports/comments/
   // identifiers) while remaining prefix-agnostic.
   //
