@@ -486,6 +486,7 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/motion/uikit/longPress.ts',
       'packages/core/src/internal/touch.ts',
       'packages/core/src/utils/pressFeedback.ts',
+      'packages/core/src/utils/pressFeedbackImports.test.ts',
       'packages/core/src/utils/pressGesture.ts',
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
@@ -559,8 +560,6 @@ describe('WebKit interaction proof routing', () => {
       'packages/themes/neutral/package.json',
       'docs/specs/AST-030/spec.md',
       '.github/workflows/release.yml',
-      // A unit test beside shared touch code puts nothing on a page.
-      'packages/core/src/utils/pressFeedbackImports.test.ts',
     ]) {
       expect(runs([untouched]), untouched).toBe(false);
     }

@@ -642,9 +642,11 @@ export function renderingFolders(importers, touched) {
  * The files each proof page loads through value imports, followed file by
  * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
  * The roots are the interaction specs and what their pages render: the
- * Storybook stories and Storybook's preview. A unit test, doc, record or
- * accessibility spec in a component folder puts nothing on a proof's page and
- * selects no proof, unless a root loads it; this map finds that case
+ * Storybook stories, Storybook's preview, and each fixture a spec bundles
+ * (a quoted path in the spec that names a listed file). A unit test, doc,
+ * record or
+ * accessibility spec in a component folder puts nothing on a proof's page
+ * and selects no proof, unless a root loads it; this map finds that case
  * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
  * read, so a caller runs every proof instead.
  * @param {{root: string, listed: string[], isProof: (file: string) => boolean}} options
@@ -667,16 +669,30 @@ export function proofImporters({root, listed, isProof}) {
       ? resolve(`packages/${match[1]}/src/${match[2] ?? 'index'}`)
       : null;
   };
+  // A spec bundles a fixture by path (`new URL('./fixture.ts', …)`,
+  // `bundleOf('fixture.ts')`): every quoted path beside it that names a
+  // listed source file counts as an import.
+  const QUOTED_PATH = /['"`]((?:\.{1,2}\/)?[\w./-]+\.[cm]?[jt]sx?)['"`]/g;
+  const bundledBy = (file, text) =>
+    [...text.matchAll(QUOTED_PATH)]
+      .map(match =>
+        resolve(
+          path.posix.normalize(
+            `${path.posix.dirname(file)}/${match[1].replace(/^(?!\.)/, './')}`,
+          ),
+        ),
+      )
+      .filter(Boolean);
   const imports = new Map();
   const importsOf = file => {
     if (!imports.has(file)) {
       const text = fs.readFileSync(path.join(root, file), 'utf8');
-      imports.set(
-        file,
-        valueImports(text)
+      imports.set(file, [
+        ...valueImports(text)
           .map(({specifier}) => targetOf(file, specifier))
           .filter(Boolean),
-      );
+        ...(isProof(file) ? bundledBy(file, text) : []),
+      ]);
     }
     return imports.get(file);
   };

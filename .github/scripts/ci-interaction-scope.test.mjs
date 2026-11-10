@@ -44,13 +44,9 @@ const NON_RUNTIME = [
   'packages/core/src/BottomSheet/BottomSheet.test.tsx',
   'packages/core/src/BottomSheet/BottomSheetCloseFocus.test.tsx',
   'packages/core/src/BottomSheet/BottomSheet.doc.mjs',
-  'packages/core/src/gestures/README.md',
-  // Under WebKit's shared touch paths, which before this ran its shared set.
-  'packages/core/src/gestures/__tests__/GestureHost.test.ts',
   // Accessibility specs, in and outside a `__tests__/` folder.
   'packages/core/src/Table/__tests__/TableFocusRing.a11y.chromium.spec.ts',
   'packages/core/src/Lightbox/LightboxKeyboard.a11y.browser.spec.ts',
-  'packages/lab/src/__tests__/ReorderGripPinchZoom.a11y.chromium.spec.ts',
 ];
 
 // Real files a proof's page or fixture loads.
@@ -64,6 +60,10 @@ const RUNTIME = [
   // Theme sources are shared infrastructure: a test there selects too.
   'packages/themes/neutral/src/neutralTheme.test.ts',
   'packages/core/src/theme/Theme.test.tsx',
+  // So are a component package's shared folders.
+  'packages/lab/src/__tests__/ReorderGripPinchZoom.a11y.chromium.spec.ts',
+  'packages/core/src/gestures/README.md',
+  'packages/core/src/gestures/__tests__/GestureHost.test.ts',
   // So is every package outside the component packages.
   'packages/native/src/contract/contracts.test.ts',
 ];
@@ -86,6 +86,8 @@ describe('the interaction scope', () => {
       it(`${lane}: a test at the root of a package outside the component packages still selects them`, () => {
         // WebKit's scope never covered a package's src root.
         expect(scope.test('packages/build/src/babel.test.mjs')).toBe(true);
+        // A component package's src root is shared too.
+        expect(scope.test('packages/charts/src/Chart.test.tsx')).toBe(true);
       });
 
     it(`${lane}: a changed interaction spec still selects them`, () => {
@@ -138,6 +140,32 @@ describe('a left-out file that a proof imports', () => {
     // So the scopes would leave out files this proof loads.
     for (const file of importers.keys())
       expect(SCOPES['Chromium proofs'].test(file), file).toBe(false);
+  });
+
+  it('is found through a fixture a proof bundles by path', () => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-imports-'));
+    const files = {
+      'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts':
+        "const entry = new URL('./sheetBundle.ts', import.meta.url);\nconst other = bundleOf('bare.ts');\n",
+      'packages/core/src/Sheet/__tests__/sheetBundle.ts':
+        "import {ease} from '../ease.test';\n",
+      'packages/core/src/Sheet/__tests__/bare.ts': '',
+      'packages/core/src/Sheet/ease.test.ts': '',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const importers = proofImporters({
+      root: tree,
+      listed: Object.keys(files),
+      isProof: isProofPage,
+    });
+    expect([...importers.keys()].sort()).toEqual([
+      'packages/core/src/Sheet/__tests__/bare.ts',
+      'packages/core/src/Sheet/__tests__/sheetBundle.ts',
+      'packages/core/src/Sheet/ease.test.ts',
+    ]);
   });
 
   it('is found through a story a proof opens', () => {
