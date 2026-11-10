@@ -696,6 +696,30 @@ describe('RadioList', () => {
       ]).toEqual([]);
     });
 
+    it('keeps a selected disabled option in one detached radio group', () => {
+      const {container} = render(
+        <form>
+          <RadioList
+            label="Preference"
+            htmlName="pref"
+            value="a"
+            onChange={() => {}}
+            isRequired>
+            <RadioListItem label="Option A" value="a" isDisabled />
+            <RadioListItem label="Option B" value="b" />
+          </RadioList>
+        </form>,
+      );
+      const form = container.querySelector('form')!;
+      const radios = container.querySelectorAll<HTMLInputElement>(
+        'input[type="radio"]',
+      );
+      expect(radios[0].form).toBeNull();
+      expect(radios[1].form).toBeNull();
+      expect([...new FormData(form).keys()]).toEqual([]);
+      expect(form.checkValidity()).toBe(true);
+    });
+
     it('keeps working as an isolated group when htmlName is omitted', () => {
       const {container} = render(
         <form>

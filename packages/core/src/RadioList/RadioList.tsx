@@ -23,6 +23,7 @@ import React, {
   useId,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -70,6 +71,19 @@ export const RadioListContext =
     null,
   );
 RadioListContext.displayName = 'RadioListContext';
+
+interface RadioListFormContextValue {
+  detachesFromForm: boolean;
+  holdSelectedDisabled: () => () => void;
+}
+
+export const RadioListFormContext =
+  createLayerScopedContext<RadioListFormContextValue | null>(
+    'RadioListFormContext',
+    1,
+    null,
+  );
+RadioListFormContext.displayName = 'RadioListFormContext';
 
 const styles = stylex.create({
   radiogroup: {
@@ -262,6 +276,19 @@ export function RadioList({
     isEnabled: showsDisabledMessage,
   });
 
+  const [selectedDisabledHolds, setSelectedDisabledHolds] = useState(0);
+  const holdSelectedDisabled = useCallback(() => {
+    setSelectedDisabledHolds(holds => holds + 1);
+    return () => setSelectedDisabledHolds(holds => holds - 1);
+  }, []);
+  const formContextValue = useMemo<RadioListFormContextValue>(
+    () => ({
+      detachesFromForm: isDisabled || selectedDisabledHolds > 0,
+      holdSelectedDisabled,
+    }),
+    [isDisabled, selectedDisabledHolds, holdSelectedDisabled],
+  );
+
   const contextValue = useMemo<RadioListContextValue>(
     () => ({
       name,
@@ -437,14 +464,16 @@ export function RadioList({
           controlStyle,
         )}>
         <RadioListContext value={contextValue}>
-          <RadioListReasonContext
-            value={
-              showsDisabledMessage
-                ? disabledMessageTooltip.describedBy
-                : undefined
-            }>
-            {children}
-          </RadioListReasonContext>
+          <RadioListFormContext value={formContextValue}>
+            <RadioListReasonContext
+              value={
+                showsDisabledMessage
+                  ? disabledMessageTooltip.describedBy
+                  : undefined
+              }>
+              {children}
+            </RadioListReasonContext>
+          </RadioListFormContext>
         </RadioListContext>
       </div>
       {showsDisabledMessage &&

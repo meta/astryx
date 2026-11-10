@@ -22,7 +22,7 @@ import React, {use, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {RadioListContext} from './RadioList';
+import {RadioListContext, RadioListFormContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
@@ -33,6 +33,7 @@ import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerBoxHold} from '../utils/boxHold';
@@ -282,11 +283,19 @@ export function RadioListItem({
   const id = useId();
   const labelID = useId();
   const descriptionID = useId();
+  const formContext = use(RadioListFormContext);
   const isDisabled = context.isDisabled || isItemDisabled;
+  const isChecked = context.value === value;
+  const isSelectedDisabled = isItemDisabled && isChecked;
+  useIsomorphicLayoutEffect(() => {
+    if (!isSelectedDisabled || formContext == null) {
+      return;
+    }
+    return formContext.holdSelectedDisabled();
+  }, [isSelectedDisabled, formContext]);
   // Every disabled radio stays focusable via aria-disabled. The optional group
   // message controls only the reason tooltip and its description, not the
   // radio's focusability.
-  const isChecked = context.value === value;
   // One predicate for both the rendered element and the aria-describedby that
   // points at it. A ReactNode description can be `false` or `''`, which render
   // nothing — a `!= null` check would leave the link dangling.
@@ -338,10 +347,9 @@ export function RadioListItem({
         value={value}
         checked={isChecked}
         aria-disabled={isDisabled ? 'true' : undefined}
-        // Disabled radios stay focusable, so detach them from the form to
-        // preserve native disabled submission behavior without removing their
-        // tab stop.
-        form={isDisabled ? '' : undefined}
+        // Disabled radios stay focusable. The group detaches every radio
+        // together when needed, so they keep one native radio group.
+        form={formContext?.detachesFromForm ? '' : undefined}
         required={context.isRequired}
         // Chromium reports an unanswered native-required radio invalid before
         // any interaction; the invalid state follows the group's status
