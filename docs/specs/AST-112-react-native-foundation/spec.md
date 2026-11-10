@@ -78,9 +78,7 @@ shared icon names under FR17.
       (web view and sign-in session), `pdf` (document view), `controls`
       (native button, text field, date pickers, and the swipe-row,
       drag-snap, and zoom-pager views), and `navigation` (the native stack
-      and tab hosts, DEC-9). The `navigation` capability's native hosts
-      follow in a release after the first; until then the router and its
-      navigators ship in the `./navigation` entries.
+      and tab hosts, DEC-9).
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
@@ -136,7 +134,8 @@ shared icon names under FR17.
     writes every permission the app needs (FR4).
 - **FR4 — Native code lives only in the platform layer.**
   - The library layer contains no native code, and the package has no
-    runtime dependency beyond `react` and `react-native`.
+    runtime dependency beyond `react`, `react-native`, and the Astryx packages
+    FR2 allows.
   - An app holds no hand-written native code. Its iOS and Android projects are
     generated from the app's configuration. The package ships one
     configuration plugin. It always writes the core's host declarations (on
@@ -167,8 +166,8 @@ shared icon names under FR17.
   - `./storage` (storage, secure storage, files) and `./network` (network,
     cookies, client identity) hold the rest of the core.
   - `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and
-    `./navigation` are the optional capabilities' entries; `./navigation` and
-    `./navigation/core` also hold the Astryx router and its navigators (FR2).
+    `./navigation` are the optional capabilities' entries; `./navigation` also
+    holds the Astryx router and its navigators (FR2).
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
@@ -213,7 +212,7 @@ shared icon names under FR17.
   - Hooks own lifecycle: they cancel their work on unmount and return stable
     callbacks. Module handles and native versions never appear in app-facing types. A
     request that presents system UI (sign-in, the file picker) may take an
-    optional `rootTag` until a registered presenting surface replaces it.
+    optional `rootTag` that names the presenting surface.
   - Names follow React Native's own conventions: `source={{uri}}`, `ref`,
     `on<Event>(event)` with one object argument, `is` and `has` booleans, and
     string unions for closed sets. A call takes its subject first and one
