@@ -648,11 +648,18 @@ export function renderingFolders(importers, touched) {
  * accessibility spec in a component folder puts nothing on a proof's page
  * and selects no proof, unless a root loads it; this map finds that case
  * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
- * read, so a caller runs every proof instead.
- * @param {{root: string, listed: string[], isProof: (file: string) => boolean}} options
+ * read, so a caller runs every proof instead. `read` reads a file; by
+ * default from `root`, and a sparse checkout passes one that falls back to
+ * the commit.
+ * @param {{root: string, listed: string[], isProof: (file: string) => boolean, read?: (file: string) => string}} options
  * @returns {Map<string, Set<string>>} each loaded file, to the roots that load it
  */
-export function proofImporters({root, listed, isProof}) {
+export function proofImporters({
+  root,
+  listed,
+  isProof,
+  read = file => fs.readFileSync(path.join(root, file), 'utf8'),
+}) {
   const known = new Set(listed);
   const resolve = target => {
     for (const suffix of RESOLVE_SUFFIXES)
@@ -686,7 +693,7 @@ export function proofImporters({root, listed, isProof}) {
   const imports = new Map();
   const importsOf = file => {
     if (!imports.has(file)) {
-      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      const text = read(file);
       imports.set(file, [
         ...valueImports(text)
           .map(({specifier}) => targetOf(file, specifier))

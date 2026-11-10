@@ -2620,6 +2620,8 @@ jobs:
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
+          # Lists the changed files, so the Chromium selection reads them.
+          component-audit: 'true'
 
       - name: Decide the WebKit proofs' scope
         id: scope-webkit
@@ -2670,6 +2672,43 @@ jobs:
             --setup-seconds 90 --max-seconds 600 \
             --leg 1 --max-legs 10 \
             "${FILTERS[@]}"
+
+      # The Chromium selection (spec:AST-030 FR31) runs in shadow: this step
+      # computes it, reports it and keeps it as an artifact, and the lane
+      # still runs every spec until a replay of recent pull requests shows the
+      # selection catches what the full runs caught. Its import graphs read
+      # the merge commit's package, harness and Storybook sources.
+      - name: Select the Chromium proofs, in shadow
+        id: select-chromium
+        if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
+        continue-on-error: true
+        # A slow sparse fetch must not time out the whole job.
+        timeout-minutes: 2
+        env:
+          CHANGED_FILES: ${{ steps.scope-chromium.outputs.changed_files_path }}
+          FULL_SUITE: ${{ steps.scope-chromium.outputs.full_suite }}
+          SCOPE_PATHS: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z][^/]*/)|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+        run: |
+          set -o pipefail
+          listed="$RUNNER_TEMP/interaction-legs/listed.txt"
+          git -C .test-scope ls-tree -r --name-only HEAD > "$listed"
+          mapfile -t SOURCES < <(grep -oE '^packages/[^/]+/src/' "$listed" | sort -u)
+          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal/interaction-harness apps/storybook/stories apps/storybook/.storybook
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select-chromium \
+            --listed "$listed" --changed "${CHANGED_FILES:-}" \
+            --scope "$SCOPE_PATHS" --full-suite "${FULL_SUITE:-true}" \
+            --every-spec "${WEBKIT_ALL_SPECS:-false}" --root .test-scope \
+            --selection .test-scope/.github/interaction-selection.json \
+            --primitives .test-scope/.github/a11y-shared-primitives.json \
+            --out "$RUNNER_TEMP/interaction-legs/chromium-selection.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the Chromium selection
+        if: steps.select-chromium.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/interaction-legs/chromium-selection.json
+          retention-days: 90
 
       - name: Count the WebKit legs
         id: count-webkit
@@ -2799,6 +2838,8 @@ jobs:
           requires-head-file: playwright.interaction.config.ts
           # A Lab-only change still runs each interaction spec it edits.
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
+          # Lists the changed files, so the Chromium selection reads them.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
