@@ -364,12 +364,7 @@ const afterTwoFrames = async (page: Page) =>
 
 test('a slow drift past 11.5 px late in the hold cancels it: no menu and no click (AST-094 FR21)', async ({
   page,
-  browserName,
 }) => {
-  test.fixme(
-    browserName === 'chromium',
-    'Chromium opens the menu at about 736 ms after a drift past 11.5 px; WebKit cancels',
-  );
   const {driver, center} = await openTouchStory(page);
   const clicks = await countTriggerClicks(page);
   // The finger rests past the commit at 400 ms, then drifts 14 px in 250 ms.
