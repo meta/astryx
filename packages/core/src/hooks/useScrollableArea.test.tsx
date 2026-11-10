@@ -9,7 +9,14 @@
 
 import {act, render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
-import {useRef, type ReactNode, type Ref} from 'react';
+import {
+  Profiler,
+  StrictMode,
+  useRef,
+  type FocusEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   useScrollableArea,
@@ -26,11 +33,13 @@ import {subscribeScrollGeometry} from './scrollGeometrySubscriptions';
 
 const testStyles = stylex.create({
   viewport: {borderWidth: 1, borderStyle: 'solid'},
+  contentMinWidth: (minWidth: string) => ({minWidth}),
 });
 
 interface FixtureProps {
   axis?: ScrollAxis;
   chaining?: ScrollOverscroll;
+  keyboardOwner?: 'viewport' | 'contentOrViewport';
   stickyContainment?: ScrollStickyContainment;
   externalRef?: Ref<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
@@ -39,6 +48,7 @@ interface FixtureProps {
 function Fixture({
   axis = 'inline',
   chaining = 'allow',
+  keyboardOwner = 'viewport',
   stickyContainment,
   externalRef,
   onScroll,
@@ -46,7 +56,7 @@ function Fixture({
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis,
     keyboardAccess: {
-      owner: 'viewport',
+      owner: keyboardOwner,
       label: 'Scrollable results',
       role: 'region',
     },
@@ -150,10 +160,13 @@ describe('useScrollableArea', () => {
   let frames: FrameRequestCallback[];
   // A computed `direction` set by a stylesheet alone: no attribute changes.
   let stylesheetDirection: string | null;
+  // The callbacks handed to ResizeObserver, to report a resize from a test.
+  let resizeObservers: ResizeObserverCallback[];
 
   beforeEach(() => {
     frames = [];
     stylesheetDirection = null;
+    resizeObservers = [];
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -164,7 +177,8 @@ describe('useScrollableArea', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal(
       'ResizeObserver',
-      vi.fn(function () {
+      vi.fn(function (callback: ResizeObserverCallback) {
+        resizeObservers.push(callback);
         return {observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn()};
       }),
     );
@@ -199,6 +213,36 @@ describe('useScrollableArea', () => {
       const pending = frames.splice(0);
       pending.forEach(callback => callback(performance.now()));
     });
+  }
+
+  function setInlineOverflow(viewport: HTMLElement, isOverflowing: boolean) {
+    setGeometry(viewport, {scrollWidth: isOverflowing ? 180 : 100});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+  }
+
+  /** Focus listener changes in call order, as `add focusin <test id>`. */
+  function recordFocusListeners() {
+    const add = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    const remove = vi.spyOn(EventTarget.prototype, 'removeEventListener');
+    const changes = (verb: string, spy: typeof add | typeof remove) =>
+      spy.mock.calls.flatMap(([type], index) => {
+        const target = spy.mock.contexts[index];
+        return target instanceof HTMLElement &&
+          target.dataset.testid != null &&
+          (type === 'focusin' || type === 'focusout')
+          ? [
+              {
+                order: spy.mock.invocationCallOrder[index],
+                change: `${verb} ${type} ${target.dataset.testid}`,
+              },
+            ]
+          : [];
+      });
+    return () =>
+      [...changes('add', add), ...changes('remove', remove)]
+        .sort((a, b) => a.order - b.order)
+        .map(({change}) => change);
   }
 
   it('reports a change below the content root as content only and an outer change as layout', async () => {
@@ -331,6 +375,57 @@ describe('useScrollableArea', () => {
     expect(pending.size).toBe(0);
   });
 
+  it('leaves an ancestor that moves on the compositor alone, and measures on its direction and its size', async () => {
+    mockOwnedComputedStyle();
+    render(<Fixture axis="block" />);
+    const viewport = screen.getByTestId('viewport');
+    const ancestor = viewport.parentElement!;
+    // Let the mount's own style writes reach the observer, and settle.
+    await act(async () => {});
+    flushFrame();
+    await act(async () => {});
+    flushFrame();
+    const framesBefore = frames.length;
+    const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
+
+    // A surface dragged under a finger writes its transform, and a custom
+    // property for its scrim, on every input sample.
+    for (const offset of [8, 16, 24]) {
+      await act(async () => {
+        ancestor.style.transform = `translateY(${offset}px)`;
+        ancestor.style.setProperty('--_scrim-opacity', `${1 - offset / 100}`);
+      });
+    }
+    expect(frames.length).toBe(framesBefore);
+    expect(vi.mocked(window.getComputedStyle).mock.calls).toHaveLength(
+      styleReads,
+    );
+
+    // The axis mapping is the ancestor's to change.
+    await act(async () => {
+      ancestor.style.direction = 'rtl';
+    });
+    expect(frames.length).toBe(framesBefore + 1);
+    flushFrame();
+
+    // A size change reaches the hook through its resize observer, whatever
+    // ancestor style caused it.
+    const framesBeforeResize = frames.length;
+    act(() => {
+      for (const callback of resizeObservers) {
+        callback(
+          [
+            {
+              target: viewport,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    expect(frames.length).toBe(framesBeforeResize + 1);
+  });
+
   it('keeps the tab stop through a writing-mode change that moves the overflowing axis', async () => {
     let isVertical = false;
     mockOwnedComputedStyle(() =>
@@ -373,8 +468,8 @@ describe('useScrollableArea', () => {
     expect(viewport.getAttribute('style')).toContain('clip');
 
     rerender(<Fixture stickyContainment="always" />);
-    expect(viewport.getAttribute('style')).toContain('auto');
-    expect(viewport.getAttribute('style')).toContain('hidden');
+    expect(viewport.getAttribute('style')).toContain('--x-overflowX: auto');
+    expect(viewport.getAttribute('style')).toContain('--x-overflowY: hidden');
   });
 
   it('activates only the overflowing physical axis when both are requested', () => {
@@ -423,7 +518,7 @@ describe('useScrollableArea', () => {
     expect(viewport).toHaveAccessibleName('Adaptive results');
     expect(viewport).toHaveAttribute('tabindex', '0');
 
-    viewport.focus();
+    void act(() => viewport.focus());
     rerender(
       <AdaptiveFixture>
         <button type="button">Use existing action</button>
@@ -711,6 +806,52 @@ describe('useScrollableArea', () => {
       inlineReversed: true,
       blockReversed: false,
     });
+    expect(getLogicalAxisMapping('sideways-lr', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: false,
+      blockReversed: false,
+    });
+    expect(getLogicalAxisMapping('sideways-rl', 'ltr')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: false,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('sideways-rl', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: true,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('vertical-rl', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: true,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('horizontal-tb', 'rtl')).toEqual({
+      inline: 'x',
+      block: 'y',
+      inlineReversed: true,
+      blockReversed: false,
+    });
+  });
+
+  it('normalizes reversed inline offsets in sideways writing modes', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    viewport.style.writingMode = 'sideways-lr';
+    setGeometry(viewport, {scrollHeight: 300, scrollTop: -200});
+
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: true,
+    });
   });
 
   it('measures both requested axes independently in vertical writing mode', () => {
@@ -776,7 +917,7 @@ describe('useScrollableArea', () => {
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
 
-    viewport.focus();
+    void act(() => viewport.focus());
     expect(document.activeElement).toBe(viewport);
     setGeometry(viewport, {scrollWidth: 100});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
@@ -784,6 +925,402 @@ describe('useScrollableArea', () => {
 
     expect(viewport).toHaveAttribute('tabindex', '-1');
     expect(document.activeElement).toBe(viewport);
+  });
+
+  it.each(['viewport', 'contentOrViewport'] as const)(
+    'removes the leftover tabindex once a fitting viewport is blurred (%s owner)',
+    keyboardOwner => {
+      render(<Fixture keyboardOwner={keyboardOwner} />);
+      const viewport = screen.getByTestId('viewport');
+      makeMeasurable(viewport);
+      setGeometry(viewport, {scrollWidth: 180});
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+
+      void act(() => viewport.focus());
+      setGeometry(viewport, {scrollWidth: 100});
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+      expect(document.activeElement).toBe(viewport);
+
+      void act(() => viewport.blur());
+      expect(viewport).not.toHaveAttribute('tabindex');
+    },
+  );
+
+  it('keeps a focused viewport in another document programmatically focusable when it loses overflow', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const container = frameDocument.createElement('div');
+    frameDocument.body.append(container);
+
+    const {getByTestId, rerender, unmount} = render(
+      <Fixture externalRef={() => {}} />,
+      {container},
+    );
+    try {
+      const viewport = getByTestId('viewport');
+      makeMeasurable(viewport);
+      viewport.style.overflowX = 'auto';
+      setInlineOverflow(viewport, true);
+      expect(viewport).toHaveAttribute('tabindex', '0');
+
+      void act(() => viewport.focus());
+      expect(frameDocument.activeElement).toBe(viewport);
+      setInlineOverflow(viewport, false);
+
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+      expect(frameDocument.activeElement).toBe(viewport);
+
+      // Reattaching reads focus again, from the same document.
+      rerender(<Fixture externalRef={() => {}} />);
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+    } finally {
+      unmount();
+      frame.remove();
+    }
+  });
+
+  it('ignores focus on a descendant of a viewport that loses overflow', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    const descendant = screen.getByTestId('descendant');
+    descendant.tabIndex = -1;
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+
+    void act(() => descendant.focus());
+    setInlineOverflow(viewport, false);
+
+    expect(document.activeElement).toBe(descendant);
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it('removes the leftover tabindex when focus moves from the viewport to a descendant', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    const descendant = screen.getByTestId('descendant');
+    descendant.tabIndex = -1;
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+
+    void act(() => descendant.focus());
+
+    expect(document.activeElement).toBe(descendant);
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps the tabindex when focusout fires while the viewport is still the active element', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+
+    // A window blur fires focusout but leaves the element active.
+    void act(() =>
+      viewport.dispatchEvent(new FocusEvent('focusout', {bubbles: true})),
+    );
+
+    expect(document.activeElement).toBe(viewport);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('keeps the tabindex when focus leaves and returns in one task', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+
+    void act(() => {
+      viewport.blur();
+      viewport.focus();
+    });
+
+    expect(document.activeElement).toBe(viewport);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('reads focus from the document when focus events never reach the viewport', () => {
+    const stopFocusEvent = (event: FocusEvent<HTMLDivElement>) =>
+      event.stopPropagation();
+    render(
+      <div onFocusCapture={stopFocusEvent} onBlurCapture={stopFocusEvent}>
+        <Fixture />
+      </div>,
+    );
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+    expect(document.activeElement).toBe(viewport);
+
+    // No focusout arrives either, so only the next measurement can notice.
+    void act(() => viewport.blur());
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+    void act(() => window.dispatchEvent(new Event('resize')));
+    flushFrame();
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it.each([
+    ['inline', {scrollWidth: 180}],
+    ['block', {scrollHeight: 180}],
+  ] as const)(
+    'does not commit for a focus change or the next measurement while the %s axis scrolls',
+    (axis, overflowingGeometry) => {
+      const onCommit = vi.fn();
+      function CountedFixture() {
+        const area = useScrollableArea({
+          axis,
+          keyboardAccess: {owner: 'viewport', label: 'Counted results'},
+        });
+        return (
+          <div data-testid="counted" {...area.getViewportProps()}>
+            <div {...area.getContentProps()} />
+          </div>
+        );
+      }
+
+      render(
+        <Profiler id="counted" onRender={onCommit}>
+          <CountedFixture />
+        </Profiler>,
+      );
+      const viewport = screen.getByTestId('counted');
+      makeMeasurable(viewport);
+      setGeometry(viewport, overflowingGeometry);
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+      expect(viewport).toHaveAttribute('tabindex', '0');
+      const remeasure = () => {
+        void act(() => window.dispatchEvent(new Event('resize')));
+        flushFrame();
+      };
+      remeasure();
+      onCommit.mockClear();
+
+      void act(() => viewport.focus());
+      expect(document.activeElement).toBe(viewport);
+      remeasure();
+      void act(() => viewport.blur());
+      remeasure();
+      expect(onCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['inline', 'block', {scrollWidth: 180}],
+    ['block', 'inline', {scrollHeight: 180}],
+  ] as const)(
+    'keeps the tabindex of a focused viewport when its scrolling %s axis is dropped',
+    (_scrollingAxis, nextAxis, overflowingGeometry) => {
+      const {rerender} = render(<Fixture axis="both" />);
+      const viewport = screen.getByTestId('viewport');
+      makeMeasurable(viewport);
+      setGeometry(viewport, overflowingGeometry);
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+      expect(viewport).toHaveAttribute('tabindex', '0');
+      void act(() => viewport.focus());
+      const removeAttribute = vi.spyOn(viewport, 'removeAttribute');
+
+      // The first commit renders before the new axis is measured. Dropping
+      // the tabindex there blurs the viewport in Chromium.
+      rerender(<Fixture axis={nextAxis} />);
+
+      expect(removeAttribute).not.toHaveBeenCalledWith('tabindex');
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+      expect(document.activeElement).toBe(viewport);
+    },
+  );
+
+  it('drops the tabindex of an unfocused viewport after an axis change', () => {
+    const {rerender} = render(<Fixture axis="both" />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    expect(viewport).toHaveAttribute('tabindex', '0');
+
+    rerender(<Fixture axis="block" />);
+
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps tracking focus when the caller passes a fresh ref every render', () => {
+    const {rerender} = render(<Fixture externalRef={() => {}} />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+
+    void act(() => viewport.focus());
+    setGeometry(viewport, {scrollWidth: 100});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+
+    const removeListener = vi.spyOn(viewport, 'removeEventListener');
+    rerender(<Fixture externalRef={() => {}} />);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+    // Reattaching releases the previous listeners so they cannot pile up.
+    expect(removeListener).toHaveBeenCalledWith(
+      'focusin',
+      expect.any(Function),
+    );
+    expect(removeListener).toHaveBeenCalledWith(
+      'focusout',
+      expect.any(Function),
+    );
+
+    void act(() => viewport.blur());
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps one focus listener pair and working tracking through StrictMode replay', () => {
+    const focusListeners = recordFocusListeners();
+    const {unmount} = render(
+      <StrictMode>
+        <Fixture />
+      </StrictMode>,
+    );
+    const viewport = screen.getByTestId('viewport');
+    expect(focusListeners()).toEqual([
+      'add focusin viewport',
+      'add focusout viewport',
+      'remove focusin viewport',
+      'remove focusout viewport',
+      'add focusin viewport',
+      'add focusout viewport',
+    ]);
+
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+    expect(viewport).toHaveAttribute('tabindex', '-1');
+    void act(() => viewport.blur());
+    expect(viewport).not.toHaveAttribute('tabindex');
+
+    unmount();
+    expect(focusListeners().slice(-2)).toEqual([
+      'remove focusin viewport',
+      'remove focusout viewport',
+    ]);
+  });
+
+  it('cleans up the old node before attaching the new one when the viewport is replaced in one commit', () => {
+    function KeyedFixture({nodeKey}: {nodeKey: string}) {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Keyed results'},
+      });
+      return (
+        <>
+          <div
+            key={nodeKey}
+            data-testid={nodeKey}
+            {...area.getViewportProps()}
+          />
+          {/* Outside the viewport, so it survives the replacement. */}
+          <div {...area.getContentProps()} />
+          <output data-testid="retained-tab-index">
+            {String(area.getViewportProps().tabIndex)}
+          </output>
+        </>
+      );
+    }
+
+    const {rerender} = render(<KeyedFixture nodeKey="old" />);
+    const viewport = screen.getByTestId('old');
+    makeMeasurable(viewport);
+    setInlineOverflow(viewport, true);
+    void act(() => viewport.focus());
+    setInlineOverflow(viewport, false);
+    expect(screen.getByTestId('retained-tab-index')).toHaveTextContent('-1');
+
+    const focusListeners = recordFocusListeners();
+    rerender(<KeyedFixture nodeKey="new" />);
+
+    expect(focusListeners()).toEqual([
+      'remove focusin old',
+      'remove focusout old',
+      'add focusin new',
+      'add focusout new',
+    ]);
+    expect(screen.getByTestId('retained-tab-index')).toHaveTextContent(
+      'undefined',
+    );
+    expect(getRegisteredScrollOwnerState(viewport)).toBeUndefined();
+    expect(
+      getRegisteredScrollOwnerState(screen.getByTestId('new')),
+    ).toBeDefined();
+  });
+
+  it('stops tracking a viewport that detaches while the hook stays mounted', () => {
+    function DetachableFixture({isAttached}: {isAttached: boolean}) {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Detachable results'},
+      });
+      return (
+        <>
+          {isAttached ? (
+            <div data-testid="detachable" {...area.getViewportProps()} />
+          ) : null}
+          {/* Outside the viewport, so only its own detach can clear the state. */}
+          <div {...area.getContentProps()} />
+          <output data-testid="retained-tab-index">
+            {String(area.getViewportProps().tabIndex)}
+          </output>
+        </>
+      );
+    }
+
+    const {rerender} = render(<DetachableFixture isAttached />);
+    const viewport = screen.getByTestId('detachable');
+    const retainedTabIndex = screen.getByTestId('retained-tab-index');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    void act(() => viewport.focus());
+    setGeometry(viewport, {scrollWidth: 100});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(retainedTabIndex).toHaveTextContent('-1');
+    expect(getRegisteredScrollOwnerState(viewport)).toBeDefined();
+
+    rerender(<DetachableFixture isAttached={false} />);
+    expect(getRegisteredScrollOwnerState(viewport)).toBeUndefined();
+    expect(retainedTabIndex).toHaveTextContent('undefined');
+
+    // The old node's listeners are gone, so focusing it again changes nothing.
+    document.body.append(viewport);
+    try {
+      void act(() => viewport.focus());
+      expect(retainedTabIndex).toHaveTextContent('undefined');
+    } finally {
+      viewport.remove();
+    }
+
+    rerender(<DetachableFixture isAttached />);
+    const replacement = screen.getByTestId('detachable');
+    expect(replacement).not.toBe(viewport);
+    expect(getRegisteredScrollOwnerState(replacement)).toBeDefined();
+    expect(getRegisteredScrollOwnerState(viewport)).toBeUndefined();
   });
 
   it('composes caller refs and handlers without losing behavior', () => {
@@ -855,5 +1392,174 @@ describe('useScrollableArea', () => {
     );
     expect(findNearestScrollOwner(descendant, 'block')).toBe(outer);
     expect(findNearestScrollOwner(descendant, 'inline')).toBeNull();
+  });
+
+  it('resolves the nearest of two nested block owners and unregisters both on unmount', () => {
+    function DoubleBlockFixture() {
+      const outer = useScrollableArea({
+        axis: 'block',
+        keyboardAccess: {owner: 'content'},
+      });
+      const inner = useScrollableArea({
+        axis: 'block',
+        keyboardAccess: {owner: 'content'},
+      });
+      return (
+        <div
+          data-testid="outer-owner"
+          {...outer.getViewportProps({style: {overflowY: 'auto'}})}>
+          <div {...outer.getContentProps()}>
+            <div
+              data-testid="inner-owner"
+              {...inner.getViewportProps({style: {overflowY: 'auto'}})}>
+              <div {...inner.getContentProps()}>
+                <span data-testid="deep-descendant" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const {unmount} = render(<DoubleBlockFixture />);
+    const outer = screen.getByTestId('outer-owner');
+    const inner = screen.getByTestId('inner-owner');
+    const descendant = screen.getByTestId('deep-descendant');
+    makeMeasurable(outer);
+    makeMeasurable(inner);
+    setGeometry(outer, {scrollHeight: 240});
+    setGeometry(inner, {scrollHeight: 300});
+
+    void act(() => {
+      outer.dispatchEvent(new Event('scroll'));
+      inner.dispatchEvent(new Event('scroll'));
+    });
+    flushFrame();
+
+    expect(findNearestScrollOwner(descendant, 'block')).toBe(inner);
+
+    unmount();
+    expect(getRegisteredScrollOwnerState(inner)).toBeUndefined();
+    expect(getRegisteredScrollOwnerState(outer)).toBeUndefined();
+  });
+
+  it('composes caller content props and consumes content xstyle', () => {
+    const contentRef = vi.fn();
+    const onClick = vi.fn();
+    function ContentFixture() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'content'},
+      });
+      return (
+        <div {...area.getViewportProps({style: {overflowX: 'auto'}})}>
+          <div
+            data-testid="styled-content"
+            {...area.getContentProps<HTMLDivElement>({
+              ref: contentRef,
+              onClick,
+              className: 'consumer-content',
+              style: {color: 'red'},
+              xstyle: [
+                testStyles.viewport,
+                testStyles.contentMinWidth('120px'),
+              ],
+            })}>
+            Content
+          </div>
+        </div>
+      );
+    }
+
+    render(<ContentFixture />);
+    const content = screen.getByTestId('styled-content');
+    expect(content).not.toHaveAttribute('xstyle');
+    expect(content).toHaveClass('consumer-content');
+    const expectedClasses = (stylex.props(testStyles.viewport).className ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(expectedClasses.length).toBeGreaterThan(0);
+    for (const token of expectedClasses) {
+      expect(content).toHaveClass(token);
+    }
+    expect(content.style.color).toBe('red');
+    expect(content.getAttribute('style')).toContain('120px');
+    expect(content).toHaveAttribute('data-scroll-content');
+    content.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(contentRef).toHaveBeenCalledWith(content);
+  });
+
+  it('preserves the last valid state through a full measurement while the viewport has no box', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180, scrollLeft: 40});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+
+    // A display:none box reads zero for every metric and fires no scroll; the
+    // full measurement must keep the last valid state rather than publish
+    // fitting.
+    setGeometry(viewport, {
+      clientWidth: 0,
+      clientHeight: 0,
+      scrollWidth: 0,
+      scrollHeight: 0,
+      scrollLeft: 0,
+    });
+    void act(() => window.dispatchEvent(new Event('resize')));
+    expect(frames).toHaveLength(1);
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+  });
+
+  it('coalesces repeated invalidations into one animation frame', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180});
+
+    void act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+      viewport.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(frames).toHaveLength(1);
+  });
+
+  it('keeps behavior-owned accessibility over conflicting caller props', () => {
+    function ConflictFixture() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Owned name'},
+      });
+      return (
+        <div
+          data-testid="conflict-viewport"
+          {...area.getViewportProps<HTMLDivElement>({
+            role: 'list',
+            'aria-label': 'Caller name',
+            tabIndex: 5,
+          })}>
+          <div {...area.getContentProps()}>Content</div>
+        </div>
+      );
+    }
+
+    render(<ConflictFixture />);
+    const viewport = screen.getByTestId('conflict-viewport');
+    expect(viewport).toHaveAttribute('role', 'group');
+    expect(viewport).toHaveAccessibleName('Owned name');
+    expect(viewport).not.toHaveAttribute('tabindex');
   });
 });

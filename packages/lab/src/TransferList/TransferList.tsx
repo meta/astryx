@@ -21,6 +21,7 @@ import {
   Fragment,
   useCallback,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -439,7 +440,11 @@ export function TransferList<T extends string = string>({
   const [query, setQuery] = useState('');
   const announce = useAnnounce();
 
-  currentValueRef.current = value;
+  // Syncs the handlers' ref with the committed `value`. A render React
+  // discards, as a suspended transition does, must not leave its value.
+  useLayoutEffect(() => {
+    currentValueRef.current = value;
+  });
 
   // An option's own message names its own constraint.
   // It does not apply to a disabled list.
@@ -754,9 +759,7 @@ export function TransferList<T extends string = string>({
           isDisabled={isDisabled}
           xstyle={[styles.item, isDisabled && styles.disabledItem]}
           data-transfer-list-row={option.value}
-          data-transfer-list-index={String(
-            currentValueRef.current.indexOf(option.value),
-          )}
+          data-transfer-list-index={String(value.indexOf(option.value))}
           {...theme}
         />
       );
@@ -915,7 +918,7 @@ export function TransferList<T extends string = string>({
                   !options.some(
                     option =>
                       !option.isTransferDisabled &&
-                      !currentValueRef.current.includes(option.value),
+                      !value.includes(option.value),
                   )
                 }
                 onClick={addAll}

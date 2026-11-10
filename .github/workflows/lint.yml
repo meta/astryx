@@ -209,6 +209,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"

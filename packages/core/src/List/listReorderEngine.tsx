@@ -429,8 +429,8 @@ function isTransparent(color: string): boolean {
 /** The element autoscroll writes to and its visible band in the viewport. */
 interface Scroller {
   readonly element: Element;
-  readonly top: number;
-  readonly bottom: number;
+  top: number;
+  bottom: number;
   readonly max: number;
   position: number;
 }
@@ -479,7 +479,10 @@ interface DragSession {
   /** The finger's distance from the dragged row's top. */
   readonly grabOffset: number;
   readonly scroller: Scroller;
-  /** How far autoscroll has moved the content since the begin. */
+  /**
+   * How far the list has moved up on screen since the begin. Autoscroll moves
+   * it, and so does any scroll of its scroller or of one around it.
+   */
   scrolled: number;
   lastY: number;
   /** The edge autoscroll's timer, on UIKit's 20 ms clock. */
@@ -1405,14 +1408,27 @@ export class ListReorderController implements ListReorderSession {
       return () => {};
     }
     const {element} = session.scroller;
+    const page = doc.scrollingElement ?? doc.documentElement;
     // The page's own scroll is reported on the document.
-    const target =
-      element === (doc.scrollingElement ?? doc.documentElement) ? doc : element;
+    const own = element === page ? doc : element;
+    // A scroll around the list's scroller can move it on screen too, as when
+    // a wheel at the end of a box scrolls the page.
+    const isAround = (target: EventTarget) =>
+      own !== doc &&
+      (target === doc ||
+        (target instanceof Element &&
+          target !== element &&
+          target.contains(element)));
     return subscribeInput(view, 'scroll', event => {
-      if (event.target !== target || this.session !== session) {
+      const {target} = event;
+      if (
+        target == null ||
+        this.session !== session ||
+        (target !== own && !isAround(target))
+      ) {
         return;
       }
-      if (session.ownScroll) {
+      if (target === own && session.ownScroll) {
         session.ownScroll = false;
         return;
       }
@@ -1460,9 +1476,22 @@ export class ListReorderController implements ListReorderSession {
   private syncScroll(session: DragSession): void {
     session.scrollStale = false;
     const {scroller} = session;
-    const position = scroller.element.scrollTop;
+    const {element} = scroller;
+    const position = element.scrollTop;
     session.scrolled += position - scroller.position;
     scroller.position = position;
+    const doc = element.ownerDocument;
+    if (element === (doc.scrollingElement ?? doc.documentElement)) {
+      return;
+    }
+    // An outer scroll moves the scroller on screen by the change in its
+    // measured top. A fixed or stuck scroller does not move. The list moves
+    // with its scroller.
+    const top = element.getBoundingClientRect().top + element.clientTop;
+    const moved = scroller.top - top;
+    session.scrolled += moved;
+    scroller.top = top;
+    scroller.bottom -= moved;
   }
 
   private stopAutoscroll(session: DragSession): void {

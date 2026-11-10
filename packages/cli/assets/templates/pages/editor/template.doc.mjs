@@ -25,6 +25,7 @@ export const doc = {
     ComputerDesktopIcon: 'desktop',
     CursorArrowRaysIcon: 'click',
     DevicePhoneMobileIcon: 'mobile',
+    DeviceTabletIcon: 'tablet',
     DocumentTextIcon: 'document',
     EllipsisHorizontalIcon: 'moreHorizontal',
     EyeIcon: 'eye',

@@ -18,6 +18,7 @@
  */
 
 import {useCallback, useState} from 'react';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
@@ -81,6 +82,7 @@ function measureSelectedItem(
   anchor: HTMLElement | null,
   listboxId: string,
   selectedItemIndex: number,
+  {countsLayerGutter = false}: {countsLayerGutter?: boolean} = {},
 ): SelectedItemPlacement | null {
   if (listbox == null || anchor == null) {
     return null;
@@ -117,8 +119,27 @@ function measureSelectedItem(
   // Desired top aligns the selected item's center with the anchor center.
   const desiredTop =
     anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+  // The layer keeps a gutter from the viewport's block end. A list that
+  // reaches into it overflows the layer's room, and the browser then takes a
+  // position fallback, which can flip the list off screen. The gutter is the
+  // layer's far-edge margin. The browser can flip the layer above its anchor
+  // before the overlay margin applies. The flip moves the gutter to the
+  // block-start margin. So read the larger of the two margins. A software
+  // keyboard's own inset replaces the gutter.
+  const layer = countsLayerGutter
+    ? listbox.closest<HTMLElement>('[popover]')
+    : null;
+  let blockEndGutter = 0;
+  if (layer != null) {
+    const layerStyle = getComputedStyle(layer);
+    blockEndGutter = Math.max(
+      0,
+      parseFloat(layerStyle.marginBlockStart) || 0,
+      parseFloat(layerStyle.marginBlockEnd) || 0,
+    );
+  }
   const viewportHeight = window.innerHeight;
-  const maxTop = Math.max(0, viewportHeight - listboxHeight);
+  const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
   const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
 
   // useLayer positions the popover below the outer anchor. Apply a negative
@@ -218,6 +239,7 @@ export function useSelectedItemOverlayMargin({
           anchorRef.current,
           listboxId,
           selectedItemIndex,
+          {countsLayerGutter: true},
         )
       : null;
     let margin: string | undefined;
@@ -383,14 +405,9 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
         return selectedIndex;
       }
-      const enabledIndices = getEnabledIndices();
-      return (
-        (fromEnd
-          ? enabledIndices[enabledIndices.length - 1]
-          : enabledIndices[0]) ?? -1
-      );
+      return enabledEdgeIndex(selectableItems, fromEnd);
     },
-    [findSelectedIndex, getEnabledIndices, selectableItems],
+    [findSelectedIndex, selectableItems],
   );
 
   const closeAndReset = useCallback(() => {
