@@ -358,6 +358,7 @@ describe('the interaction leg count job in ci.yml', () => {
     expect(counter.outputs).toEqual({
       chromium: '${{ steps.matrix.outputs.chromium }}',
       webkit: '${{ steps.matrix.outputs.webkit }}',
+      chromium_specs: '${{ steps.select-chromium.outputs.specs }}',
     });
   });
 
@@ -387,12 +388,15 @@ describe('the interaction leg count job in ci.yml', () => {
       expect(mine.if).toBe(`steps.scope-${lane.key}.outputs.applies == 'true'`);
       // A failed count falls back to ten legs that each decide for themselves.
       expect(mine['continue-on-error']).toBe(true);
+      // Each leg reads the Chromium selection from this job's output.
       expect(mine.env ?? {}).toEqual(
         JSON.parse(
-          JSON.stringify(theirs.env ?? {}).replaceAll(
-            'steps.scope.',
-            `steps.scope-${lane.key}.`,
-          ),
+          JSON.stringify(theirs.env ?? {})
+            .replaceAll('steps.scope.', `steps.scope-${lane.key}.`)
+            .replaceAll(
+              'needs.interaction-legs.outputs.chromium_specs',
+              'steps.select-chromium.outputs.specs',
+            ),
         ),
       );
       expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
@@ -1486,10 +1490,14 @@ describe('what a Chromium run covers for a pull request', () => {
   });
 });
 
-describe('the Chromium selection in ci.yml, in shadow', () => {
+describe('the Chromium selection in ci.yml', () => {
   const counter = ci.jobs['interaction-legs'];
-  const select = step(counter, 'Select the Chromium proofs, in shadow');
+  const proofs = ci.jobs['pr-interaction'];
+  const select = step(counter, 'Select the Chromium proofs');
   const scope = counter.steps.find(each => each.id === 'scope-chromium');
+  const count = step(counter, 'Count the Chromium legs');
+  const legsStep = step(proofs, "Count this run's legs");
+  const planStep = step(proofs, "Plan this leg's interaction proofs");
 
   it('runs on a pull request in scope, never on a Lab-only change, and never fails the job', () => {
     expect(select.if).toBe(
@@ -1506,26 +1514,81 @@ describe('the Chromium selection in ci.yml, in shadow', () => {
     );
     expect(select.run).toContain('sparse-checkout add');
     expect(select.run).toContain('--root .test-scope');
-    expect(select.run).toContain(
-      '--selection .test-scope/.github/interaction-selection.json',
-    );
-    expect(select.run).toContain(
-      '--primitives .test-scope/.github/a11y-shared-primitives.json',
-    );
     expect(select.run).toContain('--every-spec "${WEBKIT_ALL_SPECS:-false}"');
+    expect(select.run).toContain(
+      'specs=${r.full ? "full" : JSON.stringify(r.specs)}',
+    );
   });
 
-  it('keeps the selection as an artifact, and still runs every Chromium spec', () => {
+  it('is decided before the leg count, and every leg reads the same selection', () => {
+    const ids = counter.steps.map(each => each.id ?? each.name);
+    expect(ids.indexOf('select-chromium')).toBeLessThan(
+      ids.indexOf('count-chromium'),
+    );
+    expect(counter.outputs.chromium_specs).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    expect(count.env.CHROMIUM_SPECS).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    for (const each of [legsStep, planStep])
+      expect(each.env.CHROMIUM_SPECS).toBe(
+        '${{ needs.interaction-legs.outputs.chromium_specs }}',
+      );
+    // The WebKit lane keeps its own selection.
+    expect(JSON.stringify(ci.jobs['pr-interaction-webkit'])).not.toContain(
+      'CHROMIUM_SPECS',
+    );
+  });
+
+  it('keeps the selection as an artifact for the escape log', () => {
     const keep = step(counter, 'Keep the Chromium selection');
     expect(keep.if).toBe("steps.select-chromium.outcome == 'success'");
     expect(keep.with.name).toBe(
       'interaction-selection-${{ github.run_attempt }}',
     );
-    for (const run of [
-      step(counter, 'Count the Chromium legs').run,
-      step(ci.jobs['pr-interaction'], "Count this run's legs").run,
-      step(ci.jobs['pr-interaction'], "Plan this leg's interaction proofs").run,
-    ])
-      expect(run).not.toContain('chromium-selection');
+  });
+
+  /** Runs a step's filter block in bash and reports what it planned. */
+  function filters(run, env) {
+    const start = run.indexOf('FILTERS=()');
+    const end = run.indexOf('\nfi\n', start) + '\nfi'.length;
+    const out = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'filters-')),
+      'out',
+    );
+    fs.writeFileSync(out, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', `${run.slice(start, end)}\nprintf '%s\\n' "\${FILTERS[@]}"`],
+      {
+        env: {...process.env, GITHUB_OUTPUT: out, LAB_SPECS: '', ...env},
+        encoding: 'utf8',
+      },
+    );
+    return {
+      status: result.status,
+      filters: result.stdout
+        .split('\n')
+        .filter(line => line && !line.startsWith('No ')),
+      output: fs.readFileSync(out, 'utf8'),
+    };
+  }
+
+  it('plans the selected specs, one skip leg for none, and every spec for `full` or no selection', () => {
+    for (const run of [count.run, legsStep.run, planStep.run]) {
+      expect(
+        filters(run, {
+          CHROMIUM_SPECS: JSON.stringify(['a.spec.ts', 'b.spec.ts']),
+        }).filters,
+      ).toEqual(['--', 'a.spec.ts', 'b.spec.ts']);
+      expect(filters(run, {CHROMIUM_SPECS: '[]'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: 'count=0\nruns=false\nleg=1\n',
+      });
+      expect(filters(run, {CHROMIUM_SPECS: 'full'}).filters).toEqual([]);
+      expect(filters(run, {CHROMIUM_SPECS: ''}).filters).toEqual([]);
+    }
   });
 });
