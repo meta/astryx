@@ -6,7 +6,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableRowsVirtualization',
   description:
-    'Returns an opaque capability for fixed-height flat-row Table windowing. Pass the capability to Table.virtualization and keep the complete data, columns, explicit stable idKey and plugins on Table. Sizes are positive finite CSS pixels. The Table scrolls inside the height its parent gives it and fills all of it, so give the parent a height and make the Table its only child, or put the Table in a flex column as a flex child with min-height: 0 beside a heading or toolbar; without a height, every row renders and a development warning says so. Supported rows use single-line content; explicit wrapping, arbitrary custom renderers, non-flat rows or invalid identity use ordinary full rendering. Windowing uses the Table-owned scroll wrapper; a caller-provided scrollWrapper takes diagnostic full-render fallback. Mounted rows retain native table semantics and full-table positions; unmounted rows are not promised screen-reader discovery.',
+    'Returns an opaque capability for fixed-height flat-row Table windowing. Pass the capability to Table.virtualization and keep the complete data, columns, explicit stable idKey and plugins on Table. Sizes are positive finite CSS pixels. The Table scrolls inside the height its parent gives it and fills all of it, so give the parent a height and make the Table its only child, or put the Table in a flex column as a flex child with min-height: 0 beside a heading or toolbar. Supported rows use single-line content; explicit wrapping, arbitrary custom renderers, non-flat rows or invalid identity use ordinary full rendering. Windowing uses the Table-owned scroll wrapper; a caller-provided scrollWrapper takes diagnostic full-render fallback. Mounted rows retain native table semantics and full-table positions; unmounted rows are not promised screen-reader discovery.',
   props: [
     {
       name: 'rowHeight',
@@ -18,8 +18,9 @@ export const docs = {
     {
       name: 'initialViewportHeight',
       type: 'number',
+      required: true,
       description:
-        'Optional: the viewport height in CSS pixels that the first window plans for, on the server and before the viewport is measured. It does not size anything: the Table scrolls inside the height its parent gives it, and after mount the measured viewport sets the window. Without it, the first frame renders one row plus overscan. Table accounts for its headers and chrome.',
+        'The viewport height in CSS pixels that the first window plans for, on the server and before the viewport is measured. It does not size the Table: the Table scrolls inside the height its parent gives it, and after mount the measured viewport sets the window. Table accounts for its headers and chrome.',
     },
   ],
 };
@@ -32,6 +33,6 @@ export const docsDense = {
     rowHeight:
       'Total body-row pitch including density padding and borders; text and supported controls must fit.',
     initialViewportHeight:
-      'Optional viewport height the first window plans for; sizes nothing; measured viewport wins after mount; without it the first frame is one row plus overscan.',
+      'First-frame viewport height for the window plan; does not size the Table; measured viewport wins after mount.',
   },
 };

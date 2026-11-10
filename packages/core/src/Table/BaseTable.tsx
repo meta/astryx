@@ -647,9 +647,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       config == null ||
       !Number.isFinite(config.rowHeight) ||
       config.rowHeight <= 0 ||
-      (config.initialViewportHeight !== undefined &&
-        (!Number.isFinite(config.initialViewportHeight) ||
-          config.initialViewportHeight <= 0))
+      !Number.isFinite(config.initialViewportHeight) ||
+      config.initialViewportHeight <= 0
     ) {
       return 'row and viewport geometry must be positive finite CSS pixels';
     }
@@ -1062,11 +1061,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtimeValue = useMemo(
     () => ({
       ...runtime,
-      // A windowed Table's wrapper scrolls in both axes and takes its height
-      // from its parent. initialViewportHeight only seeds the first window.
-      hasBlockViewport: windowPlan.isWindowed,
+      viewportHeight: windowPlan.isWindowed
+        ? config?.initialViewportHeight
+        : undefined,
     }),
-    [runtime, windowPlan.isWindowed],
+    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>
