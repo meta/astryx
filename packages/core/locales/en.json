@@ -2562,5 +2562,9 @@
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",
     "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
+  },
+  "@astryx.searchField.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
   }
 }
