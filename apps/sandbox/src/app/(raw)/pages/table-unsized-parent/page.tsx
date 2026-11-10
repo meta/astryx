@@ -78,23 +78,30 @@ interface Reading {
   scrollHeight: number;
   mountedRows: number;
   scrolls: boolean;
+  at: string;
 }
 
-/** Reads the scroll area that wraps the Table inside `section`. */
+/**
+ * Reads the Table's scroll area inside `section`, and counts every body row
+ * in the section that shows text. Spacer rows carry no text.
+ */
 function read(section: HTMLElement): Reading | null {
-  const table = section.querySelector('table');
-  const area = table?.closest('[role="group"]');
-  if (!(area instanceof HTMLElement) || table == null) {
+  const area = section.querySelector('table')?.closest('[role="group"]');
+  if (!(area instanceof HTMLElement)) {
     return null;
   }
-  const mountedRows = Array.from(table.querySelectorAll('tbody > tr')).filter(
-    row => row.getAttribute('aria-hidden') !== 'true',
-  ).length;
+  let mountedRows = 0;
+  for (const row of Array.from(section.querySelectorAll('tbody tr'))) {
+    if ((row.textContent ?? '').trim() !== '') {
+      mountedRows += 1;
+    }
+  }
   return {
     height: Math.round(area.clientHeight),
     scrollHeight: Math.round(area.scrollHeight),
     mountedRows,
     scrolls: area.scrollHeight > area.clientHeight + 1,
+    at: new Date().toLocaleTimeString(),
   };
 }
 
@@ -114,19 +121,31 @@ function Case({
     initialViewportHeight: 400,
   });
   const [reading, setReading] = useState<Reading | null>(null);
-  // The readout updates on the Table's own scrolls and on a slow timer, so a
-  // page scroll or a resize also shows.
+  // The readout reads the DOM once per frame while the page or the Table
+  // scrolls, and on a one-second timer, so it never shows a stale count.
   const sectionRef = useCallback((node: HTMLElement | null) => {
     if (node == null) {
       return;
     }
-    const update = () => setReading(read(node));
-    const timer = window.setInterval(update, 500);
-    node.addEventListener('scroll', update, {capture: true, passive: true});
+    let frame = 0;
+    const update = () => {
+      if (frame !== 0) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        setReading(read(node));
+      });
+    };
+    const timer = window.setInterval(update, 1000);
+    window.addEventListener('scroll', update, {capture: true, passive: true});
+    window.addEventListener('resize', update, {passive: true});
     update();
     return () => {
       window.clearInterval(timer);
-      node.removeEventListener('scroll', update, {capture: true});
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', update, {capture: true});
+      window.removeEventListener('resize', update);
     };
   }, []);
   return (
@@ -158,7 +177,7 @@ function Readout({reading}: {reading: Reading | null}): ReactNode {
       <span {...stylex.props(styles.readout)} data-readout="">
         scroll area {reading.height}px · scrollHeight {reading.scrollHeight}px ·
         rows in DOM {reading.mountedRows} of {ROW_COUNT} · scrolls{' '}
-        {reading.scrolls ? 'yes' : 'no'}
+        {reading.scrolls ? 'yes' : 'no'} · read {reading.at}
       </span>
     </Text>
   );
