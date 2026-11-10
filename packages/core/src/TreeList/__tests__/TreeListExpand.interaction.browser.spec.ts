@@ -774,17 +774,31 @@ test('the guide lines beside a group show and hide with it: none runs past the l
   browserName,
 }) => {
   await open(page);
-  const expand = await recordFrames(page, async () => tapToggle(page));
-  const collapse = await recordFrames(page, async () => tapToggle(page));
+  // Long enough that frames read on time land inside the travel.
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const expand = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
+  const collapse = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
   for (const [name, phase] of [
     ['expands', expand],
     ['collapses', collapse],
   ] as const) {
     const late = lateReads(phase, browserName);
+    const moving = insideTravel(
+      phase[0].belowTop,
+      phase[phase.length - 1].belowTop,
+    );
     requireFrames(phase, {
       min: 2,
       during: `the group ${name}`,
-      where: frame => !late.has(frame),
+      where: frame => moving(frame) && !late.has(frame),
     });
     judgeFrames(phase, late, {
       excess: frame => frame.guideBottom - frame.lastBottom - BAND_ALLOWANCE,
