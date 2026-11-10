@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file FunctionDoc for `themeEditUndo()` / `astryx experimental theme undo`. */
+/** @file FunctionDoc for `themeEditUndo()` / `astryx experimental theme editor undo`. */
 
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
 export const doc = {
@@ -12,7 +12,7 @@ export const doc = {
   displayName: 'themeEditUndo()',
   summary: 'Put the theme back as it was before its last change.',
   description:
-    'Steps back one change: the settings file, the theme source and the build go back to how they were before the last set, unset, or base or mode change, and the preview is rewritten. The result names what was undone and how many earlier steps are left. Experimental: it may change or be removed in a patch release.',
+    'Steps back one change: the settings file, the theme source and the build go back to how they were before the last set, unset, or base or mode change, and the preview is rewritten. The result names what was undone and how many earlier steps are left. When the settings file is damaged (not valid JSON), the step back restores the settings from before the last change without reading it. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditUndo(theme: string, options?: object): Promise<object>',
   keywords: [
@@ -75,6 +75,6 @@ export const doc = {
       code: 'await themeEditUndo(...)',
     },
   ],
-  command: 'experimental theme undo',
+  command: 'experimental theme editor undo',
   related: ['themeBuild'],
 };

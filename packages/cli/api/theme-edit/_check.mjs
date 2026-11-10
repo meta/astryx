@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The type check of one `set` or `reset`: the part, the variant, the
+ * @file The type check of one `set` or `undo <theme> <thing>`: the part, the variant, the
  * state, the mode, the token's type, and whether the part (or anything in
  * it) reads the token. A change that cannot take effect is refused, and the
  * refusal leads with the command that works. Also `how`, which answers a
@@ -26,6 +26,7 @@ import {
   HEADING_WEIGHTS,
   INTENTS,
   LIKE,
+  HOW,
   P,
   PART_WORDS,
   SPACING,
@@ -89,7 +90,7 @@ function checkTypedValue(type, value, name) {
  * @param {string} thing
  * @param {string | undefined} value
  * @param {SetFlags} flags
- * @param {boolean} [unset] a reset: only the identity of the setting is checked
+ * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -106,7 +107,7 @@ export function checkSetting(
   const TOKENS = ctx.project.core.tokenDefaults;
   if (!thing)
     refuse(E.ERR_MISSING_ARGUMENT, 'Name the thing to change.', {
-      run: [`${P} ${unset ? 'reset' : 'set'} --help`],
+      run: [`${P} ${unset ? 'undo' : 'set'} --help`],
     });
   if (!unset && (value === undefined || value === ''))
     refuse(E.ERR_MISSING_ARGUMENT, `Give a value for ${thing}.`, {
@@ -136,15 +137,15 @@ export function checkSetting(
     );
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
-      run: [`${P} explain <part>`],
+      run: [`${HOW} <part>`],
     });
   if (s.only) {
     const fam = s.on ? familyOf(s.on) : null;
     if (!fam || FAMILIES[/** @type {string} */ (s.on)])
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        '--only is for one member of a family, such as text-input (explain --list families).',
-        {run: [`${P} explain --list families`]},
+        '--only is for one member of a family, such as text-input (how --list families).',
+        {run: [`${HOW} --list families`]},
       );
     if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
       refuse(
@@ -152,7 +153,9 @@ export function checkSetting(
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their family, so drop --only.`,
         {
           run: [
-            `${P} ${unset ? 'reset' : 'set'} ${slug} ${thing} ${q(v)} --on ${s.on}`,
+            unset
+              ? `${P} undo ${slug} ${thing}${v ? ` ${q(v)}` : ''} --on ${s.on}`
+              : `${P} set ${slug} ${thing} ${q(v)} --on ${s.on}`,
           ],
         },
       );
@@ -171,8 +174,8 @@ export function checkSetting(
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${P} explain ${s.on.split('-')[0]} --list parts`,
-            `${P} explain "${s.on}"`,
+            `${HOW} ${s.on.split('-')[0]} --list parts`,
+            `${HOW} "${s.on}"`,
           ],
         },
       );
@@ -183,20 +186,20 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           '--when takes <prop>:<value>, such as variant:primary.',
-          {run: [`${P} explain ${s.on}`]},
+          {run: [`${HOW} ${s.on}`]},
         );
       if (!t.props.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
-          {didYouMean: nearest(p, t.props), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(p, t.props), run: [`${HOW} ${s.on}`]},
         );
       const vals = C.variantValues(s.on)[p] ?? [];
       if (vals.length && !vals.includes(wv))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
-          {didYouMean: nearest(wv, vals), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(wv, vals), run: [`${HOW} ${s.on}`]},
         );
     }
     const states = [...t.states, ...COMMON_STATES];
@@ -390,13 +393,13 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_PRIVATE_TOKEN,
         `"${thing}" is private to a component; themes cannot set it.`,
-        {run: [`${P} explain "<what you want>"`]},
+        {run: [`${HOW} "<what you want>"`]},
       );
     if (!(thing in TOKENS)) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
         didYouMean: nearest(thing, Object.keys(TOKENS)),
         run: [
-          `${P} explain ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
+          `${HOW} ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
         ],
       });
     }
@@ -499,7 +502,7 @@ export function checkSetting(
         {
           run: [
             `${P} set ${slug} ${prop} ${q(v || '<value>')} --on <part>`,
-            `${P} explain "${prop}"`,
+            `${HOW} "${prop}"`,
           ],
         },
       );
@@ -567,7 +570,7 @@ export function checkSetting(
     {
       run: hint
         ? hint(v, s.on)
-        : [`${P} explain "${thing}${s.on ? ` on ${s.on}` : ''}"`],
+        : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
       didYouMean: hint
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...CSS_PROPERTIES]),
@@ -596,7 +599,7 @@ function refuseInvisibleCorners(ctx, slug, s) {
         ? kids.map(
             k => `${P} set ${slug} corners ${q(s.value || 'round')} --on ${k}`,
           )
-        : [`${P} explain ${s.on}`],
+        : [`${HOW} ${s.on}`],
     },
   );
 }
@@ -763,7 +766,7 @@ export function answerHow(ctx, question) {
       if (kids.length && group === 'text') {
         results.push({
           text: `parts inside ${part} with their own text color: ${kids.join(', ')}. A text token set --on ${part} reaches them; a color property does not.`,
-          commands: kids.slice(0, 1).map(k => `${P} explain ${k}`),
+          commands: kids.slice(0, 1).map(k => `${HOW} ${k}`),
         });
       }
     }
@@ -838,5 +841,5 @@ export function wholeThemeTokens(ctx, aspect) {
   ];
 }
 
-/** The aspects `explain` answers at the whole-theme level. */
+/** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];

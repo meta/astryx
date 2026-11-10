@@ -4,12 +4,12 @@
  * @file The type checker behind `astryx experimental theme`: the type of
  * every token (from Core's own token groups), what each part reads (from the
  * part data), and the checks that refuse a change that cannot take effect.
- * Also `explain`, and contrast problems the theme caused versus its base.
+ * Also `how` lookups, and contrast problems the theme caused versus its base.
  *
  * @position api/theme-edit — compile-time knowledge over the part data
  */
 
-import {DIRECT, GROUPS} from './_tables.mjs';
+import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 
 /**
  * Whether a color is see-through: its contrast depends on what is under it,
@@ -273,7 +273,7 @@ export function makeCompiler(project, parts) {
         message: `${target} reads ${token} only for ${fmtFeeds(fed)}, not for its ${g}, so this would not change what you expect.`,
         run: [
           `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
-          `${P} explain ${target}`,
+          `${HOW} ${target}`,
         ],
         also: [],
       };
@@ -317,7 +317,7 @@ export function makeCompiler(project, parts) {
       run,
       also: kids.length
         ? [
-            `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${P} explain ${kids[0]})`,
+            `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${HOW} ${kids[0]})`,
           ]
         : [],
     };
@@ -342,7 +342,7 @@ export function makeCompiler(project, parts) {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
       run: near.length
         ? near.slice(0, 3).map(t => `${P} set <theme> ${t} <value>`)
-        : [`${P} explain "<what you want>"`],
+        : [`${HOW} "<what you want>"`],
       also:
         g === 'shadow'
           ? [

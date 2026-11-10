@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Previews for `astryx experimental theme`: the sample app page and
+ * @file Previews for `astryx experimental theme editor` and `theme preview`: the sample app page and
  * the theme-building page (every component grouped, overlays open, and real
  * template pages), rendered with the theme to self-contained HTML by the
- * render machinery, or written into the app as a page module. PNG pictures
+ * render machinery; and the sources of the in-app preview route and its
+ * pages. PNG pictures
  * are made only on request, with a Playwright or Chrome installed on the
  * machine.
  *
@@ -228,7 +229,7 @@ function templateFiles(imports) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string} fromDir the folder of the page
  */
-function themeImports(ctx, slug, data, fromDir) {
+export function themeImports(ctx, slug, data, fromDir) {
   const f = themeFiles(ctx.project.cwd, slug);
   /** @param {string} file */
   const rel = file => {
@@ -352,39 +353,48 @@ function jsx(tree, depth) {
 }
 
 /**
- * Write the theme-building page into the app: a page module that uses the
- * app's own Astryx, with a light and dark switch, plus the template pages
- * it shows, beside it.
- * @param {import('./_settings.mjs').Ctx} ctx
- * @param {string} slug
- * @param {import('./_settings.mjs').ThemeData} data
- * @param {string} dir absolute folder to write into
- * @param {string | undefined} group
- * @returns {{files: string[], components: number, skipped: string[]}}
+ * Import lines for the elements a page uses: Core modules by name, a
+ * template page that is not in Core left out.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, string>} imports element -> module
  */
-export function writeShowcase(ctx, slug, data, dir, group) {
-  const {project} = ctx;
-  const {items, imports, skipped} = showcaseItems(project, group);
-  const ti = themeImports(ctx, slug, data, dir);
+function importLines(project, imports) {
   /** @type {Map<string, string[]>} */
   const byModule = new Map();
-  /** @type {string[]} */
-  const files = [];
   for (const [name, spec] of Object.entries(imports)) {
-    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(spec);
-    if (m) {
-      const file = path.join(dir, `theme-preview-${m[1]}.tsx`);
-      fs.mkdirSync(dir, {recursive: true});
-      fs.copyFileSync(path.join(TEMPLATES_DIR, m[1], 'page.tsx'), file);
-      files.push(shown(project.cwd, file));
-      byModule.set(`./theme-preview-${m[1]}`, [`default as ${name}`]);
-      continue;
-    }
-    const list = byModule.get(spec) ?? [];
-    list.push(name);
-    byModule.set(spec, list);
+    if (spec.startsWith('./templates/')) continue;
+    byModule.set(spec, [...(byModule.get(spec) ?? []), name]);
   }
-  const modeOnly = ti.mode === 'system' ? null : ti.mode;
+  void project;
+  return [...byModule].map(
+    ([spec, names]) =>
+      `import {${names.join(', ')}} from ${JSON.stringify(spec)};`,
+  );
+}
+
+const SAFE = [
+  '/** Shows nothing for a component that throws, so the rest of the page renders. */',
+  'class Safe extends React.Component<{children: React.ReactNode}, {failed: boolean}> {',
+  '  state = {failed: false};',
+  '  static getDerivedStateFromError() {',
+  '    return {failed: true};',
+  '  }',
+  '  render() {',
+  '    return this.state.failed ? null : this.props.children;',
+  '  }',
+  '}',
+];
+
+/**
+ * The source of the preview's components page: every component grouped,
+ * each variant side by side, overlays open. Template pages are pages of
+ * their own (`preview add --template`), so they are not on it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @returns {{source: string, components: number}}
+ */
+export function componentsPageSource(project) {
+  const shownItems = showcaseItems(project, undefined);
+  const items = shownItems.items.filter(it => it.group !== 'pages');
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
   const groups = new Map();
   for (const it of items) {
@@ -409,69 +419,147 @@ export function writeShowcase(ctx, slug, data, dir, group) {
           return `        <div className="tp-cell">\n          <div className="tp-name">${name}</div>\n          <div className="tp-row">\n${body}\n          </div>\n        </div>`;
         })
         .join('\n');
-      return `      <section>\n        <h2 className="tp-group">${g}</h2>\n        <div className="${g === 'pages' ? 'tp-pages' : 'tp-grid'}">\n${cells}\n        </div>\n      </section>`;
+      return `      <section>\n        <h2 className="tp-group">${g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
     })
     .join('\n');
-  const css = `.tp-bar{position:sticky;top:0;z-index:100;display:flex;gap:14px;align-items:center;padding:8px 14px;font:12px ui-monospace,monospace;border-bottom:1px solid #8884;background:var(--color-background-body)}.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-pages{display:grid;gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}`;
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}`;
   const source = [
-    `// Written by \`astryx experimental theme preview ${slug}\`: a page for building the ${slug} theme.`,
-    '// Every component grouped, each variant side by side, overlays open, and full template pages.',
+    '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
     "'use client';",
     '',
     "import * as React from 'react';",
-    "import {Theme} from '@astryxdesign/core/theme';",
-    `import {${slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}Theme as theme} from ${JSON.stringify(ti.module.replace(/\.js$/, ''))};`,
-    ...ti.css.map(c => `import ${JSON.stringify(c)};`),
-    ...[...byModule].map(
-      ([spec, names]) =>
-        `import {${names.join(', ')}} from ${JSON.stringify(spec)};`,
-    ),
+    ...importLines(project, shownItems.imports),
     '',
     'const noop = () => {};',
     '',
-    '/** Shows nothing for a component that throws, so the rest of the page renders. */',
-    'class Safe extends React.Component<{children: React.ReactNode}, {failed: boolean}> {',
-    '  state = {failed: false};',
-    '  static getDerivedStateFromError() {',
-    '    return {failed: true};',
-    '  }',
-    '  render() {',
-    '    return this.state.failed ? null : this.props.children;',
-    '  }',
-    '}',
+    ...SAFE,
     '',
-    'export default function ThemePreviewPage() {',
-    `  const [mode, setMode] = React.useState<'light' | 'dark'>(${JSON.stringify(modeOnly ?? 'light')});`,
+    'export default function ComponentsPage() {',
     '  return (',
-    '    <Theme theme={theme} mode={mode}>',
+    '    <div>',
     `      <style>{${JSON.stringify(css)}}</style>`,
-    "      <div style={{background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}>",
-    '        <div className="tp-bar">',
-    `          <strong>${slug}</strong>`,
-    modeOnly
-      ? `          <span>${modeOnly} only</span>`
-      : "          {(['light', 'dark'] as const).map(m => (\n            <label key={m}>\n              <input type=\"radio\" checked={mode === m} onChange={() => setMode(m)} /> {m}\n            </label>\n          ))}",
-    '        </div>',
     sections,
-    '      </div>',
-    '    </Theme>',
+    '    </div>',
     '  );',
     '}',
     '',
   ].join('\n');
-  fs.mkdirSync(dir, {recursive: true});
-  const main = path.join(dir, 'theme-preview.tsx');
-  fs.writeFileSync(
-    main,
-    source.replace(/onChange=\{noop\}/g, 'onChange={noop}'),
-  );
-  void SHOWCASE_GROUP_HELP;
-  return {
-    files: [shown(project.cwd, main), ...files],
-    components: new Set(items.map(i => i.name)).size,
-    skipped,
-  };
+  return {source, components: new Set(items.map(i => i.name)).size};
 }
+
+/**
+ * The source of the preview's overview page: the sample app page.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @returns {string}
+ */
+export function overviewPageSource(project) {
+  /** @type {Record<string, string>} */
+  const imports = {};
+  for (const n of elementNames(SAMPLE_PAGE)) {
+    const spec = importPathOf(project, n);
+    if (spec) imports[n] = spec;
+  }
+  return [
+    '// Written by `astryx experimental theme preview add`: a sample app page.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+    ...importLines(project, imports),
+    '',
+    'const noop = () => {};',
+    '',
+    'export default function OverviewPage() {',
+    `  return ${jsx(/** @type {any} */ (SAMPLE_PAGE), 1)};`,
+    '}',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The source of the preview route: an app shell with a side nav item per
+ * preview page, a top bar with the theme name and a light/dark/system
+ * switch, and the selected page in the content area. It is a normal page of
+ * the app, so it keeps the app's layout, global CSS and providers.
+ * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[]} | null}} spec
+ *   `file` relative to the route folder, without extension; no theme: the app's own theme
+ * @returns {string}
+ */
+export function previewRouteSource({pages, theme}) {
+  const name = theme?.name ?? 'app theme';
+  const mode = theme
+    ? [
+        '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
+        '            <SegmentedControlItem value="light" label="Light" />',
+        '            <SegmentedControlItem value="dark" label="Dark" />',
+        '            <SegmentedControlItem value="system" label="System" />',
+        '          </SegmentedControl>',
+      ]
+    : [];
+  const shell = [
+    '      <AppShell',
+    '        height="fill"',
+    '        topNav={',
+    `          <TopNav label="Theme preview" heading={<strong>{${JSON.stringify(name)}}</strong>} endContent={`,
+    ...(mode.length ? mode : ['          null']),
+    '          } />',
+    '        }',
+    '        sideNav={',
+    '          <SideNav>',
+    '            {PAGES.map(p => (',
+    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} onClick={() => setPage(p.id)} />',
+    '            ))}',
+    '          </SideNav>',
+    '        }>',
+    '        <current.Page />',
+    '      </AppShell>',
+  ];
+  return [
+    '// Written by `astryx experimental theme preview add`. `preview add`, `preview remove` and',
+    '// theme-preview.json keep it: edit the list with those commands, not by hand.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+    "import {AppShell} from '@astryxdesign/core/AppShell';",
+    "import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';",
+    "import {TopNav} from '@astryxdesign/core/TopNav';",
+    ...(theme
+      ? [
+          "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+          "import {Theme} from '@astryxdesign/core/theme';",
+          `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
+          ...theme.css.map(c => `import ${JSON.stringify(c)};`),
+        ]
+      : []),
+    ...pages.map(
+      (p, i) => `import Page${i} from ${JSON.stringify(`./${p.file}`)};`,
+    ),
+    '',
+    ...(theme ? ["type Mode = 'light' | 'dark' | 'system';", ''] : []),
+    'const PAGES = [',
+    ...pages.map(
+      (p, i) =>
+        `  {id: ${JSON.stringify(p.id)}, label: ${JSON.stringify(p.label)}, Page: Page${i}},`,
+    ),
+    '];',
+    '',
+    'export default function ThemePreviewPage() {',
+    '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    ...(theme
+      ? ["  const [mode, setMode] = React.useState<Mode>('system');"]
+      : []),
+    '  const current = PAGES.find(p => p.id === page) ?? PAGES[0];',
+    '  return (',
+    ...(theme
+      ? ['    <Theme theme={theme} mode={mode}>', ...shell, '    </Theme>']
+      : ['    <>', ...shell, '    </>']),
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/** @param {string} slug */
+const camelName = slug => slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else

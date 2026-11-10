@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file CommandDoc for `astryx experimental theme show`. */
+/** @file CommandDoc for `astryx experimental theme editor show`. */
 
 /** @type {import('@astryxdesign/cli/authoring').CommandDoc} */
 export const doc = {
   type: 'command',
-  name: 'experimental theme show',
-  displayName: 'astryx experimental theme show',
+  name: 'experimental theme editor show',
+  displayName: 'astryx experimental theme editor show',
   namespace: 'cli/commands',
   stability: 'experimental',
   summary:
@@ -38,18 +38,18 @@ export const doc = {
   examples: [
     {
       label: 'Everything',
-      cli: 'astryx experimental theme show brand',
+      cli: 'astryx experimental theme editor show brand',
     },
     {
       label: 'With pictures',
-      cli: 'astryx experimental theme show brand --png',
+      cli: 'astryx experimental theme editor show brand --png',
     },
   ],
   outsideProject: 'refuse',
   notes: [
     {
       type: 'prose',
-      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme show writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the app project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
+      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme editor show writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the app project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
     },
   ],
   exitCodes: [
@@ -62,5 +62,5 @@ export const doc = {
       when: 'the theme does not exist, an unknown --group, or a page that does not render',
     },
   ],
-  related: ['experimental theme', 'experimental theme compile'],
+  related: ['experimental theme editor', 'experimental theme compile'],
 };

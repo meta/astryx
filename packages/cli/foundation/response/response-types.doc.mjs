@@ -112,24 +112,18 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
-    // experimental theme (experimental: may change or be removed in a patch release)
+    // experimental theme editor and preview (experimental: may change or be removed in a patch release)
     {
       value: 'themeEdit.new',
       stability: 'experimental',
       description:
-        'A theme made by `experimental theme new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
+        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
         'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `family` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
-    },
-    {
-      value: 'themeEdit.reset',
-      stability: 'experimental',
-      description:
-        "One setting returned to the base theme's value: the same fields as `themeEdit.set`, with `setting` naming the one removed. Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.show',
@@ -141,19 +135,31 @@ export const doc = {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        'The last change undone: what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` naming the one removed, which is back to the base theme's value. Experimental: may change or be removed in a patch release.",
     },
     {
-      value: 'themeEdit.preview',
+      value: 'themeEdit.previewAdd',
       stability: 'experimental',
       description:
-        'The theme-building page: `mode` (`html`, one rendered file, or `page`, page modules written into the app), the `files` written, the `components` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
+        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added` and every page (`pages`), the `files` the preview wrote, `notes`, a new starter `app` (its folder and files) or null, and how to `open` it. Experimental: may change or be removed in a patch release.",
     },
     {
-      value: 'themeEdit.explain',
+      value: 'themeEdit.previewList',
       stability: 'experimental',
       description:
-        'An explain answer; `kind` says which: `part`, `family`, `setting`, `aspect`, `question` (answers with commands), `picture` (main colors or the color at points) or `list` (the items). Experimental: may change or be removed in a patch release.',
+        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, and the `pages` (`id`, `label`). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.previewRemove',
+      stability: 'experimental',
+      description:
+        'A page or the whole theme preview removed: the route `folder`, the files `removed`, and the `pages` left (empty when the whole preview went). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.how',
+      stability: 'experimental',
+      description:
+        'A how answer; `kind` says which: `part`, `family`, `setting`, `aspect`, `question` (answers with commands), `picture` (main colors or the color at points) or `list` (the items). Experimental: may change or be removed in a patch release.',
     },
     // render (experimental: may change or be removed in a patch release)
     {

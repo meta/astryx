@@ -10,7 +10,10 @@
  */
 
 /** The command prefix every suggested command starts with. */
-export const P = 'astryx experimental theme';
+export const P = 'astryx experimental theme editor';
+
+/** The lookup command: what a part reads, a setting, a question, a picture. */
+export const HOW = `${P} how`;
 
 /** The built-in themes a theme can build on (`new --like`, `set base`). */
 export const LIKE = [
@@ -531,7 +534,7 @@ export const KEY_TOKENS = [
   '--font-family-body',
 ];
 
-/** The CSS properties `explain --list properties` shows without a filter. */
+/** The CSS properties `how --list properties` shows without a filter. */
 export const COMMON_PROPERTIES = [
   'background',
   'background-color',
@@ -581,7 +584,7 @@ export const THING_HINTS = {
   ],
   density: () => [`${P} set <theme> spacing compact`],
   bold: (_v, on) => [`${P} set <theme> font-weight 700 --on ${on ?? '<part>'}`],
-  'text-color': (_v, on) => [`${P} explain "text color on ${on ?? '<part>'}"`],
+  'text-color': (_v, on) => [`${HOW} "text color on ${on ?? '<part>'}"`],
 };
 
 /**
