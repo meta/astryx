@@ -21,7 +21,10 @@ import {
 
 const read = name =>
   yaml.parse(
-    fs.readFileSync(path.resolve(import.meta.dirname, '../workflows', name), 'utf8'),
+    fs.readFileSync(
+      path.resolve(import.meta.dirname, '../workflows', name),
+      'utf8',
+    ),
   );
 const ci = read('ci.yml');
 const step = (job, name) => job.steps.find(each => each.name === name);
@@ -42,11 +45,25 @@ function starts(id, {github, inputs}) {
   const needs = new Proxy({}, {get: () => ({result: 'success', outputs: {}})});
   return Boolean(
     Function(
-      'github', 'needs', 'inputs', 'always', 'cancelled', 'success', 'failure',
-      'startsWith', 'contains', 'fromJSON',
+      'github',
+      'needs',
+      'inputs',
+      'always',
+      'cancelled',
+      'success',
+      'failure',
+      'startsWith',
+      'contains',
+      'fromJSON',
       `return ${hasStatus ? '' : 'success() && '}(${expression});`,
     )(
-      github, needs, inputs, () => true, () => false, () => true, () => false,
+      github,
+      needs,
+      inputs,
+      () => true,
+      () => false,
+      () => true,
+      () => false,
       (value, prefix) => String(value ?? '').startsWith(prefix),
       (list, item) => (list ?? []).includes(item),
       JSON.parse,
@@ -78,11 +95,15 @@ describe('the weekly full WebKit run', () => {
     expect(dispatch).toContain('gh workflow run ci.yml');
     expect(dispatch).toContain('--ref main');
     expect(dispatch).toContain('-f operation=webkit-weekly');
-    expect(ci.on.workflow_dispatch.inputs.operation.options).toContain('webkit-weekly');
+    expect(ci.on.workflow_dispatch.inputs.operation.options).toContain(
+      'webkit-weekly',
+    );
   });
 
   it('starts only the jobs the WebKit proofs need, and its verdict', () => {
-    const started = Object.keys(ci.jobs).filter(id => starts(id, weeklyDispatch));
+    const started = Object.keys(ci.jobs).filter(id =>
+      starts(id, weeklyDispatch),
+    );
     expect(started.sort()).toEqual(
       [
         'admission',
@@ -98,9 +119,12 @@ describe('the weekly full WebKit run', () => {
 
   it('waits in a group of its own, so a release-check never replaces it', () => {
     const group = ci.concurrency.group;
-    const weekly = "(github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && 'webkit-weekly')";
+    const weekly =
+      "(github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && 'webkit-weekly')";
     expect(group).toContain(weekly);
-    expect(group.indexOf(weekly)).toBeLessThan(group.indexOf("'main-heavy-lanes'"));
+    expect(group.indexOf(weekly)).toBeLessThan(
+      group.indexOf("'main-heavy-lanes'"),
+    );
   });
 
   it('runs no WebKit leg when the main-only guard fails', () => {
@@ -110,14 +134,34 @@ describe('the weekly full WebKit run', () => {
         .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
         .replace(/\.labels\.\*\.name/g, '.labels.map(l => l.name)')
         .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]');
-      const needs = new Proxy({}, {
-        get: (_, key) => ({result: key === 'webkit-weekly-request' ? 'failure' : 'success', outputs: {}}),
-      });
+      const needs = new Proxy(
+        {},
+        {
+          get: (_, key) => ({
+            result: key === 'webkit-weekly-request' ? 'failure' : 'success',
+            outputs: {},
+          }),
+        },
+      );
       return Boolean(
-        Function('github', 'needs', 'inputs', 'always', 'cancelled', 'startsWith', 'contains',
-          `return (${expression});`)(
-          {...weeklyDispatch.github, ref: 'refs/heads/fix/thing'}, needs, weeklyDispatch.inputs,
-          () => true, () => false, (v, p) => String(v ?? '').startsWith(p), (l, i) => (l ?? []).includes(i)),
+        Function(
+          'github',
+          'needs',
+          'inputs',
+          'always',
+          'cancelled',
+          'startsWith',
+          'contains',
+          `return (${expression});`,
+        )(
+          {...weeklyDispatch.github, ref: 'refs/heads/fix/thing'},
+          needs,
+          weeklyDispatch.inputs,
+          () => true,
+          () => false,
+          (v, p) => String(v ?? '').startsWith(p),
+          (l, i) => (l ?? []).includes(i),
+        ),
       );
     };
     expect(failedGuard('interaction-legs')).toBe(false);
@@ -129,7 +173,9 @@ describe('the weekly full WebKit run', () => {
     expect(request.if).toBe(
       "github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly'",
     );
-    expect(step(request, 'Require main').run).toContain("[ \"$GITHUB_REF\" != 'refs/heads/main' ]");
+    expect(step(request, 'Require main').run).toContain(
+      '[ "$GITHUB_REF" != \'refs/heads/main\' ]',
+    );
     for (const id of ['interaction-legs', 'pr-interaction-webkit'])
       expect(ci.jobs[id].needs, id).toContain('webkit-weekly-request');
   });
@@ -139,23 +185,26 @@ describe('the weekly full WebKit run', () => {
     expect(webkit.env.WEBKIT_WEEKLY).toBe(
       "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' }}",
     );
-    expect(step(webkit, "Decide this job's scope").with['outside-pull-request']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && 'run' || 'skip' }}",
-    );
+    expect(
+      step(webkit, "Decide this job's scope").with['outside-pull-request'],
+    ).toBe("${{ inputs.operation == 'webkit-weekly' && 'run' || 'skip' }}");
     expect(step(webkit, 'Checkout').with.ref).toBe(
       '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     expect(step(webkit, 'Verify evidence checkout').env.EXPECTED_HEAD_SHA).toBe(
       '${{ github.event.pull_request.head.sha || github.sha }}',
     );
-    expect(step(webkit, "Decide the WebKit scope").run).toContain(
+    expect(step(webkit, 'Decide the WebKit scope').run).toContain(
       'if [ "${WEBKIT_WEEKLY:-}" = true ]; then',
     );
   });
 
   it('records a green or failed verdict for the release check to read', () => {
     const verdict = ci.jobs['webkit-weekly-verdict'];
-    expect(verdict.needs).toEqual(['webkit-weekly-request', 'pr-interaction-webkit']);
+    expect(verdict.needs).toEqual([
+      'webkit-weekly-request',
+      'pr-interaction-webkit',
+    ]);
     expect(verdict.if).toBe(
       "${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success' }}",
     );
@@ -170,21 +219,45 @@ describe('the weekly full WebKit run', () => {
 describe('the release check WebKit scope', () => {
   const now = Date.parse('2026-11-16T15:00:00Z');
   const onMain = {branch: 'main', sameRepository: true};
-  const green = (createdAt, sha = 'a'.repeat(40), run = onMain) => ({name: GREEN, createdAt, sha, ...run});
-  const failed = (createdAt, sha = 'b'.repeat(40), run = onMain) => ({name: FAILED, createdAt, sha, ...run});
+  const green = (createdAt, sha = 'a'.repeat(40), run = onMain) => ({
+    name: GREEN,
+    createdAt,
+    sha,
+    ...run,
+  });
+  const failed = (createdAt, sha = 'b'.repeat(40), run = onMain) => ({
+    name: FAILED,
+    createdAt,
+    sha,
+    ...run,
+  });
 
   it('reads the release version from the release tooling title', () => {
-    expect(releaseVersion('[do not merge] v0.7.12 interaction check at c99ad4aa20')).toBe('0.7.12');
-    expect(releaseVersion('[do not merge] interaction check at c99ad4aa20')).toBeNull();
+    expect(
+      releaseVersion('[do not merge] v0.7.12 interaction check at c99ad4aa20'),
+    ).toBe('0.7.12');
+    expect(
+      releaseVersion('[do not merge] interaction check at c99ad4aa20'),
+    ).toBeNull();
   });
 
   it('runs the subset while the last full weekly run is green and at most 7 days old', () => {
-    expect(releaseScope({version: '0.7.13', verdicts: [green('2026-11-15T11:00:00Z')], now}).full).toBe(false);
+    expect(
+      releaseScope({
+        version: '0.7.13',
+        verdicts: [green('2026-11-15T11:00:00Z')],
+        now,
+      }).full,
+    ).toBe(false);
   });
 
   it('runs the full suite when the last green full weekly run is more than 7 days old', () => {
     const old = new Date(now - MAX_AGE_MS - 60_000).toISOString();
-    const scope = releaseScope({version: '0.7.13', verdicts: [green(old)], now});
+    const scope = releaseScope({
+      version: '0.7.13',
+      verdicts: [green(old)],
+      now,
+    });
     expect(scope.full).toBe(true);
     expect(scope.reason).toContain('more than 7');
   });
@@ -202,8 +275,14 @@ describe('the release check WebKit scope', () => {
   it('reads only verdicts a run on main in this repository recorded', () => {
     const verdicts = [
       failed('2026-11-08T11:00:00Z'),
-      green('2026-11-15T11:00:00Z', 'c'.repeat(40), {branch: 'fix/thing', sameRepository: true}),
-      green('2026-11-15T12:00:00Z', 'd'.repeat(40), {branch: 'main', sameRepository: false}),
+      green('2026-11-15T11:00:00Z', 'c'.repeat(40), {
+        branch: 'fix/thing',
+        sameRepository: true,
+      }),
+      green('2026-11-15T12:00:00Z', 'd'.repeat(40), {
+        branch: 'main',
+        sameRepository: false,
+      }),
     ];
     const scope = releaseScope({version: '0.7.13', verdicts, now});
     expect(scope.full).toBe(true);
@@ -211,24 +290,48 @@ describe('the release check WebKit scope', () => {
   });
 
   it('runs the full suite when no full weekly run is recorded', () => {
-    expect(releaseScope({version: '0.7.13', verdicts: [], now}).full).toBe(true);
+    expect(releaseScope({version: '0.7.13', verdicts: [], now}).full).toBe(
+      true,
+    );
   });
 
   it('runs the full suite at every minor release, and when the version is unknown', () => {
-    expect(releaseScope({version: '0.8.0', verdicts: [green('2026-11-15T11:00:00Z')], now}).full).toBe(true);
-    expect(releaseScope({version: null, verdicts: [green('2026-11-15T11:00:00Z')], now}).full).toBe(true);
+    expect(
+      releaseScope({
+        version: '0.8.0',
+        verdicts: [green('2026-11-15T11:00:00Z')],
+        now,
+      }).full,
+    ).toBe(true);
+    expect(
+      releaseScope({
+        version: null,
+        verdicts: [green('2026-11-15T11:00:00Z')],
+        now,
+      }).full,
+    ).toBe(true);
   });
 
   it('decides in both the leg count job and every WebKit leg, the same way', () => {
-    const lane = step(ci.jobs['pr-interaction-webkit'], 'Decide the WebKit scope');
-    const counter = step(ci.jobs['interaction-legs'], 'Decide the WebKit scope');
+    const lane = step(
+      ci.jobs['pr-interaction-webkit'],
+      'Decide the WebKit scope',
+    );
+    const counter = step(
+      ci.jobs['interaction-legs'],
+      'Decide the WebKit scope',
+    );
     // The same decision; only the scope step it waits on is named apart.
     expect(counter.run).toBe(lane.run);
     expect(counter.env).toEqual(lane.env);
     expect(lane.if).toBe("steps.scope.outputs.applies == 'true'");
     expect(counter.if).toBe("steps.scope-webkit.outputs.applies == 'true'");
-    expect(lane.env.RELEASE_TITLE).toBe('${{ github.event.pull_request.title }}');
-    expect(lane.run).toContain('node .test-scope/.github/scripts/webkit-release-scope.mjs >> "$GITHUB_ENV"');
+    expect(lane.env.RELEASE_TITLE).toBe(
+      '${{ github.event.pull_request.title }}',
+    );
+    expect(lane.run).toContain(
+      'node .test-scope/.github/scripts/webkit-release-scope.mjs >> "$GITHUB_ENV"',
+    );
     for (const id of ['pr-interaction-webkit', 'interaction-legs'])
       expect(ci.jobs[id].permissions.actions, id).toBe('read');
   });

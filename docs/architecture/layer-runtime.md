@@ -147,6 +147,11 @@ can flip across either axis. Centered placements also gain span fallbacks so the
 surface can move along the alignment axis near viewport edges. Clearance is
 applied to both edges of the placement axis so a flip retains the gap.
 
+Known limitation: a trigger inside SVG `<foreignObject>` cannot be a CSS
+anchor in Chromium, so an anchored surface for it opens at the viewport corner.
+Place the trigger in an HTML layer over the SVG, positioned at the node's
+coordinates, and keep the SVG for shapes, edges, and labels.
+
 #### Viewport inset
 
 Anchor mode owns the viewport inset (`spec:AST-059`). Every anchor-mode layer
@@ -782,7 +787,10 @@ it on the surface inside the layer and run no layout while it plays.
   presentation, held from the open until its close settles (INV14).
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
-  Escape/platform routing.
+  Escape/platform routing. The stack, the modal outlet registry, the gesture
+  counter and the per-document outside-press and popover-operation records
+  live under versioned keys, one per page, so every copy of Core on the page
+  orders, routes and dismisses through the same records (`spec:AST-110` FR3).
 - `Popover/usePopover.tsx` owns focus-trap composition and default native light
   dismiss for Popover-family surfaces.
 - `hooks/useFocusTrap.ts` adapts dismissible traps into current shared
@@ -803,7 +811,9 @@ it on the surface inside the layer and run no layout while it plays.
   shared dismissal stack owns Escape and platform close routing.
 - `Layer/toastHost.tsx` owns `ToastContext`, Toast's viewport registration, and
   the toast queue that LayerProvider's outlet and `useToast`'s fallback root
-  both use. `LayerProvider`, `useToast`, and `ToastViewport` own current
+  both use. The viewport registration lives under a versioned key, one per
+  React, so every copy of Core on one React renders the same registered
+  viewport (`spec:AST-110` FR3). `LayerProvider`, `useToast`, and `ToastViewport` own current
   notification state, dispatch, and viewport rendering; the viewport sits at
   the provider's inset on each edge unless its own `toast.inset` overrides that
   edge.

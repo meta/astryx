@@ -60,7 +60,12 @@ describe('legsFitMessage', () => {
 
   it('fits when the proofs need the last leg the matrix has', () => {
     expect(
-      legsFitMessage({seconds: 1480, files: Object.keys(costs), costs, ...limits}),
+      legsFitMessage({
+        seconds: 1480,
+        files: Object.keys(costs),
+        costs,
+        ...limits,
+      }),
     ).toBeNull();
   });
 
@@ -74,13 +79,20 @@ describe('legsFitMessage', () => {
     });
     expect(message).toContain('need 4 legs');
     expect(message).toContain('the matrix has 3');
-    expect(message).toContain('a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)');
+    expect(message).toContain(
+      'a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)',
+    );
   });
 
   it('names the spec when one spec alone outlasts a leg', () => {
     const one = {'huge.spec.ts': 700};
     expect(
-      legsFitMessage({seconds: 700, files: ['huge.spec.ts'], costs: one, ...limits}),
+      legsFitMessage({
+        seconds: 700,
+        files: ['huge.spec.ts'],
+        costs: one,
+        ...limits,
+      }),
     ).toContain('huge.spec.ts (700 s)');
   });
 });
@@ -322,14 +334,35 @@ describe('the list reader and recordLog', () => {
 describe('the interaction leg count job in ci.yml', () => {
   const counter = ci.jobs['interaction-legs'];
   const lanes = [
-    {id: 'pr-interaction', key: 'chromium', count: "Count this run's legs", mine: 'Count the Chromium legs'},
-    {id: 'pr-interaction-webkit', key: 'webkit', count: "Count this run's WebKit legs", mine: 'Count the WebKit legs'},
+    {
+      id: 'pr-interaction',
+      key: 'chromium',
+      count: "Count this run's legs",
+      mine: 'Count the Chromium legs',
+    },
+    {
+      id: 'pr-interaction-webkit',
+      key: 'webkit',
+      count: "Count this run's WebKit legs",
+      mine: 'Count the WebKit legs',
+    },
   ];
 
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
-    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci', 'webkit-weekly-request']);
-    // The WebKit lane's gate, which also admits the weekly full run.
-    expect(counter.if).toBe(ci.jobs['pr-interaction-webkit'].if);
+    expect(counter.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'webkit-weekly-request',
+    ]);
+    // The lanes' gate, which admits main's nightly Chromium run and the
+    // weekly full WebKit run.
+    expect(counter.if).toBe(
+      ci.jobs['pr-interaction-webkit'].if.replace(
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+      ),
+    );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
     expect(counter.outputs).toEqual({
       chromium: '${{ steps.matrix.outputs.chromium }}',
@@ -352,7 +385,9 @@ describe('the interaction leg count job in ci.yml', () => {
     it(`counts the ${lane.key} lane the way its legs do`, () => {
       const job = ci.jobs[lane.id];
       const scope = step(job, "Decide this job's scope");
-      const myScope = counter.steps.find(each => each.id === `scope-${lane.key}`);
+      const myScope = counter.steps.find(
+        each => each.id === `scope-${lane.key}`,
+      );
       expect(myScope.uses).toBe(scope.uses);
       expect(myScope.with).toEqual(scope.with);
       const theirs = step(job, lane.count);
@@ -363,7 +398,10 @@ describe('the interaction leg count job in ci.yml', () => {
       expect(mine['continue-on-error']).toBe(true);
       expect(mine.env ?? {}).toEqual(
         JSON.parse(
-          JSON.stringify(theirs.env ?? {}).replaceAll('steps.scope.', `steps.scope-${lane.key}.`),
+          JSON.stringify(theirs.env ?? {}).replaceAll(
+            'steps.scope.',
+            `steps.scope-${lane.key}.`,
+          ),
         ),
       );
       expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
@@ -395,7 +433,9 @@ describe('the interaction leg count job in ci.yml', () => {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     };
-    expect(outputs(['success', '3'], ['success', '0'])).toBe('chromium=[1, 2, 3]\nwebkit=[1]\n');
+    expect(outputs(['success', '3'], ['success', '0'])).toBe(
+      'chromium=[1, 2, 3]\nwebkit=[1]\n',
+    );
     expect(outputs(['skipped', ''], ['failure', ''])).toBe(
       'chromium=[1]\nwebkit=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n',
     );
@@ -404,12 +444,22 @@ describe('the interaction leg count job in ci.yml', () => {
     );
   });
 
-  it('caps every count at the ceiling the lanes\' fallback matrix lists, ten legs', () => {
-    const ceiling = matrixFor(ci.jobs['pr-interaction'].strategy.matrix.leg, 'pull_request').length;
+  it("caps every count at the ceiling the lanes' fallback matrix lists, ten legs", () => {
+    const ceiling = matrixFor(
+      ci.jobs['pr-interaction'].strategy.matrix.leg,
+      'pull_request',
+    ).length;
     expect(ceiling).toBe(10);
-    expect(matrixFor(ci.jobs['pr-interaction-webkit'].strategy.matrix.leg, 'pull_request')).toHaveLength(ceiling);
+    expect(
+      matrixFor(
+        ci.jobs['pr-interaction-webkit'].strategy.matrix.leg,
+        'pull_request',
+      ),
+    ).toHaveLength(ceiling);
     for (const lane of lanes) {
-      expect(step(ci.jobs[lane.id], lane.count).run).toContain(`--max-legs ${ceiling}`);
+      expect(step(ci.jobs[lane.id], lane.count).run).toContain(
+        `--max-legs ${ceiling}`,
+      );
       expect(step(counter, lane.mine).run).toContain(`--max-legs ${ceiling}`);
     }
     const name = step(counter, "Name each lane's legs").run;
@@ -646,10 +696,7 @@ describe('the interaction proof legs in ci.yml', () => {
             '-c',
             count.run
               .replaceAll('${{ matrix.leg }}', String(leg))
-              .replaceAll(
-                '${{ strategy.job-total }}',
-                '6',
-              ),
+              .replaceAll('${{ strategy.job-total }}', '6'),
           ],
           {
             cwd: dir,
@@ -1039,7 +1086,9 @@ describe('the interaction proof legs in ci.yml', () => {
         // so the next step is proposed before the guard trips.
         const near = nearCeilingMessage({seconds, ...limits});
         if (near)
-          console.log(`::warning title=Interaction legs near the ceiling::${label}: ${near}`);
+          console.log(
+            `::warning title=Interaction legs near the ceiling::${label}: ${near}`,
+          );
         expect(
           legsFitMessage({
             seconds,

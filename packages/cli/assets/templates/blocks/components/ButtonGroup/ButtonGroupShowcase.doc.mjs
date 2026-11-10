@@ -14,5 +14,6 @@ export const doc = {
     ChevronDownIcon: 'chevronDown',
     ClipboardDocumentIcon: 'clipboard',
     ClipboardIcon: 'clipboard',
+    ScissorsIcon: 'cut',
   },
 };

@@ -465,7 +465,7 @@
     "spec:AST-085",
     "spec:AST-086"
   ],
-  "packages/core/src/HoverCard/HoverCard.tsx": ["#5049", "#5049"],
+  "packages/core/src/HoverCard/HoverCard.tsx": ["#5049"],
   "packages/core/src/HoverCard/useHoverCard.tsx": ["FR11"],
   "packages/core/src/Icon/Icon.tsx": ["ORD1", "spec quote"],
   "packages/core/src/Indicator/CheckIndicator.tsx": ["#4838", "#4893"],
@@ -591,9 +591,7 @@
     "spec:AST-085",
     "spec:AST-085"
   ],
-  "packages/core/src/List/List.tsx": ["FR29", "spec:AST-017"],
   "packages/core/src/List/ListContext.tsx": ["DEC-6", "spec:AST-061"],
-  "packages/core/src/List/ListItem.tsx": ["FR11", "spec:AST-061"],
   "packages/core/src/Markdown/Markdown.fr23.bench.ts": [
     "AST-036",
     "FR23",
@@ -1085,13 +1083,6 @@
     "FR2",
     "FR8",
     "spec:AST-086"
-  ],
-  "packages/core/src/Timestamp/Timestamp.tsx": [
-    "FR5",
-    "FR9",
-    "component:Timestamp",
-    "component:Timestamp",
-    "spec quote"
   ],
   "packages/core/src/Toast/Toast.tsx": ["FR3"],
   "packages/core/src/Toast/ToastViewport.tsx": [

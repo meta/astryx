@@ -54,6 +54,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -503,7 +504,13 @@ function StandaloneBottomSheet({
     BOTTOM_SHEET_STACK_DEFAULT_VIEW,
   );
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  // Written at commit: a render React discards, as a suspended transition
+  // does, must not change the scrim. The insertion effect runs before any
+  // layout effect, so a nested sheet's registry call in the same commit sees
+  // the new state too.
+  useInsertionEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
   // Closed and being replaced by the sheet that opened in the same update:
   // the panel is retained (stays, aligns, fades) instead of sliding out.
   const isReplaced = !isOpen && isPresented && stackView.replacedMotion != null;

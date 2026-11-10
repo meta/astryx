@@ -85,14 +85,14 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
-    // The same gate, and the weekly full run on main as its one dispatch
-    // (spec:AST-030 DEC-24).
-    expect(webkit.if).toBe(
-      chromium.if.replace(
-        "github.event_name != 'workflow_dispatch' && always()",
-        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
-      ),
-    );
+    // The Chromium proofs also run for main's nightly full run; the WebKit
+    // proofs run for the weekly full run on main (spec:AST-030 DEC-24).
+    const nightly =
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()";
+    const weekly =
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()";
+    expect(chromium.if).toContain(nightly);
+    expect(webkit.if).toBe(chromium.if.replace(nightly, weekly));
     expect(ungated(webkit.if)).toBe(
       "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
@@ -122,7 +122,8 @@ describe('WebKit interaction proof routing', () => {
     );
     expect(webkit.steps.indexOf(decide(webkit))).toBe(1);
     expect(decide(webkit).with).toMatchObject({
-      'outside-pull-request': "${{ github.event_name == 'workflow_dispatch' && 'run' || 'skip' }}",
+      'outside-pull-request':
+        "${{ inputs.operation == 'webkit-weekly' && 'run' || 'skip' }}",
       'requires-head-file': 'playwright.interaction.config.ts',
     });
     expect(step(webkit, 'Skip the WebKit proofs outside their scope').if).toBe(

@@ -68,8 +68,8 @@ jobs:
               >> "$GITHUB_OUTPUT"
           fi
 
-      # Public text carries no internal identifier, host or name: each commit
-      # message and added line from the merge base to the head, and the title
+      # Public text carries no internal identifier, host or name: each of the
+      # pull request's own commit messages and added lines, and the title
       # and description as they read when the check runs, so a re-run reads an
       # edit (spec:AST-030 FR27). The base branch's copy of the check runs, so
       # a pull request cannot change its own check.
@@ -98,23 +98,43 @@ jobs:
           fi
           HEAD_SHA=$(git rev-parse HEAD^2)
           BASE_TIP=$(git rev-parse HEAD^1)
+          MERGE_SHA=$(git rev-parse HEAD)
+          # The pull request's own commits come from GitHub's list of them, and
+          # its added lines from the base tip to this merge, so a shallow clone
+          # cannot read the base branch's commits as the pull request's. The
+          # list is used only when it holds every commit the pull request
+          # reports (GitHub lists at most 250).
+          COMMITS="$CHECK_DIR/commits.jsonl"
+          EXPECTED=$(node -e 'const p = require(process.argv[1]); process.stdout.write(String(p.commits ?? p.pull_request?.commits ?? ""))' "$CHECK_DIR/pull-request.json" 2>/dev/null || true)
+          LISTED=false
+          if [ -n "$EXPECTED" ] \
+            && gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
+              --jq '.[] | {sha: .sha, message: .commit.message}' > "$COMMITS" 2>/dev/null \
+            && [ "$(grep -c . "$COMMITS")" -eq "$EXPECTED" ]; then
+            LISTED=true
+          fi
           MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
-          # A branch far behind its base: deepen only the base branch and the
-          # pull request head, then, rarely, take the whole history.
-          if [ -z "$MERGE_BASE" ]; then
+          # Without the list: a branch far behind its base deepens only the
+          # base branch and the pull request head, then, rarely, takes the
+          # whole history.
+          if [ -z "$MERGE_BASE" ] && [ "$LISTED" != true ]; then
             git fetch --no-tags --deepen=500 origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
             MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
           fi
-          if [ -z "$MERGE_BASE" ]; then
+          if [ -z "$MERGE_BASE" ] && [ "$LISTED" != true ]; then
             git fetch --no-tags --unshallow origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
             MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
           fi
-          if [ -z "$MERGE_BASE" ]; then
-            echo "::error title=Public text check::The merge base was not found, so the commits cannot be checked."
+          if [ -z "$MERGE_BASE" ] && [ "$LISTED" != true ]; then
+            echo "::error title=Public text check::Neither the pull request's commit list nor its merge base could be read, so the commits cannot be checked."
             exit 1
           fi
+          ARGS=(--base "${MERGE_BASE:-$BASE_TIP}" --head "$HEAD_SHA")
+          if [ "$LISTED" = true ]; then
+            ARGS+=(--commits-json "$COMMITS" --diff-base "$BASE_TIP" --diff-head "$MERGE_SHA")
+          fi
           node "$CHECK_DIR/.github/scripts/check-public-text.mjs" \
-            --base "$MERGE_BASE" --head "$HEAD_SHA" \
+            "${ARGS[@]}" \
             --hashes "$CHECK_DIR/public-text-hashes.json" \
             --pr-json "$CHECK_DIR/pull-request.json"
 
@@ -189,6 +209,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"

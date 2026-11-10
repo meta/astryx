@@ -360,6 +360,9 @@ export {
   type TabBarProps,
 } from './TabBar';
 
+// TabBarMoreList: the screen of TabBar's More tab (UIMoreListController).
+export {TabBarMoreList, type TabBarMoreListProps} from './TabBarMoreList';
+
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';

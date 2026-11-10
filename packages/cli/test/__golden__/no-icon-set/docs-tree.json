@@ -1197,7 +1197,8 @@
   "styling-libraries/tailwind": {
     "type": "docs.detail",
     "sections": [
-      "tailwind"
+      "tailwind",
+      "add-astryx-to-an-app-that-already-uses-tailwind"
     ],
     "mentions": []
   },
@@ -1415,7 +1416,8 @@
       "type-scale",
       "display-text",
       "usage",
-      "custom-type-scale"
+      "custom-type-scale",
+      "dynamic-type"
     ],
     "mentions": []
   },
