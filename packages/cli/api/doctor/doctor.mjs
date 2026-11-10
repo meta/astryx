@@ -42,6 +42,7 @@ import {
 } from '../../foundation/agent-docs/agent-docs.mjs';
 import {
   CLI_ROOT,
+  findPackageRoot,
   findProjectCoreDir,
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
@@ -107,6 +108,9 @@ import {
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
+  findIconPlaceholders,
+  placeholderFixes,
+  unlistedIconSets,
   computerIntegrationsToAdd,
   displayHomePath,
   outsideProject,
@@ -157,8 +161,13 @@ import {checkBuilt} from './built-checks.mjs';
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
- * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string}}|null} [iconSets]
+ * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
  *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   Experimental: may change or be removed in a patch release.
+ * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
+ *   Each file in the project's own source that uses the placeholder component
+ *   the CLI writes for a missing icon, read only in a project that sets
+ *   `experimental.iconSet`; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
@@ -996,10 +1005,11 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
- * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet` names a set
- * that is not installed, or one that is installed but withdrawn (with why);
- * warns when two or more sets are installed and none is the project's, and
- * for each other installed set that was withdrawn, with why.
+ * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet`
+ * names a set, main or backup, that is not installed, that is installed but
+ * withdrawn (with why), or that two packages ship under one name; and when
+ * more than one set is installed and the list leaves one out. Warns for each
+ * other installed set that was withdrawn, with why.
  * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
  * `experimental.iconSet` gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
@@ -1013,38 +1023,66 @@ export function checkIconSets(ctx) {
   const {sets, withdrawn, choice} = state;
   // Only a project that opts in with `experimental.iconSet` gets the check.
   if (!choice.configured) return null;
-  if (choice.status === 'missing') {
+  const list = [
+    {selector: choice.configured, status: choice.status, reason: choice.reason},
+    ...(choice.backups ?? []),
+  ];
+  const installFix =
+    'Install the package that ships the set, or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the installed sets).';
+  const missing = list.filter(each => each.status === 'missing');
+  if (missing.length > 0) {
     return {
       id,
       label,
       status: 'fail',
-      message: choice.reason,
-      fix: 'Install the package that ships the set, or set experimental.iconSet in astryx.config to an installed set (`astryx experimental icon --list` names them).',
+      message: missing.map(each => each.reason).join(' | '),
+      fix: installFix,
     };
   }
-  if (choice.status === 'withdrawn') {
+  const gone = list.filter(each => each.status === 'withdrawn');
+  if (gone.length > 0) {
     return {
       id,
       label,
       status: 'fail',
-      message: choice.reason,
-      fix: 'Run `astryx integration check` in the package that ships the set, or install the module its data names; or set experimental.iconSet in astryx.config to a valid installed set (`astryx experimental icon --list` names them).',
+      message: gone.map(each => each.reason).join(' | '),
+      fix: 'Run `astryx integration check` in the package that ships the set, or install the module its data names; or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the valid installed sets).',
     };
   }
-  /** @type {string[]} */
-  const problems = [];
-  if (choice.status === 'ambiguous') problems.push(choice.reason);
-  for (const each of withdrawn) problems.push(each.reason);
-  if (problems.length > 0) {
+  const shared = list.filter(each => each.status === 'ambiguous');
+  if (shared.length > 0) {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: shared.map(each => each.reason).join(' | '),
+      fix: 'Write each name in experimental.iconSet as "<package>/<set>" (`astryx experimental icon --list` names them).',
+    };
+  }
+  const order = choice.order ?? [];
+  const unlisted = sets.filter(set => !order.includes(set));
+  if (sets.length > 1 && unlisted.length > 0) {
+    const {problem, fix} = unlistedIconSets(
+      sets.length,
+      list[0].selector,
+      list.slice(1).map(each => each.selector),
+      unlisted.map(set => `${set.package}/${set.name}`),
+    );
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: `${problem} (experimental.iconSet), so which set a copied template uses is not decided.`,
+      fix,
+    };
+  }
+  if (withdrawn.length > 0) {
     return {
       id,
       label,
       status: 'warn',
-      message: problems.join(' | '),
-      fix:
-        choice.status === 'ambiguous'
-          ? 'Set experimental.iconSet in astryx.config to "<package>/<set>" so templates use one set.'
-          : 'Run `astryx integration check` in the package that ships the set, or install its module.',
+      message: withdrawn.map(each => each.reason).join(' | '),
+      fix: 'Run `astryx integration check` in the package that ships the set, or install its module.',
     };
   }
   return {
@@ -1052,6 +1090,48 @@ export function checkIconSets(ctx) {
     label,
     status: 'pass',
     message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}`,
+  };
+}
+
+/**
+ * The placeholder component for a missing icon, still in the project's own
+ * source (AST-084): each file and the meanings it stands for, with the commands that give each a
+ * real icon. Only a project that sets `experimental.iconSet` gets the check.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconPlaceholders(ctx) {
+  const choice = ctx.iconSets?.choice;
+  if (!choice?.configured || ctx.iconPlaceholders == null) return null;
+  const id = 'icon-placeholders';
+  const label = 'Placeholder icons';
+  const found = ctx.iconPlaceholders;
+  if (found.length === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: 'No copied code uses the placeholder for a missing icon.',
+    };
+  }
+  const main = choice.configured;
+  const meanings = [
+    ...new Set(found.flatMap(each => each.meanings ?? [])),
+  ].sort();
+  const where = found
+    .map(
+      each =>
+        `${each.file} (${each.meanings ? each.meanings.join(', ') : 'meaning not recorded'})`,
+    )
+    .join(', ');
+  const uses = found.reduce((total, each) => total + each.uses, 0);
+  const [mapFix, backupFix] = placeholderFixes(meanings, main);
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
+    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
   };
 }
 
@@ -2151,6 +2231,7 @@ export const SYNC_CHECKS = [
   checkProviderIdentity,
   checkIntegrationIssues,
   checkIconSets,
+  checkIconPlaceholders,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
@@ -2218,6 +2299,8 @@ export async function runChecks(options = {}) {
   let projectError = null;
   /** @type {DoctorContext['iconSets']} */
   let iconSets = null;
+  /** @type {DoctorContext['iconPlaceholders']} */
+  let iconPlaceholders = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
@@ -2315,6 +2398,9 @@ export async function runChecks(options = {}) {
       }
       try {
         iconSets = await project.iconSets();
+        if (iconSets.choice.configured) {
+          iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+        }
       } catch {
         iconSets = null;
       }
@@ -2344,6 +2430,7 @@ export async function runChecks(options = {}) {
     configError,
     projectError,
     iconSets,
+    iconPlaceholders,
   };
 
   /** @type {DoctorCheck[]} */
