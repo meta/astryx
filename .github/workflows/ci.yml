@@ -722,7 +722,9 @@ jobs:
           compression-level: 6
 
       # The built API surface the data tests read for public-hook coverage.
-      # A package the dependency build above skips is listed as not built.
+      # The CLI and build packages, which the dependency build above skips,
+      # are listed as not built; the test names them as excluded and fails on
+      # any other package missing from the surface.
       - name: Write the docsite's API surface
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: node scripts/api-report/cli.mjs --surface .api-surface-docsite

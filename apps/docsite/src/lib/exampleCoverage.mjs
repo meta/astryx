@@ -317,28 +317,65 @@ export function formatCoverageReport(packageName, coverage, blocks) {
 const SURFACE_HINT = 'node scripts/api-report/cli.mjs --surface <dir>';
 
 /**
+ * Packages the docsite-build CI job does not build, so its API surface lists
+ * them as not built. Neither has a public hook.
+ */
+export const NOT_BUILT_IN_DOCSITE_BUILD = Object.freeze([
+  '@astryxdesign/cli',
+  '@astryxdesign/build',
+]);
+export const NOT_BUILT_REASON = 'not built in docsite-build';
+
+/**
  * The built API surface the hook coverage reads: `ASTRYX_API_SURFACE`, a
  * directory relative to the repository root that holds `surface.json`. In CI a
- * missing or unreadable surface is an error, so the coverage cannot stop
- * silently; elsewhere the hook coverage is skipped with a note.
+ * missing or unreadable surface is an error, and so is a package the surface
+ * lists as not built that NOT_BUILT_IN_DOCSITE_BUILD does not name: a package
+ * never leaves the hook coverage without a stated reason. Outside CI the hook
+ * coverage is skipped with a note, and an unexpected package is only named.
  *
  * @param {{env: Record<string, string | undefined>, repoRoot: string}} input
- * @returns {{dir: string} | {skip: string}}
+ * @returns {{dir: string, excluded: string[], unexpected: string[]} | {skip: string}}
  */
 export function resolveApiSurface({env, repoRoot}) {
+  const ci = env.CI === 'true';
   const value = env.ASTRYX_API_SURFACE;
   const dir = value ? path.resolve(repoRoot, value) : null;
-  if (dir && fs.existsSync(path.join(dir, 'surface.json'))) return {dir};
-  if (env.CI === 'true') {
+  let surface = null;
+  try {
+    surface = dir
+      ? JSON.parse(fs.readFileSync(path.join(dir, 'surface.json'), 'utf8'))
+      : null;
+  } catch {
+    surface = null;
+  }
+  if (!surface) {
+    if (ci) {
+      throw new Error(
+        `ASTRYX_API_SURFACE is required in CI: build it with ${SURFACE_HINT}`,
+      );
+    }
+    return {
+      skip: value
+        ? `Hook coverage skipped: ${value} holds no readable surface.json; build it with ${SURFACE_HINT}.`
+        : `Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that ${SURFACE_HINT} wrote.`,
+    };
+  }
+  const notBuilt = (Array.isArray(surface.skipped) ? surface.skipped : []).map(
+    entry => String(entry?.name ?? ''),
+  );
+  const excluded = notBuilt.filter(name =>
+    NOT_BUILT_IN_DOCSITE_BUILD.includes(name),
+  );
+  const unexpected = notBuilt.filter(
+    name => !NOT_BUILT_IN_DOCSITE_BUILD.includes(name),
+  );
+  if (ci && unexpected.length) {
     throw new Error(
-      `ASTRYX_API_SURFACE is required in CI: build it with ${SURFACE_HINT}`,
+      `The API surface lists ${unexpected.join(', ')} as not built, so hook coverage would skip ${unexpected.length === 1 ? 'it' : 'them'}. Build ${unexpected.length === 1 ? 'it' : 'them'} before writing the surface, or add ${unexpected.length === 1 ? 'it' : 'them'} to NOT_BUILT_IN_DOCSITE_BUILD with a reason.`,
     );
   }
-  return {
-    skip: value
-      ? `Hook coverage skipped: ${value} holds no surface.json; build it with ${SURFACE_HINT}.`
-      : `Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that ${SURFACE_HINT} wrote.`,
-  };
+  return {dir, excluded, unexpected};
 }
 
 /**
