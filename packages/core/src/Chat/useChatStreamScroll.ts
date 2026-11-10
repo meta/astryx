@@ -4,7 +4,8 @@
 
 /**
  * @file useChatStreamScroll.ts
- * @input Uses React refs, state, callbacks, useMediaQuery
+ * @input Uses React refs, state, callbacks, useMediaQuery, and the input
+ *   stream's document scroll events when the page itself scrolls
  * @output Exports useChatStreamScroll hook for AI chat scroll behavior
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
@@ -34,6 +35,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
+import {subscribeInput} from '../utils/inputStream';
 
 // =============================================================================
 // Types
@@ -150,6 +152,13 @@ function markFollowing(el: Element, locked: boolean): void {
   } else {
     following.delete(el);
   }
+}
+
+// The page's scroll fires at the document. The root's box moves up by that
+// scroll.
+function scrollsPage(el: HTMLElement): boolean {
+  const doc = el.ownerDocument;
+  return el === doc.scrollingElement || el === doc.documentElement;
 }
 
 export function useChatStreamScroll({
@@ -305,9 +314,12 @@ export function useChatStreamScroll({
       if (!container) {
         return;
       }
-      const containerRect = container.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      const offset = elRect.top - containerRect.top + container.scrollTop;
+      // The page's visible area starts at the viewport's top, not at the
+      // root's box.
+      const top = scrollsPage(container)
+        ? 0
+        : container.getBoundingClientRect().top;
+      const offset = el.getBoundingClientRect().top - top + container.scrollTop;
       container.scrollTo({top: offset, behavior: 'instant'});
       lastScrollTopRef.current = container.scrollTop;
     },
@@ -363,8 +375,8 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
-  // Syncs scroll and scrollend listeners on the stream container with
-  // `enabled`.
+  // Syncs the scroll and scrollend listeners with `enabled`: the stream
+  // container's own, or the document's when the container scrolls the page.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
@@ -373,10 +385,15 @@ export function useChatStreamScroll({
 
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
+    const doc = el.ownerDocument;
+    const isPage = scrollsPage(el);
+    // The root's offsetHeight is the page's height. Its clientHeight is the
+    // viewport's, which is what the reader sees.
+    const shownHeight = () => (isPage ? el.clientHeight : el.offsetHeight);
 
     const onScroll = () => {
-      const {scrollTop, scrollHeight, offsetHeight} = el;
-      const dist = scrollHeight - scrollTop - offsetHeight;
+      const {scrollTop, scrollHeight} = el;
+      const dist = scrollHeight - scrollTop - shownHeight();
 
       // Button visibility
       setIsScrolledUp(dist > buttonThreshold);
@@ -397,14 +414,29 @@ export function useChatStreamScroll({
     };
 
     const onScrollEnd = () => {
-      const dist = el.scrollHeight - el.scrollTop - el.offsetHeight;
+      const dist = el.scrollHeight - el.scrollTop - shownHeight();
       if (dist <= lockThreshold) {
         setLocked(true);
       }
     };
 
-    el.addEventListener('scroll', onScroll, {passive: true});
-    el.addEventListener('scrollend', onScrollEnd);
+    // A scroll of the page fires at the document, not at its root element.
+    const view = isPage ? doc.defaultView : null;
+    const stopPageListeners: (() => void)[] = [];
+    if (view != null) {
+      const atDocument = (listener: () => void) => (event: Event) => {
+        if (event.target === doc) {
+          listener();
+        }
+      };
+      stopPageListeners.push(
+        subscribeInput(view, 'scroll', atDocument(onScroll)),
+        subscribeInput(view, 'scrollend', atDocument(onScrollEnd)),
+      );
+    } else {
+      el.addEventListener('scroll', onScroll, {passive: true});
+      el.addEventListener('scrollend', onScrollEnd);
+    }
 
     // Initial scroll to bottom — content already present at mount.
     requestAnimationFrame(() => {
@@ -416,6 +448,9 @@ export function useChatStreamScroll({
     });
 
     return () => {
+      for (const stop of stopPageListeners) {
+        stop();
+      }
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
       markFollowing(el, false);

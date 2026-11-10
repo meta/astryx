@@ -51,6 +51,8 @@ const RELEASED_REFUSAL_CODES = {
   'integration add': 'ERR_FILE_NOT_FOUND',
   'theme use': 'ERR_THEME_INVALID',
   'theme remove': 'ERR_THEME_INVALID',
+  'experimental theme use': 'ERR_THEME_INVALID',
+  'experimental theme remove': 'ERR_THEME_INVALID',
 };
 
 /** Every `own` command; each has a describe block below. */
@@ -62,6 +64,7 @@ const OWN_TESTED = new Set([
   'integration verify',
   'integration pack',
   'theme add',
+  'experimental theme add',
   'upgrade',
 ]);
 
@@ -747,6 +750,43 @@ describe('theme add outside a project (own)', () => {
       const r = await answer(
         ['--json', 'theme', 'add', 'butter'],
         tmpDir('theme-add-slug'),
+      );
+      expect(r.status).toBe(1);
+      expect(r.written).toEqual([]);
+      expect(r.kind).toBe('ERR_THEME_INVALID');
+      expect(r.envelope.error).toContain('app project');
+    },
+    SLOW,
+  );
+});
+
+describe('experimental theme add outside a project (own)', () => {
+  it(
+    'lists the available themes with no slug, as in a new project',
+    async () => {
+      const empty = await answer(
+        ['--json', 'experimental', 'theme', 'add'],
+        tmpDir('experimental-theme-add'),
+      );
+      const project = await answer(
+        ['--json', 'experimental', 'theme', 'add'],
+        newProject(),
+      );
+      expect(empty.status).toBe(0);
+      expect(empty.envelope.type).toBe('theme.list');
+      expect(empty.envelope.data.map(t => t.slug)).toEqual(
+        project.envelope.data.map(t => t.slug),
+      );
+    },
+    SLOW,
+  );
+
+  it(
+    'writes nothing and names the app project it needs, given a slug',
+    async () => {
+      const r = await answer(
+        ['--json', 'experimental', 'theme', 'add', 'butter'],
+        tmpDir('experimental-theme-add-slug'),
       );
       expect(r.status).toBe(1);
       expect(r.written).toEqual([]);

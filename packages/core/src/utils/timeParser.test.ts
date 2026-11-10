@@ -11,6 +11,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  createISOTimeString,
   parseISOTime,
   formatISOTime,
   formatDisplayTime12h,
@@ -52,6 +53,46 @@ describe('parseISOTime', () => {
     expect(parseISOTime('14:60')).toBeNull();
     expect(parseISOTime('14:30:60')).toBeNull();
     expect(parseISOTime('abc')).toBeNull();
+  });
+});
+
+describe('createISOTimeString', () => {
+  it('normalizes a valid time', () => {
+    expect(createISOTimeString('14:30')).toBe('14:30');
+    expect(createISOTimeString('9:05')).toBe('09:05');
+    expect(createISOTimeString('14:30:45')).toBe('14:30:45');
+  });
+
+  it('accepts what main read as the right time', () => {
+    expect(createISOTimeString(' 14:30 ')).toBe('14:30');
+    expect(createISOTimeString('14:30:15.250')).toBe('14:30:15');
+  });
+
+  it('rejects a 12-hour time instead of reading it 12 hours off', () => {
+    expect(createISOTimeString('2:30 PM')).toBeNull();
+    expect(createISOTimeString('2:30pm')).toBeNull();
+  });
+
+  it('rejects a field with anything but digits', () => {
+    expect(createISOTimeString('14:30abc')).toBeNull();
+    expect(createISOTimeString('14.9:30')).toBeNull();
+    expect(createISOTimeString('1e1:30')).toBeNull();
+    expect(createISOTimeString('14:30:00Z')).toBeNull();
+    expect(createISOTimeString('14:30.5')).toBeNull();
+  });
+
+  it('rejects a field with more than two digits', () => {
+    expect(createISOTimeString('014:30')).toBeNull();
+  });
+
+  it('answers null for a value that is not a string', () => {
+    expect(createISOTimeString(undefined as unknown as string)).toBeNull();
+    expect(createISOTimeString(null as unknown as string)).toBeNull();
+  });
+
+  it('rejects an out-of-range time', () => {
+    expect(createISOTimeString('24:00')).toBeNull();
+    expect(createISOTimeString('14:60')).toBeNull();
   });
 });
 

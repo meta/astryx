@@ -860,6 +860,62 @@ describe('Tooltip', () => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
     });
+
+    describe('focus a dialog returns after a tap', () => {
+      /**
+       * Tap the trigger, type into a field elsewhere, then hand focus back to
+       * the trigger the way a closing dialog does. The returned focus matches
+       * `:focus-visible` after typing in a real browser; jsdom does not model
+       * that, so stand it up here.
+       */
+      const tapTypeAndReturn = async (keys: string[]) => {
+        const onOpenChange = vi.fn();
+        render(
+          <>
+            <Tooltip
+              content="Rename this file"
+              onOpenChange={onOpenChange}
+              delay={0}>
+              <button type="button">Rename</button>
+            </Tooltip>
+            <input type="text" aria-label="File name" />
+          </>,
+        );
+        const trigger = screen.getByRole('button', {name: 'Rename'});
+        const field = screen.getByLabelText('File name');
+        const realMatches = trigger.matches.bind(trigger);
+        vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+          selector === ':focus-visible' ? true : realMatches(selector),
+        );
+
+        tap(trigger);
+        tapOutside(field);
+        for (const key of keys) {
+          fireEvent.keyDown(field, {key});
+        }
+        fireEvent.focusIn(trigger);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return onOpenChange;
+      };
+
+      it.each([
+        ['typed characters', ['-', 'v', '2']],
+        ['an edit and the Go key', ['Backspace', 'Enter']],
+        ['keys an on-screen keyboard leaves unidentified', ['Unidentified']],
+      ])('stays shut after %s', async (_, keys) => {
+        const onOpenChange = await tapTypeAndReturn(keys);
+        expect(onOpenChange).not.toHaveBeenCalledWith(true);
+      });
+
+      it.each([
+        ['Escape', ['-', 'Escape']],
+        ['Tab', ['-', 'Tab']],
+        ['an arrow key', ['-', 'ArrowLeft']],
+      ])('opens after %s, which is keyboard navigation', async (_, keys) => {
+        const onOpenChange = await tapTypeAndReturn(keys);
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
   });
 });
 

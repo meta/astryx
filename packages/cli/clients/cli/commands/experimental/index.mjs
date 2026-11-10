@@ -14,6 +14,7 @@ import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
 import {registerExperimentalRender} from './render.mjs';
+import {registerExperimentalTheme} from './theme.mjs';
 
 /** @param {import('commander').Command} program */
 export function registerExperimental(program) {
@@ -42,4 +43,5 @@ export function registerExperimental(program) {
   });
   registerExperimentalIcon(experimental, program);
   registerExperimentalRender(experimental, program);
+  registerExperimentalTheme(experimental, program);
 }
