@@ -25,8 +25,10 @@ import {
   blockMainThread,
   type BusyRun,
   type BusyWindow,
+  BusyWindowTooLateError,
   compareCurve,
   CONTROL_RGB,
+  controlPageTimes,
   curveOf,
   drag,
   frames,
@@ -34,6 +36,7 @@ import {
   openStory,
   pooledBusyProof,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   startBusyControl,
   startScreencast,
@@ -464,6 +467,11 @@ test('the dismissal keeps changing the screen every frame while the main thread 
   const runs: BusyRun[] = [];
   const windows: BusyWindow[] = [];
   const closed: boolean[] = [];
+  // When each run's block began, and the first and last frames of its fade
+  // on the cast, ms on the page clock.
+  const blockFroms: number[] = [];
+  const fadeStarts: (number | null)[] = [];
+  const fadeLasts: (number | null)[] = [];
   // The backdrop's level on the cast while the finger rests before each lift:
   // the value the page itself set at the drag's end.
   const beforeLift: (number | null)[] = [];
@@ -502,16 +510,61 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     const lastMove =
       played.filter(e => e.type === 'touchMove').at(-1)?.dispatchedAt ??
       Number.NaN;
-    beforeLift.push(
-      tracked.filter(f => f.box != null && f.t >= lastMove && f.t < lift).at(-1)
-        ?.box?.x ?? null,
-    );
+    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+    // A WebKit busy proof dates its frames on the control's clock, with
+    // `controlPageTimes` over the same stamps. The fade's frames are read on
+    // that clock too. Chromium keeps the cast's stamps. With no control
+    // reading at all, the fade gets no time, and no late label.
+    const dating = control.every(f => f.engine === 'webkit')
+      ? controlPageTimes(
+          [...new Set([...tracked, ...control].map(f => f.t))],
+          control,
+          undefined,
+          undefined,
+        )
+      : undefined;
+    const onProofClock = (stamp: number | undefined): number | null =>
+      stamp == null
+        ? null
+        : dating === undefined
+          ? stamp
+          : (dating?.times.get(stamp) ?? null);
+    // The rest's last frame. A starved cast that shows none fails by name.
+    const rest = requireFrames(tracked, {
+      min: 1,
+      during: `run ${run + 1}: the finger rested before the lift`,
+      where: f => f.box != null && f.t >= lastMove && f.t < lift,
+    });
+    const level = rest.at(-1)?.box?.x ?? null;
+    beforeLift.push(level);
     const final = tracked.at(-1)?.box?.x ?? 0;
     const settled =
       tracked.find(
         f =>
           f.t >= block.from && f.box != null && Math.abs(f.box.x - final) <= 1,
       )?.t ?? block.to;
+    blockFroms.push(block.from);
+    // The fade ran at least from its first frame that moved to its last frame
+    // short of the final level. A gap between frames can only shorten that.
+    const fadeFirst = tracked.find(
+      f =>
+        f.t >= lift &&
+        f.box != null &&
+        level != null &&
+        Math.abs(f.box.x - level) > 1,
+    );
+    const fadeLast = tracked
+      .filter(
+        f =>
+          fadeFirst != null &&
+          f.t >= fadeFirst.t &&
+          f.t < settled &&
+          f.box != null &&
+          Math.abs(f.box.x - final) > 1,
+      )
+      .at(-1);
+    fadeStarts.push(onProofClock(fadeFirst?.t));
+    fadeLasts.push(onProofClock(fadeLast?.t));
     const window = {
       from: block.from + 20,
       to: Math.min(block.to, settled) - 1,
@@ -520,11 +573,7 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     for (let i = 1; i < shown.length; i += 1) {
       closest = Math.min(closest, shown[i].t - shown[i - 1].t);
     }
-    runs.push({
-      tracked,
-      control: await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
-      window,
-    });
+    runs.push({tracked, control, window});
     windows.push(window);
     closed.push(
       await v.dialog.waitFor({state: 'hidden', timeout: 2000}).then(
@@ -592,8 +641,32 @@ test('the dismissal keeps changing the screen every frame while the main thread 
   expect(closest, 'a run shows two frames in its window').toBeLessThan(
     Number.POSITIVE_INFINITY,
   );
-  for (const window of windows) {
-    expect(window.to - window.from).toBeGreaterThan(100);
+  // Each run must hold more than 100 ms of the fade. A run holds less when
+  // its block began late in the fade. Then the fade, counted from its own
+  // start, lasted longer than the window needs, and the run fails by that
+  // name.
+  for (const [i, window] of windows.entries()) {
+    const windowMs = window.to - window.from;
+    const start = fadeStarts[i];
+    const last = fadeLasts[i];
+    // A fade with no time on the proof's clock is not named late: the plain
+    // floor judges it.
+    const fadeMs = start != null && last != null ? last - start : 0;
+    const neededMs = 100 + (window.from - blockFroms[i]);
+    if (windowMs <= 100 && fadeMs > neededMs) {
+      throw new BusyWindowTooLateError(
+        `run ${i + 1}: the block began ${(blockFroms[i] - (start ?? 0)).toFixed(0)} ms into a fade that ran at least ${fadeMs.toFixed(0)} ms, so its window holds ${windowMs.toFixed(1)} ms, under 100`,
+        {
+          run: i + 1,
+          windowMs,
+          fadeMs,
+          blockFrom: blockFroms[i],
+          fadeStart: start ?? Number.NaN,
+          fadeLast: last ?? Number.NaN,
+        },
+      );
+    }
+    expect(windowMs, `run ${i + 1}'s window`).toBeGreaterThan(100);
   }
   expect(closed).toEqual(windows.map(() => true));
 });

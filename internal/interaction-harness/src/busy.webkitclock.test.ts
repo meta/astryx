@@ -17,7 +17,12 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof, pageTimesOnControls, pooledBusyProof} from './busy';
+import {
+  busyWindowProof,
+  controlPageTimes,
+  pageTimesOnControls,
+  pooledBusyProof,
+} from './busy';
 import {FrameStarvationError, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -444,6 +449,26 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     expect(
       pageTimesOnControls(frames.control, {ahead: frames.ahead}).get(turn),
     ).toBeCloseTo(turn, 0);
+  });
+
+  it('gives a frame near a turn the time the proofs use: its distance from an agreeing stamp', () => {
+    // At 1200 ms the first control turns, so that frame has no reading.
+    const shots = onTime();
+    const frames = cast(shots, fade(0.6), 'webkit');
+    const turn = shots[24].stamp;
+    const stamps = [
+      ...new Set([...frames.tracked, ...frames.control].map(frame => frame.t)),
+    ];
+    const dating = controlPageTimes(
+      stamps,
+      frames.control,
+      undefined,
+      undefined,
+    );
+    expect(pageTimesOnControls(frames.control).has(turn)).toBe(false);
+    expect(dating?.read.has(turn)).toBe(false);
+    // On time, each reading agrees with its stamp, so the turn keeps its own.
+    expect(dating?.times.get(turn)).toBeCloseTo(turn, 0);
   });
 
   it("dates the frames from the controls' starts as from the origin their stamps agree with", () => {

@@ -386,9 +386,10 @@ function readControlClock(control: readonly TrackedFrame[]): {
  * the one `ahead`. The stamp only picks the control's cycle, so a stamp that
  * runs late moves no reading. Each control counts from its start
  * (`controlStarts`), or else from the origin that most of its frames' stamps
- * agree with (`controlClock`). A frame with no reading has no time here.
- * Frames tracked from the same screencast share its stamps, so a spec looks
- * their times up here. The busy proofs date their frames from these times.
+ * agree with (`controlClock`). A frame with no reading has no time here:
+ * `controlPageTimes` gives it the time the busy proofs use. Frames tracked
+ * from the same screencast share its stamps, so a spec looks their times up
+ * here. The busy proofs date their frames from these times.
  */
 export function pageTimesOnControls(
   control: readonly TrackedFrame[],
@@ -449,7 +450,7 @@ export function pageTimesOnControls(
  * the proof matches frames by time. `read` holds the stamps whose time is
  * their own reading. Null when no stamp has a reading.
  */
-function controlPageTimes(
+export function controlPageTimes(
   stamps: readonly number[],
   control: readonly TrackedFrame[],
   ahead: readonly TrackedFrame[] | undefined,
