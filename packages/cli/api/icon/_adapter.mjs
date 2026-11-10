@@ -34,7 +34,11 @@ export {
 } from '../../foundation/discovery/icon-ranking.mjs';
 export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
-export {setConfigString} from '../../foundation/config/config-writer.mjs';
+export {
+  setConfigString,
+  setConfigValue,
+} from '../../foundation/config/config-writer.mjs';
+export {ICON_USE_ORDER_COMMAND} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   assertIconExport,
   checkNewDefinition,
@@ -177,9 +181,10 @@ function findProjectDir(cwd) {
  * `experimental.iconSet`, read from the project's package.json; null when
  * nothing says so.
  * @param {string} projectDir
+ * @param {{list?: boolean}} [options] `list`: the value written is a list
  * @returns {string | null}
  */
-export function iconSetConfigCliWarning(projectDir) {
+export function iconSetConfigCliWarning(projectDir, options = {}) {
   let pkg;
   try {
     pkg = JSON.parse(
@@ -188,5 +193,5 @@ export function iconSetConfigCliWarning(projectDir) {
   } catch {
     return null;
   }
-  return projectIconSetCliWarning(pkg);
+  return projectIconSetCliWarning(pkg, options);
 }

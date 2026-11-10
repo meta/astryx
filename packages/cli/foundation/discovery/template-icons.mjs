@@ -15,7 +15,12 @@
  *   2. otherwise is the icon the project set's `map` names for the Astryx
  *      icon definition the source icon draws.
  * Nothing is guessed from names or words. A `likely` reviewed match is never
- * applied: a kept icon names it as a suggestion.
+ * applied: a kept icon names it as a suggestion. The project's list names a
+ * main set and backup sets in order: each icon maps to the first set in the
+ * list that has a match, and never mixes sets within one icon. An icon with
+ * a meaning that no set in the list has loses its library import: each of its
+ * uses renders a placeholder component that the file declares once, with a
+ * comment that names the meaning, so the copied code needs no new package.
  * A declared key names a named import by the name it imports
  * (`{Trash as TrashIcon}` is `Trash`) and a default import by its local name
  * (`import DeleteIcon from …` is `DeleteIcon`). A mapped named import and
@@ -24,10 +29,11 @@
  * becomes the set's named import aliased to its local name. An icon from an
  * installed set that draws a variant (such as solid) maps to the target's
  * variant of that name, else its default. With a project icon set, every
- * declared key ends up mapped or kept (FR10): an icon with no match keeps its
- * original import, and a key bound only by a namespace import, a type-only
- * import, a re-export, an import from an Astryx package or from the project's
- * own set, or by no import at all, is kept with the reason. A side-effect
+ * declared key ends up mapped, a placeholder, or kept (FR10): an icon that
+ * draws no Astryx definition and has no match keeps its original import, and
+ * a key bound only by a namespace import, a type-only import, a re-export, an
+ * import from an Astryx package or from a set in the project's list, or by no
+ * import at all, is kept with the reason. A side-effect
  * import binds nothing. Without a project icon set the source is unchanged
  * and the report says why.
  *
@@ -75,6 +81,33 @@ import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
  *   `exact` or `strong` match in the project set's data names the source
  *   icon; `definition`: the target's `map` names it for the Astryx icon
  *   definition the source draws
+ * @property {{asked: string, used: string | null}} [variant] present when the
+ *   source draws a look the target set's icon does not have: the look it
+ *   asked for, and the look used (the set's default look)
+ */
+
+/**
+ * One icon no set in the project's list has: each of its uses in the copied
+ * code renders the placeholder component that the file declares.
+ * @typedef {object} PlaceholderIcon
+ * @property {{module: string, export: string}} source
+ * @property {{local: string}} target the name of the placeholder component
+ *   in the file
+ * @property {string[]} definitions the icon definitions the icon draws
+ * @property {string[]} fixes the commands that give it a real icon: map the
+ *   definition in the main set, or add a backup set that has it
+ * @property {string[]} [dropped] the library's sizing props removed from its
+ *   elements, as for a mapped icon
+ * @property {{set: string, id: string, module: string, export: string, confidence: 'likely'}} [suggestion]
+ *   a `likely` reviewed match in the main set, suggested and never applied
+ */
+
+/**
+ * One set a template's mapped icons come from.
+ * @typedef {object} UsedIconSet
+ * @property {string} set `<package>/<set>`
+ * @property {string} license
+ * @property {number} icons how many mapped icons it gives
  */
 
 /**
@@ -95,10 +128,201 @@ import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
  * @property {'selected' | 'none' | 'ambiguous' | 'missing' | 'withdrawn'} status the
  *   project's icon-set state; only `selected` maps anything
  * @property {string | null} set the project set as `<package>/<set>`
+ * @property {string[]} [order] the main set and each backup, as
+ *   `<package>/<set>`, in the order icons are looked up; present when the
+ *   project lists backups
  * @property {string} reason
  * @property {MappedIcon[]} mapped
+ * @property {PlaceholderIcon[]} placeholder
  * @property {KeptIcon[]} kept
+ * @property {UsedIconSet[]} sets each set the mapped icons come from, with
+ *   its license
  */
+
+/** The name of the placeholder component, when the file does not use it. */
+export const PLACEHOLDER_NAME = 'MissingIcon';
+
+/**
+ * The placeholder component the CLI declares once in a copied file. It sizes
+ * like an icon (1em, in the current text color). It is hidden from assistive
+ * technology unless a use gives it a label.
+ * @param {string} name
+ */
+export function placeholderDeclaration(name) {
+  return `/** Stands in for an icon that no icon set in this project has. Replace each use with a real icon. */
+function ${name}(props: React.SVGProps<SVGSVGElement>) {
+  const labelled =
+    props['aria-label'] != null || props['aria-labelledby'] != null;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      aria-hidden={labelled ? undefined : true}
+      role={labelled ? 'img' : undefined}
+      {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" strokeDasharray="3 2.33" />
+    </svg>
+  );
+}`;
+}
+
+/**
+ * The comment beside each use of the placeholder, so `astryx doctor` can name
+ * the meaning it stands for.
+ * @param {string[]} definitions
+ */
+export function placeholderNote(definitions) {
+  return `/* missing icon: ${definitions.join(', ')} */`;
+}
+
+/**
+ * Read the meanings back from a placeholder use's comment. Null for a
+ * comment that is not one.
+ * @param {string} comment the comment's text, with or without its markers
+ * @returns {string[] | null}
+ */
+export function placeholderMeanings(comment) {
+  const found = /^(?:\/\*)?\s*missing icon:\s*([^*]*?)\s*(?:\*\/)?$/u.exec(
+    comment.trim(),
+  );
+  return found
+    ? found[1]
+        .split(',')
+        .map(each => each.trim())
+        .filter(Boolean)
+    : null;
+}
+
+/** Node keys that position or format a node and never change its shape. */
+const FORMAT_KEYS = new Set([
+  'start',
+  'end',
+  'loc',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+]);
+
+/**
+ * A declaration's shape: its tree without positions, comments, quote style,
+ * whitespace-only JSX text, or its own name. Formatting a file never changes
+ * it.
+ * @param {any} node a function declaration
+ */
+function declarationShape(node) {
+  const name = node.id?.name;
+  return JSON.stringify(node, (key, value) => {
+    if (FORMAT_KEYS.has(key)) return undefined;
+    if (key === 'id' && value?.name === name) return '<name>';
+    if (key === 'children' && Array.isArray(value)) {
+      return value.filter(
+        child => child?.type !== 'JSXText' || child.value.trim() !== '',
+      );
+    }
+    return value;
+  });
+}
+
+/** @type {string | undefined} */
+let placeholderShape;
+
+/**
+ * Whether a top-level statement declares the placeholder component exactly
+ * as the CLI writes it, under any name. Returns the name, or null.
+ * @param {any} statement
+ * @returns {string | null}
+ */
+function placeholderDeclared(statement) {
+  const node =
+    statement.type === 'ExportNamedDeclaration'
+      ? statement.declaration
+      : statement;
+  if (node?.type !== 'FunctionDeclaration' || !node.id) return null;
+  placeholderShape ??= declarationShape(
+    parseSource(placeholderDeclaration(PLACEHOLDER_NAME)).program.body[0],
+  );
+  return declarationShape(node) === placeholderShape ? node.id.name : null;
+}
+
+/**
+ * Each use of the placeholder component in a file: the name it is declared
+ * under and the meanings its comment names (null when it names none). Only
+ * the declaration the CLI writes counts, and only code: commented-out code
+ * and text in strings are never uses. A closing JSX tag is part of its
+ * element's use. Null when the source does not parse.
+ * @param {string} source
+ * @returns {Array<{local: string, meanings: string[] | null}> | null}
+ */
+export function placeholderUses(source) {
+  let ast;
+  try {
+    ast = parseSource(source);
+  } catch {
+    return null;
+  }
+  /** @type {Set<any>} */
+  const declarations = new Set();
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const statement of ast.program.body) {
+    const name = placeholderDeclared(statement);
+    if (name) {
+      names.add(name);
+      declarations.add(statement.declaration ?? statement);
+    }
+  }
+  if (names.size === 0) return [];
+  /** @type {Array<{local: string, meanings: string[] | null}>} */
+  const uses = [];
+  walk(ast.program, (node, parent, key) => {
+    if (node.type !== 'Identifier' && node.type !== 'JSXIdentifier') return;
+    if (!names.has(node.name)) return;
+    if (declarations.has(parent) && key === 'id') return;
+    if (parent?.type === 'JSXClosingElement') return;
+    if (!isReference(node, parent, key)) return;
+    const note = (ast.comments ?? []).find(
+      (/** @type {any} */ comment) =>
+        comment.start >= node.end &&
+        /^\s*$/u.test(source.slice(node.end, comment.start)),
+    );
+    uses.push({
+      local: node.name,
+      meanings: note
+        ? placeholderMeanings(source.slice(note.start, note.end))
+        : null,
+    });
+  });
+  return uses;
+}
+
+/**
+ * The text of one import specifier the rewrite adds.
+ * @param {{imported: string, local: string}} entry
+ */
+function specifierText(entry) {
+  return entry.local === entry.imported
+    ? entry.imported
+    : `${entry.imported} as ${entry.local}`;
+}
+
+/**
+ * The commands that give a placeholder icon a real one.
+ * @param {string[]} definitions
+ * @param {string} main the main set's name as the list writes it
+ * @returns {string[]}
+ */
+export function placeholderFixes(definitions, main) {
+  return [
+    `astryx experimental icon map ${definitions[0] ?? '<definition>'} <icon> --set ${main}`,
+    `astryx experimental icon use ${main} --backup <set>`,
+  ];
+}
 
 /**
  * Index every installed set's exports: `<module>\0<export>` → the icon it
@@ -225,6 +449,25 @@ function targetExport(icon, set, variant) {
 }
 
 /**
+ * The look a mapped icon draws when the source asked for one the target's
+ * icon does not have: what it asked for and the target's default look.
+ * Undefined when the look is kept, or when the source names no look.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+function lookChange(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
+}
+
+/**
  * Whether a module is one of Astryx's own packages (`@astryxdesign/core`,
  * its subpaths, and every other `@astryxdesign/` package).
  * @param {string} module
@@ -319,6 +562,73 @@ export function iconsNotImported(source, declared) {
 }
 
 /**
+ * Whether a module is a package import: not relative, not absolute, and not
+ * a Node built-in.
+ * @param {string} module
+ */
+function isPackageModule(module) {
+  return !/^(?:\.|\/|node:)/u.test(module);
+}
+
+/**
+ * The value imports a template takes from other packages, as the keys its
+ * `icons` uses: a named import by the name it imports, a default import by
+ * its local name. Astryx's own packages, relative files, namespace imports,
+ * and type-only imports are left out. Null when the source does not parse.
+ * @param {string} source
+ * @returns {Array<{key: string, module: string}> | null}
+ */
+export function packageImports(source) {
+  let ast;
+  try {
+    ast = parseSource(source);
+  } catch {
+    return null;
+  }
+  return iconBindings(ast)
+    .filter(
+      binding =>
+        (binding.form === 'named' || binding.form === 'default') &&
+        isPackageModule(binding.module) &&
+        !isAstryxModule(binding.module),
+    )
+    .map(({key, module}) => ({key, module}));
+}
+
+/**
+ * The icons each template imports but does not declare in its `icons`. A
+ * package import is an icon when its key ends in `Icon`, or when it comes
+ * from a module that some template declares an icon from (an icon library).
+ * Only templates that parse are read.
+ * @param {Array<{id: string, source: string, declared: Record<string, string>}>} templates
+ * @returns {Array<{id: string, key: string, module: string}>}
+ */
+export function undeclaredTemplateIcons(templates) {
+  const read = templates.flatMap(template => {
+    const imports = packageImports(template.source);
+    return imports ? [{...template, imports}] : [];
+  });
+  /** Modules some template declares an icon from. */
+  const iconModules = new Set(
+    read.flatMap(template =>
+      template.imports
+        .filter(each => Object.hasOwn(template.declared, each.key))
+        .map(each => each.module),
+    ),
+  );
+  /** @type {Array<{id: string, key: string, module: string}>} */
+  const found = [];
+  for (const template of read) {
+    for (const each of template.imports) {
+      if (Object.hasOwn(template.declared, each.key)) continue;
+      if (!/Icon$/u.test(each.key) && !iconModules.has(each.module)) continue;
+      found.push({id: template.id, key: each.key, module: each.module});
+    }
+  }
+  return found;
+}
+
+/**
  * A library's own sizing props, dropped from a mapped icon: an icon set's
  * icons take their size from CSS.
  */
@@ -350,15 +660,23 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     return {source, icons: undefined};
   }
   const target = choice.set ?? null;
+  /** The sets an icon is looked up in, in order: the main set first. */
+  const targets = target ? (choice.order ?? [target]) : [];
   /** @type {TemplateIconsReport} */
   const icons = {
     status: choice.status,
     set: target ? `${target.package}/${target.name}` : null,
+    ...(targets.length > 1
+      ? {order: targets.map(each => `${each.package}/${each.name}`)}
+      : {}),
     reason: choice.reason,
     mapped: [],
+    placeholder: [],
     kept: [],
+    sets: [],
   };
   if (!target) return {source, icons};
+  const main = choice.configured ?? target.name;
 
   /** @type {any} */
   let ast;
@@ -369,12 +687,14 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   }
   const index = indexSets(sets);
   const targetModules = new Set(
-    target.data.icons.flatMap(icon => [
-      icon.module ?? target.data.module,
-      ...(icon.variants ?? []).map(
-        variant => variant.module ?? icon.module ?? target.data.module,
-      ),
-    ]),
+    targets.flatMap(each =>
+      each.data.icons.flatMap(icon => [
+        icon.module ?? each.data.module,
+        ...(icon.variants ?? []).map(
+          variant => variant.module ?? icon.module ?? each.data.module,
+        ),
+      ]),
+    ),
   );
 
   /** Every name the file writes, to keep aliases collision-free. */
@@ -386,6 +706,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   const renames = new Map();
   /** @type {Map<string, {module: string, imported: string, local: string}>} */
   const added = new Map();
+  /** @type {Map<string, string>} a placeholder's old local name → the comment each use carries */
+  const notes = new Map();
+  /** The placeholder component's name, once an icon needs it. */
+  let placeholderName = '';
   /**
    * Every local name whose import maps away, found first, so a mapped name
    * may reuse a name another mapped import frees.
@@ -393,8 +717,9 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
    */
   const freed = new Set();
   /**
-   * The source record and the match of each mapped import specifier.
-   * @type {Map<any, {record: SourceIcon, match: ReturnType<typeof matchIcon>}>}
+   * The source record of each mapped import specifier, the first set in the
+   * list that matches it, and the match.
+   * @type {Map<any, {record: SourceIcon, set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}>}
    */
   const planned = new Map();
   for (const node of ast.program.body) {
@@ -437,10 +762,20 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
               definitions: [meant],
             }
           : null;
-      if (!record || record.set === target) continue;
-      const match = matchIcon(record, target);
-      planned.set(specifier, {record, match});
-      if (match) freed.add(specifier.local.name);
+      if (!record || (record.set && targets.includes(record.set))) continue;
+      /** @type {{set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}} */
+      let found = {set: target, match: null};
+      for (const each of targets) {
+        const match = matchIcon(record, each);
+        if (match) {
+          found = {set: each, match};
+          break;
+        }
+      }
+      planned.set(specifier, {record, ...found});
+      if (found.match || record.definitions.length > 0) {
+        freed.add(specifier.local.name);
+      }
     }
   }
   /** Where the mapped imports go: where the first rewritten import was. */
@@ -449,7 +784,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   const accounted = new Set();
   /** The local names of mapped imports, as the template wrote them. */
   const mappedLocals = new Set();
-  /** @type {Array<[MappedIcon, string]>} each mapped icon and its local name */
+  /** @type {Array<[MappedIcon | PlaceholderIcon, string]>} each mapped or placeholder icon and its local name */
   const mappedEntries = [];
 
   for (const node of ast.program.body) {
@@ -471,8 +806,44 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       }
       const imported = importedName(specifier);
       const local = specifier.local.name;
-      const {record, match} = plan;
+      const {record, set, match} = plan;
       accounted.add(declaredKey(specifier));
+      if (!match && record.definitions.length > 0) {
+        // No set in the list has this meaning: each use renders the local
+        // placeholder, so the file imports nothing new.
+        const likely = reviewedMatch(record, target, ['likely']);
+        if (!placeholderName) {
+          let name = PLACEHOLDER_NAME;
+          const taken = (/** @type {string} */ candidate) =>
+            written.has(candidate) ||
+            [...added.values()].some(each => each.local === candidate);
+          for (let n = 2; taken(name); n++) name = `${PLACEHOLDER_NAME}${n}`;
+          placeholderName = name;
+        }
+        renames.set(local, placeholderName);
+        notes.set(local, placeholderNote(record.definitions));
+        mappedLocals.add(local);
+        /** @type {PlaceholderIcon} */
+        const placeholderIcon = {
+          source: {module, export: imported},
+          target: {local: placeholderName},
+          definitions: record.definitions,
+          fixes: placeholderFixes(record.definitions, main),
+          ...(likely
+            ? {
+                suggestion: {
+                  set: target.name,
+                  id: likely.id,
+                  ...targetExport(likely, target, record.variant),
+                  confidence: /** @type {const} */ ('likely'),
+                },
+              }
+            : {}),
+        };
+        icons.placeholder.push(placeholderIcon);
+        mappedEntries.push([placeholderIcon, local]);
+        continue;
+      }
       if (!match) {
         keep.push(specifier);
         const likely = reviewedMatch(record, target, ['likely']);
@@ -482,7 +853,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           reason:
             record.definitions.length > 0
               ? `${icons.set} maps no icon to the icon definition "${record.definitions.join('", "')}"${record.setName ? ', and none is a reviewed match for it' : ''}`
-              : `no icon in ${icons.set} is a reviewed match for it`,
+              : `no icon in ${targets.length > 1 ? 'any set in your list' : icons.set} is a reviewed match for it`,
           ...(likely
             ? {
                 suggestion: {
@@ -496,7 +867,8 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         });
         continue;
       }
-      const chosen = targetExport(match.icon, target, record.variant);
+      const chosen = targetExport(match.icon, set, record.variant);
+      const look = lookChange(match.icon, set, record.variant);
       const key = `${chosen.module}\0${chosen.export}`;
       let entry = added.get(key);
       if (!entry) {
@@ -507,6 +879,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         const base = name;
         const taken = (/** @type {string} */ candidate) =>
           (written.has(candidate) && !freed.has(candidate)) ||
+          candidate === placeholderName ||
           [...added.values()].some(each => each.local === candidate);
         for (let n = 2; taken(name); n++) name = `${base}${n}`;
         entry = {module: chosen.module, imported: chosen.export, local: name};
@@ -518,13 +891,14 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       const mappedIcon = {
         source: {module, export: imported},
         target: {
-          set: target.name,
-          package: target.package,
+          set: set.name,
+          package: set.package,
           id: match.icon.id,
           module: chosen.module,
           export: chosen.export,
         },
         by: match.by,
+        ...(look ? {variant: look} : {}),
       };
       icons.mapped.push(mappedIcon);
       mappedEntries.push([mappedIcon, local]);
@@ -611,7 +985,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     const typeOnly = pick(each => each.form === 'type');
     const reExport = pick(each => each.form === 're-export');
     const [binding, reason] = fromTarget
-      ? [fromTarget, `it is already imported from ${icons.set}`]
+      ? [
+          fromTarget,
+          `it is already imported from ${targets.length > 1 ? 'a set in your list' : icons.set}`,
+        ]
       : namespace
         ? [
             namespace,
@@ -637,13 +1014,32 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     });
   }
 
-  if (added.size === 0) return {source, icons};
+  /** @type {Map<DiscoveredIconSet, number>} */
+  const used = new Map();
+  for (const plan of planned.values()) {
+    if (plan.match) used.set(plan.set, (used.get(plan.set) ?? 0) + 1);
+  }
+  icons.sets = targets
+    .filter(each => used.has(each))
+    .map(each => ({
+      set: `${each.package}/${each.name}`,
+      license: each.license,
+      icons: /** @type {number} */ (used.get(each)),
+    }));
 
-  // Every reference to a renamed binding uses the mapped name.
+  if (added.size === 0 && !placeholderName) return {source, icons};
+
+  // Every reference to a renamed binding uses the mapped name. A use of the
+  // placeholder carries a comment that names its meaning.
   walk(ast.program, (node, parent, key) => {
     if (node.type === 'Identifier' || node.type === 'JSXIdentifier') {
-      const next = renames.get(node.name);
-      if (!next || !isReference(node, parent, key)) return;
+      const renamed = renames.get(node.name);
+      if (!renamed || !isReference(node, parent, key)) return;
+      const note = notes.get(node.name);
+      const next =
+        note && parent?.type !== 'JSXClosingElement'
+          ? `${renamed} ${note}`
+          : renamed;
       if (parent?.type === 'ObjectProperty' && parent.shorthand) {
         edits.push({
           start: node.start,
@@ -692,21 +1088,54 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     if (!prior || edit.text.length > prior.text.length) unique.set(at, edit);
   }
 
+  // The placeholder is declared once, above the file's first statement that
+  // is not an import, and after any comment that leads that statement.
+  if (placeholderName) {
+    const first = ast.program.body.find(
+      (/** @type {any} */ node) => node.type !== 'ImportDeclaration',
+    );
+    const declaration = placeholderDeclaration(placeholderName);
+    if (first) {
+      const previous = ast.program.body[ast.program.body.indexOf(first) - 1];
+      const after = previous ? previous.loc.end.line : 0;
+      // A comment on the line of the statement before it trails that
+      // statement, so the declaration goes after it.
+      const at = Math.min(
+        first.start,
+        ...(first.leadingComments ?? [])
+          .filter(
+            (/** @type {any} */ comment) => comment.loc.start.line > after,
+          )
+          .map((/** @type {any} */ comment) => comment.start),
+      );
+      unique.set('placeholder', {
+        start: at,
+        end: at,
+        text: `${declaration}\n\n`,
+      });
+    } else {
+      const at = source.length;
+      unique.set('placeholder', {
+        start: at,
+        end: at,
+        text: `${source.endsWith('\n') ? '' : '\n'}\n${declaration}\n`,
+      });
+    }
+  }
+
   /** @type {Map<string, string[]>} */
   const byModule = new Map();
   for (const entry of added.values()) {
     const list = byModule.get(entry.module) ?? [];
-    list.push(
-      entry.local === entry.imported
-        ? entry.imported
-        : `${entry.imported} as ${entry.local}`,
-    );
+    list.push(specifierText(entry));
     byModule.set(entry.module, list);
   }
   const lines = [...byModule.entries()]
     .map(([module, names]) => `import {${names.join(', ')}} from '${module}';`)
     .join('\n');
-  unique.set('insert', {start: insertAt, end: insertAt, text: `${lines}\n`});
+  if (lines) {
+    unique.set('insert', {start: insertAt, end: insertAt, text: `${lines}\n`});
+  }
 
   let out = source;
   for (const edit of [...unique.values()].sort(
