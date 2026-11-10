@@ -118,6 +118,12 @@ export const categories: SandboxCategory[] = [
           'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
       },
       {
+        name: 'Menu Grow Cases',
+        href: '/pages/menu-grow-cases/',
+        description:
+          'Large DropdownMenus and a Popover that grow out of their trigger: tall, wide, many rows, nested, at the edges and flipped, on a page that scrolls with the document',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:
