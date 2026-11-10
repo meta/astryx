@@ -23,15 +23,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                   |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                   |
-| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                          |
-| End-user impact         | None yet: the module does not exist, and Selector renders every option. Once it ships, people opening a long list wait less, and every windowed list behaves the same way. |
-| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                             |
-| Compatibility/readiness | Additive and internal. Spec only: no module exists yet (Current-state impact). Table's approved virtualization hook keeps its public shape.                                |
-| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                      |
-| Governing rules         | DEC-1.                                                                                                                                                                     |
+| Area                    | Contract                                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                             |
+| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                                    |
+| End-user impact         | People opening a long windowed list wait less, and every windowed list behaves the same way, inside a container scroll area or on a scrolling page (INV4).                           |
+| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                                       |
+| Compatibility/readiness | Additive and internal. Table's public virtualization hook keeps its shape except for DEC-6's one rename (INV3).                                                                      |
+| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it, other than DEC-6's one rename. |
+| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4, DEC-6.                                                                                                                                                   |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,6 +55,22 @@ Consumers:
 - Selector's option list.
 - Chat's message list.
 
+## Requirements
+
+- **FR1 — Configurable anchoring.** The shared windowing engine anchors the
+  window to the first visible row, to the end (follow), or to a given item, as
+  the consumer configures.
+- **FR2 — The anchored row keeps its position.** The anchored row keeps its
+  position through streaming inserts, above it or at the end, and through item
+  resizes.
+- **FR3 — Variable row heights.** The engine positions rows of variable
+  height.
+- **FR4 — Container and page scroll.** The engine works inside a container
+  scroll area and with page (document) scroll (INV4).
+
+The engine is chosen by a measured comparison of candidates on performance and
+row-position accuracy (DEC-3).
+
 ## Boundaries and invariants
 
 - **INV1 — One windowing module in Core.** In `@astryxdesign/core`, one shared
@@ -69,15 +85,27 @@ Consumers:
   only through a Core `./internal/*` subpath (`spec:AST-017` FR21). This holds
   while OQ1 is open.
 - **INV3 — Consumers keep their public shapes.** Adopting the module changes
-  no consumer's public API. `module:Table/useTableRowsVirtualization` keeps its
-  approved public shape and uses the module internally.
+  no consumer's public API, with one exception: `useTableRowsVirtualization`
+  renames `viewportHeight` to `initialViewportHeight` (DEC-6), and
+  `module:Table/useTableRowsVirtualization` changes with that rename. Apart
+  from that rename, the hook keeps its approved public shape and uses the
+  module internally.
+- **INV4 — Container and page scroll.** Every virtualizer, the shared engine
+  and each consumer, works both inside a container scroll area and with page
+  (document) scroll. One exception: Table's virtualization windows inside
+  Table's own bounded scroll area (`component:Table` FR19) until a later
+  decision moves it to page or container scroll (INV4 gap).
+- **INV5 — Size budget.** The shared windowing engine stays at or under 4.9 KB minified and gzipped (esbuild, ESM, minified, React external, gzip -9), the size of the smallest comparable full-featured virtualizer library on that measure. Each component's adapter stays at or under 2 KB on the same measure. An adapter's size is what windowing adds to a bundle that already holds its host component and the engine: its own code plus the wiring it adds inside the host component, with the engine, React and Core helpers the host already uses left out. A change over either budget needs the owner's decision.
 
 ## Current-state impact
 
-- **No module exists yet.** Selector renders every option when it opens.
-  Table's virtualization hook is specified in
-  `module:Table/useTableRowsVirtualization` but not built; Chat renders every
-  message.
+- Table windows through the shared module. Selector renders every option when
+  it opens; Core's Chat renders every message.
+- **INV4 gap:** Table windows only inside its own bounded viewport; when the
+  page or an outer container is its scroller, it renders every row.
+- **INV5 gap:** Table's adapter (controller and wiring) measures about 5.3 KB.
+- **INV5 gap:** Table's adapter wiring lives in Table's own component code, so a plain Table that never windows carries about 6.2 KB of the windowing stack.
+- **INV5 gap:** Lab's `ChatVirtualizer` measures 4.7 KB in its own code, with no split between shared engine and chat adapter.
 
 ## Change coupling
 
@@ -87,12 +115,11 @@ windowing symbol.
 
 ## Owning code
 
+- `packages/core/src/utils/listWindow.ts` — the shared windowing module.
 - `module:Table/useTableRowsVirtualization` — Table's public virtualization
-  hook, a consumer; it has no code yet (Current-state impact).
+  hook, a consumer.
 - `packages/core/src/Selector/` — a consumer.
 - `packages/core/src/Chat/` — a consumer.
-
-The module itself has no path yet (Current-state impact).
 
 ## Deciding specs
 
@@ -105,6 +132,66 @@ The module itself has no path yet (Current-state impact).
 One shared private windowing module owns long-list windowing in Core; spec
 only. The module stays private while OQ1 is open.
 
+### DEC-2 — Virtualizers work in container and page scroll
+
+**Reference:** `architecture:list-windowing/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> any visualizer engine needs to be able to attach to any scroll ref
+
+> i want to instead require that visualizers should work in both container
+> scroll areas as well as page scroll
+
+The second statement refines the first; "visualizer" means virtualizer. Every
+virtualizer works inside a container scroll area and with page (document)
+scroll (INV4, FR4). No scroll-ref API is required.
+
+### DEC-3 — Common engine requirements
+
+**Reference:** `architecture:list-windowing/DEC-3`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> In the common visualizer, anchoring will need to be configurable, scroll
+> positions keep properly with streaming data, then i want to pick the engine
+> with best perf and accuracy for row positions with variable height
+
+"Visualizer" means virtualizer. The shared windowing engine meets FR1–FR4. The
+engine is chosen by a measured comparison of candidates on performance and
+row-position accuracy.
+
+### DEC-4 — The windowing engine and its adapters have a size budget
+
+**Reference:** `architecture:list-windowing/DEC-4`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> Size budget ok
+
+The owner approved the budget in INV5. It is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
+
+### DEC-6 — Table's public windowing API changes only one name
+
+**Reference:** `architecture:list-windowing/DEC-6`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> For humberto the public api probabyl just needs the initialViewportHeight
+> rename
+
+> Va a
+
+`useTableRowsVirtualization` keeps `rowHeight` and renames `viewportHeight` to
+`initialViewportHeight`, which Table reads for the first frame only. Other
+options the owner's card described for later (a callback scroll target, exact
+or estimated item sizes, an anchor) reach Table's public API only through a
+later owner decision.
+
+Rejected: adding those options to Table's public API now.
+
+The owner added: "We can keep it required", "It just needs a rename and to
+remove it from affecting the actual height of the table", and "mainly because i
+dont want the virtualization hook to define the height. It does need to read
+the height". So `initialViewportHeight` stays required, and the hook reads the
+measured height of Table's scroll area and never defines it.
+
 ## Open questions
 
 - **OQ1 — Is the windowing module public (a hook) or internal only?** Not
@@ -112,8 +199,10 @@ only. The module stays private while OQ1 is open.
 
 ## Verification
 
-| Invariant | Evidence                                                                                                           | Failure signal                                                             |
-| --------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| INV1      | Review of each Core list that windows (evidence gap: no module or automated check exists yet)                      | A Core component keeps its own windowing implementation beside the module  |
-| INV2      | Public export review of every package entry point (evidence gap: no module exists yet)                             | The module, or a type only it uses, is reachable from a public entry point |
-| INV3      | The public-API report for `useTableRowsVirtualization` and each consumer (evidence gap: the hook is not built yet) | Adopting the module changes a consumer's public props, types, or exports   |
+| Invariant | Evidence                                                                                                                                        | Failure signal                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| INV1      | Review of each Core list that windows (evidence gap: no automated check)                                                                        | A Core component keeps its own windowing implementation beside the module                         |
+| INV2      | Public export review of every package entry point                                                                                               | The module, or a type only it uses, is reachable from a public entry point                        |
+| INV3      | The public-API report (`packages/core/api-report.md`) for `useTableRowsVirtualization` and each consumer                                        | Adopting the module changes a consumer's public props, types, or exports                          |
+| INV4      | Each consumer's windowed list inside a container scroll area and on a scrolling page (evidence gap: Table windows only inside its own viewport) | A consumer renders every row, or places rows wrongly, when the page or an outer container scrolls |
+| INV5      | The size check's dedicated budget entries for the engine and each adapter (evidence gap: no size check has these entries)                       | The engine measures over 4.9 KB, or an adapter over 2 KB, without the owner's decision            |
