@@ -338,8 +338,6 @@ export const isProofPage = file =>
   isInteractionSpec(file) ||
   /\.stories\.[cm]?[jt]sx?$/.test(file) ||
   file === 'apps/storybook/.storybook/preview.tsx';
-// A Storybook story, which renders the component it is named for.
-const STORY = /^apps\/storybook\/stories\/([A-Z][^/.]*)\.stories\.tsx$/;
 
 /**
  * What a Chromium interaction run covers for a pull request (spec:AST-030
@@ -347,7 +345,8 @@ const STORY = /^apps\/storybook\/stories\/([A-Z][^/.]*)\.stories\.tsx$/;
  * touched, dependents}`. It runs every interaction spec the change adds or
  * edits, every spec that loads a changed file through its own imports, and
  * every spec in the component folders the change touches and in the folders
- * that render them through value imports. A unit test, doc, record or
+ * that render them through value imports. A story maps to no component, so a
+ * changed story runs the whole suite. A unit test, doc, record or
  * accessibility spec in a component folder touches no component; it selects
  * only the specs that import it. It fails closed: an unknown change, a
  * missing import graph or proof import map, a full-suite classification, a
@@ -401,20 +400,8 @@ export function chromiumSelection({
       // and no map says which proofs open which story.
       if (loaders.some(loader => !isInteractionSpec(loader)))
         return full(`${file} is loaded by a story or Storybook's preview`);
-      continue;
-    }
-    const story = STORY.exec(file);
-    if (story) {
-      const named = [
-        ...new Set(
-          listed
-            .map(componentFolderOf)
-            .filter(folder => folder?.split('/')[1] === story[1]),
-        ),
-      ];
-      if (named.length !== 1)
-        return full(`${file} maps to ${named.length} component folders`);
-      touched.add(named[0]);
+      // A spec that loads it makes it a change to its component.
+      if (loaders.length > 0) touched.add(componentFolderOf(file));
       continue;
     }
     if (selection.shared.some(prefix => file.startsWith(prefix)))
@@ -698,6 +685,21 @@ function select(args) {
   for (const line of selected) console.log(line);
 }
 
+/**
+ * Reads a file from a checkout, or from its commit when a sparse checkout
+ * leaves the file out.
+ * @param {string} root
+ */
+export function checkoutReader(root) {
+  return file =>
+    fs.existsSync(path.join(root, file))
+      ? fs.readFileSync(path.join(root, file), 'utf8')
+      : execFileSync('git', ['-C', root, 'show', `HEAD:${file}`], {
+          encoding: 'utf8',
+          maxBuffer: 1 << 26,
+        });
+}
+
 function selectChromium(args) {
   const listedFile = option(args, '--listed');
   const scope = option(args, '--scope');
@@ -722,7 +724,13 @@ function selectChromium(args) {
   }
   if (importers != null && importers.size === 0) importers = null;
   try {
-    if (root) proofs = proofImporters({root, listed, isProof: isProofPage});
+    if (root)
+      proofs = proofImporters({
+        root,
+        listed,
+        isProof: isProofPage,
+        read: checkoutReader(root),
+      });
   } catch (error) {
     console.error(
       `The proofs' imports could not be followed: ${error.message}`,
