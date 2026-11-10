@@ -1,7 +1,8 @@
 # Temporary: samples the Table virtualization release spec's timings on the
 # release-check runner (4-core-ubuntu), isolated with one worker, five times, so
 # its timing budgets can be derived on the gating runner. Isolated: one worker,
-# nothing else on the runner. Not for merge.
+# nothing else on the runner. It runs the spec as #11035 changes it (1,800
+# cadence intervals). Not for merge.
 name: tmp-table-release-timing
 
 on:
