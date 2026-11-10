@@ -187,6 +187,63 @@ describe('AreaChart series composition', () => {
     expect(stacked.map(path => path.getAttribute('d'))).not.toEqual(overlaid);
   });
 
+  it('gives two charts over the same key their own gradient ids', () => {
+    // The file-level observer stub keeps one callback; collect both charts'
+    // callbacks here so each chart measures a width and renders its svg.
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: ResizeObserverCallback) {
+          callbacks.push(cb);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    render(
+      <>
+        <AreaChart
+          data={data}
+          xKey="month"
+          yKeys={['revenue']}
+          gradient
+          title="First revenue"
+        />
+        <AreaChart
+          data={data}
+          xKey="month"
+          yKeys={['revenue']}
+          gradient
+          title="Second revenue"
+        />
+      </>,
+    );
+    act(() => {
+      for (const cb of callbacks) {
+        cb(
+          [{contentRect: {width: 600}} as unknown as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+    });
+
+    const gradients = Array.from(document.querySelectorAll('linearGradient'));
+    expect(gradients).toHaveLength(2);
+    const ids = gradients.map(g => g.getAttribute('id'));
+    expect(new Set(ids).size).toBe(2);
+    for (const chart of screen.getAllByRole('img')) {
+      const fill =
+        chart
+          .querySelector('path[fill]:not([fill="none"])')
+          ?.getAttribute('fill') ?? '';
+      const match = fill.match(/^url\(#(.+)\)$/);
+      expect(match).not.toBeNull();
+      expect(chart.querySelector(`#${match?.[1]}`)).not.toBeNull();
+    }
+  });
+
   it('hides the legend when legend is false', () => {
     render(
       <AreaChart

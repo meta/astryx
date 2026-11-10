@@ -5,9 +5,10 @@
  * @output Area series — fill under line with stacking + gradient support
  *
  * Missing / non-finite values (including gaps in a stacked baseline) become
- * holes via d3's `.defined()` rather than collapsing to zero. The gradient id is
- * salted with the series' collision-free `_uid` so overlapping areas over the
- * same dataKey never share (and steal) each other's fill.
+ * holes via d3's `.defined()` rather than collapsing to zero. The gradient id
+ * carries the chart's id plus the series' collision-free `_uid`, so neither
+ * overlapping areas in one chart nor two charts over the same dataKey ever
+ * share (and steal) each other's fill.
  */
 
 import {
@@ -18,7 +19,7 @@ import {
   curveStep,
 } from 'd3-shape';
 import {line as d3Line} from 'd3-shape';
-import type {SeriesDef, ResolvedPoint} from '../types';
+import type {SeriesDef, ResolvedPoint, SeriesContext} from '../types';
 import {seriesFill} from '../markColor';
 import {xPixel} from '../utils';
 
@@ -85,7 +86,7 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
       return points;
     },
 
-    render(resolved) {
+    render(resolved, ctx?: SeriesContext) {
       if (resolved.length === 0) {
         return null;
       }
@@ -106,12 +107,16 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
         .curve(curveFactory);
       const strokeD = lineGen(resolved) ?? '';
 
-      // Unique per series instance so two areas over the same dataKey don't
-      // share a gradient id (which would make one steal the other's fill).
-      const gradientId = `area-grad-${(seriesDef._uid ?? dataKey).replace(
+      // Unique per chart instance (plus per series within it), so neither two
+      // areas over the same dataKey nor two charts over the same key share a
+      // gradient id (which would make one steal the other's fill).
+      const seriesToken = (seriesDef._uid ?? dataKey).replace(
         /[^a-zA-Z0-9_-]/g,
         '-',
-      )}`;
+      );
+      const gradientId = ctx?.chartId
+        ? `area-grad-${ctx.chartId}-${seriesToken}`
+        : `area-grad-${seriesToken}`;
       const fillColor = seriesFill(seriesDef, color);
 
       return (
