@@ -147,13 +147,16 @@ must be added here even when it delegates to an existing member or shared hook.
   same accept/block decision.
 - **FR4 — Blocked schemes cannot execute.** After browser-compatible scheme
   normalization, `javascript:`, `vbscript:`, and `data:text/html` do not become
-  navigation, including through native anchors. Markdown's parser also blocks
-  every `data:` URL, of any media type, in links and images.
+  navigation, including through native anchors. The parser owns Markdown link
+  and image URL safety: it also blocks every `data:` URL, of any media type, in
+  links and images. The renderer keeps a check only at a real bypass path, if
+  one exists.
 - **FR5 — Accepted destinations retain browser behavior.** Relative paths,
   fragments, protocol-relative destinations, HTTP(S), mailto, tel, and safe custom
   schemes retain native and router navigation, targets, downloads, and browser
   affordances. Accepted structured router destinations retain their fields and
-  object identity.
+  object identity. For Markdown, the parser owns which link and image URLs are
+  accepted; a `data:` URL is not one.
 - **FR6 — Both custom-router props are sinks.** A supplied `href` and explicit
   `to` are checked independently, including the scheme-bearing fields of
   supported structured forms (`href`, `pathname`, and `protocol`) and the

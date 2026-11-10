@@ -82,8 +82,9 @@ itself establish implementation or exact-head verification.
   destination beginning with `javascript:`, `vbscript:`, or `data:text/html`
   MUST NOT become executable navigation. The check applies before query, hash,
   target, modifier-key, or pointer-button differences can select another sink.
-  Markdown's parser also blocks every `data:` URL, of any media type, in links
-  and images, and `<Markdown>` renders only the nodes it parsed (DEC-3).
+  The parser owns Markdown link and image URL safety: it also blocks every
+  `data:` URL, of any media type, in links and images. The renderer keeps a
+  check only at a real bypass path, if one exists (DEC-3).
 - **FR4 — Ordinary destinations keep working.** Relative paths, same-document
   fragments, protocol-relative URLs, and ordinary schemes such as `http:`,
   `https:`, `mailto:`, `tel:`, and safe custom schemes MUST retain their existing
