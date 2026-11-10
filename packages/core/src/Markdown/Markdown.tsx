@@ -94,7 +94,6 @@ import type {
   MarkdownPluginEntry,
   PreparedMarkdownPlugins,
 } from './plugins/protocol';
-import {sanitizeMarkdownLinkUrl, sanitizeMarkdownUrl} from './url';
 import {
   projectMarkdownHeadings,
   type MarkdownHeadingProjection,
@@ -1114,9 +1113,10 @@ function renderInline(
       return <MathComp key={index} value={node.value} display="inline" />;
     }
     case 'link': {
-      const safeHref = sanitizeMarkdownLinkUrl(node.url);
-      if (safeHref == null) {
-        // Unsafe URL — render as plain text
+      // The parser keeps only safe destinations, so the renderer checks no
+      // scheme. An empty destination still renders as text.
+      const safeHref = node.url;
+      if (safeHref === '') {
         return (
           <span key={index}>
             {node.children.map((c, i) =>
@@ -1195,8 +1195,8 @@ function renderInline(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return <span key={index}>[{node.alt}]</span>;
       }
       const ImageComp = components?.image;
@@ -2173,8 +2173,8 @@ function renderBlock(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return (
           <div
             key={index}

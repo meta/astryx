@@ -98,6 +98,46 @@ describe('createMarkdownTextTransform', () => {
     expect(JSON.stringify(blocks)).toContain('"type":"code","content":"TODO"');
   });
 
+  it('stores a replacement link or image URL in its normalized form', () => {
+    const replaceWith = (node: Record<string, unknown>) =>
+      createMarkdownPlugin({
+        name: 'url-replacement',
+        apiVersion: 1,
+        transform: createMarkdownTextTransform({
+          pattern: /X/g,
+          requiredSubstrings: ['X'],
+          replace: () => ({...node}) as never,
+        }),
+      });
+    const link = (url: string) => ({
+      type: 'link',
+      url,
+      children: [{type: 'text', value: 'go'}],
+    });
+    const image = (url: string) => ({type: 'image', url, alt: 'pic'});
+
+    expect(
+      parseMarkdown('X', {plugins: [replaceWith(link(' \t '))]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: ''}]},
+    ]);
+    expect(
+      parseMarkdown('X', {plugins: [replaceWith(image(' '))]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'image', src: ''}]},
+    ]);
+    expect(
+      parseMarkdown('X', {
+        plugins: [replaceWith(link('  https://example.com/x  '))],
+      }),
+    ).toMatchObject([
+      {
+        type: 'paragraph',
+        children: [{type: 'link', href: 'https://example.com/x'}],
+      },
+    ]);
+  });
+
   it('runs helpers in plugin order and supports removal', () => {
     const replace = (name: string, pattern: RegExp, value: string) =>
       createMarkdownPlugin({

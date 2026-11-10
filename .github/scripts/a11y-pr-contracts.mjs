@@ -639,6 +639,88 @@ export function renderingFolders(importers, touched) {
 }
 
 /**
+ * The files each proof page loads through value imports, followed file by
+ * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
+ * The roots are the interaction specs and what their pages render: the
+ * Storybook stories, Storybook's preview, and each fixture a spec bundles
+ * (a quoted path in the spec that names a listed file). A unit test, doc,
+ * record or
+ * accessibility spec in a component folder puts nothing on a proof's page
+ * and selects no proof, unless a root loads it; this map finds that case
+ * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
+ * read, so a caller runs every proof instead. `read` reads a file; by
+ * default from `root`, and a sparse checkout passes one that falls back to
+ * the commit.
+ * @param {{root: string, listed: string[], isProof: (file: string) => boolean, read?: (file: string) => string}} options
+ * @returns {Map<string, Set<string>>} each loaded file, to the roots that load it
+ */
+export function proofImporters({
+  root,
+  listed,
+  isProof,
+  read = file => fs.readFileSync(path.join(root, file), 'utf8'),
+}) {
+  const known = new Set(listed);
+  const resolve = target => {
+    for (const suffix of RESOLVE_SUFFIXES)
+      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+    return null;
+  };
+  const targetOf = (file, specifier) => {
+    if (specifier.startsWith('.'))
+      return resolve(
+        path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
+      );
+    const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+    return match
+      ? resolve(`packages/${match[1]}/src/${match[2] ?? 'index'}`)
+      : null;
+  };
+  // A spec bundles a fixture by path (`new URL('./fixture.ts', …)`,
+  // `bundleOf('fixture.ts')`): every quoted path beside it that names a
+  // listed source file counts as an import.
+  const QUOTED_PATH = /['"`]((?:\.{1,2}\/)?[\w./-]+\.[cm]?[jt]sx?)['"`]/g;
+  const bundledBy = (file, text) =>
+    [...text.matchAll(QUOTED_PATH)]
+      .map(match =>
+        resolve(
+          path.posix.normalize(
+            `${path.posix.dirname(file)}/${match[1].replace(/^(?!\.)/, './')}`,
+          ),
+        ),
+      )
+      .filter(Boolean);
+  const imports = new Map();
+  const importsOf = file => {
+    if (!imports.has(file)) {
+      const text = read(file);
+      imports.set(file, [
+        ...valueImports(text)
+          .map(({specifier}) => targetOf(file, specifier))
+          .filter(Boolean),
+        ...(isProof(file) ? bundledBy(file, text) : []),
+      ]);
+    }
+    return imports.get(file);
+  };
+  const importers = new Map();
+  for (const proof of listed.filter(isProof)) {
+    const seen = new Set([proof]);
+    const queue = [proof];
+    while (queue.length > 0) {
+      for (const target of importsOf(queue.pop())) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        queue.push(target);
+        if (!importers.has(target)) importers.set(target, new Set());
+        importers.get(target).add(proof);
+      }
+    }
+  }
+  return importers;
+}
+
+/**
  * The `scoped` and `release-only` specs of the component folders that render a
  * touched folder, nearest first, then in path order, leaving out `planned`.
  * @param {{file: string, routing: {mode: string}}[]} specs
