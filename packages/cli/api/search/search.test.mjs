@@ -25,6 +25,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../docs/docs.mjs')} */
@@ -674,7 +675,7 @@ describe('search leaf — integration components', () => {
    * `@acme/widgets` integration that contributes one component.
    */
   function makeConsumerWithIntegrationComponent() {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-search-it-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-search-it-'));
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({name: 'consumer'}));
     fs.writeFileSync(
       path.join(dir, 'astryx.config.mjs'),

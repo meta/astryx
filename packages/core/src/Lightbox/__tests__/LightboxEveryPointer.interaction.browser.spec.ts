@@ -2,14 +2,15 @@
 
 /**
  * @file LightboxEveryPointer.interaction.browser.spec.ts
- * @input The built "With zoom" and "Default" Lightbox stories, with a
- *   3000 × 2000 test photo. A desktop context (1280 × 800, a fine primary
- *   pointer) has a mouse and a trackpad's wheel. Chromium also has timed
- *   mouse events through the Chrome DevTools Protocol
- * @output Proofs that Lightbox's gestures work for every pointer. A ctrl-wheel
+ * @input The built "With zoom", "Gallery with zoom" and "Default" Lightbox
+ *   stories in a desktop context. It has a mouse and a trackpad's wheel, and
+ *   in Chromium a pen and timed mouse events
+ * @output Proofs for Lightbox's gestures under every pointer. A ctrl-wheel
  *   zooms, and a trackpad's scroll pans a zoomed photo and stops at its edge.
  *   A mouse wheel's notch leaves it in place, and a mouse drag's release
- *   stops it
+ *   stops it. A mouse's sideways drag and a trackpad's sideways scroll leave a
+ *   gallery on its photo. A drag down by a mouse, a pen or a trackpad, or a
+ *   wheel's notch, leaves a fitted photo in place
  * @position Interaction tests for Lightbox (browser), beside
  *   LightboxZoomModes.interaction.browser.spec.ts
  */
@@ -32,10 +33,11 @@ import {
 
 const storybook = withStorybook(test);
 
-type Story = 'with-zoom' | 'default';
+type Story = 'with-zoom' | 'gallery-with-zoom' | 'default';
 
 const TRIGGER: Record<Story, string> = {
   'with-zoom': 'Open with zoom',
+  'gallery-with-zoom': 'Open gallery with zoom',
   default: 'Open lightbox',
 };
 
@@ -87,7 +89,10 @@ async function openDesktop(
   await page.getByRole('button', {name: TRIGGER[story]}).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const img = dialog.getByRole('img').first();
+  const img =
+    story === 'gallery-with-zoom'
+      ? dialog.locator('[data-current] img')
+      : dialog.getByRole('img').first();
   await expect
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
@@ -119,6 +124,19 @@ async function boxOf(locator: Locator) {
   return box;
 }
 
+/** A mouse pressed at `from` and moved to `to` in `steps`, one a frame. */
+async function mouseDrag(page: Page, from: Point, to: Point, steps: number) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let i = 1; i <= steps; i++) {
+    await page.mouse.move(
+      from.x + ((to.x - from.x) * i) / steps,
+      from.y + ((to.y - from.y) * i) / steps,
+    );
+    await frames(page, 1);
+  }
+}
+
 /**
  * Mouse or pen events with exact timestamps through the Chrome DevTools
  * Protocol: a release's velocity is the move's, whatever the runner's pace.
@@ -147,6 +165,104 @@ async function timedPointer(page: Page, pointerType: 'mouse' | 'pen') {
   };
 }
 
+test('a mouse drag down leaves a fitted photo and the viewer in place, as on main', async ({
+  browser,
+}) => {
+  // The drag to close belongs to the touch presentation. Where the primary
+  // pointer is fine, a mouse drag leaves the photo where it is.
+  const {context, page, dialog, img, centre} = await openDesktop(
+    browser,
+    'with-zoom',
+  );
+  try {
+    const before = await boxOf(img);
+    await mouseDrag(page, centre, {x: centre.x, y: centre.y + 150}, 10);
+    expect(Math.abs((await boxOf(img)).y - before.y)).toBeLessThan(1);
+    await page.mouse.up();
+    await frames(page, 30);
+    await expect(dialog).toBeVisible();
+    expect(Math.abs((await boxOf(img)).y - before.y)).toBeLessThan(1);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a mouse drag sideways leaves a gallery on its photo, as on main', async ({
+  browser,
+}) => {
+  const {context, page, dialog, centre} = await openDesktop(
+    browser,
+    'gallery-with-zoom',
+  );
+  try {
+    const counter = dialog.getByText(/^\d+ \/ \d+$/);
+    await expect(counter).toHaveText('1 / 4');
+    // Past half a page from the photo's right side: under a finger, the
+    // release pages on its travel alone.
+    await mouseDrag(page, {x: 1100, y: centre.y}, {x: 250, y: centre.y}, 17);
+    await page.mouse.up();
+    await frames(page, 30);
+    await expect(counter).toHaveText('1 / 4');
+  } finally {
+    await context.close();
+  }
+});
+
+const WHEEL_DRIVERS =
+  "Chromium's driver sends each wheel as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas.";
+
+test('a trackpad’s horizontal scroll leaves a gallery on its photo', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'webkit', WHEEL_DRIVERS);
+  const {wheel, context, page, dialog, centre} = await openDesktop(
+    browser,
+    'gallery-with-zoom',
+  );
+  try {
+    const counter = dialog.getByText(/^\d+ \/ \d+$/);
+    await expect(counter).toHaveText('1 / 4');
+    await page.mouse.move(centre.x, centre.y);
+    // Past half a page, which pages under a finger. No delta is a multiple
+    // of 40 px, which would read as a mouse wheel's notch.
+    for (let i = 0; i < 24; i++) {
+      await wheel(30, 0);
+      await frames(page, 1);
+    }
+    await frames(page, 30);
+    await expect(counter).toHaveText('1 / 4');
+  } finally {
+    await context.close();
+  }
+});
+
+test("a mouse wheel's notches leave a gallery on its photo", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', WHEEL_DRIVERS);
+  const {wheel, context, page, dialog, centre} = await openDesktop(
+    browser,
+    'gallery-with-zoom',
+  );
+  try {
+    const counter = dialog.getByText(/^\d+ \/ \d+$/);
+    await expect(counter).toHaveText('1 / 4');
+    await page.mouse.move(centre.x, centre.y);
+    for (let i = 0; i < 8; i++) {
+      await wheel(120, 0);
+      await frames(page, 1);
+    }
+    // The host ends a notch's stream 100 ms after its last event. Fifteen
+    // frames pass that at up to 120 Hz.
+    await frames(page, 15);
+    await expect(counter).toHaveText('1 / 4');
+  } finally {
+    await context.close();
+  }
+});
+
 test('a ctrl-wheel zooms the photo', async ({browser}) => {
   const {wheel, context, page, dialog, img, centre} = await openDesktop(
     browser,
@@ -171,9 +287,6 @@ test('a ctrl-wheel zooms the photo', async ({browser}) => {
     await context.close();
   }
 });
-
-const WHEEL_DRIVERS =
-  "Chromium's driver sends each wheel as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas.";
 
 test("a trackpad's scroll pans a zoomed photo", async ({
   browser,
@@ -352,6 +465,102 @@ test('a zoomed photo stops at a mouse drag’s release, as on main', async ({
     // The coast belongs to the touch presentation: the photo stays where the
     // release left it.
     expect(Math.abs((await boxOf(img)).x - atRelease)).toBeLessThan(1);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a pen drag down leaves a fitted photo and the viewer in place', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Pen input is dispatched through the Chrome DevTools Protocol.',
+  );
+  const {context, page, dialog, img, centre} = await openDesktop(
+    browser,
+    'with-zoom',
+  );
+  try {
+    const before = await boxOf(img);
+    const pen = await timedPointer(page, 'pen');
+    await pen('mouseMoved', centre, 0);
+    await pen('mousePressed', centre, 16);
+    for (let i = 1; i <= 8; i++) {
+      await pen('mouseMoved', {x: centre.x, y: centre.y + 20 * i}, 24);
+    }
+    expect(Math.abs((await boxOf(img)).y - before.y)).toBeLessThan(1);
+    await pen('mouseReleased', {x: centre.x, y: centre.y + 160}, 8);
+    await frames(page, 30);
+    await expect(dialog).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("a trackpad's scroll down leaves a fitted photo and the viewer in place", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'webkit', WHEEL_DRIVERS);
+  const {wheel, context, page, dialog, img, centre} = await openDesktop(
+    browser,
+    'with-zoom',
+  );
+  try {
+    const before = await boxOf(img);
+    await page.mouse.move(centre.x, centre.y);
+    const lowest = page.evaluate(
+      async () =>
+        new Promise<number>(resolve => {
+          const photo = document.querySelector('dialog img');
+          let low = photo?.getBoundingClientRect().y ?? 0;
+          const t0 = performance.now();
+          const tick = () => {
+            low = Math.max(low, photo?.getBoundingClientRect().y ?? low);
+            if (performance.now() - t0 < 400) {
+              requestAnimationFrame(tick);
+            } else {
+              resolve(low);
+            }
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    // A trackpad's swipe down, under natural scrolling. No delta is a
+    // multiple of 40 px, which would read as a mouse wheel's notch.
+    for (let i = 0; i < 10; i++) {
+      await wheel(0, -12);
+      await frames(page, 1);
+    }
+    // The drag to close belongs to the touch presentation: the photo stays.
+    expect(await lowest).toBeLessThan(before.y + 1);
+    await frames(page, 30);
+    await expect(dialog).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("a mouse wheel's notch leaves a fitted photo and the viewer in place", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', WHEEL_DRIVERS);
+  const {wheel, context, page, dialog, img, centre} = await openDesktop(
+    browser,
+    'with-zoom',
+  );
+  try {
+    const before = await boxOf(img);
+    await page.mouse.move(centre.x, centre.y);
+    await wheel(0, -100);
+    // The host ends a notch's stream 100 ms after its last event. Fifteen
+    // frames pass that at up to 120 Hz.
+    await frames(page, 15);
+    expect(Math.abs((await boxOf(img)).y - before.y)).toBeLessThan(1);
+    await expect(dialog).toBeVisible();
   } finally {
     await context.close();
   }

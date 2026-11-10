@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {warmIntegrationChecks} from '../../../test-utils/warm-integration-checks.mjs';
 import {discoverCoreTemplates} from '../../../foundation/discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 // The checks' one-time start in this file runs here, while the file is
 // collected, so no test carries it. That start is TypeScript and its lib
@@ -28,7 +29,7 @@ let tmpDir;
 beforeEach(() => {
   // Under the repository, so the components check resolves Core.
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-check-cli-'),
+    path.join(REPO_ROOT, '.astryx-integration-check-cli-'),
   );
 });
 

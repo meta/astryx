@@ -149,16 +149,92 @@ export function rowScale(element: HTMLElement, box: DOMRect): number {
     : 1;
 }
 
+/** A row's pages: one stop each, and the items whose stops native snap skips. */
+export interface SnapPages {
+  readonly stops: number[];
+  readonly skipped: Element[];
+}
+
 /**
- * Each item's snap stop: the scroll offset that aligns its start edge with
- * the scroll padding, clamped to `end`. Read from the items' rects, with the
- * position `shown` added back. Stops closer than half a pixel are one stop.
+ * The row's stops, one per page (`snapPages`). Read from the items' rects,
+ * with the position `shown` added back.
  */
 export function snapStops(
   element: HTMLElement,
   shown: number,
   end: number,
 ): number[] {
+  return snapPages(element, shown, end).stops;
+}
+
+/**
+ * The row's stops, one per page. Stops closer than half a pixel are one stop.
+ * The end's page is the page that the end rounds to. So a stop within half
+ * its preceding step of the end is that page, which rests where the row
+ * ends. Native snap skips the items of that stop (`skipped`).
+ */
+export function snapPages(
+  element: HTMLElement,
+  shown: number,
+  end: number,
+  isHeld = false,
+): SnapPages {
+  const stops: number[] = [];
+  const owners: Element[][] = [];
+  for (const {item, stop} of itemStops(element, shown, end, isHeld)) {
+    if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
+      stops.push(stop);
+      owners.push([item]);
+    } else {
+      owners[owners.length - 1].push(item);
+    }
+  }
+  const n = stops.length;
+  if (
+    n >= 3 &&
+    stops[n - 1] >= end - 0.5 &&
+    stops[n - 1] - stops[n - 2] < (stops[n - 2] - stops[n - 3]) / 2
+  ) {
+    stops.splice(n - 2, 1);
+    return {stops, skipped: owners[n - 2]};
+  }
+  return {stops: n > 0 ? stops : [0], skipped: []};
+}
+
+/**
+ * How far the row's items reach, start to end. A held row's items carry the
+ * paging's translate, so each rect takes its own item's translate off, read
+ * right after it. The span is then the layout's, whenever each rect was read.
+ */
+export function itemsSpan(element: HTMLElement, isHeld = false): number {
+  const items = Array.from(element.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement,
+  );
+  if (items.length === 0) {
+    return 0;
+  }
+  // A rect is on screen, scaled with the row; a translate is in the row's own
+  // pixels. So each rect takes the scale off before its translate.
+  const scale = rowScale(element, element.getBoundingClientRect());
+  let start = Infinity;
+  let end = -Infinity;
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    const held = isHeld
+      ? Number.parseFloat(getComputedStyle(item).translate) || 0
+      : 0;
+    start = Math.min(start, rect.left / scale - held);
+    end = Math.max(end, rect.right / scale - held);
+  }
+  return end - start;
+}
+
+function itemStops(
+  element: HTMLElement,
+  shown: number,
+  end: number,
+  isHeld: boolean,
+): {item: Element; stop: number}[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
   const scale = rowScale(element, box);
@@ -170,18 +246,19 @@ export function snapStops(
     Number.parseFloat(
       rtl ? style.scrollPaddingRight : style.scrollPaddingLeft,
     ) || 0;
-  const stops: number[] = [];
-  for (const child of Array.from(element.children)) {
-    const rect = child.getBoundingClientRect();
+  return Array.from(element.children, item => {
+    const rect = item.getBoundingClientRect();
+    // A held row's children carry the paging's translate. The rect shows the
+    // translate at the time of its read, so the next read takes it off.
+    const held = isHeld
+      ? Number.parseFloat(getComputedStyle(item).translate) || 0
+      : 0;
     const fromEdge =
-      (rtl ? box.right - rect.right : rect.left - box.left) / scale;
-    const stop = Math.min(
-      Math.max(fromEdge - border + shown - padding, 0),
-      end,
-    );
-    if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
-      stops.push(stop);
-    }
-  }
-  return stops.length > 0 ? stops : [0];
+      (rtl ? box.right - rect.right : rect.left - box.left) / scale +
+      (rtl ? held : -held);
+    return {
+      item,
+      stop: Math.min(Math.max(fromEdge - border + shown - padding, 0), end),
+    };
+  });
 }

@@ -25,13 +25,19 @@
   "sideEffects": [
     "**/*.css"
   ],
-  "main": "./dist/source.js",
+  "type": "module",
+  "main": "./dist/source.cjs",
   "types": "./dist/source.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/source.d.ts",
-      "import": "./dist/source.mjs",
-      "require": "./dist/source.js"
+      "import": {
+        "types": "./dist/source.d.ts",
+        "default": "./dist/source.mjs"
+      },
+      "require": {
+        "types": "./dist/source.d.cts",
+        "default": "./dist/source.cjs"
+      }
     },
     "./built": {
       "types": "./dist/gothic.d.ts",
@@ -52,6 +58,7 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
+    "theme.css.d.ts",
     "palette.config.json",
     "!**/*.test.*",
     "!**/*.spec.js",
@@ -69,7 +76,7 @@
   ],
   "scripts": {
     "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
-    "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-gothic-palette-refs.mjs --check && astryx theme build src/gothicTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
+    "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-gothic-palette-refs.mjs --check && astryx theme build src/gothicTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/emit-commonjs-declarations.mjs dist/source.d.ts && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0"
