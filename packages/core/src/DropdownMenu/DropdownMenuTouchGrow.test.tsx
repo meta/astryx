@@ -13,6 +13,7 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import type * as ReducedMotionPreference from '../motion/reducedMotionPreference';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
 import * as menuSurfaceMotion from './menuSurfaceMotion';
@@ -37,6 +38,17 @@ const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
   holdEntranceInput: entranceHold,
 }));
+// The one Reduce Motion predicate, which a case can turn on by itself, as a
+// new theme setting would.
+const preference = vi.hoisted(() => ({reduces: false}));
+vi.mock('../motion/reducedMotionPreference', async importOriginal => {
+  const actual = await importOriginal<typeof ReducedMotionPreference>();
+  return {
+    ...actual,
+    prefersReducedMotion: (element?: Element | null) =>
+      preference.reduces || actual.prefersReducedMotion(element),
+  };
+});
 
 const ITEMS: DropdownMenuOption[] = [{label: 'Edit'}, {label: 'Duplicate'}];
 
@@ -86,6 +98,7 @@ beforeEach(() => {
   __resetMenuPressForTest();
   resetMenuSurfaceMotionForTest();
   vi.clearAllMocks();
+  preference.reduces = false;
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockImplementation((query: string) => ({
@@ -226,6 +239,15 @@ describe('DropdownMenu touch grow', () => {
         <DropdownMenu button={{label: 'Actions'}} items={ITEMS} />
       </div>,
     );
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    await settleLoad();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
+  it("reads Reduce Motion from the one predicate the animator reads: when it says reduce, a finger's open keeps the layer's own entrance", async () => {
+    preference.reduces = true;
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
     await settleLoad();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();

@@ -28,7 +28,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {holdInput} from '../Layer/inputHold';
 import {createPresentationHold} from '../Layer/presentationHold';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {prefersReducedMotion} from '../motion/reducedMotionPreference';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import type * as MenuSurfaceMotionModule from './menuSurfaceMotion';
@@ -94,19 +94,6 @@ function loadAtFirstTouch(view: Window): () => void {
     void loadMotion().catch(() => {});
   });
   return unsubscribe;
-}
-
-/**
- * Whether Reduce Motion applies to `element`, as the animator reads it: the
- * person's setting, or a theme around it that reduces motion for everyone.
- */
-function prefersReducedMotion(element: Element): boolean {
-  const view = element.ownerDocument.defaultView;
-  return (
-    (typeof view?.matchMedia === 'function' &&
-      view.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
-    themeReducesMotion(element)
-  );
 }
 
 function boxOf(element: Element): MenuSurfaceGeometry['surface'] {

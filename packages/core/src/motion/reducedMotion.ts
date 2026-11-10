@@ -44,9 +44,9 @@
  * - /packages/core/src/motion/animator.ts (its Reduced Motion path)
  */
 
-import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
+import {defaultIsCoarsePointer} from './animator';
+import {prefersReducedMotion} from './reducedMotionPreference';
 import {resolveMotion} from './resolveMotion';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
@@ -84,8 +84,7 @@ export function reducedMotionFade(
     touchRelease?: boolean;
   } = {},
 ): ReducedMotionFade | null {
-  // A theme that reduces motion for everyone counts as the setting.
-  if (!defaultPrefersReducedMotion() && !themeReducesMotion(element)) {
+  if (!prefersReducedMotion(element)) {
     return null;
   }
   const fades = options.touchRelease === true || defaultIsCoarsePointer();
