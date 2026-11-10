@@ -20,12 +20,12 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect, afterAll} from 'vitest';
 import {
-  isPublishedPackage,
   checkPackageExports,
   probeLoadTargets,
   resolveExportTarget,
   verifyExports,
 } from './verify-exports.mjs';
+import {isPublished} from './npm/published-manifests.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -99,71 +99,6 @@ const canaryManifest = (name, extra = {}) => ({
 
 const labels = targets => targets.map(t => t.label);
 const names = results => results.map(r => r.name);
-
-describe('isPublishedPackage — which packages the gate covers', () => {
-  it('covers a plain public package', () => {
-    expect(isPublishedPackage({name: '@astryxdesign/core'})).toBe(true);
-  });
-
-  it('skips a genuinely private workspace-only package', () => {
-    // Nothing is published, so there is no consumer to break.
-    expect(
-      isPublishedPackage({name: '@astryxdesign/storybook', private: true}),
-    ).toBe(false);
-  });
-
-  it('covers a private package the release workflow publishes to @canary', () => {
-    // `private: true` here is only npm's guard against a stable publish; the
-    // canary job strips it and ships the package.
-    expect(isPublishedPackage(canaryManifest('@astryxdesign/charts'))).toBe(
-      true,
-    );
-  });
-
-  it('reads the marker, not the package name, within the published scope', () => {
-    expect(
-      isPublishedPackage({name: '@astryxdesign/charts', private: true}),
-    ).toBe(false);
-    expect(
-      isPublishedPackage({
-        name: '@astryxdesign/anything',
-        private: true,
-        astryx: {canaryOnly: true},
-      }),
-    ).toBe(true);
-    // The publisher ships only @astryxdesign packages.
-    expect(isPublishedPackage({name: '@scope/anything'})).toBe(false);
-  });
-
-  it('covers everything the canary publish loop publishes', () => {
-    // release.yml decides publishability with `(!p.private ||
-    // p.astryx?.canaryOnly) && p.name?.startsWith('@astryxdesign/')` — truthy,
-    // not `=== true`. A stricter test here would skip a package the publisher
-    // ships. Keep the two predicates in step.
-    const releaseYmlPublishes = pkg =>
-      Boolean(
-        (!pkg.private || pkg.astryx?.canaryOnly) &&
-        pkg.name?.startsWith('@astryxdesign/'),
-      );
-    const manifests = [
-      {private: true, astryx: {canaryOnly: true}},
-      {private: true, astryx: {canaryOnly: 'soon'}},
-      {private: true, astryx: {canaryOnly: 1}},
-      {private: true, astryx: {canaryOnly: false}},
-      {private: true, astryx: {}},
-      {private: true},
-      {},
-    ].flatMap(pkg => [
-      {name: '@astryxdesign/x', ...pkg},
-      {name: '@other/x', ...pkg},
-      pkg,
-    ]);
-    for (const pkg of manifests) {
-      const shipped = releaseYmlPublishes(pkg);
-      expect(isPublishedPackage(pkg), JSON.stringify(pkg)).toBe(shipped);
-    }
-  });
-});
 
 describe('checkPackageExports — which targets get probed', () => {
   /** A built package: ESM and CJS entries, declarations, a stylesheet, assets. */
@@ -457,6 +392,30 @@ describe('verifyExports — package selection over a real tree', () => {
     ]);
   });
 
+  it('reports other syntax errors as they are, not as a missing type', () => {
+    const root = fixtureRoot({
+      lab: {
+        manifest: canaryManifest('@astryxdesign/fixture-lab', {
+          type: undefined,
+          exports: {'.': {default: './dist/index.js'}},
+        }),
+        files: {'dist/index.js': 'export const = ;\n'},
+      },
+    });
+    const failures = probeLoadTargets(verifyExports(root).targets);
+    expect(failures.map(f => f.code)).not.toContain('ERR_MISSING_TYPE_MODULE');
+  });
+
+  it('skips a package npm does not receive, as the canary loops do', () => {
+    const root = fixtureRoot({
+      tooling: {
+        manifest: {name: '@other/tooling', exports: {'.': './dist/index.js'}},
+        files: {'dist/index.js': UNLOADABLE},
+      },
+    });
+    expect(verifyExports(root).results).toEqual([]);
+  });
+
   it('keeps import, require and source handling', () => {
     const root = fixtureRoot({
       vega: {
@@ -524,7 +483,7 @@ describe('the real workspace manifests', () => {
 
     expect(canaries.length).toBeGreaterThan(0);
     for (const pkg of canaries) {
-      expect(isPublishedPackage(pkg), pkg.name).toBe(true);
+      expect(isPublished(pkg), pkg.name).toBe(true);
     }
   });
 

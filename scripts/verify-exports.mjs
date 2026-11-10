@@ -24,9 +24,9 @@
  * even though the Tooltip specifier inside it is broken). Catching that needs a
  * static scan; see scripts/check-fully-specified.mjs.
  *
- * Coverage follows what actually ships, not what `private` says: `canaryOnly`
- * packages are published to the `@canary` dist-tag, and their runtime entry is
- * reached through `default`.
+ * Coverage follows what npm receives (scripts/npm/published-manifests.mjs):
+ * `canaryOnly` packages are published to the `@canary` dist-tag although they
+ * say `private: true`, and their runtime entry is reached through `default`.
  *
  * Exit code 1 if any exports are broken.
  */
@@ -36,6 +36,8 @@ import {spawnSync} from 'node:child_process';
 import {compileFunction} from 'node:vm';
 import {join, resolve, dirname, relative} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+
+import {isPublished} from './npm/published-manifests.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -164,28 +166,6 @@ export function resolveExportTarget(value, loader, conditions = []) {
   return null;
 }
 
-/**
- * Whether a package's published artifacts are in scope for this gate.
- *
- * `private: true` normally means workspace-only — nothing is published, so
- * there is no consumer for a broken export to reach. `astryx.canaryOnly`
- * packages are the exception: they carry `private: true` purely as npm's hard
- * guarantee against a stable publish, and the release workflow strips it in its
- * ephemeral checkout to publish them on the `@canary` dist-tag.
- *
- * This is the predicate the canary publish loop uses —
- * `(!p.private || p.astryx?.canaryOnly) && p.name?.startsWith('@astryxdesign/')`
- * in .github/workflows/release.yml — with `canaryOnly` tested for truthiness
- * for the same reason: a stricter test would let a package the publisher ships
- * go unverified.
- */
-export function isPublishedPackage(pkg) {
-  return (
-    (!pkg.private || Boolean(pkg.astryx?.canaryOnly)) &&
-    Boolean(pkg.name?.startsWith('@astryxdesign/'))
-  );
-}
-
 const labelFor = (exportKey, conditions) =>
   conditions.length > 0
     ? `exports["${exportKey}"].${conditions.join('.')}`
@@ -270,7 +250,8 @@ export function verifyExports(root) {
     const pkgDir = dirname(pkgJsonPath);
     const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
 
-    if (!isPublishedPackage(pkg)) continue;
+    // The packages npm receives, the list the canary loops publish.
+    if (!isPublished(pkg)) continue;
 
     const errors = [];
 
@@ -342,21 +323,29 @@ function packageTypeOf(file) {
  * not say `"type": "module"`. Node 22.7 and later load such a file by its URL
  * through syntax detection, so an import probe passes, but a bundler or a
  * resolver that follows the package's `type` reads it as CommonJS and fails.
- * The test compiles the file the way Node wraps a CommonJS module: module
- * syntax does not compile there.
+ * The file must fail to compile the way Node wraps a CommonJS module and
+ * compile as an ES module; a file that is invalid either way has some other
+ * defect, which the import probe reports.
  */
 export function hasUndeclaredModuleSyntax(file) {
   if (!file.endsWith('.js') || packageTypeOf(file) === 'module') return false;
+  const source = readFileSync(file, 'utf-8');
   try {
     compileFunction(
-      readFileSync(file, 'utf-8'),
+      source,
       ['exports', 'require', 'module', '__filename', '__dirname'],
       {filename: file},
     );
     return false;
   } catch (error) {
-    return error instanceof SyntaxError;
+    if (!(error instanceof SyntaxError)) return false;
   }
+  const asModule = spawnSync(
+    process.execPath,
+    ['--input-type=module', '--check'],
+    {input: source, encoding: 'utf-8'},
+  );
+  return asModule.status === 0;
 }
 
 /**
@@ -430,7 +419,11 @@ function main() {
       console.error(
         `  ✗ ${failure.pkgName} ${failure.label} → ${failure.value} (${failure.loader})`,
       );
-      console.error(`      ${failure.code}`);
+      console.error(
+        failure.code === 'ERR_MISSING_TYPE_MODULE'
+          ? '      ES module syntax in a .js file whose package does not declare "type": "module"'
+          : `      ${failure.code}`,
+      );
     }
   } else if (targets.length > 0) {
     const imports = targets.filter(target => target.loader === 'import').length;
@@ -440,8 +433,11 @@ function main() {
     );
   }
 
-  const loadFailures = failures.length;
-  if (totalErrors + loadFailures > 0) {
+  const missingType = failures.filter(
+    failure => failure.code === 'ERR_MISSING_TYPE_MODULE',
+  ).length;
+  const loadFailures = failures.length - missingType;
+  if (totalErrors + loadFailures + missingType > 0) {
     if (totalErrors > 0) {
       console.error(
         `\n${totalErrors} package artifact or export error(s) found. Fix the paths above.`,
@@ -451,6 +447,14 @@ function main() {
       console.error(
         `\n${loadFailures} export target(s) exist but fail to load. A Node consumer ` +
           `using the advertised condition gets the same error.`,
+      );
+    }
+    if (missingType > 0) {
+      console.error(
+        `\n${missingType} export target(s) use ES module syntax in a .js file whose ` +
+          `package does not declare "type": "module". Node may still load them through ` +
+          `syntax detection, but a bundler or resolver that follows the package's ` +
+          `"type" reads them as CommonJS.`,
       );
     }
     process.exit(1);
