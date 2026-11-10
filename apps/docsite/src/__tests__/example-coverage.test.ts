@@ -13,8 +13,9 @@
  * example block. That list is a report too and never fails the run.
  *
  * @input Authored component docs and template descriptors across documented
- *   packages, committed API reports, plus the generated block and component
- *   registries
+ *   packages, the built API surface named by ASTRYX_API_SURFACE (written by
+ *   `node scripts/api-report/cli.mjs --surface <dir>`), plus the generated
+ *   block and component registries
  * @output CI-visible coverage inventory (components and public hooks) and
  *   regression coverage for authored-block admission into the registry
  * @position Build-time docsite documentation-coverage reporting
@@ -115,11 +116,25 @@ describe('example coverage (report-only)', () => {
   }, 120_000);
 
   it('reports public hooks with no hook doc or no example block', async () => {
+    // The hook list comes from the built API surface; without one there is
+    // nothing to list.
+    const surfaceDir = process.env.ASTRYX_API_SURFACE;
+    if (!surfaceDir) {
+      process.stdout.write(
+        'Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that `node scripts/api-report/cli.mjs --surface <dir>` wrote.\n',
+      );
+      return;
+    }
+    const repoRoot = path.resolve(import.meta.dirname, '../../../..');
     const inventories = await inventoryAllPackages();
     // A block in any package can be the example for a hook.
     const allBlocks = inventories.flatMap(inventory => inventory.blocks);
     for (const inventory of inventories) {
-      const reportPath = path.join(inventory.packageDir, 'api-report.md');
+      const reportPath = path.join(
+        surfaceDir,
+        path.relative(repoRoot, inventory.packageDir),
+        'api-report.md',
+      );
       if (!fs.existsSync(reportPath)) {
         continue;
       }

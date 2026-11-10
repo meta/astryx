@@ -28,7 +28,7 @@
  *
  * @input Authored component docs (src/X/X.doc.mjs), template descriptors
  *   (the package's declared templates root, e.g. packages/lab/blocks), and
- *   committed API reports (packages/X/api-report.md)
+ *   each package's report in a built API surface (`cli.mjs --surface <dir>`)
  * @output Per-component pairing of example labels to block names, structural
  *   findings (missing same-stem sources, descriptor load failures), and
  *   per-hook doc and example-block coverage
@@ -318,7 +318,7 @@ export function formatCoverageReport(packageName, coverage, blocks) {
  * Hook names that an API report lists in its Hooks sections, sorted and
  * listed once each.
  *
- * @param {string} reportText content of a committed api-report.md
+ * @param {string} reportText one package's report from a built API surface
  * @returns {string[]}
  */
 export function readReportedHooks(reportText) {

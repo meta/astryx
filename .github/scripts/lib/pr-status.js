@@ -516,13 +516,13 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
 }
 
 // The API report step's own renderer (scripts/api-report/changes.mjs), so
-// the PR report and `pnpm api:report` show API changes one way.
+// the PR report and the step's api-changes.md show API changes one way.
 const {renderChanges} = require('../../../scripts/api-report/changes.mjs');
 
 /**
  * API changes (the API report step's api-changes.json): one visible line per
  * package, the rows in one closed disclosure; nothing when no package has a
- * change or a report to refresh.
+ * change.
  */
 function apiChangesLine(report) {
   if (!report || !Array.isArray(report.packages)) return '';

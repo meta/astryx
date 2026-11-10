@@ -1857,9 +1857,8 @@ jobs:
 
       # Advisory API changes (architecture:public-component-api INV24): each
       # published package's report from this build, compared with the merge
-      # base's surface (Main's record of it, else the base built above, else
-      # the reports committed there, read with git). A committed report that
-      # differs from this build is one stale line, not rows. It reads the
+      # base's surface (Main's record of it, else the base built above). With
+      # neither, nothing is compared and baseRecord is null. It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
       # A head cut before cli.mjs existed cannot run the next step;
@@ -1878,15 +1877,14 @@ jobs:
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
           # Main's surface of the merge base, else the base built above for its
-          # sizes, reported here. A head that predates the built surface
-          # compares committed reports.
+          # sizes, reported here.
           SURFACE=()
           if grep -q -- "'--base-surface'" scripts/api-report/cli.mjs; then
             if [ -f .api-surface-base/surface.json ]; then
               SURFACE=(--base-surface .api-surface-base --base-record main)
             elif [ -f base-build.done ] && [ -d .size-base ]; then
               node scripts/api-report/cli.mjs --surface .api-surface-build --root .size-base \
-                || echo "::notice::The merge base's API surface was not written; the API changes compare with its committed reports."
+                || echo "::notice::The merge base's API surface was not written; no API changes are compared."
               if [ -f .api-surface-build/surface.json ]; then
                 SURFACE=(--base-surface .api-surface-build --base-record build)
               fi
