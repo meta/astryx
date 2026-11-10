@@ -844,6 +844,8 @@ export function ContextMenu({
     },
     [layer],
   );
+  // Syncs the menu's side with the browser's layout of the shown menu: its
+  // height picks below or above the lift, before the frame paints.
   useIsomorphicLayoutEffect(() => {
     const lifted = liftRef.current;
     const menu = listRef.current?.closest<HTMLElement>('[popover]');
