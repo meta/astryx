@@ -20,7 +20,7 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
-import {createRef, Profiler, useState} from 'react';
+import {createRef, Profiler, startTransition, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
@@ -1230,13 +1230,16 @@ describe('Tokenizer', () => {
       });
       expect(input).toHaveAttribute('aria-expanded', 'true');
 
-      // Select an item. The caller does not commit it, so the list closes as
-      // after any other pick (component:Tokenizer FR14 covers a commit).
+      // Select an item. The caller does not commit it, so it stays eligible
+      // (component:Tokenizer FR13) and the list keeps its choices.
       fireEvent.click(screen.getByText('Alice'));
       expect(onChange).toHaveBeenCalled();
 
-      // Popover should not reopen with an empty menu after selection
-      expect(input).toHaveAttribute('aria-expanded', 'false');
+      // The popover never shows an empty menu after selection.
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1383,7 +1386,7 @@ describe('Tokenizer', () => {
       expect(input).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('closes after a pick the caller does not commit', async () => {
+    it('keeps a choice the caller does not commit, and a later search still loads', async () => {
       const user = userEvent.setup();
       const {source} = countingSource();
       render(
@@ -1402,14 +1405,57 @@ describe('Tokenizer', () => {
       await act(async () => {
         await new Promise(r => setTimeout(r, 20));
       });
-      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
 
-      // A later list still loads from the source.
       await user.type(input, 'di');
       await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'true');
+        expect(option('Diana')).toBeInTheDocument();
       });
       expect(option('Alice')).not.toBeInTheDocument();
+    });
+
+    it('keeps the list open when the caller commits each pick in a transition', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function InTransition() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={items => startTransition(() => setValue(items))}
+            hasEntriesOnFocus
+            debounceMs={0}
+          />
+        );
+      }
+      render(<InTransition />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Alice'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).not.toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
     });
 
     it('makes the next choice active after a keyboard pick', async () => {
@@ -1565,6 +1611,37 @@ describe('Tokenizer', () => {
 
       expect(input).toHaveAttribute('aria-expanded', 'false');
       expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('cancels the source once when the field becomes disabled, not on each later render', async () => {
+      const cancel = vi.fn();
+      const source: SearchSource = {...userSource, cancel};
+      function Parent() {
+        const [renders, setRenders] = useState(0);
+        return (
+          <>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              isDisabled
+            />
+            <button type="button" onClick={() => setRenders(renders + 1)}>
+              Rerender {renders}
+            </button>
+          </>
+        );
+      }
+      render(<Parent />);
+      const before = cancel.mock.calls.length;
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          screen.getByRole('button', {name: /Rerender/}).click();
+        });
+      }
+      expect(cancel.mock.calls.length).toBe(before);
     });
 
     it('closes when focus leaves by Tab after a pick', async () => {

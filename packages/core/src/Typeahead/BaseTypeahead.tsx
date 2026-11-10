@@ -955,15 +955,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Set when a pick kept the menu open; the open after the commit then
   // reloads a listbox or lets a dialog take focus.
   const pickKeptOpenRef = useRef(false);
-  // Set when a pick kept the focus list open. Holds the picked id and the
-  // committed-choices key from before the pick. When the commit adds that id,
-  // the reload keeps the list that the pick's render already filtered, and
-  // does not ask the source again. Otherwise the list closes, as after any
-  // other pick.
-  const keptFocusListPickRef = useRef<{
-    id: string;
-    key: string | undefined;
-  } | null>(null);
+  // The ids picked from a kept focus list since the last committed change.
+  // The caller's next committed change decides: when it adds one of them, the
+  // reload keeps the list that the commit's render already filtered, and does
+  // not ask the source again. Otherwise the list closes, as after any other
+  // pick. Typing, a close, or a pick that closes the list clears it.
+  const keptFocusListPicksRef = useRef<Set<string> | null>(null);
   // True while a list that a pick kept open is shown. That list closes when
   // the field becomes disabled.
   const isFocusListKeptRef = useRef(false);
@@ -1044,6 +1041,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
     isFocusListKeptRef.current = false;
+    keptFocusListPicksRef.current = null;
     openerAtRequestRef.current = null;
     outsidePress.stop();
     onOpenChange?.(false);
@@ -1080,6 +1078,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
     }
   }, [popover]);
+  // The latest hideList, read by the effect that runs when the field becomes
+  // disabled, as an effect event.
+  const hideListRef = useRef(hideList);
+  useIsomorphicLayoutEffect(() => {
+    hideListRef.current = hideList;
+  });
   // Show the layer, deferring past the active click if a pointer is down
   // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
@@ -1105,9 +1109,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       onLoadingChangeRef.current?.(false);
     }
     if (isFocusListKeptRef.current) {
-      hideList();
+      hideListRef.current();
     }
-  }, [isDisabled, hideList]);
+  }, [isDisabled]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current || isDialogMenuRef.current) {
       return;
@@ -1401,8 +1405,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   //   an empty or failed answer closes (FR15);
   // - a focus list with focus entries off: close.
   const reloadForCommittedChoices = useCallback(() => {
-    const keptFocusListPick = keptFocusListPickRef.current;
-    keptFocusListPickRef.current = null;
+    const keptFocusListPicks = keptFocusListPicksRef.current;
+    keptFocusListPicksRef.current = null;
     // A search waiting for its debounce would use the source from before the
     // commit, so the reload replaces it.
     const hadPendingSearch = searchTimeoutRef.current != null;
@@ -1417,11 +1421,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       hideList();
       return;
     }
-    if (keptFocusListPick != null) {
-      if (
-        committedChoices?.ids.has(keptFocusListPick.id) !== true ||
-        results.length === 0
-      ) {
+    if (keptFocusListPicks != null) {
+      const committedIds = committedChoices?.ids;
+      const isPickCommitted =
+        committedIds != null &&
+        [...keptFocusListPicks].some(id => committedIds.has(id));
+      if (!isPickCommitted || results.length === 0) {
         hideList();
         return;
       }
@@ -1478,23 +1483,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     });
   }, [committedChoicesKey]);
 
-  // A pick that the caller did not commit changes no committed value, so no
-  // reload reads the mark. The list then closes, as after any other pick.
-  useIsomorphicLayoutEffect(() => {
-    const keptFocusListPick = keptFocusListPickRef.current;
-    if (
-      keptFocusListPick != null &&
-      keptFocusListPick.key === committedChoicesKey
-    ) {
-      keptFocusListPickRef.current = null;
-      hideList();
-    }
-  });
-
   // Handle query change
   const handleQueryChange = useCallback(
     (newQuery: string) => {
       isFocusListKeptRef.current = false;
+      keptFocusListPicksRef.current = null;
       setQuery(newQuery);
       onChangeQuery?.(newQuery);
 
@@ -1609,10 +1602,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         pickedIndex >= 0 &&
         nextIndex >= 0;
       if (keepsFocusList) {
-        keptFocusListPickRef.current = {
-          id: item.id,
-          key: committedChoicesKey,
-        };
+        keptFocusListPicksRef.current = new Set([
+          ...(keptFocusListPicksRef.current ?? []),
+          item.id,
+        ]);
         isFocusListKeptRef.current = true;
         openRequestedRef.current = false;
         onChange(item);
@@ -1621,6 +1614,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         inputRef.current?.focus();
         return;
       }
+      keptFocusListPicksRef.current = null;
       // Bump generation to invalidate any in-flight async searches
       searchGenRef.current++;
       if (searchTimeoutRef.current) {
@@ -1659,7 +1653,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       isDisabled,
       displayedResults,
       committedChoices,
-      committedChoicesKey,
       isAtCommitLimit,
       hasEntriesOnFocus,
       isLoading,
