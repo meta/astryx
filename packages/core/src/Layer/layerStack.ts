@@ -156,8 +156,8 @@ interface DocumentEntry extends LayerStackEntry {
   ownerDocument: Document | null;
 }
 
-// The layer stack of every copy of Core on the page, so a swizzled layer and
-// the package's stack, order and dismiss as one.
+// Every copy of Core on the page shares this stack. A swizzled layer and a
+// package layer then order and dismiss as one.
 const stack = sharedState('layer/layer-stack/state', 1, () => ({
   entries: [] as DocumentEntry[],
   // Registration order per layer identity. `useLayerDismissal` keeps one token
@@ -175,6 +175,8 @@ const stack = sharedState('layer/layer-stack/state', 1, () => ({
   // The documents in which a text composition is running. Tracked from
   // composition events because the DOM offers no way to ask.
   composingDocuments: new Set<Document>(),
+  // How to remove each document's listeners, kept by the copy that added them.
+  stopListeningByDocument: new Map<Document, () => void>(),
 }));
 
 function seqFor(token: object): number {
@@ -382,13 +384,19 @@ function startListening(doc: Document): void {
   doc.addEventListener('compositionstart', handleCompositionStart, true);
   doc.addEventListener('compositionend', handleCompositionEnd, true);
   doc.addEventListener('blur', handleCompositionEnd, true);
+  // The copy that adds the listeners keeps their remover in the shared state,
+  // so the copy that closes the document's last layer removes these ones.
+  stack.stopListeningByDocument.set(doc, () => {
+    doc.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
+    doc.removeEventListener('compositionstart', handleCompositionStart, true);
+    doc.removeEventListener('compositionend', handleCompositionEnd, true);
+    doc.removeEventListener('blur', handleCompositionEnd, true);
+  });
 }
 
 function stopListening(doc: Document): void {
-  doc.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
-  doc.removeEventListener('compositionstart', handleCompositionStart, true);
-  doc.removeEventListener('compositionend', handleCompositionEnd, true);
-  doc.removeEventListener('blur', handleCompositionEnd, true);
+  stack.stopListeningByDocument.get(doc)?.();
+  stack.stopListeningByDocument.delete(doc);
   stack.composingDocuments.delete(doc);
 }
 

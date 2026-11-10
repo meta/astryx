@@ -42,8 +42,8 @@ import {
 } from 'react';
 import {sharedState} from '../utils/sharedRealm';
 
-// The modal outlets of every copy of Core on the page: the top layer is one
-// per document, so a swizzled modal and the package's order as one.
+// Every copy of Core on the page shares these outlets. The top layer is one
+// per document, so a swizzled modal and a package modal order as one.
 const modalState = sharedState('layer/modal-outlet/state', 1, () => ({
   outlets: [] as HTMLDialogElement[],
   // Outlets whose order among themselves is decided by their caller (a stack of
