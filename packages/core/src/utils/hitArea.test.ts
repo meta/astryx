@@ -206,6 +206,13 @@ describe('writeHitInsets', () => {
   });
 });
 
+// Lets the promise callbacks that follow an animation's end run.
+async function promiseCallbacks(): Promise<void> {
+  for (let index = 0; index < 5; index++) {
+    await Promise.resolve();
+  }
+}
+
 describe('watchHitArea', () => {
   let coarse = true;
   let pointerListeners: Set<() => void>;
@@ -1052,7 +1059,7 @@ describe('watchHitArea', () => {
     control.getAnimations = () => [];
     finish();
     await finished;
-    await Promise.resolve();
+    await promiseCallbacks();
     flush();
     expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
     stop();
@@ -1124,7 +1131,7 @@ describe('watchHitArea', () => {
       slide.playState = 'finished';
       finish();
       await finished;
-      await Promise.resolve();
+      await promiseCallbacks();
       flush();
       expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
       stop();

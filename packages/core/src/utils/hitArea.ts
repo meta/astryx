@@ -375,8 +375,9 @@ let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
 let isCoarse = false;
 /**
- * The page's interactive elements, as the last pass found them. Each mutation
- * and each watch change updates them, so the page is matched only once.
+ * The page's interactive elements. An added subtree, an attribute change or
+ * a watch change updates them, and a read drops the elements that left the
+ * page. So the page is matched only once.
  */
 let interactive: Set<Element> | null = null;
 let interactiveDocument: Document | null = null;
@@ -639,10 +640,8 @@ function regroup(element: Element): void {
   if (kept == null) {
     return;
   }
-  for (const entry of [...kept]) {
-    if (entry !== element && element.contains(entry)) {
-      kept.delete(entry);
-    }
+  for (const found of element.querySelectorAll(INTERACTIVE_SELECTOR)) {
+    kept.delete(found);
   }
   addMatches(kept, element);
   // An outer watch that counted only for what `element` holds stops counting.
@@ -716,22 +715,35 @@ function measureOne(
 }
 
 /**
- * The finite animations running or held on the page. An endless one, such as
- * a spinner, moves nothing that comes to rest. Core pauses an animation only
- * inside a gesture, and the gesture ends it. So a watch that a paused animation
- * holds is released.
+ * The finite animations running or held in `root` and its subtree. An endless
+ * one, such as a spinner, moves nothing that comes to rest. Core pauses an
+ * animation only inside a gesture, and the gesture ends it. So a watch that a
+ * paused animation holds is released.
  */
-function settlingAnimations(doc: Document): Animation[] {
-  if (typeof doc.getAnimations !== 'function') {
+export function settlingAnimations(root: Element | Document): Animation[] {
+  if (typeof root.getAnimations !== 'function') {
     return [];
   }
-  return doc.getAnimations().filter(animation => {
+  const animations = isElement(root)
+    ? root.getAnimations({subtree: true})
+    : root.getAnimations();
+  return animations.filter(animation => {
     if (animation.playState !== 'running' && animation.playState !== 'paused') {
       return false;
     }
     const end = animation.effect?.getComputedTiming().endTime;
     return typeof end === 'number' && Number.isFinite(end);
   });
+}
+
+/** Runs `then` once each animation has finished or been cancelled. */
+export function whenSettled(
+  animations: ReadonlyArray<Animation>,
+  then: () => void,
+): void {
+  void Promise.allSettled(
+    animations.map(async animation => animation.finished),
+  ).then(then);
 }
 
 /**
@@ -756,10 +768,7 @@ function isHeldBack(watch: Watch, settling: ReadonlyArray<Animation>): boolean {
     if (watches == null) {
       watches = new Set();
       heldByAnimation.set(animation, watches);
-      // A cancelled animation rejects `finished`. It holds nothing after that.
-      void Promise.resolve(animation.finished)
-        .catch(() => undefined)
-        .then(() => releaseHeld(animation));
+      whenSettled([animation], () => releaseHeld(animation));
     }
     watches.add(watch);
   }
@@ -971,24 +980,12 @@ function withoutOwnScale(element: Element, onScreen: HitRect): HitRect {
 /** Measures the watch in a pass once the control's own motion has ended. */
 function scheduleAtRest(watch: Watch): void {
   const {element} = watch;
-  const running =
-    typeof element.getAnimations === 'function'
-      ? element.getAnimations().filter(animation => {
-          const end = animation.effect?.getComputedTiming().endTime;
-          return (
-            animation.playState === 'running' &&
-            typeof end === 'number' &&
-            Number.isFinite(end)
-          );
-        })
-      : [];
-  if (running.length === 0) {
+  const moving = settlingAnimations(element);
+  if (moving.length === 0) {
     schedule(watch);
     return;
   }
-  void Promise.allSettled(
-    running.map(async animation => animation.finished),
-  ).then(() => {
+  whenSettled(moving, () => {
     if (watched.get(element)?.watches.has(watch)) {
       schedule(watch);
     }
