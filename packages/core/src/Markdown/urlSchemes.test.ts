@@ -175,6 +175,12 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
       expect(urlsIn(parseInline(`see <${url}> here`, gfm))).toEqual([]);
     });
 
+    it('stores a bare URL with a control character in its normalized form', () => {
+      expect(
+        urlsIn(parseMarkdown('see https://exa\u0001mple.com/x here', gfm)),
+      ).toEqual(['https://example.com/x']);
+    });
+
     it('keeps a safe angle-bracket autolink', () => {
       expect(
         urlsIn(parseMarkdown('see <https://example.com/x> here', gfm)),

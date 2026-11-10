@@ -2857,7 +2857,7 @@ function scanAutolinksInText(text: string): AutolinkMatch[] {
       matches.push({
         start: m.index,
         end: m.index + m[0].length,
-        href: normalizedMarkdownDestination(url),
+        href: url,
         display: url,
       });
     }
@@ -3008,7 +3008,7 @@ function splitTextOnAutolinks(
     }
     out.push({
       type: 'link',
-      url: m.href,
+      url: normalizedMarkdownDestination(m.href),
       children: [{type: 'text', value: m.display}],
     });
     cursor = m.end;

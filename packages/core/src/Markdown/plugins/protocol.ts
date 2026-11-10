@@ -805,25 +805,27 @@ function collectCodeInternalProperties(
   return properties;
 }
 
-/**
- * The same tree with every link and image URL in the normalized form the
- * parser stores, so the renderer can use each URL as it is. Only nodes on a
- * path to a changed URL are copied; the input is not changed.
- */
 type TreeValue = object | string | number | boolean | null | undefined;
 
-function normalizeAstDestinations<T>(root: T): T {
+/**
+ * @internal The same tree with every link and image URL in the normalized form
+ * the parser stores, so the renderer can use each URL as it is. Only nodes on
+ * a path to a changed URL are copied; the input is not changed. The input must
+ * be a validated tree.
+ */
+export function normalizeAstDestinations<T>(root: T): T {
   const visit = (value: TreeValue): TreeValue => {
     if (Array.isArray(value)) {
-      let changed = false;
-      const next = (value as TreeValue[]).map((item): TreeValue => {
-        const result = visit(item);
-        if (result !== item) {
-          changed = true;
+      const items = value as TreeValue[];
+      let next: TreeValue[] | null = null;
+      for (let index = 0; index < items.length; index++) {
+        const result = visit(items[index]);
+        if (result !== items[index]) {
+          next ??= items.slice();
+          next[index] = result;
         }
-        return result;
-      });
-      return changed ? next : value;
+      }
+      return next ?? value;
     }
     if (value == null || typeof value !== 'object') {
       return value;
