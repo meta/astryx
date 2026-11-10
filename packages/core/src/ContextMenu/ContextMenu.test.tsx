@@ -1028,7 +1028,7 @@ describe.each([
       expect(layer?.children).toHaveLength(1);
     });
 
-    it('lifts a trigger that paints no box of its own on the theme’s surface, and a picture as it is', () => {
+    it('lifts a trigger that shows no surface of its own on a plate of the theme’s surface, and a picture as it is', () => {
       const liftOf = (content: React.ReactNode) => {
         const view = render(
           <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
@@ -1042,7 +1042,9 @@ describe.each([
         press.up();
         const platter = {
           background: trigger.style.backgroundColor,
-          radius: trigger.style.borderRadius,
+          radius: trigger.style.borderTopLeftRadius,
+          reach: trigger.style.outlineWidth,
+          reachColor: trigger.style.outlineColor,
         };
         view.unmount();
         return platter;
@@ -1051,11 +1053,14 @@ describe.each([
       expect(liftOf(<div>Long-press me</div>)).toEqual({
         background: expect.stringContaining('--color-background-surface'),
         radius: expect.stringContaining('--radius-container'),
+        reach: expect.stringContaining('--spacing-2'),
+        reachColor: expect.stringContaining('--color-background-surface'),
       });
-      // A picture paints its own box: no platter.
+      // A picture shows its own surface: no plate.
       const picture = liftOf(<img alt="" src="data:," />);
       expect(picture.background).not.toContain('--color-background-surface');
       expect(picture.radius).not.toContain('--radius-container');
+      expect(picture.reach).toBe('');
     });
 
     it('keeps an inline trigger’s menu at the finger: no lift', () => {

@@ -626,11 +626,24 @@ test('a trigger that paints no box of its own lifts on the theme’s surface, ro
       el.parentElement?.append(probe);
       const surface = getComputedStyle(probe).backgroundColor;
       probe.remove();
+      const sized = document.createElement('span');
+      sized.style.position = 'absolute';
+      sized.style.width = 'var(--spacing-2)';
+      el.append(sized);
+      const spacing = parseFloat(getComputedStyle(sized).width);
+      sized.remove();
+      const reach =
+        style.outlineStyle === 'none'
+          ? 0
+          : parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
       return {
         lifted: el.matches(':popover-open'),
         background: style.backgroundColor,
         radius: style.borderTopLeftRadius,
+        outerRadius: parseFloat(style.borderTopLeftRadius) + reach,
+        reach,
         surface,
+        spacing,
         inline: (el as HTMLElement).style.cssText,
       };
     });
@@ -654,10 +667,12 @@ test('a trigger that paints no box of its own lifts on the theme’s surface, ro
   expect(rest.background, detail).toBe('rgba(0, 0, 0, 0)');
   expect(open.lifted, detail).toBe(true);
   expect(open.background, detail).toBe(open.surface);
-  expect(open.radius, detail).toBe('12px');
+  expect(open.reach, detail).toBe(open.spacing);
+  expect(open.outerRadius, detail).toBeCloseTo(12, 0);
   expect(back.background, detail).toBe(rest.background);
   expect(back.radius, detail).toBe(rest.radius);
-  expect(back.inline, detail).not.toMatch(/background|radius/);
+  expect(back.reach, detail).toBe(rest.reach);
+  expect(back.inline, detail).not.toMatch(/background|radius|outline/);
 });
 
 /** Holds a finger on a trigger of the plate story until its menu shows. */
