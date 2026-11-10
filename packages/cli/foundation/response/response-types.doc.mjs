@@ -112,6 +112,49 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
+    // experimental theme (experimental: may change or be removed in a patch release)
+    {
+      value: 'themeEdit.new',
+      stability: 'experimental',
+      description:
+        'A theme made by `experimental theme new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.set',
+      stability: 'experimental',
+      description:
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `family` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.reset',
+      stability: 'experimental',
+      description:
+        "One setting returned to the base theme's value: the same fields as `themeEdit.set`, with `setting` naming the one removed. Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.show',
+      stability: 'experimental',
+      description:
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.undo',
+      stability: 'experimental',
+      description:
+        'The last change undone: what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.preview',
+      stability: 'experimental',
+      description:
+        'The theme-building page: `mode` (`html`, one rendered file, or `page`, page modules written into the app), the `files` written, the `components` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.explain',
+      stability: 'experimental',
+      description:
+        'An explain answer; `kind` says which: `part`, `family`, `setting`, `aspect`, `question` (answers with commands), `picture` (main colors or the color at points) or `list` (the items). Experimental: may change or be removed in a patch release.',
+    },
     // render (experimental: may change or be removed in a patch release)
     {
       value: 'render.page',

@@ -1187,9 +1187,12 @@ export function BottomSheetPanel({
     if (element != null) {
       // A drag's close holds the sheet where the finger left it, so the exit
       // starts from there. A step back to rest first would turn the sheet
-      // the wrong way.
+      // the wrong way. A reduced-motion close fades the sheet out there. A
+      // hidden sheet keeps no drag offset, so it opens again from rest.
       const holdsDragClose =
-        dragExit != null && (!isClosing || playedDragExit != null);
+        isPresented &&
+        dragExit != null &&
+        (!isClosing || playedDragExit != null || isCrossFade);
       if (consumerTransform == null && !holdsDragClose) {
         element.style.transform = sheetTransform ?? '';
       }
