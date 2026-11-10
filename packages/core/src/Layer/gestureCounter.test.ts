@@ -10,9 +10,8 @@
  *   ends at its release and runs once per press and layer. A release target
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
- *   fired `contextmenu`. A claim that cancels the tap cancels its touch's
- *   lift (`touchend`) after the release, and no other. A claim ends when
- *   another control takes the pointer
+ *   fired `contextmenu`. A claim runs its onRelease at its release, and no
+ *   other. A claim ends when another control takes the pointer
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
@@ -23,7 +22,6 @@ import {
   currentGesture,
   isPressInFlight,
 } from './gestureCounter';
-import {__resetClickGuardForTest} from '../utils/clickGuard';
 
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
 function pointerEvent(
@@ -323,69 +321,55 @@ describe('claimPress', () => {
     expect([...listening].filter(([, n]) => n !== 0)).toEqual([]);
   });
 
-  /** A cancelable touch lift, which jsdom's events lack. */
-  const touchEnd = () =>
-    new Event('touchend', {bubbles: true, cancelable: true, composed: true});
-
-  it('cancels the lift after the release of a claim that cancels the tap', () => {
+  it('runs onRelease at the release of a claim that is still held', () => {
     const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
-    claimPress(layer, {cancelsTap: true});
+    claimPress(layer, {onRelease});
+    expect(onRelease).not.toHaveBeenCalled();
     trigger.dispatchEvent(pointerEvent('pointerup', 7));
-    const lift = touchEnd();
-    trigger.dispatchEvent(lift);
-    expect(lift.defaultPrevented).toBe(true);
-    __resetClickGuardForTest();
+    expect(onRelease).toHaveBeenCalledOnce();
   });
 
-  it('cancels no lift for a claim that keeps the tap, or one whose layer closed first', () => {
+  it('runs no onRelease for a claim whose layer closed first, or a cancelled press', () => {
     const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
-    claimPress(layer);
-    trigger.dispatchEvent(pointerEvent('pointerup', 7));
-    const kept = touchEnd();
-    trigger.dispatchEvent(kept);
-    expect(kept.defaultPrevented).toBe(false);
-
-    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
-    claimPress(layer, {cancelsTap: true});
+    claimPress(layer, {onRelease});
     layer.dispatchEvent(
       Object.assign(new Event('toggle'), {newState: 'closed'}),
     );
     trigger.dispatchEvent(pointerEvent('pointerup', 7));
-    const afterClose = touchEnd();
-    trigger.dispatchEvent(afterClose);
-    expect(afterClose.defaultPrevented).toBe(false);
-    __resetClickGuardForTest();
+
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    trigger.dispatchEvent(pointerEvent('pointercancel', 7));
+    expect(onRelease).not.toHaveBeenCalled();
   });
 
-  it('ends when another control takes the pointer, and then neither takes it back nor cancels the tap', () => {
+  it('ends when another control takes the pointer, and then neither takes it back nor runs onRelease', () => {
     const {trigger, layer} = mountLayer();
     const row = document.createElement('div');
     document.body.append(row);
+    const onRelease = vi.fn();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
-    claimPress(layer, {cancelsTap: true});
+    claimPress(layer, {onRelease});
     expect(captured).toEqual([7]);
     row.dispatchEvent(pointerEvent('gotpointercapture', 7));
     row.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
     expect(captured).toEqual([7]);
     row.dispatchEvent(pointerEvent('pointerup', 7, {x: 20, y: 20}));
-    const lift = touchEnd();
-    row.dispatchEvent(lift);
-    expect(lift.defaultPrevented).toBe(false);
-    __resetClickGuardForTest();
+    expect(onRelease).not.toHaveBeenCalled();
   });
 
   it('keeps the claim when the layer itself takes the pointer', () => {
     const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
-    claimPress(layer, {cancelsTap: true});
+    claimPress(layer, {onRelease});
     layer.dispatchEvent(pointerEvent('gotpointercapture', 7));
     trigger.dispatchEvent(pointerEvent('pointerup', 7));
-    const lift = touchEnd();
-    trigger.dispatchEvent(lift);
-    expect(lift.defaultPrevented).toBe(true);
-    __resetClickGuardForTest();
+    expect(onRelease).toHaveBeenCalledOnce();
   });
 
   it('claims a press for the context menu only once that press fired contextmenu', () => {

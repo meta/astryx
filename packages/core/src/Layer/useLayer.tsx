@@ -33,11 +33,9 @@ import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {
   claimContextMenuPress,
-  claimPress,
   currentGesture,
   currentGestureHasClicked,
 } from './gestureCounter';
-import {useOutsidePress} from './outsidePress';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
@@ -499,11 +497,12 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onCloseStart?: () => void;
   /**
-   * The owner decides what a touch outside that pans does to the layer. An
-   * anchored menu closes as that pan begins, so the layer does not keep such
-   * a pan from light-dismissing it.
+   * Watches the open layer for touches outside it that pan; returns the
+   * function that stops watching. A light-dismiss layer is given one by its
+   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
+   * as such a pan begins, is given none.
    */
-  ownsOutsidePan?: boolean;
+  watchesOutsidePans?: (layer: HTMLElement) => () => void;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -1151,9 +1150,6 @@ function getGutterStyles(
   return [styles.gutterBlockStart, styles.gutterBlockEnd];
 }
 
-/** A layer the browser light-dismisses learns only of pans outside it. */
-function reportsNoOutsidePress(): void {}
-
 /**
  * Internal props for controls that sit beside an open layer. This stays out of
  * the public useLayer/usePopover return types until the input family adopts it.
@@ -1224,8 +1220,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
-  const ownsOutsidePan =
-    mode === 'context' ? (options.ownsOutsidePan ?? false) : false;
+  const watchesOutsidePans =
+    mode === 'context' ? options.watchesOutsidePans : undefined;
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
   onCloseStartRef.current =
     mode === 'context' ? options.onCloseStart : undefined;
@@ -1332,27 +1328,12 @@ function useLayerImplementation(
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
-  // A touch that starts outside an open auto layer and pans is a gesture,
-  // not an outside press. A browser can still read it as a tap, for example
-  // when its main thread is late. So the layer claims that touch as it
-  // begins to pan: the release lands on the layer, and the tap is cancelled.
-  const outsidePanWatch = useOutsidePress();
-  const watchOutsidePans = useCallback(
-    (popover: HTMLElement) => {
-      const root = popover.getRootNode();
-      outsidePanWatch.start(
-        popover,
-        path => path.includes(popover),
-        reportsNoOutsidePress,
-        {
-          pointerTypes: ['touch'],
-          root: isShadowRoot(root) ? root : null,
-          onPan: () => claimPress(popover, {cancelsTap: true}),
-        },
-      );
-    },
-    [outsidePanWatch],
-  );
+  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
+  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsidePanWatch = useCallback(() => {
+    stopOutsidePanWatchRef.current?.();
+    stopOutsidePanWatchRef.current = null;
+  }, []);
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1580,8 +1561,9 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
-        if (!ownsOutsidePan) {
-          watchOutsidePans(popover);
+        if (watchesOutsidePans != null) {
+          stopOutsidePanWatch();
+          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
         }
       }
       if (keepsAnchorClear) {
@@ -1596,8 +1578,8 @@ function useLayerImplementation(
     onShow,
     keepsAnchorClear,
     lightDismiss,
-    ownsOutsidePan,
-    watchOutsidePans,
+    watchesOutsidePans,
+    stopOutsidePanWatch,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1766,7 +1748,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
-      outsidePanWatch.stop();
+      stopOutsidePanWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -1792,7 +1774,7 @@ function useLayerImplementation(
     clearContextMount,
     releaseAnchor,
     cancelPendingAnchorWait,
-    outsidePanWatch,
+    stopOutsidePanWatch,
   ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
@@ -1944,15 +1926,17 @@ function useLayerImplementation(
   }, []);
 
   // Syncs the document's capture-phase gesture tracking with this mount.
-  // Unmount forgets the layer's dismissal and releases a pending anchor wait.
+  // Unmount forgets the layer's dismissal, releases a pending anchor wait and
+  // stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
     return () => {
       forgetDismissalRef.current?.();
       pendingAnchorWaitRef.current?.();
+      stopOutsidePanWatch();
     };
-  }, []);
+  }, [stopOutsidePanWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -2008,7 +1992,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
-        outsidePanWatch.stop();
+        stopOutsidePanWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -2023,7 +2007,7 @@ function useLayerImplementation(
       clearContextMount,
       rememberDismissal,
       releaseAnchor,
-      outsidePanWatch,
+      stopOutsidePanWatch,
     ],
   );
 

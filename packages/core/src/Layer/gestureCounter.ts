@@ -7,8 +7,7 @@
  * @input Pointer and context-menu events through the shared input stream;
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
- *   press is down, and the press claims (claimPress, claimContextMenuPress).
- *   A claim can also cancel the tap of its press (utils/clickGuard.ts)
+ *   press is down, and the press claims (claimPress, claimContextMenuPress)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
@@ -23,7 +22,6 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
-import {armClickGuard} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
 
@@ -132,18 +130,14 @@ export function isPressInFlight(): boolean {
  * it, so its own pointerup and click still reach it. It still gets them when
  * it moves away under a pointer that stays still.
  *
- * `cancelsTap` also cancels the tap that the browser can make from a touch's
- * release. A browser can read a finger that panned as a tap, for example
- * when its main thread is late, and light-dismiss from that tap. The pointer
- * capture keeps a dismissal at the release from closing the layer; the
- * cancelled tap keeps a dismissal at the tap from closing it.
+ * `onRelease` runs at the release of a claim that is still held then.
  */
 export function claimPress(
   layer: HTMLElement,
   {
     releaseTarget = null,
-    cancelsTap = false,
-  }: {releaseTarget?: HTMLElement | null; cancelsTap?: boolean} = {},
+    onRelease,
+  }: {releaseTarget?: HTMLElement | null; onRelease?: () => void} = {},
 ): void {
   listen();
   const pointerId = state.pressPointerId;
@@ -253,8 +247,8 @@ export function claimPress(
   const endClaim = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
       stop();
-      if (cancelsTap && event.type === 'pointerup') {
-        armClickGuard(layer.ownerDocument, {cancelsTouchEnd: true});
+      if (event.type === 'pointerup') {
+        onRelease?.();
       }
     }
   };

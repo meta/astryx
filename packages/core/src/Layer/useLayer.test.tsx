@@ -47,6 +47,7 @@ import type {
 } from './useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {observeBrowserHide} from './popoverOperations';
+import {watchOutsidePans} from './outsidePanClaim';
 
 vi.mock('./preserveAnimations', async importOriginal => {
   const actual: {preserveAnimations: typeof preserveAnimations} =
@@ -3183,7 +3184,7 @@ describe('a touch that pans outside an open light-dismiss layer', () => {
     const layer = useLayerInternal({
       mode: 'context',
       lightDismiss: true,
-      ownsOutsidePan,
+      watchesOutsidePans: ownsOutsidePan ? undefined : watchOutsidePans,
     });
     return (
       <>
@@ -3225,7 +3226,7 @@ describe('a touch that pans outside an open light-dismiss layer', () => {
     fireEvent.pointerUp(page, touch(pointerId, 280));
   }
 
-  it('claims the pan for the layer, so its release lands on the layer', () => {
+  it('claims the pan for a layer given the watch, so its release lands on the layer', () => {
     const {container, getByRole, getByTestId} = render(
       <PanHarness ownsOutsidePan={false} />,
     );
@@ -3246,7 +3247,7 @@ describe('a touch that pans outside an open light-dismiss layer', () => {
     expect(captured).toEqual([]);
   });
 
-  it('leaves the pan to an owner that owns it (an anchored menu)', () => {
+  it('watches no pans for a layer given no watch (an anchored menu)', () => {
     const {getByRole, getByTestId} = render(<PanHarness ownsOutsidePan />);
     fireEvent.click(getByRole('button', {name: 'Trigger'}));
     panOnPage(getByTestId('page'), 5);

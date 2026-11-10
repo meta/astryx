@@ -4,7 +4,7 @@
 
 /**
  * @file usePopover.tsx
- * @input Uses useLayer, useFocusTrap, React hooks
+ * @input Uses useLayer, useFocusTrap, React hooks, and Layer's outside-pan watch (outsidePanClaim)
  * @output Exports the public usePopover hook with derived focus and guarded opening.
  *   For Popover.tsx (internal), exports usePopoverInternal and
  *   FALLBACK_CLOSE_SELECTOR.
@@ -20,6 +20,7 @@
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
+import {watchOutsidePans} from '../Layer/outsidePanClaim';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -390,8 +391,9 @@ interface InternalPopoverOptions extends UsePopoverOptions {
    */
   getOpener?: () => HTMLElement | null;
   /**
-   * The owner decides what a touch outside that pans does to the popover
-   * (useLayer's `ownsOutsidePan`).
+   * The owner decides what a touch outside that pans does to the popover.
+   * Otherwise a light-dismiss popover keeps such a pan from dismissing it
+   * (useLayer's `watchesOutsidePans`).
    */
   ownsOutsidePan?: boolean;
 }
@@ -490,7 +492,8 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
-    ownsOutsidePan,
+    watchesOutsidePans:
+      hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
