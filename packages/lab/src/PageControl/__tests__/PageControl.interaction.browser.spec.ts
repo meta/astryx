@@ -26,6 +26,7 @@ import {
   drag,
   FRAME_STARVATION_MS,
   FrameStarvationError,
+  frameGaps,
   MARKER_RGB,
   releaseAnimations,
   openStory,
@@ -37,6 +38,7 @@ import {
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {jogInterval} from '../pageControlModel';
 
 const storybook = withStorybook(test);
 
@@ -131,6 +133,79 @@ function msPerPage(window: ReadonlyArray<{t: number; page: number}>) {
   const first = window[0];
   const last = window[window.length - 1];
   return (last.t - first.t) / Math.abs(last.page - first.page);
+}
+
+/** Logs when the page draws each frame from now on; the reader returns them. */
+async function logFrames(page: Page) {
+  await page.evaluate(() => {
+    const frames: number[] = [];
+    (window as unknown as {frameLog: number[]}).frameLog = frames;
+    const step = (t: number) => {
+      frames.push(t);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as {frameLog: number[]}).frameLog);
+}
+
+/**
+ * Judges a jog's rate across a held window against its bounds, ms per page.
+ * The jog restarts its count after a timer that runs later than one step, so
+ * a stall longer than `stepMs` slows the steps it overlaps. A rate too slow
+ * fails by name only when the steps clear of such a stall are in bounds, or
+ * when no step is clear. Any other rate out of bounds fails as it is.
+ */
+function expectJogRate(
+  held: ReadonlyArray<{t: number; page: number}>,
+  frames: readonly number[],
+  {
+    above,
+    below,
+    stepMs,
+    during,
+  }: {above: number; below: number; stepMs: number; during: string},
+): void {
+  const rate = msPerPage(held);
+  const gaps = frameGaps(frames, held[0].t, held[held.length - 1].t);
+  const stalls = gaps.filter(gap => gap.to - gap.from > stepMs);
+  if (rate >= below && stalls.length > 0) {
+    const clear = held
+      .slice(1)
+      .map((step, i) => ({
+        ms: step.t - held[i].t,
+        pages: Math.abs(step.page - held[i].page),
+        stalled: stalls.some(
+          stall => stall.from < step.t && stall.to > held[i].t,
+        ),
+      }))
+      .filter(step => !step.stalled);
+    const clearPages = clear.reduce((sum, step) => sum + step.pages, 0);
+    const clearRate =
+      clearPages > 0
+        ? clear.reduce((sum, step) => sum + step.ms, 0) / clearPages
+        : null;
+    if (clearRate == null || (clearRate > above && clearRate < below)) {
+      // The frames the window needs: those drawn, and enough more to keep
+      // every gap within one step.
+      const drawn = gaps.length - 1;
+      const missing = stalls.reduce(
+        (sum, stall) => sum + Math.ceil((stall.to - stall.from) / stepMs) - 1,
+        0,
+      );
+      throw new FrameStarvationError({
+        by: 'the jog',
+        during,
+        frames: drawn,
+        min: drawn + missing,
+        longestGapMs: Math.max(...stalls.map(stall => stall.to - stall.from)),
+        cause: `a stall longer than one ${stepMs.toFixed(0)} ms step restarts the jog's count. The jog ran at ${rate.toFixed(0)} ms per page, ${clearRate == null ? 'with no step clear of a stall' : `and at ${clearRate.toFixed(0)} ms per page clear of a stall`}, so the run proves nothing about its rate`,
+      });
+    }
+  }
+  expect(rate).toBeGreaterThan(above);
+  expect(rate).toBeLessThan(below);
 }
 
 async function logPages(slider: Locator) {
@@ -301,6 +376,7 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   }
   const contentEnd = box.x + box.width - 14;
   const current = await indicatorCenter(slider, 25);
+  const frames = await logFrames(page);
   const pages = await logPages(slider);
   // Scrub 40 px past the content's edge and hold there for 1.2 s:
   // 0.173 pages/s per px → about 7 pages a second.
@@ -313,9 +389,12 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   );
   const log = await pages();
   const held = log.filter(e => e.t >= log[0].t + 400);
-  const nearStep = msPerPage(held);
-  expect(nearStep).toBeGreaterThan(110);
-  expect(nearStep).toBeLessThan(190);
+  expectJogRate(held, await frames(), {
+    above: 110,
+    below: 190,
+    stepMs: jogInterval(40) * 1000,
+    during: 'the jog stepped 40 px past the edge',
+  });
   expect(log[log.length - 1].page).toBeGreaterThan(30);
   // Far past (100 px): 15 pages a second.
   const far = await logPages(slider);
@@ -328,9 +407,12 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
     ),
   );
   const fast = (await far()).filter((e, i, all) => e.t >= all[0].t + 300);
-  const farStep = msPerPage(fast);
-  expect(farStep).toBeGreaterThan(50);
-  expect(farStep).toBeLessThan(85);
+  expectJogRate(fast, await frames(), {
+    above: 50,
+    below: 85,
+    stepMs: jogInterval(100) * 1000,
+    during: 'the jog stepped 100 px past the edge',
+  });
 });
 
 test('a held finger shows the platter, the pressed overlay, and dims the other indicators after 155 ms; the touched indicator does not transform', async ({
