@@ -140,7 +140,9 @@ test('outside a scroller, a finger’s press highlights in the frame it lands, a
   // busy page. Between the two, it records each frame's time and keeps the
   // release animations. A busy page starts them late, and the release then
   // waits for their end (utils/pressFeedback.ts). Their end is read at the
-  // removal: it cancels them, which clears their start times.
+  // removal: it cancels them, which clears their start times. As in the press
+  // controller, a release animation is a finite CSS animation. It runs on the
+  // button, or on a part that no nested press owner holds.
   await opened.surface.evaluate(el => {
     const release = {
       fadingAt: null as number | null,
@@ -152,7 +154,13 @@ test('outside a scroller, a finger’s press highlights in the frame it lands, a
     const animations = new Set<Animation>();
     const keepAnimations = () => {
       for (const animation of el.getAnimations({subtree: true})) {
-        if ('animationName' in animation) {
+        const target = (animation.effect as KeyframeEffect | null)?.target;
+        if (
+          'animationName' in animation &&
+          target != null &&
+          (target === el || target.closest('[data-astryx-pressable]') === el) &&
+          Number.isFinite(Number(animation.effect?.getComputedTiming().endTime))
+        ) {
           animations.add(animation);
         }
       }
