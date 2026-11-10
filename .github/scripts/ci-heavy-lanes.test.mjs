@@ -546,12 +546,17 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ).toEqual([]);
   });
 
-  it("leaves every run name as it was, but main's nightly interaction run's", () => {
+  it("leaves every run name as it was, but main's nightly interaction run's and the weekly WebKit run's", () => {
     const name = operation =>
       Function(
         'github',
         'inputs',
-        `return (${ci['run-name'].replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/format\('Interaction proofs of \{0\}', github\.sha\)/, '`Interaction proofs of ${github.sha}`')});`,
+        `return (${ci['run-name']
+          .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+          .replace(
+            /format\('([^']*)\{0\}', github\.sha\)/g,
+            '`$1${github.sha}`',
+          )});`,
       )(
         {event_name: operation ? 'workflow_dispatch' : 'pull_request', sha},
         operation ? {operation} : {},
@@ -560,6 +565,17 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     for (const operation of [undefined, 'capture', 'release-check'])
       expect(name(operation), String(operation)).toBe('');
     expect(name('interaction-full')).toBe(`Interaction proofs of ${sha}`);
+    expect(name('webkit-weekly')).toBe(`WebKit weekly of ${sha}`);
+  });
+
+  it('never counts a weekly full WebKit run on the tip as its release-check', async () => {
+    const calls = await run({
+      runs: [
+        check(30, {head_sha: sha, display_title: `WebKit weekly of ${sha}`}),
+      ],
+      units: [unitAt(30)],
+    });
+    expect(calls.dispatch).toContainEqual(releaseCheck(sha));
   });
 
   it('does not check a tip twice', async () => {

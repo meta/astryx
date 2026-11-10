@@ -2,7 +2,8 @@
 
 /**
  * @file Knowledge-record validation.
- * @input Versioned schemas, records, and current ENGOWNERS/DESIGNOWNERS.
+ * @input Versioned schemas, records, and current ENGOWNERS/DESIGNOWNERS of
+ *   this repository, or of the checkout `--root` names.
  * @output Structural, relationship, and approval-eligibility problems.
  * @position Repository knowledge guardrail; schemas do not grant approval rights.
  */
@@ -2623,8 +2624,8 @@ export function statusPhraseWarnings(root = DEFAULT_ROOT) {
   return warnings;
 }
 
-function printStatusPhraseWarnings() {
-  const warnings = statusPhraseWarnings();
+function printStatusPhraseWarnings(root) {
+  const warnings = statusPhraseWarnings(root);
   if (!warnings.length) return;
   console.warn(
     `Records state temporary project status (${warnings.length}; warning only). Describe the system, or keep one Status line:`,
@@ -2637,27 +2638,37 @@ function printStatusPhraseWarnings() {
     );
 }
 
+/** The checkout `--root` names, or this repository. */
+function rootArgument() {
+  const rootIndex = process.argv.indexOf('--root');
+  if (rootIndex === -1) return DEFAULT_ROOT;
+  const root = process.argv[rootIndex + 1];
+  if (!root) throw new Error('--root requires a directory.');
+  return path.resolve(root);
+}
+
 async function main() {
-  if (!repositoryFileList(DEFAULT_ROOT)) {
+  const root = rootArgument();
+  if (!repositoryFileList(root)) {
     console.warn(
       'Skipped the INV25 reachability and path-pattern match checks: `git ls-files` is unavailable here.',
     );
   }
-  const problems = await validateKnowledgeRoot();
-  printStatusPhraseWarnings();
+  const problems = await validateKnowledgeRoot(root);
+  printStatusPhraseWarnings(root);
   const baseIndex = process.argv.indexOf('--base');
   if (baseIndex !== -1) {
     const baseRevision = process.argv[baseIndex + 1];
     if (!baseRevision) throw new Error('--base requires a revision.');
     problems.push(
       ...validateSchemaEvolution(
-        schemaFilesAtRevision(DEFAULT_ROOT, baseRevision),
-        currentSchemaFiles(DEFAULT_ROOT),
+        schemaFilesAtRevision(root, baseRevision),
+        currentSchemaFiles(root),
       ),
     );
-    const repositoryFiles = repositoryFileList(DEFAULT_ROOT);
+    const repositoryFiles = repositoryFileList(root);
     const changes = repositoryFiles
-      ? approvalLineRewritesSince(DEFAULT_ROOT, baseRevision, repositoryFiles)
+      ? approvalLineRewritesSince(root, baseRevision, repositoryFiles)
       : [];
     for (const change of changes) {
       console.warn(
