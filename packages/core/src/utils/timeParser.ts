@@ -27,8 +27,15 @@ export interface ParsedTime {
 /**
  * Validates and creates an ISOTimeString from a string.
  * Returns null if the string is not a valid time format.
+ *
+ * Every field must be digits only. parseISOTime reads each field with
+ * parseInt, which stops at the first non-digit, so on its own it would turn
+ * "2:30 PM" into 02:30 (12 hours off) and "14:30abc" into 14:30.
  */
 export function createISOTimeString(value: string): ISOTimeString | null {
+  if (!/^\d{1,2}:\d{1,2}(?::\d{1,2})?$/.test(value)) {
+    return null;
+  }
   const parsed = parseISOTime(value);
   if (!parsed) {
     return null;
