@@ -1797,10 +1797,13 @@ function motionStepPx(values: readonly number[]): number {
  * at the first presented change inside it: WebKit presents a just-started
  * compositor animation late (a sheet's release held on screen for 130 to
  * 300 ms while its timeline ran, and the screencast reaches Node about 0.7 s
- * late on a loaded runner, too late to wait on before blocking). Only a hold
+ * late on a loaded runner, too late to wait on before blocking). Chromium on
+ * a loaded runner does too. A slider's coast first showed 25–111 ms after
+ * its start (median 57 ms), with a catch-up on that first frame. Only a hold
  * at `setBeforeBlock`, the value the page itself last set before the block,
- * is excused. Every frame after that first change is judged, so a freeze
- * later in the block fails.
+ * is excused. Without it, a window with a caught animation takes the value on
+ * the cast's last frame before that animation's start. Every frame after that
+ * first change is judged, so a freeze later in the block fails.
  * An element off screen before the judged part is judged from its first
  * position inside the part, as a card that enters from an edge. The cast's
  * frames before the part must show the screen without it. A main-thread
@@ -2154,9 +2157,11 @@ function judgeBusyWindow(
      * coordinates: where the box sits at rest, plus the offset the page wrote.
      * A hold that starts before the block and ends at its first presented
      * change can be a late hand-off. It is one only when it holds this value,
-     * where the animation starts. Without it, or when the hold shows another
-     * value, the hold is judged as a stall. An animation can freeze at the
-     * block's start.
+     * where the animation starts. Without it, a window that caught an
+     * animation (`blockMainThread`'s `during`) takes the value on the cast's
+     * last frame before that animation's start. When the hold shows another
+     * value, or no value is known, the hold is judged as a stall. An
+     * animation can freeze at the block's start.
      */
     setBeforeBlock?: number;
     /**
@@ -2383,13 +2388,23 @@ function judgeBusyWindow(
   // up to a step off. A cast with no step is read within a pixel, and a
   // sub-pixel read within half a pixel.
   const matchPx = subpixelStepPx != null ? 0.5 : (readStepPx ?? 1);
+  // Where the animation starts: the value the page set (`setBeforeBlock`).
+  // Without it, the caught animation's start dates it: the value on the
+  // cast's last frame before that start. Unlike the progress replay's
+  // anchor, a frame that shows no element is not skipped. An earlier value
+  // can be stale, so the hold then gets no excuse.
+  const preStart =
+    setBeforeBlock ??
+    (heldCurve == null
+      ? undefined
+      : [...tracked].reverse().find(f => f.t < heldCurve.from)?.box?.[axis]);
   const heldFromBeforeBlock =
-    setBeforeBlock != null &&
+    preStart != null &&
     lead.length > 0 &&
     holdStart > 0 &&
     prior[holdStart].t < window.from &&
     heldFrames >= 2 &&
-    Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
+    Math.abs(lead[lead.length - 1] - preStart) <= matchPx;
   // Off screen before the judged part, as a card that enters from an edge:
   // the cast's frames there show the screen without it. Its first position
   // inside the part is then its on-screen start, and judging starts there.
