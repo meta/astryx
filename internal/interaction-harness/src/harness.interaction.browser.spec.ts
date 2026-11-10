@@ -30,8 +30,8 @@
  *   after it;
  *   storyboards write a
  *   sheet and a trace that follows the curve, an endless animation does not
- *   set their length, and a photograph Chromium returns empty is taken again
- *   two frames later; a touch filmstrip keeps scripted event times while a
+ *   set their length, and a photograph the engine fails throws its error and
+ *   records no frame; a touch filmstrip keeps scripted event times while a
  *   handler clock sees its pacing; the timer gate holds a component timer
  *   until the filmstrip is done, drops callbacks the page cancels, stamps held
  *   frames with the time they run, and leaves the harness its own frames; a
@@ -3822,7 +3822,7 @@ test.describe('wheel and pen input', () => {
       expect(stall.frameGapMs).toBeGreaterThan(100);
       expect(stall.handlingMs).toBeLessThan(stall.gapMs);
       expect(String(outcome)).toMatch(
-        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, over its 100 ms \(engine or page work\)/,
+        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, at or over its 100 ms \(engine or page work\)/,
       );
       // A starved runner's renderer draws no frame either, and the error
       // says so.
@@ -6704,54 +6704,28 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(files['sheet.png']).toMatch(/sheet\.png$/);
   });
 
-  test('a capture Chromium returns empty is taken again two frames later', async ({
+  test('a capture the engine fails throws its error and records no frame', async ({
     page,
   }) => {
     await fixture(page);
-    // Counts the page's frames, so the wait before the second capture shows.
-    await page.evaluate(() => {
-      const w = window as unknown as {__frames: number};
-      w.__frames = 0;
-      const tick = () => {
-        w.__frames += 1;
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-    const screenshot = page.screenshot.bind(page);
-    const calledAt: number[] = [];
-    let failures = 1;
     // What Chromium answers when its surface copy comes back empty.
-    page.screenshot = (async (options?: Parameters<Page['screenshot']>[0]) => {
-      calledAt.push(
-        await page.evaluate(
-          () => (window as unknown as {__frames: number}).__frames,
-        ),
+    let photographs = 0;
+    page.screenshot = (async () => {
+      photographs += 1;
+      throw new Error(
+        'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot',
       );
-      if (failures-- > 0) {
-        throw new Error(
-          'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot',
-        );
-      }
-      return screenshot(options);
     }) as Page['screenshot'];
     const storyboard = new Storyboard(page, {
-      name: 'harness-self-test-recapture',
+      name: 'harness-self-test-capture-error',
       clip: {x: 0, y: 340, width: 402, height: 120},
     });
-    await storyboard.capture('t=0 ms', 0);
-    expect(storyboard.frames).toHaveLength(1);
-    expect(calledAt).toHaveLength(2);
-    expect(calledAt[1] - calledAt[0]).toBeGreaterThanOrEqual(2);
-    expect(storyboard.trace().recaptures).toEqual([
-      {label: 't=0 ms', error: expect.stringContaining('Unable to capture')},
-    ]);
-    // Captures that keep failing still fail, with Chromium's error.
-    failures = Infinity;
-    await expect(storyboard.capture('t=1 ms', 1)).rejects.toThrow(
+    await expect(storyboard.capture('t=0 ms', 0)).rejects.toThrow(
       /Unable to capture screenshot/,
     );
-    expect(storyboard.frames).toHaveLength(1);
+    expect(photographs).toBe(1);
+    expect(storyboard.frames).toHaveLength(0);
+    expect(storyboard.trace()).not.toHaveProperty('recaptures');
   });
 
   test('a touch filmstrip photographs every scripted event', async ({

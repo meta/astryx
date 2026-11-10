@@ -367,8 +367,14 @@ function validateReleaseState({
   return errors;
 }
 
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
 function gitRaw(root, args) {
-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: GIT_MAX_BUFFER,
+  });
 }
 
 function git(root, args) {
@@ -1068,7 +1074,7 @@ const RELEASE_POLICY_CARRY_PATTERNS = [
   /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
   /^scripts\/release\/release-paths\.mjs$/,
   /^\.github\/actions\/test-scope\/action\.yml$/,
-  /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
+  /^\.github\/scripts\/(?:test-scope-action|touched-components)\.test\.mjs$/,
   /^\.github\/workflows\/ci\.yml$/,
   /^docs\/release\.md$/,
   /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,

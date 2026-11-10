@@ -1,991 +1,672 @@
-diff --git a/.github/actions/test-scope/action.yml b/.github/actions/test-scope/action.yml
-index eb8aa34cfb0..a869c376ada 100644
---- a/.github/actions/test-scope/action.yml
-+++ b/.github/actions/test-scope/action.yml
-@@ -89,0 +90,5 @@ outputs:
-+  truncated:
-+    description: >-
-+      `true` when the step could not decide because GitHub truncated the pull
-+      request's file list (3,000 files); a re-run cannot decide such a scope.
-+    value: ${{ steps.scope.outputs.truncated }}
-@@ -150,0 +156 @@ runs:
-+            truncated: 'false',
-@@ -171,0 +178,15 @@ runs:
-+          const writeChangedFiles = files => {
-+            const changedFilesPath = path.join(
-+              process.env.RUNNER_TEMP || os.tmpdir(),
-+              'test-scope-changed-files.txt',
-+            );
-+            const changed = [
-+              ...new Set(
-+                files.flatMap(file =>
-+                  [file.filename, file.previous_filename].filter(Boolean),
-+                ),
-+              ),
-+            ];
-+            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
-+            return changedFilesPath;
-+          };
-@@ -179,14 +199,0 @@ runs:
--          if (pr.base.ref.startsWith('release/v')) {
--            core.info('Release-branch pull request: the generated version bump.');
--            report({
--              ...everything,
--              ...(audit ? auditNone : {}),
--              spec_only: 'true',
--              tooling_only: 'true',
--              release_bump: 'true',
--              touches: 'false',
--              applies: 'false',
--            });
--            return;
--          }
--
-@@ -214,0 +222,3 @@ runs:
-+                ...(pr.base.ref.startsWith('release/v')
-+                  ? ['scripts/release/release-paths.mjs']
-+                  : []),
-@@ -238 +248,6 @@ runs:
--              report({...everything, decided: 'false'});
-+              report({
-+                ...everything,
-+                release_bump: String(pr.base.ref.startsWith('release/v')),
-+                decided: 'false',
-+                truncated: String(/truncated the file list/.test(error.message)),
-+              });
-@@ -247,0 +263,34 @@ runs:
-+
-+            if (pr.base.ref.startsWith('release/v')) {
-+              const releaseKind = execFileSync(
-+                'node',
-+                [
-+                  path.join(root, 'scripts/release/release-paths.mjs'),
-+                  '--classify',
-+                ],
-+                {encoding: 'utf8', input: `${nameStatus}\n`},
-+              ).trim();
-+              if (releaseKind === 'version-bump') {
-+                core.info('Release-branch pull request: the generated version bump.');
-+                report({
-+                  ...everything,
-+                  ...(audit ? auditNone : {}),
-+                  spec_only: 'true',
-+                  tooling_only: 'true',
-+                  release_bump: 'true',
-+                  touches: 'false',
-+                  applies: 'false',
-+                });
-+              } else {
-+                core.info(
-+                  `Release-branch ${releaseKind} candidate: every test lane runs; the release validator decides whether the change is allowed.`,
-+                );
-+                report({
-+                  ...everything,
-+                  ...(audit ? auditAll : {}),
-+                  release_bump: 'true',
-+                  changed_files_path: writeChangedFiles(files),
-+                });
-+              }
-+              return;
-+            }
-diff --git a/.github/scripts/test-scope-action.test.mjs b/.github/scripts/test-scope-action.test.mjs
-index caa564da490..e65114eaa3e 100644
---- a/.github/scripts/test-scope-action.test.mjs
-+++ b/.github/scripts/test-scope-action.test.mjs
-@@ -42,0 +43 @@ const CLASSIFIER_FILES = new Set([
-+const RELEASE_PATHS_FILE = 'scripts/release/release-paths.mjs';
-@@ -106,0 +108 @@ async function decide({
-+          file === RELEASE_PATHS_FILE ||
-@@ -183,0 +186 @@ describe('per-job scope step', () => {
-+        'truncated',
-@@ -206 +209 @@ describe('per-job scope step', () => {
--  it('marks a release-branch pull request as the generated version bump', async () => {
-+  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
-@@ -208,0 +212,7 @@ describe('per-job scope step', () => {
-+      files: changed(
-+        '.changeset/frozen.md',
-+        'packages/core/CHANGELOG.md',
-+        'packages/core/package.json',
-+        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
-+        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
-+      ),
-@@ -217,0 +228,49 @@ describe('per-job scope step', () => {
-+  it('runs every lane for a release-branch test-repair candidate', async () => {
-+    const {outputs} = await decide({
-+      context: pullRequestContext('release/v1.2.3'),
-+      files: changed(
-+        'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
-+      ),
-+      inputs: {'component-audit': 'true'},
-+    });
-+    expect(outputs).toMatchObject({
-+      release_bump: 'true',
-+      spec_only: 'false',
-+      tooling_only: 'false',
-+      full_suite: 'true',
-+      vitest_full_suite: 'true',
-+      has_components: 'true',
-+      force_full_component_audits: 'true',
-+      applies: 'true',
-+    });
-+    expect(fs.readFileSync(outputs.changed_files_path, 'utf8')).toBe(
-+      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts\n',
-+    );
-+  });
-+
-+  it.each([
-+    ['an empty file list', []],
-+    ['an API failure', new Error('unavailable')],
-+    [
-+      'a truncated file list',
-+      Array.from({length: 3000}, (_, index) => ({
-+        filename: `packages/core/src/Test${index}.test.ts`,
-+        status: 'modified',
-+      })),
-+    ],
-+  ])('runs every lane when release scope has %s', async (_, files) => {
-+    const {outputs} = await decide({
-+      context: pullRequestContext('release/v1.2.3'),
-+      files,
-+      inputs: {'component-audit': 'true'},
-+    });
-+    expect(outputs).toMatchObject({
-+      release_bump: 'true',
-+      decided: 'false',
-+      full_suite: 'true',
-+      vitest_full_suite: 'true',
-+      force_full_component_audits: 'true',
-+      applies: 'true',
-+    });
-+  });
-+
-@@ -382 +441 @@ describe('per-job scope step', () => {
--  ])('puts everything in scope when %s', async (_, options) => {
-+  ])('puts everything in scope when %s', async (name, options) => {
-@@ -386,0 +446,4 @@ describe('per-job scope step', () => {
-+    // Only a truncated file list is one a re-run cannot decide.
-+    expect(outputs.truncated).toBe(
-+      name === 'GitHub truncates the file list' ? 'true' : 'false',
-+    );
-@@ -543 +606 @@ describe('per-job scope step', () => {
--    it('applies no audit to a release-branch pull request', async () => {
-+    it('applies no audit to the generated release-branch pull request', async () => {
-@@ -545,0 +609,5 @@ describe('per-job scope step', () => {
-+        files: changed(
-+          '.changeset/frozen.md',
-+          'packages/core/CHANGELOG.md',
-+          'packages/core/package.json',
-+        ),
-@@ -836,0 +905,39 @@ describe('the temporary policy folder', () => {
-+
-+describe('the contract job on a pull request GitHub truncates', () => {
-+  it('lists every file and runs, never fails, on an undecided scope', async () => {
-+    const ci = yaml.parse(
-+      fs.readFileSync(
-+        path.join(import.meta.dirname, '../workflows/ci.yml'),
-+        'utf8',
-+      ),
-+    );
-+    const job = ci.jobs['pr-component-a11y-contracts'];
-+    const scopeStep = job.steps.find(step => step.id === 'scope');
-+    const {outputs} = await decide({
-+      files: Array.from({length: 3001}, (_, i) => ({
-+        filename: `packages/core/src/Button/file${i}.tsx`,
-+        status: 'modified',
-+      })),
-+      inputs: scopeStep.with,
-+    });
-+    expect(outputs).toMatchObject({applies: 'true', decided: 'false'});
-+    expect(outputs.changed_files_path ?? '').toBe('');
-+    // The workflow's own conditions, read against these outputs.
-+    const holds = condition =>
-+      Function(
-+        'outputs',
-+        `return (${condition
-+          .replace(
-+            /steps\.scope\.outputs\.(\w+)/g,
-+            (_, key) => `(outputs.${key} ?? '')`,
-+          )
-+          .replace(/ == /g, ' === ')
-+          .replace(/ != /g, ' !== ')});`,
-+      )(outputs);
-+    const step = name => job.steps.find(candidate => candidate.name === name);
-+    expect(holds(step('Require the changed-file list').if)).toBe(false);
-+    expect(holds(step('List every file when the scope is undecided').if)).toBe(
-+      true,
-+    );
-+  });
-+});
-diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 06d9db55411..f824d6ca219 100644
---- a/.github/workflows/ci.yml
-+++ b/.github/workflows/ci.yml
-@@ -303,0 +304,2 @@ jobs:
-+          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
-+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
-@@ -374 +376 @@ jobs:
--      - name: Fetch release refs, base, and trusted release policy
-+      - name: Fetch release refs, base, main, and trusted release policy
-@@ -377 +379,2 @@ jobs:
--          git fetch origin "${{ github.base_ref }}" --depth=50
-+          git fetch origin "${{ github.base_ref }}" --depth=200
-+          git fetch origin 'main:refs/remotes/origin/main'
-@@ -381,0 +385,2 @@ jobs:
-+          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
-+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
-@@ -388 +393 @@ jobs:
--      - name: Require generated-only release bookkeeping
-+      - name: Require generated release bookkeeping or a proven test repair
-@@ -393 +398,2 @@ jobs:
--            --head "${{ github.event.pull_request.head.sha }}"
-+            --head "${{ github.event.pull_request.head.sha }}" \
-+            --main-ref origin/main
-@@ -472,0 +479,2 @@ jobs:
-+          git show origin/main:scripts/release/release-paths.mjs \
-+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
-@@ -4291,0 +4300,9 @@ jobs:
-+      # When the scope could not be decided, every file counts as changed.
-+      - name: List every file when the scope is undecided
-+        id: everything
-+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
-+        run: |
-+          git ls-files > "$RUNNER_TEMP/every-file.txt"
-+          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
-+          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
-+
-@@ -4295 +4312 @@ jobs:
--        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
-+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
-@@ -4315 +4332 @@ jobs:
--          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
-+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
-@@ -4326 +4343 @@ jobs:
--          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
-+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
-@@ -4411 +4428 @@ jobs:
--          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
-+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
+diff --git a/.github/scripts/touched-components.test.mjs b/.github/scripts/touched-components.test.mjs
+index bd7e00cf041..001460d023a 100644
+--- a/.github/scripts/touched-components.test.mjs
++++ b/.github/scripts/touched-components.test.mjs
+@@ -757 +757 @@ describe('pr-component-a11y-contracts routing', () => {
+-      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''",
++      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'",
+@@ -836 +836 @@ describe('pr-component-a11y-contracts routing', () => {
+-      '${{ steps.scope.outputs.changed_files_path }}',
++      '${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}',
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..02d05a4b359 100644
+index 02d05a4b359..0aa91e241e9 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
-@@ -14,2 +14,2 @@
-- * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
-- * it imports nothing else at module load.
-+ * CI copies this file, release-paths.mjs, and lib/workspace-globs.mjs as
-+ * trusted policy.
-@@ -19,0 +20 @@ import fs from 'node:fs';
-+import os from 'node:os';
-@@ -23,0 +25,6 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
-+import {
-+  classifyReleaseDiff,
-+  diffEntryFiles,
-+  isReleaseOutputPath,
-+  isReleaseTestRepairPath,
-+} from './release-paths.mjs';
-@@ -362,0 +370,4 @@ function validateReleaseState({
-+function gitRaw(root, args) {
-+  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
-+}
+@@ -369,0 +370,2 @@ function validateReleaseState({
++const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 +
-@@ -364 +375 @@ function git(root, args) {
--  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
-+  return gitRaw(root, args).trim();
-@@ -709,7 +720,355 @@ function listActiveBranches(root) {
--const RELEASE_OUTPUT_PATTERNS = [
--  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
--  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
--  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
--  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
--  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
--  /^pnpm-lock\.yaml$/,
-+const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
-+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:skip|fixme|fail|slow)\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
-+
-+function changedStatementsFromDiff(diff) {
-+  const statements = [];
-+  let oldLines = [];
-+  let newLines = [];
-+
-+  const statementData = text => {
-+    const masked = [...text];
-+    const stack = [];
-+    const pairs = [];
-+    let quote = null;
-+    let escaped = false;
-+    let lineComment = false;
-+    let blockComment = false;
-+    for (let index = 0; index < text.length; index += 1) {
-+      const character = text[index];
-+      const next = text[index + 1];
-+      if (lineComment) {
-+        masked[index] = ' ';
-+        if (character === '\n') lineComment = false;
-+        continue;
-+      }
-+      if (blockComment) {
-+        masked[index] = ' ';
-+        if (character === '*' && next === '/') {
-+          masked[index + 1] = ' ';
-+          blockComment = false;
-+          index += 1;
-+        }
-+        continue;
-+      }
-+      if (quote) {
-+        masked[index] = ' ';
-+        if (escaped) escaped = false;
-+        else if (character === '\\') escaped = true;
-+        else if (character === quote) quote = null;
-+        continue;
-+      }
-+      if (character === '/' && next === '/') {
-+        masked[index] = ' ';
-+        masked[index + 1] = ' ';
-+        lineComment = true;
-+        index += 1;
-+        continue;
-+      }
-+      if (character === '/' && next === '*') {
-+        masked[index] = ' ';
-+        masked[index + 1] = ' ';
-+        blockComment = true;
-+        index += 1;
-+        continue;
-+      }
-+      if (character === "'" || character === '"' || character === '`') {
-+        masked[index] = ' ';
-+        quote = character;
-+        continue;
-+      }
-+      if ('([{'.includes(character)) {
-+        stack.push({character, index});
-+        continue;
-+      }
-+      if (')]}'.includes(character)) {
-+        const expected = {')': '(', ']': '[', '}': '{'}[character];
-+        const opening = stack.at(-1);
-+        if (opening?.character === expected) {
-+          stack.pop();
-+          pairs.push({
-+            close: index,
-+            open: opening.index,
-+            type: opening.character,
-+          });
-+        }
-+      }
-+    }
-+    return {masked: masked.join(''), pairs};
-+  };
-+
-+  const addChangedStatements = lines => {
-+    const text = lines.map(line => line.text).join('\n');
-+    const ranges = [];
-+    let offset = 0;
-+    for (const line of lines) {
-+      ranges.push({end: offset + line.text.length, start: offset});
-+      offset += line.text.length + 1;
-+    }
-+    const {masked, pairs} = statementData(text);
-+    for (let index = 0; index < lines.length; index += 1) {
-+      if (!lines[index].changed) continue;
-+      const range = ranges[index];
-+      const enclosingCall = pairs
-+        .filter(
-+          pair =>
-+            pair.type === '(' &&
-+            pair.open <= range.start &&
-+            pair.close >= range.end,
-+        )
-+        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
-+      const changedCode = masked.slice(range.start, range.end).trim();
-+      if (!changedCode) {
-+        if (
-+          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
-+            lines[index].text,
-+          )
-+        ) {
-+          statements.push('<unbounded changed statement>');
-+        }
-+        continue;
-+      }
-+      if (!enclosingCall) {
-+        if (!changedCode.includes(';')) {
-+          statements.push('<unbounded changed statement>');
-+          continue;
-+        }
-+        for (const statement of changedCode.split(';')) {
-+          if (statement.trim()) statements.push(`${statement.trim()};`);
-+        }
-+        continue;
-+      }
-+      const previousSemicolon = masked.lastIndexOf(';', enclosingCall.open - 1);
-+      if (previousSemicolon === -1) {
-+        statements.push('<unbounded changed statement>');
-+        continue;
-+      }
-+      const start = previousSemicolon + 1;
-+      const semicolon = masked.indexOf(';', enclosingCall.close);
-+      if (semicolon === -1) {
-+        statements.push('<unbounded changed statement>');
-+        continue;
-+      }
-+      statements.push(text.slice(start, semicolon + 1).trim());
-+    }
-+  };
-+  const flush = () => {
-+    addChangedStatements(oldLines);
-+    addChangedStatements(newLines);
-+    oldLines = [];
-+    newLines = [];
-+  };
-+
-+  for (const line of diff.split('\n')) {
-+    if (line.startsWith('@@')) {
-+      flush();
-+      continue;
-+    }
-+    if (/^(?:diff --git |index |--- |\+\+\+ )/.test(line)) continue;
-+    const marker = line[0];
-+    const text = line.slice(1);
-+    if (marker === ' ') {
-+      oldLines.push({changed: false, text});
-+      newLines.push({changed: false, text});
-+    } else if (marker === '-') {
-+      oldLines.push({changed: true, text});
-+    } else if (marker === '+') {
-+      newLines.push({changed: true, text});
-+    }
-+  }
-+  flush();
-+  return [...new Set(statements)];
-+}
-+
-+function validateReleaseTestRepair({
-+  entries,
-+  changedLines,
-+  changedStatements,
-+  commitCount,
-+  mergeCommitCount,
-+  patchId,
-+  changeDigest,
-+  mainPatches,
-+  baseChangesets,
-+}) {
-+  const errors = [];
-+  if (entries.length === 0)
-+    errors.push('release test repair has no changed files');
-+  if (commitCount !== 1 || mergeCommitCount !== 0)
-+    errors.push(
-+      'release test repair must contain exactly one non-merge commit',
-+    );
-+  if (baseChangesets.size !== 0)
-+    errors.push(
-+      'release test repair requires the generated version bump to be merged first',
-+    );
-+
-+  for (const entry of entries) {
-+    const status = entry.split('\t', 1)[0];
-+    if (status !== 'M')
-+      errors.push(`release test repair may only modify an existing test: ${entry}`);
-+    const files = diffEntryFiles(entry);
-+    if (files === null) {
-+      errors.push(`invalid diff entry: ${entry}`);
-+      continue;
-+    }
-+    for (const file of files) {
-+      if (!isReleaseTestRepairPath(file))
-+        errors.push(`release test repair contains a non-test path: ${file}`);
-+    }
-+  }
-+  for (const statement of changedStatements ?? changedLines ?? []) {
-+    if (RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT.test(statement))
-+      errors.push(
-+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${statement}`,
-+      );
-+  }
-+
-+  const source = patchId
-+    ? (mainPatches.get(patchId) ?? []).find(
-+        candidate =>
-+          candidate.changeDigest === changeDigest && candidate.presentAtMain,
-+      )
-+    : null;
-+  if (!patchId || !changeDigest || !source)
-+    errors.push(
-+      'release test repair does not exactly match a non-merge commit still present on main',
-+    );
-+  return {errors, sourceCommit: source?.commit ?? null};
-+}
-+
-+function stablePatchId(root, diff) {
-+  if (!diff.trim()) return null;
-+  const output = execFileSync('git', ['patch-id', '--stable'], {
+@@ -371 +373,5 @@ function gitRaw(root, args) {
+-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
++  return execFileSync('git', args, {
 +    cwd: root,
 +    encoding: 'utf8',
-+    input: diff,
-+  }).trim();
-+  return output.split(/\s+/)[0] || null;
-+}
-+
-+function exactChangeDigest(diff) {
-+  const change = diff
-+    .split('\n')
-+    .filter(
-+      line =>
-+        /^(?:diff --git |new file mode |deleted file mode |rename (?:from|to) |copy (?:from|to) )/.test(
-+          line,
-+        ) ||
-+        (/^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line)),
-+    )
-+    .join('\n');
-+  return change ? sha256(change) : null;
-+}
-+
-+function patchIsPresentAtRef(root, ref, diff) {
-+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-release-index-'));
-+  const index = path.join(temp, 'index');
-+  const env = {...process.env, GIT_INDEX_FILE: index};
-+  try {
-+    execFileSync('git', ['read-tree', ref], {
-+      cwd: root,
-+      env,
-+      stdio: 'ignore',
-+    });
-+    execFileSync(
-+      'git',
-+      ['apply', '--cached', '--reverse', '--check', '--whitespace=nowarn'],
-+      {
-+        cwd: root,
-+        env,
-+        input: diff.endsWith('\n') ? diff : `${diff}\n`,
-+        stdio: ['pipe', 'ignore', 'ignore'],
-+      },
-+    );
-+    return true;
-+  } catch {
-+    return false;
-+  } finally {
-+    fs.rmSync(temp, {recursive: true, force: true});
-+  }
-+}
-+
-+function validateReleaseTestRepairAtRef(
-+  root,
-+  {base, head, mainRef, entries, baseChangesets},
-+) {
-+  const mergeBase = git(root, ['merge-base', base, head]);
-+  const commits = git(root, ['rev-list', `${mergeBase}..${head}`])
-+    .split('\n')
-+    .filter(Boolean);
-+  const mergeCommits = git(root, [
-+    'rev-list',
-+    '--min-parents=2',
-+    `${mergeBase}..${head}`,
-+  ])
-+    .split('\n')
-+    .filter(Boolean);
-+  const diff = gitRaw(root, [
-+    'diff',
-+    '--binary',
-+    `${mergeBase}..${head}`,
-+  ]);
-+  const changedStatements = changedStatementsFromDiff(
-+    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
-+  );
-+  const patchId = stablePatchId(root, diff);
-+  const changeDigest = exactChangeDigest(diff);
-+  const files = [
-+    ...new Set(entries.flatMap(entry => diffEntryFiles(entry) ?? [])),
-+  ];
-+  const mainPatches = new Map();
-+  if (mainRef) {
-+    const candidates = git(root, [
-+      'log',
-+      '--format=%H',
-+      '--no-merges',
-+      mainRef,
-+      '--',
-+      ...files,
-+    ])
-+      .split('\n')
-+      .filter(Boolean);
-+    for (const commit of candidates) {
-+      const candidateDiff = gitRaw(root, [
-+        'show',
-+        '--format=',
-+        '--binary',
-+        commit,
-+      ]);
-+      const candidatePatchId = stablePatchId(root, candidateDiff);
-+      if (!candidatePatchId || candidatePatchId !== patchId) continue;
-+      const candidateChangeDigest = exactChangeDigest(candidateDiff);
-+      const matches = mainPatches.get(candidatePatchId) ?? [];
-+      matches.push({
-+        commit,
-+        changeDigest: candidateChangeDigest,
-+        presentAtMain:
-+          candidateChangeDigest === changeDigest &&
-+          patchIsPresentAtRef(root, mainRef, candidateDiff),
-+      });
-+      mainPatches.set(candidatePatchId, matches);
-+    }
-+  }
-+  return {
-+    ...validateReleaseTestRepair({
-+      entries,
-+      changedStatements,
-+      commitCount: commits.length,
-+      mergeCommitCount: mergeCommits.length,
++    maxBuffer: GIT_MAX_BUFFER,
++  });
+@@ -1071 +1077 @@ const RELEASE_POLICY_CARRY_PATTERNS = [
+-  /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
++  /^\.github\/scripts\/(?:test-scope-action|touched-components)\.test\.mjs$/,
+diff --git a/scripts/release/active-release.test.mjs b/scripts/release/active-release.test.mjs
+index cc60bedcc5c..33dc9a60348 100644
+--- a/scripts/release/active-release.test.mjs
++++ b/scripts/release/active-release.test.mjs
+@@ -10,0 +11 @@
++import crypto from 'node:crypto';
+@@ -25,0 +27 @@ import {
++  changedStatementsFromDiff,
+@@ -26,0 +29 @@ import {
++  isReleaseTestRepairPath,
+@@ -30,0 +34 @@ import {
++  validateReleaseTestRepair,
+@@ -454,0 +459,632 @@ describe('active release branch authority', () => {
++  it('admits one post-bump test repair whose patch already merged on main', () => {
++    const patchId = 'a'.repeat(40);
++    const changeDigest = 'c'.repeat(64);
++    const sourceCommit = 'b'.repeat(40);
++    const valid = {
++      entries: [
++        'M\tpackages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
++      ],
++      changedLines: ['await mouseDrag(page, {duration: 50});'],
++      commitCount: 1,
++      mergeCommitCount: 0,
 +      patchId,
 +      changeDigest,
-+      mainPatches,
-+      baseChangesets,
-+    }),
-+    patchId,
-+  };
-+}
-+
-+const RELEASE_POLICY_CARRY_PATTERNS = [
-+  /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
-+  /^scripts\/release\/release-paths\.mjs$/,
-+  /^\.github\/actions\/test-scope\/action\.yml$/,
-+  /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
-+  /^\.github\/workflows\/ci\.yml$/,
-+  /^docs\/release\.md$/,
-+  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +1077,159 @@ const RELEASE_OUTPUT_PATTERNS = [
--function isReleaseOutputPath(file) {
--  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
-+function isAncestor(root, ancestor, descendant) {
-+  try {
-+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
-+      cwd: root,
-+      stdio: 'ignore',
++      mainPatches: new Map([
++        [patchId, [{commit: sourceCommit, changeDigest, presentAtMain: true}]],
++      ]),
++      baseChangesets: new Map(),
++    };
++    expect(isReleaseTestRepairPath(valid.entries[0].split('\t')[1])).toBe(true);
++    expect(
++      isReleaseTestRepairPath(
++        'packages/cli/assets/codemods/transforms/v0.7.12/__tests__/remove-old-api.test.mjs',
++      ),
++    ).toBe(false);
++    expect(
++      isReleaseTestRepairPath(
++        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
++      ),
++    ).toBe(false);
++    expect(validateReleaseTestRepair(valid)).toEqual({
++      errors: [],
++      sourceCommit,
 +    });
-+    return true;
-+  } catch {
-+    return false;
-+  }
-+}
++  });
 +
-+function patchBuildsHead(root, base, head, patch) {
-+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-policy-carry-'));
-+  const index = path.join(temp, 'index');
-+  const env = {...process.env, GIT_INDEX_FILE: index};
-+  try {
-+    execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
-+    execFileSync(
++  it('fails closed for any broader or unproven release test repair', () => {
++    const patchId = 'a'.repeat(40);
++    const changeDigest = 'c'.repeat(64);
++    const sourceCommit = 'b'.repeat(40);
++    const repair = overrides =>
++      validateReleaseTestRepair({
++        entries: ['M\tinternal/interaction-harness/runner.ts'],
++        changedLines: ['const release = event.timeStamp;'],
++        commitCount: 1,
++        mergeCommitCount: 0,
++        patchId,
++        changeDigest,
++        mainPatches: new Map([
++          [
++            patchId,
++            [{commit: sourceCommit, changeDigest, presentAtMain: true}],
++          ],
++        ]),
++        baseChangesets: new Map(),
++        ...overrides,
++      }).errors;
++
++    expect(
++      repair({
++        entries: [
++          'R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
++        ],
++      }),
++    ).toContain(
++      'release test repair may only modify an existing test: R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
++    );
++    expect(
++      repair({entries: ['A\tpackages/core/src/Button/Button.test.tsx']}),
++    ).toContain(
++      'release test repair may only modify an existing test: A\tpackages/core/src/Button/Button.test.tsx',
++    );
++    expect(
++      repair({entries: ['M\tpackages/core/src/Button/Button.tsx']}),
++    ).toContain(
++      'release test repair contains a non-test path: packages/core/src/Button/Button.tsx',
++    );
++    expect(
++      repair({
++        entries: ['M\tpackages/core/src/Button/__snapshots__/Button.snap'],
++      }),
++    ).toContain(
++      'release test repair contains a non-test path: packages/core/src/Button/__snapshots__/Button.snap',
++    );
++    expect(
++      repair({
++        entries: ['M\tapps/docsite/e2e/theme-showcase.spec.ts'],
++      }),
++    ).toContain(
++      'release test repair contains a non-test path: apps/docsite/e2e/theme-showcase.spec.ts',
++    );
++    expect(
++      repair({
++        entries: ['M\tapps/docsite/src/__tests__/routing.test.ts'],
++      }),
++    ).toContain(
++      'release test repair contains a non-test path: apps/docsite/src/__tests__/routing.test.ts',
++    );
++    for (const line of [
++      'expect(dialog).toBeHidden();',
++      '.toBeHidden({visible: false});',
++      'expectNoA11yViolations(page);',
++      'test.skip(true, "flaky");',
++      'test.fail();',
++      'test.slow();',
++      'skip();',
++      'ctx.fixme();',
++      'testInfo.skip();',
++      'test.info().fail();',
++      'it.skipIf(process.platform === "darwin")();',
++      'describe.runIf(false)();',
++      'const timeoutMs = 2_000;',
++      'retries: 3,',
++      'axe.disableRules(["color-contrast"]);',
++      'return;',
++      'expect(tree).toMatchSnapshot();',
++    ]) {
++      expect(repair({changedLines: [line]})).toContain(
++        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
++      );
++    }
++    const statementCases = [
++      {
++        diff: `diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1,6 +1,6 @@
++ before();
++ await expect.poll(() => count).toBeGreaterThan(
++-  0,
+++  1,
++ );
++ after();`,
++        expected:
++          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
++      },
++      {
++        diff: `diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1,6 +1,6 @@
++ before();
++ await expect(result).toEqual({
++-  value: 1,
+++  value: 2,
++ });
++ after();`,
++        expected: 'await expect(result).toEqual({\n  value: 2,\n});',
++      },
++      {
++        diff: `diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1,7 +1,7 @@
++ before();
++ await expect.poll(() => {
++-  return ready;
+++  return settled;
++ }).toBe(true);
++ after();`,
++        expected:
++          'await expect.poll(() => {\n  return settled;\n}).toBe(true);',
++      },
++      {
++        diff: `diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -84,5 +84,5 @@
++       children: [
++         {type: 'paragraph'},
++       ],
++-      ordered: false,
+++      ordered: true,
++     });`,
++        expected: '<unbounded changed statement>',
++      },
++      {
++        diff: `diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -493,5 +493,5 @@
++       brand: {
++         light: {
++-          accent: neutralPalettes.green.light[25],
+++          accent: neutralPalettes.green.light[30],
++         },
++       },`,
++        expected: '<unbounded changed statement>',
++      },
++    ];
++    for (const {diff, expected} of statementCases) {
++      const changedStatements = changedStatementsFromDiff(diff);
++      expect(changedStatements).toContain(expected);
++      expect(repair({changedLines: undefined, changedStatements})).toContain(
++        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
++      );
++    }
++    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1,7 +1,7 @@
++ /**
++  * @file BottomSheetRelease.a11y.chromium.spec.ts
++- * @input Built BottomSheet stories and real Chromium touch input (CDP), each
++- *   event with its own timestamp
+++ * @input Built BottomSheet stories and real Chromium touch and mouse input
+++ *   (CDP), each event with its own timestamp
++  * @output Browser evidence for the touch release.
++  */
++@@ -20,5 +20,8 @@
++ setup();
+++const cdp = await page.context().newCDPSession(page);
+++// 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
+++// dismiss line even when event delivery is slow.
+++await mouseDrag(cdp, sheet, 150, 50);
++ cleanup();`);
++    expect(portStatements).not.toContain('<unbounded changed statement>');
++
++    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1 +1 @@
++-safe(); expect(value).toBe(true);
+++safe(); expect(value).toBe(false);`);
++    expect(multiStatementChange).toContain('expect(value).toBe(false);');
++    expect(
++      repair({changedLines: undefined, changedStatements: multiStatementChange}),
++    ).toContain(
++      'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
++    );
++
++    expect(
++      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
++--- a/test.mjs
+++++ b/test.mjs
++@@ -1 +1 @@
++-// @vitest-environment node
+++// @vitest-environment jsdom`),
++    ).toContain('<unbounded changed statement>');
++
++    expect(repair({commitCount: 2})).toContain(
++      'release test repair must contain exactly one non-merge commit',
++    );
++    expect(repair({mergeCommitCount: 1})).toContain(
++      'release test repair must contain exactly one non-merge commit',
++    );
++    expect(repair({mainPatches: new Map()})).toContain(
++      'release test repair does not exactly match a non-merge commit still present on main',
++    );
++    expect(repair({changeDigest: 'd'.repeat(64)})).toContain(
++      'release test repair does not exactly match a non-merge commit still present on main',
++    );
++    expect(
++      repair({
++        mainPatches: new Map([
++          [
++            patchId,
++            [
++              {
++                commit: sourceCommit,
++                changeDigest,
++                presentAtMain: false,
++              },
++            ],
++          ],
++        ]),
++      }),
++    ).toContain(
++      'release test repair does not exactly match a non-merge commit still present on main',
++    );
++    expect(
++      repair({
++        baseChangesets: new Map([['.changeset/frozen.md', 'c'.repeat(64)]]),
++      }),
++    ).toContain(
++      'release test repair requires the generated version bump to be merged first',
++    );
++  });
++
++  it('proves the real git patch against current main before the CLI admits it', () => {
++    const root = fs.mkdtempSync(
++      path.join(os.tmpdir(), 'astryx-release-test-repair-'),
++    );
++    roots.push(root);
++    const testFile =
++      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
++    const before =
++      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
++    const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
++    const {cut} = createRepository(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'cut',
++        snapshot: true,
++        files: {
++          '.changeset/README.md': '# Changesets\n',
++          'pnpm-workspace.yaml': "packages:\n  - 'packages/*'\n",
++          'packages/core/package.json': JSON.stringify({
++            name: '@astryxdesign/core',
++            version: '0.6.5',
++          }),
++          [testFile]: before,
++        },
++      },
++    ]);
++    const plan = {
++      schemaVersion: 2,
++      version: '0.6.5',
++      branch: BRANCH,
++      cutSha: cut,
++      changesets: [],
++    };
++    const marker = buildMarker(plan);
++    const {
++      mainRepair,
++      largeMain,
++      mixedMain,
++      mainRevert,
++      releaseBase,
++      releaseRepair,
++      whitespaceRepair,
++    } = importCommits(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'mainRepair',
++        parent: cut,
++        files: {[testFile]: after},
++      },
++      {
++        ref: 'refs/heads/main',
++        name: 'largeMain',
++        parent: 'mainRepair',
++        files: {
++          [testFile]: `${after}// later main context\n`,
++          'large-unrelated.txt': 'x'.repeat(2 * 1024 * 1024),
++        },
++      },
++      {
++        ref: 'refs/heads/mixed-main',
++        name: 'mixedMain',
++        parent: cut,
++        files: {
++          [testFile]: after,
++          'packages/core/src/Button/Button.tsx':
++            'export const productChange = true;\n',
++        },
++      },
++      {
++        ref: `refs/heads/${BRANCH}`,
++        name: 'releaseBase',
++        parent: cut,
++        files: {
++          '.release/active.json': `${JSON.stringify(marker)}\n`,
++          '.release/plan.json': `${JSON.stringify(plan)}\n`,
++        },
++      },
++      {
++        ref: 'refs/heads/repair',
++        name: 'releaseRepair',
++        parent: 'releaseBase',
++        files: {[testFile]: after},
++      },
++      {
++        ref: 'refs/heads/whitespace-repair',
++        name: 'whitespaceRepair',
++        parent: 'releaseBase',
++        files: {
++          [testFile]:
++            'const ready = true;\nawait mouse Drag(page);\n\n',
++        },
++      },
++      {
++        ref: 'refs/heads/reverted-main',
++        name: 'mainRevert',
++        parent: 'mainRepair',
++        files: {[testFile]: before},
++      },
++    ]);
++    const validator = path.join(import.meta.dirname, 'active-release.mjs');
++    const run = (head, mainRef) =>
++      execFileSync(
++        process.execPath,
++        [
++          validator,
++          'validate-diff',
++          '--root',
++          root,
++          '--base',
++          releaseBase,
++          '--head',
++          head,
++          '--main-ref',
++          mainRef,
++        ],
++        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
++      );
++
++    expect(JSON.parse(run(releaseRepair, largeMain))).toMatchObject({
++      kind: 'test-repair',
++      sourceCommit: mainRepair,
++      files: 1,
++    });
++    for (const [head, mainRef] of [
++      [whitespaceRepair, mainRepair],
++      [releaseRepair, mainRevert],
++      [releaseRepair, mixedMain],
++    ]) {
++      try {
++        run(head, mainRef);
++        throw new Error('expected validation to fail');
++      } catch (error) {
++        expect(error.stderr).toContain(
++          'does not exactly match a non-merge commit still present on main',
++        );
++      }
++    }
++  });
++
++  it('admits only an exact reviewed policy bundle onto a predating release branch', () => {
++    const root = fs.mkdtempSync(
++      path.join(os.tmpdir(), 'astryx-release-policy-carry-'),
++    );
++    roots.push(root);
++    const validatorFile = 'scripts/release/active-release.mjs';
++    const activeTestFile = 'scripts/release/active-release.test.mjs';
++    const touchedTestFile = '.github/scripts/touched-components.test.mjs';
++    const workflowFile = '.github/workflows/ci.yml';
++    const manifestPath = 'scripts/release/policy-carry/v0.6.5.json';
++    const patchPath = 'scripts/release/policy-carry/v0.6.5.diff';
++    const digest = value =>
++      crypto.createHash('sha256').update(value).digest('hex');
++    const {cut} = createRepository(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'cut',
++        snapshot: true,
++        files: {
++          [validatorFile]: 'main generated only\n',
++          [activeTestFile]: 'main validator tests\n',
++          [touchedTestFile]: 'main workflow contract tests\n',
++          [workflowFile]: 'main trusted base\n',
++          'packages/core/src/Button/Button.tsx': 'export const Button = 1;\n',
++        },
++      },
++    ]);
++    const policyFiles = {
++      [validatorFile]: 'generated or proven test repair\n',
++      [workflowFile]: 'trusted base plus current main\n',
++    };
++    const {releaseBase, policyCarry, wrongContent, productCarry} =
++      importCommits(root, [
++        {
++          ref: `refs/heads/${BRANCH}`,
++          name: 'releaseBase',
++          parent: cut,
++          files: {
++            [validatorFile]: 'release generated only\n',
++            [workflowFile]: 'release trusted base\n',
++          },
++        },
++        {
++          ref: 'refs/heads/policy-carry',
++          name: 'policyCarry',
++          parent: 'releaseBase',
++          files: policyFiles,
++        },
++        {
++          ref: 'refs/heads/wrong-content',
++          name: 'wrongContent',
++          parent: 'releaseBase',
++          files: {
++            ...policyFiles,
++            [workflowFile]: 'almost trusted base plus current main\n',
++          },
++        },
++        {
++          ref: 'refs/heads/product-carry',
++          name: 'productCarry',
++          parent: 'releaseBase',
++          files: {
++            ...policyFiles,
++            'packages/core/src/Button/Button.tsx': 'export const Button = 2;\n',
++          },
++        },
++      ]);
++    const patch = execFileSync(
 +      'git',
-+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
-+      cwd: root,
-+      env,
-+      input: patch.endsWith('\n') ? patch : `${patch}\n`,
-+      stdio: ['pipe', 'ignore', 'ignore'],
++      ['diff', '--binary', releaseBase, policyCarry],
++      {cwd: root, encoding: 'utf8'},
++    );
++    const targets = Object.fromEntries(
++      Object.keys(policyFiles)
++        .sort()
++        .map(file => [
++          file,
++          digest(
++            execFileSync('git', ['show', `${policyCarry}:${file}`], {
++              cwd: root,
++            }),
++          ),
++        ]),
++    );
++    const manifest = {
++      schemaVersion: 1,
++      releaseBranch: BRANCH,
++      base: releaseBase,
++      patch: patchPath,
++      patchSha256: digest(patch),
++      targets,
++    };
++    const {mainPolicy} = importCommits(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'mainPolicy',
++        parent: cut,
++        files: {
++          [manifestPath]: `${JSON.stringify(manifest)}\n`,
++          [patchPath]: patch,
++        },
++      },
++    ]);
++    const validator = path.join(import.meta.dirname, 'active-release.mjs');
++    const run = (head, {base = releaseBase, source = mainPolicy} = {}) =>
++      execFileSync(
++        process.execPath,
++        [
++          validator,
++          'validate-policy-carry',
++          '--root',
++          root,
++          '--base',
++          base,
++          '--head',
++          head,
++          '--source',
++          source,
++          '--main-ref',
++          source,
++          '--manifest',
++          manifestPath,
++          '--release-branch',
++          BRANCH,
++        ],
++        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
++      );
++
++    expect(JSON.parse(run(policyCarry))).toMatchObject({
++      kind: 'policy-carry',
++      source: mainPolicy,
++      manifest: manifestPath,
++      files: 2,
 +    });
-+    const tree = execFileSync('git', ['write-tree'], {
-+      cwd: root,
-+      env,
-+      encoding: 'utf8',
-+    }).trim();
-+    return tree === git(root, ['rev-parse', `${head}^{tree}`]);
-+  } catch {
-+    return false;
-+  } finally {
-+    fs.rmSync(temp, {recursive: true, force: true});
-+  }
-+}
 +
-+function validateReleasePolicyCarryAtRef(
-+  root,
-+  {base, head, source, mainRef, manifestPath, releaseBranch},
-+) {
-+  const errors = [];
-+  const baseCommit = git(root, ['rev-parse', base]);
-+  const commits = git(root, ['rev-list', `${baseCommit}..${head}`])
-+    .split('\n')
-+    .filter(Boolean);
-+  const mergeCommits = git(root, [
-+    'rev-list',
-+    '--min-parents=2',
-+    `${baseCommit}..${head}`,
-+  ])
-+    .split('\n')
-+    .filter(Boolean);
-+  if (commits.length !== 1 || mergeCommits.length !== 0)
-+    errors.push(
-+      'release policy carry must contain exactly one non-merge commit',
++    const secondPolicyFiles = {
++      [validatorFile]: 'bounded validator output\n',
++      [activeTestFile]: 'validator regression tests\n',
++      [touchedTestFile]: 'fallback workflow contract tests\n',
++    };
++    const {secondCarry} = importCommits(root, [
++      {
++        ref: 'refs/heads/second-policy-carry',
++        name: 'secondCarry',
++        parent: policyCarry,
++        files: secondPolicyFiles,
++      },
++    ]);
++    const secondPatch = execFileSync(
++      'git',
++      ['diff', '--binary', policyCarry, secondCarry],
++      {cwd: root, encoding: 'utf8'},
 +    );
-+  if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
-+    errors.push('release policy carry commit must directly follow the release head');
-+  if (!isAncestor(root, source, mainRef))
-+    errors.push('release policy carry source is not merged on current main');
-+  if (
-+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.json$/.test(manifestPath)
-+  )
-+    errors.push('release policy carry manifest path is invalid');
++    const secondManifest = {
++      schemaVersion: 1,
++      releaseBranch: BRANCH,
++      base: policyCarry,
++      patch: patchPath,
++      patchSha256: digest(secondPatch),
++      targets: Object.fromEntries(
++        Object.keys(secondPolicyFiles)
++          .sort()
++          .map(file => [
++            file,
++            digest(
++              execFileSync('git', ['show', `${secondCarry}:${file}`], {
++                cwd: root,
++              }),
++            ),
++          ]),
++      ),
++    };
++    const {mainSecondPolicy} = importCommits(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'mainSecondPolicy',
++        parent: mainPolicy,
++        files: {
++          [manifestPath]: `${JSON.stringify(secondManifest)}\n`,
++          [patchPath]: secondPatch,
++        },
++      },
++    ]);
++    expect(
++      JSON.parse(
++        run(secondCarry, {
++          base: policyCarry,
++          source: mainSecondPolicy,
++        }),
++      ),
++    ).toMatchObject({
++      kind: 'policy-carry',
++      source: mainSecondPolicy,
++      manifest: manifestPath,
++      files: 3,
++    });
 +
-+  const manifest = jsonAtRef(root, source, manifestPath);
-+  if (
-+    manifest?.schemaVersion !== 1 ||
-+    manifest.releaseBranch !== releaseBranch ||
-+    manifest.base !== baseCommit ||
-+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.diff$/.test(
-+      manifest?.patch ?? '',
-+    ) ||
-+    !/^[0-9a-f]{64}$/.test(manifest?.patchSha256 ?? '') ||
-+    !manifest?.targets ||
-+    Array.isArray(manifest.targets) ||
-+    typeof manifest.targets !== 'object'
-+  ) {
-+    errors.push(
-+      'release policy carry manifest does not match this branch and base',
-+    );
-+  }
-+
-+  const targets =
-+    manifest?.targets &&
-+    !Array.isArray(manifest.targets) &&
-+    typeof manifest.targets === 'object'
-+      ? Object.entries(manifest.targets).sort(([a], [b]) => a.localeCompare(b))
-+      : [];
-+  for (const [file, digest] of targets) {
-+    if (
-+      !RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)) ||
-+      !/^[0-9a-f]{64}$/.test(digest)
-+    ) {
-+      errors.push(
-+        `release policy carry manifest has an invalid target: ${file}`,
++    try {
++      run(wrongContent);
++      throw new Error('expected validation to fail');
++    } catch (error) {
++      expect(error.stderr).toContain(
++        `release policy carry file does not match its reviewed bundle: ${workflowFile}`,
 +      );
 +    }
-+  }
-+
-+  const candidateEntries = git(root, [
-+    'diff',
-+    '--name-status',
-+    baseCommit,
-+    head,
-+  ])
-+    .split('\n')
-+    .filter(Boolean);
-+  const candidateFiles = [
-+    ...new Set(
-+      candidateEntries.flatMap(entry => {
-+        const files = diffEntryFiles(entry);
-+        if (files === null) {
-+          errors.push(`invalid release policy carry diff entry: ${entry}`);
-+          return [];
-+        }
-+        return files;
-+      }),
-+    ),
-+  ].sort();
-+  const targetFiles = targets.map(([file]) => file);
-+  for (const file of candidateFiles) {
-+    if (!RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)))
-+      errors.push(
-+        `release policy carry contains an unauthorized path: ${file}`,
++    try {
++      run(productCarry);
++      throw new Error('expected validation to fail');
++    } catch (error) {
++      expect(error.stderr).toContain(
++        'release policy carry contains an unauthorized path: packages/core/src/Button/Button.tsx',
 +      );
-+  }
-+  if (canonicalJson(candidateFiles) !== canonicalJson(targetFiles))
-+    errors.push(
-+      'release policy carry file set does not match its reviewed bundle',
-+    );
-+
-+  const candidateDigests = fileDigestsAtRef(root, head, candidateFiles);
-+  for (const [file, digest] of targets) {
-+    if (candidateDigests.get(file) !== digest)
-+      errors.push(
-+        `release policy carry file does not match its reviewed bundle: ${file}`,
-+      );
-+  }
-+
-+  const patchContent = manifest?.patch
-+    ? filesAtRef(root, source, [manifest.patch]).get(manifest.patch)
-+    : null;
-+  const patch = patchContent?.toString('utf8') ?? '';
-+  if (!patch || sha256(patchContent) !== manifest?.patchSha256)
-+    errors.push(
-+      'release policy carry patch does not match its manifest digest',
-+    );
-+  else if (!patchBuildsHead(root, baseCommit, head, patch))
-+    errors.push('release policy carry patch does not build the candidate head');
-+
-+  return {
-+    errors,
-+    files: candidateEntries.length,
-+    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
-+  };
-@@ -729,8 +1245,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
--    const [status, ...files] = entry.split('\t');
--    const isMove = status?.startsWith('R') || status?.startsWith('C');
--    const expectedPaths = isMove ? 2 : 1;
--    if (
--      !status ||
--      files.length !== expectedPaths ||
--      files.some(file => !file)
--    ) {
-+    const [status] = entry.split('\t');
-+    const files = diffEntryFiles(entry);
-+    if (files === null) {
-@@ -1265,0 +1777,29 @@ async function main() {
-+  if (command === 'validate-policy-carry') {
-+    const base = required(values, 'base');
-+    const head = required(values, 'head');
-+    const source = required(values, 'source');
-+    const mainRef = required(values, 'main-ref');
-+    const manifestPath = required(values, 'manifest');
-+    const releaseBranch = required(values, 'release-branch');
-+    const result = validateReleasePolicyCarryAtRef(root, {
-+      base,
-+      head,
-+      source,
-+      mainRef,
-+      manifestPath,
-+      releaseBranch,
-+    });
-+    if (result.errors.length) throw new Error(result.errors.join('\n'));
-+    console.log(
-+      JSON.stringify({
-+        kind: 'policy-carry',
-+        base,
-+        head,
-+        source,
-+        manifest: manifestPath,
-+        files: result.files,
-+        bundleDigest: result.bundleDigest,
-+      }),
-+    );
-+    return;
-+  }
-@@ -1274,7 +1814,25 @@ async function main() {
--    const errors = [
--      ...validateIdentity(marker, plan),
--      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
--        plan,
--        baseChangesets: changesetMapAtRef(root, base),
--      }),
--    ];
-+    const entries = raw ? raw.split('\n') : [];
-+    const baseChangesets = changesetMapAtRef(root, base);
-+    const kind = classifyReleaseDiff(entries);
-+    let sourceCommit = null;
-+    let patchId = null;
-+    let diffErrors;
-+    if (kind === 'test-repair') {
-+      const repair = validateReleaseTestRepairAtRef(root, {
-+        base,
-+        head,
-+        mainRef: required(values, 'main-ref'),
-+        entries,
-+        baseChangesets,
-+      });
-+      sourceCommit = repair.sourceCommit;
-+      patchId = repair.patchId;
-+      diffErrors = repair.errors;
-+    } else if (kind === 'version-bump') {
-+      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
-+    } else {
-+      diffErrors = [
-+        'release candidate contains paths outside the generated version bump or test-repair classes',
-+      ];
 +    }
-+    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1844 @@ async function main() {
-+        kind,
-@@ -1287 +1846,2 @@ async function main() {
--        files: raw ? raw.split('\n').length : 0,
-+        files: entries.length,
-+        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1960 @@ export {
-+  changedStatementsFromDiff,
-@@ -1404,0 +1966 @@ export {
-+  isReleaseTestRepairPath,
-@@ -1411,0 +1974 @@ export {
-+  validateReleaseTestRepair,
-diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
-new file mode 100644
-index 00000000000..8ede431dd48
---- /dev/null
-+++ b/scripts/release/release-paths.mjs
-@@ -0,0 +1,80 @@
-+// Copyright (c) Meta Platforms, Inc. and affiliates.
++  });
 +
-+/**
-+ * @file Shared release-branch path classification.
-+ *
-+ * @input  git diff --name-status entries
-+ * @output generated bump, test repair, or invalid release-branch classification
-+ * @position trusted base policy shared by release validation and CI scope routing
-+ */
-+
-+import fs from 'node:fs';
-+
-+const RELEASE_OUTPUT_PATTERNS = [
-+  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
-+  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
-+  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
-+  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
-+  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
-+  /^pnpm-lock\.yaml$/,
-+];
-+
-+const RELEASE_TEST_REPAIR_PATTERNS = [
-+  /(?:^|\/)__tests__\//,
-+  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
-+  /^internal\/interaction-harness\//,
-+];
-+
-+function isReleaseOutputPath(file) {
-+  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
-+}
-+
-+function isReleaseTestRepairPath(file) {
-+  return (
-+    !file.startsWith('apps/docsite/') &&
-+    !isReleaseOutputPath(file) &&
-+    RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
-+    !file.includes('/__snapshots__/') &&
-+    !file.endsWith('.snap')
-+  );
-+}
-+
-+function diffEntryFiles(entry) {
-+  const [status, ...files] = entry.split('\t');
-+  const isMove = status?.startsWith('R') || status?.startsWith('C');
-+  const expectedPaths = isMove ? 2 : 1;
-+  return !status || files.length !== expectedPaths || files.some(file => !file)
-+    ? null
-+    : files;
-+}
-+
-+function classifyReleaseDiff(entries) {
-+  if (entries.length === 0) return 'invalid';
-+  const files = entries.map(diffEntryFiles);
-+  if (files.some(entryFiles => entryFiles === null)) return 'invalid';
-+  const paths = files.flat();
-+  if (paths.every(isReleaseTestRepairPath)) return 'test-repair';
-+  if (
-+    paths.every(
-+      file => file.startsWith('.changeset/') || isReleaseOutputPath(file),
-+    )
-+  ) {
-+    return 'version-bump';
-+  }
-+  return 'invalid';
-+}
-+
-+if (process.argv.includes('--classify')) {
-+  const entries = fs
-+    .readFileSync(0, 'utf8')
-+    .split('\n')
-+    .filter(Boolean);
-+  console.log(classifyReleaseDiff(entries));
-+}
-+
-+export {
-+  classifyReleaseDiff,
-+  diffEntryFiles,
-+  isReleaseOutputPath,
-+  isReleaseTestRepairPath,
-+};
