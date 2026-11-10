@@ -205,9 +205,10 @@ export interface LinkProps extends BaseProps<
   hasUnderline?: boolean;
   /**
    * Whether the link is disabled.
-   * A disabled link renders as a plain anchor without an href (and without
-   * target/rel/onClick), so it cannot navigate or run onClick. It keeps a tab
-   * stop and is announced as a disabled link.
+   * A disabled link cannot navigate or run onClick. With `href` and no
+   * `onClick` it renders as a plain anchor without an href, target, or rel;
+   * with `onClick` it renders as a link-styled button. It keeps a tab stop and
+   * is announced as disabled.
    * @default false
    */
   isDisabled?: boolean;
@@ -293,6 +294,33 @@ export interface LinkProps extends BaseProps<
    * Link content (required).
    */
   children: ReactNode;
+}
+
+type LinkKeyDownHandler = React.KeyboardEventHandler<
+  HTMLAnchorElement | HTMLButtonElement
+>;
+
+// A disabled Link keeps its Tab stop, does nothing when activated, and tells
+// assistive technology that it is disabled. Spread these props after the
+// caller's props. Then a caller `aria-disabled`, `role`, or `tabIndex` cannot
+// replace them.
+function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    role: 'link',
+    'aria-disabled': true,
+    tabIndex: 0,
+  } as const;
+}
+
+// A native button has a Tab stop. Remove the caller's `tabIndex` so that the
+// button keeps it.
+function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    'aria-disabled': true,
+    tabIndex: undefined,
+  } as const;
 }
 
 /**
@@ -406,7 +434,6 @@ export function Link({
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
-        aria-disabled={isDisabled || undefined}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -427,8 +454,7 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
-        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
+        {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
         {sharedContent}
       </button>
     );
@@ -442,10 +468,7 @@ export function Link({
     linkElement = (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
-        role="link"
         aria-label={label || undefined}
-        aria-disabled={true}
-        tabIndex={0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -463,7 +486,7 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        {...disabledInteractionProps(props.onKeyDown)}>
+        {...disabledAnchorProps(props.onKeyDown)}>
         {sharedContent}
       </a>
     );
