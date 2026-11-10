@@ -167,6 +167,8 @@ export function gatherCandidatesReused(options) {
  * @property {SearcherWeights} main The main searcher's weights.
  * @property {SearcherWeights} doc The doc searcher's weights.
  * @property {SearcherWeights} template The template searcher's weights.
+ * @property {import('../build/blocks/blocks.mjs').BlockPickerWeights} [picker]
+ *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads.
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
  */
 
@@ -174,8 +176,9 @@ export function gatherCandidatesReused(options) {
 let searchData = null;
 
 /**
- * The search tree's static data, read once: the entry cards and each node's
- * weights file.
+ * The search tree's static data, read once: the entry cards, each node's
+ * weights file, and build's block-picker weights for the fit pass, which are
+ * read only when the pass first needs them.
  *
  * These files are static, reviewed data that only order matches inside a score
  * band; ORDERING.md beside them says what each holds and how
@@ -187,12 +190,19 @@ export function loadSearchData() {
     /** @param {string} file */
     const read = file =>
       JSON.parse(readFileSync(new URL(file, import.meta.url), 'utf8'));
+    /** @type {import('../build/blocks/blocks.mjs').BlockPickerWeights | undefined} */
+    let picker;
     searchData = {
       cards: read('./_cards.json'),
       router: read('./tree.weights.json'),
       main: read('./_main-searcher.weights.json'),
       doc: read('./_doc-searcher.weights.json'),
       template: read('./_template-searcher.weights.json'),
+      // Read on first use: most searches never reach the fit pass.
+      get picker() {
+        picker ??= read('../build/blocks/blocks.weights.json');
+        return picker;
+      },
     };
   }
   return searchData;

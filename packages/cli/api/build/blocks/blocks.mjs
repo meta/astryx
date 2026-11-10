@@ -190,7 +190,7 @@ function decode(weights) {
 /**
  * A text's sparse unit vector over the vocabulary: (1 + ln count) x idf.
  * @param {string[]} terms
- * @param {ReturnType<typeof decode>} d
+ * @param {{index: Map<string, number>, idf: Float64Array}} d
  * @returns {Map<number, number>}
  */
 function vectorOf(terms, d) {
@@ -228,6 +228,118 @@ function project(v, m, scale, dims) {
   }
   for (let k = 0; k < dims; k++) out[k] *= scale;
   return out;
+}
+
+/**
+ * The vocabulary index and idf alone, read once per weights object. The two
+ * sides below decode only the matrix rows their words use.
+ * @type {WeakMap<BlockPickerWeights, {index: Map<string, number>, idf: Float64Array, rows: Map<string, Int8Array>}>}
+ */
+const vocabularies = new WeakMap();
+
+/** @param {BlockPickerWeights} weights */
+function vocabularyOf(weights) {
+  let v = vocabularies.get(weights);
+  if (!v) {
+    v = {
+      index: new Map(weights.vocab.map((w, i) => [w, i])),
+      idf: Float64Array.from(weights.idf, x => x / 1024),
+      rows: new Map(),
+    };
+    vocabularies.set(weights, v);
+  }
+  return v;
+}
+
+/**
+ * One row of a byte matrix, decoded from the base64 text alone: four
+ * characters hold three bytes, so the row's bytes sit inside the characters
+ * from its first byte's group to its last byte's group.
+ * @param {BlockPickerWeights} weights
+ * @param {'request' | 'doc'} matrix
+ * @param {number} i
+ * @returns {Int8Array}
+ */
+function rowOf(weights, matrix, i) {
+  const {rows} = vocabularyOf(weights);
+  const key = `${matrix}:${i}`;
+  let row = rows.get(key);
+  if (!row) {
+    const {dims} = weights;
+    const first = Math.floor((i * dims) / 3);
+    const last = Math.ceil(((i + 1) * dims) / 3);
+    const bytes = Buffer.from(
+      weights[matrix].slice(first * 4, last * 4),
+      'base64',
+    ).subarray(i * dims - first * 3, i * dims - first * 3 + dims);
+    // Each byte is a signed weight stored offset by 128.
+    row = Int8Array.from(bytes, b => b - 128);
+    rows.set(key, row);
+  }
+  return row;
+}
+
+/**
+ * A text's side for `matchOf` through one matrix: the same sum, in the same
+ * order, as `project` over the decoded matrix.
+ * @param {string} text
+ * @param {BlockPickerWeights} weights
+ * @param {'request' | 'doc'} matrix
+ * @param {number} scale
+ * @returns {{vector: Map<number, number>, projected: Float64Array}}
+ */
+function sideOf(text, weights, matrix, scale) {
+  const vector = vectorOf(termsOf(text), vocabularyOf(weights));
+  const {dims} = weights;
+  const projected = new Float64Array(dims);
+  for (const [i, x] of vector) {
+    const row = rowOf(weights, matrix, i);
+    for (let k = 0; k < dims; k++) projected[k] += x * row[k];
+  }
+  for (let k = 0; k < dims; k++) projected[k] *= scale;
+  return {vector, projected};
+}
+
+/**
+ * A text's docs side for `matchOf`: its word vector and that vector through
+ * the doc matrix. Search scores its entries' own docs with it.
+ * @param {string} text
+ * @param {BlockPickerWeights} weights
+ * @returns {{vector: Map<number, number>, projected: Float64Array}}
+ */
+export function docSideOf(text, weights) {
+  return sideOf(text, weights, 'doc', weights.docScale);
+}
+
+/**
+ * A request's side for `matchOf`: its word vector and that vector through the
+ * request matrix.
+ * @param {string} request
+ * @param {BlockPickerWeights} weights
+ * @returns {{vector: Map<number, number>, projected: Float64Array}}
+ */
+export function requestSideOf(request, weights) {
+  return sideOf(request, weights, 'request', weights.requestScale);
+}
+
+/**
+ * The picker's match of a request to a docs text: their projections' dot
+ * product plus the lexical weight times their plain overlap.
+ * @param {{vector: Map<number, number>, projected: Float64Array}} request
+ * @param {{vector: Map<number, number>, projected: Float64Array}} doc
+ * @param {BlockPickerWeights} weights
+ * @returns {number}
+ */
+export function matchOf(request, doc, weights) {
+  let s = 0;
+  for (let k = 0; k < weights.dims; k++)
+    s += request.projected[k] * doc.projected[k];
+  let overlap = 0;
+  for (const [i, x] of request.vector) {
+    const y = doc.vector.get(i);
+    if (y !== undefined) overlap += x * y;
+  }
+  return s + weights.lexical * overlap;
 }
 
 /**

@@ -41,6 +41,19 @@
       },
       {
         "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall reset",
+        "parent": "astryx docs global/uninstall --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
         "name": "cli/api/functions/theme-template",
         "package": "@astryxdesign/cli",
         "score": "<text>",
@@ -86,19 +99,6 @@
         "section": "<text>",
         "title": "<text>",
         "command": "astryx docs global/uninstall agent-guide",
-        "parent": "astryx docs global/uninstall --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "global/uninstall",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs global/uninstall reset",
         "parent": "astryx docs global/uninstall --index",
         "mentions": []
       },
