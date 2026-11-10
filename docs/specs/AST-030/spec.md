@@ -641,9 +641,7 @@ they are separately named.
   MUST be logged, and the rule MUST be reviewed against that log four weeks
   after the lane starts to run selectively. A replay of a recent set of pull
   requests (the `vjeux` lane's spike set) MUST show that selective runs catch
-  every failure the full runs caught (DEC-28). Implementation gap: the lane
-  runs every interaction spec on a pull request today, and the selection and
-  its tests are not built.
+  every failure the full runs caught (DEC-28). FR31 gap: the selection and its tests have no implementation yet; the lane runs every interaction spec.
 
 ### Platform support
 
