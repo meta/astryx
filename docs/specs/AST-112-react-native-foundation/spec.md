@@ -181,7 +181,8 @@ shared icon names under FR17.
     drawing a second one.
 - **FR11 — Expo builds are supported; Expo Go is not a target.** The platform
   packages build in a prebuild or development-build project and in EAS Build
-  through their configuration plugins, with no manual native edits. They do
+  through the platform core's configuration plugin (FR4), with no manual native
+  edits. They do
   not run in Expo Go, and no package requires an Expo runtime library
   (`spec:AST-082/FR13`). Expo's API shapes do not limit the platform's API.
 - **FR12 — Astryx Stage is the contract developers build against.** Astryx
@@ -317,7 +318,7 @@ declaration unless each build remembered to turn it off.
 **Decider:** imdreamrunner, 2026-11-09
 
 The platform packages bring all native code; an app's native projects are
-generated from configuration with the packages' plugins. An Astryx upgrade then
+generated from configuration with the platform core's plugin. An Astryx upgrade then
 reaches every app through its dependencies, and no app carries native code that
 drifts from the platform.
 
@@ -340,8 +341,8 @@ easy to miss and its reason is not typed.
 **Reference:** `spec:AST-112/DEC-5`
 **Decider:** imdreamrunner, 2026-11-09
 
-Cloud and prebuild builds are a goal, so the packages carry configuration
-plugins. Expo Go cannot load the packages' native code, and an API limited to
+Cloud and prebuild builds are a goal, so the platform core carries a
+configuration plugin. Expo Go cannot load the packages' native code, and an API limited to
 what every Expo module offers would cap the platform.
 
 Rejected: an adapter package for Expo's module system, because it adds a second
