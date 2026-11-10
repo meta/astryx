@@ -702,6 +702,23 @@ seeing this happen".
 Rejected: script positioning as a fallback for CSS anchor positioning in
 supported browsers (it lags the scroll by a frame and forces layout).
 
+### DEC-10 — A layer never inherits its trigger's press transform
+
+**Reference:** `spec:AST-059/DEC-10`
+**Decider:** `cixzhang`, `2026-11-10`
+
+A trigger's press feedback scales only the trigger's own visual. A layer the
+trigger opens renders outside that scaled subtree, so a press never scales,
+moves or distorts the layer or its entrance, and the layer anchors to the
+trigger's untransformed box.
+
+The owner: "since we scale the button on press the popover also gets scaled
+from it which makes the animation look weird. We probably need the popover
+menu to be outside of the scale css".
+
+Rejected: counter-scaling the layer to cancel the press (it lags the press and
+still distorts the entrance).
+
 ## Open questions
 
 None. Every decision above is the owner's.

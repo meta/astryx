@@ -643,6 +643,11 @@ layers use Layer rendering without joining Escape/platform dismissal.
   Fixed mode's one-time coordinates, a one-time entrance or exit transform, and
   the reduced browser fallback do not follow an anchor (`spec:AST-059` DEC-9).
 
+- **INV22 — A layer never inherits its trigger's press transform.** Press
+  feedback scales only the trigger's own visual; a layer renders outside that
+  scaled subtree and anchors to the trigger's untransformed box
+  (`spec:AST-059` DEC-10).
+
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
 return, modal semantics, channel admission policy, public controlled/uncontrolled
@@ -651,6 +656,7 @@ APIs, visual treatment, or theming anatomy.
 ## Current gaps and accepted change
 
 - INV21 gap: the source check and the scroll trace are not built.
+- INV22 gap: the press-transform browser cases are not built.
   Current gaps are observable facts, not current target behavior:
 
 - Tooltip currently consumes Escape ahead of an associated Popover, menu, or
@@ -839,7 +845,8 @@ app-declared inset. Its DEC-7 and DEC-8 govern the anchor-clear list and the
 one check after a scroll stops.
 
 `spec:AST-059` DEC-9 governs INV21: script never moves a layer to follow its
-anchor.
+anchor. Its DEC-10 governs INV22: a layer never inherits its trigger's press
+transform.
 
 `spec:AST-003` is accepted but unimplemented. It defines the approved next
 runtime and must move to `shipped` before its requirements are incorporated into
@@ -865,6 +872,7 @@ this current architecture record.
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                            | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                             | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
 | INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                                                         |
+| INV22        | A browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, ContextMenu): during and after a press, the layer's rectangle and computed transform match an unpressed open                                                                                                                                                                                                                                                                                                                                                                                               |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
