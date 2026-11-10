@@ -107,7 +107,7 @@ if (!('Temporal' in globalThis)) {
         },
         {
           type: 'prose',
-          text: 'Without a `Temporal` that supports it, a calendar that needs one shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (`buddhist`, `roc`, `japanese`) work everywhere without it.',
+          text: 'Without a `Temporal` that supports it, a calendar that needs one shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (Buddhist, Minguo, and Japanese) work everywhere without it.',
         },
       ],
     },

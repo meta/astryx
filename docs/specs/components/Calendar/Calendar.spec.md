@@ -258,8 +258,8 @@ button.
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
-- **Capability:** calendars other than `gregory`, `iso8601`, `buddhist`,
-  `roc`, and `japanese`, which need the runtime's `Temporal`.
+- **Capability:** calendars other than the Gregorian, ISO 8601, Buddhist,
+  Minguo, and Japanese calendars, which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing or does not support the calendar,
   as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
   the first render and warns once in development, on the server and in the

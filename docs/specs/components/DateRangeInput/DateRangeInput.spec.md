@@ -196,8 +196,8 @@ fill measures 3.88:1 on the popover surface, under 4.5:1.
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
 - **Capability:** trigger text and the popover Calendar in calendars other than
-  `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese`, which need the
-  runtime's `Temporal`.
+  the Gregorian, ISO 8601, Buddhist, Minguo, and Japanese calendars, which need
+  the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
   the field shows Gregorian dates and warns once in development, naming a
   polyfill (`spec:AST-111` FR5). An application that loads a `Temporal`

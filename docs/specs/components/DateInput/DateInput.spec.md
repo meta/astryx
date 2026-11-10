@@ -371,8 +371,8 @@ clear-glyph target of its own.
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
-- **Capability:** typed entry, committed text, and the bottom sheet in
-  calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese`,
+- **Capability:** typed entry, committed text, and the bottom sheet in calendars
+  other than the Gregorian, ISO 8601, Buddhist, Minguo, and Japanese calendars,
   which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
   the field reads, writes, and shows Gregorian dates, its presentations resolve

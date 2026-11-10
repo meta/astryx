@@ -519,8 +519,8 @@ no theming target or theme state; the root element keeps the existing
 - **Capability:** date values that PowerSearch (its tokens in both
   presentations, and the sheet's Filters rows and removal announcement) and
   PowerSearchToken write in the provider's calendar (`spec:AST-111` FR18), for
-  calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and
-  `japanese`, which need the runtime's `Temporal`.
+  calendars other than the Gregorian, ISO 8601, Buddhist, Minguo, and Japanese
+  calendars, which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing or does not support the calendar,
   as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
   the first render and warns once in development, on the server and in the

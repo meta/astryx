@@ -279,8 +279,8 @@ leading clock glyph uses `date-time-input-clock-icon`.
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
 - **Capability:** typed date entry, committed date text, and the bottom sheet's
-  Date panel in calendars other than `gregory`, `iso8601`, `buddhist`, `roc`,
-  and `japanese`, which need the runtime's `Temporal`.
+  Date panel in calendars other than the Gregorian, ISO 8601, Buddhist, Minguo,
+  and Japanese calendars, which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
   the date segment reads, writes, and shows Gregorian dates, its presentations
   resolve as they do for `gregory`, and it warns once in development, naming a

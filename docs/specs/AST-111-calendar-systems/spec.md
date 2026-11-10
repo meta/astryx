@@ -106,9 +106,9 @@ server code stay calendar-neutral.
 ```
 
 ```ts
-// Calendars other than gregory, iso8601, buddhist, roc, and japanese need
-// Temporal. Where the runtime lacks it, the application loads a polyfill on the
-// server and in the browser.
+// Calendars other than the Gregorian, ISO 8601, Buddhist, Minguo, and Japanese
+// calendars need Temporal. Where the runtime lacks it, the application loads a
+// polyfill on the server and in the browser.
 import 'temporal-polyfill/full/global';
 ```
 
@@ -129,7 +129,8 @@ optional `calendar` argument that defaults to `gregory` (FR18). The public
   `buddhist`, `roc`, `japanese`, `persian`, `indian`, `hebrew`, `chinese`,
   `dangi`, `coptic`, `ethiopic`, `ethioaa`, `islamic-civil`, `islamic-tbla`, or
   `islamic-umalqura`: the calendars that ECMA-402 and Temporal require. Any
-  other identifier resolves to `gregory` and warns once in development.
+  other identifier resolves to `gregory` and warns once in development. Each
+  calendar goes by its CLDR name (DEC-8).
 - **FR2 — The application selects the calendar.** A date component uses, in
   order: its own `calendar` prop; the `calendar` prop of its
   `InternationalizationProvider`; otherwise `gregory`. A locale never selects
@@ -148,13 +149,14 @@ optional `calendar` argument that defaults to `gregory` (FR18). The public
   assumes 12 months or Gregorian month lengths. A leap
   month is a distinct month with its own name: Adar I and Adar II in a Hebrew
   leap year, or the leap month of a `chinese` or `dangi` year.
-- **FR5 — Some calendars need Temporal.** `gregory`, `iso8601`, `buddhist`,
-  `roc`, and `japanese` work everywhere. The other calendars use the runtime's
-  `Temporal`, native or a polyfill the application loads; Astryx bundles none.
-  Without it, a component that resolves one of them shows and accepts Gregorian
-  dates and warns once in development, naming the polyfill. Server and browser
-  markup match when both resolve the calendar the same way, so a server-rendered
-  application loads `Temporal` on the server too. FR19 names the one exception.
+- **FR5 — Some calendars need Temporal.** The Gregorian, ISO 8601, Buddhist,
+  Minguo, and Japanese calendars work everywhere. The other calendars use the
+  runtime's `Temporal`, native or a polyfill the application loads; Astryx
+  bundles none. Without it, a component that resolves one of them shows and
+  accepts Gregorian dates and warns once in development, naming the polyfill.
+  Server and browser markup match when both resolve the calendar the same way,
+  so a server-rendered application loads `Temporal` on the server too. FR19
+  names the one exception.
 
 ### Calendar
 
@@ -202,7 +204,7 @@ These requirements apply to the text fields of `DateInput` and
   when the locale's format includes it, such as `พ.ศ.` (B.E., the Buddhist Era)
   or `民國` (Minguo, the Minguo calendar's era), and add it when the year alone is
   ambiguous, following the ICU4X year-ambiguity model: a year before the
-  calendar's epoch era always shows its era, and in the `japanese` and `roc`
+  calendar's epoch era always shows its era, and in the Japanese and Minguo
   calendars, whose era changes within 1900 through 2100, a format that omits the
   era gains it, written narrow when that keeps the locale's field order; where
   every era width reorders the fields, only a date before the latest era gains
@@ -306,9 +308,10 @@ These requirements apply to the text fields of `DateInput` and
   example date in the calendar's numeric pattern: today when the field accepts
   it, else the nearest date it accepts within `min`, `max`, and
   `dateConstraints`. A caller's `placeholder` always wins. The field's
-  description names its calendar only when that calendar differs from its
-  provider's calendar, so a page in one calendar does not repeat it and a page
-  that mixes calendars says which field uses which.
+  description names its calendar, by the locale's CLDR display name (DEC-8),
+  only when that calendar differs from its provider's calendar, so a page in one
+  calendar does not repeat it and a page that mixes calendars says which field
+  uses which.
 - **AR3 — Each rejection has its own message.** Unreadable text, a date the
   calendar does not have, and an out-of-range date each announce a different
   message.
@@ -529,6 +532,23 @@ loses for seconds or steps, so the calendar wins even over an explicit
 
 Rejected: keeping an explicit `native` native, because the device, not the
 application, would then choose the calendar a person sees.
+
+### DEC-8 — Calendars go by their CLDR names
+
+**Reference:** `spec:AST-111/DEC-8`
+**Decider:** `nynexman4464`, 2026-11-10
+
+Astryx names a calendar the way CLDR names it. A component that names a
+calendar reads the locale's display name from `Intl.DisplayNames` with type
+`calendar` (AR2). Specs, docs, changesets, and source comments use the CLDR
+English name, such as the Minguo calendar for `roc`, the Dangi calendar for
+`dangi`, and the Chinese calendar for `chinese`. They write the ECMA-402
+identifier in code font only where the API value itself is meant. Era names
+that `Intl` writes, such as `民國`, are data and appear as `Intl` writes them.
+
+Rejected: names that are not CLDR's, such as a country, a state, or a holiday
+standing for a calendar, because a standard name stays neutral and matches what
+the components show.
 
 ## Open questions
 
