@@ -754,7 +754,7 @@ describe('pr-component-a11y-contracts routing', () => {
   it('fails, never passes, when the scope step cannot list the changed files', () => {
     const guard = contractStep('Require the changed-file list');
     expect(guard.if).toBe(
-      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''",
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'",
     );
     expect(guard.run).toContain('exit 1');
     expect(guard['continue-on-error']).toBeUndefined();
@@ -833,7 +833,7 @@ describe('pr-component-a11y-contracts routing', () => {
     // Every changed path, not only the changed specs: a change in a
     // component folder owns that folder's specs.
     expect(runStep.env.FILES_PATH).toBe(
-      '${{ steps.scope.outputs.changed_files_path }}',
+      '${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}',
     );
     // A wide change still runs the touched components' own specs, then the
     // specs of the folders that render them (FR12).
