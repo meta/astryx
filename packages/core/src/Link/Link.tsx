@@ -300,27 +300,23 @@ type LinkKeyDownHandler = React.KeyboardEventHandler<
   HTMLAnchorElement | HTMLButtonElement
 >;
 
-// A disabled Link keeps its Tab stop, does nothing when activated, and tells
-// assistive technology that it is disabled. Spread these props after the
-// caller's props. Then a caller `aria-disabled`, `role`, or `tabIndex` cannot
-// replace them.
+// Spread these props after the caller's props, so a caller `aria-disabled` or
+// `role` cannot replace them. A caller `tabIndex` still applies, so a disabled
+// Link keeps the focus order it has when enabled.
 function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
   return {
     ...disabledInteractionProps(onKeyDown),
     role: 'link',
     'aria-disabled': true,
-    tabIndex: 0,
   } as const;
 }
 
-// A native button has a Tab stop and the button role. Remove the caller's
-// `tabIndex` and `role` so that the button keeps them.
+// The native button keeps its own role.
 function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
   return {
     ...disabledInteractionProps(onKeyDown),
     role: undefined,
     'aria-disabled': true,
-    tabIndex: undefined,
   } as const;
 }
 
@@ -470,6 +466,7 @@ export function Link({
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
         aria-label={label || undefined}
+        tabIndex={0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
