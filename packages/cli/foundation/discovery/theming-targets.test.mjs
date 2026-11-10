@@ -23,8 +23,10 @@
 
 import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {findCoreDir} from '../fs/paths.mjs';
+import {recordReads} from '../fs/read-record.mjs';
 const promotedThemeSurfaceTransform = new URL(
   '../../assets/codemods/transforms/v0.7.0/migrate-deprecated-theme-surface.mjs',
   import.meta.url,
@@ -261,6 +263,78 @@ function inlineStyleText(src) {
   for (const m of src.matchAll(/setProperty\(\s*'[^']+'/g)) chunks.push(m[0]);
   return chunks.join('\n');
 }
+
+describe('a Core scan', () => {
+  /**
+   * Writes a Widget doc whose theming targets are `classes`.
+   * @param {string} src
+   * @param {string[]} classes
+   */
+  function writeWidgetDoc(src, classes) {
+    const dir = path.join(src, 'Widget');
+    fs.mkdirSync(dir, {recursive: true});
+    const doc = {
+      type: 'component',
+      name: 'Widget',
+      displayName: 'Widget',
+      description: 'A small widget.',
+      props: [],
+      theming: {targets: classes.map(className => ({className}))},
+    };
+    fs.writeFileSync(
+      path.join(dir, 'Widget.doc.mjs'),
+      `export default ${JSON.stringify(doc)};\n`,
+    );
+  }
+
+  it('reads a doc again once it changes', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-targets-'));
+    const src = path.join(root, 'src');
+    try {
+      writeWidgetDoc(src, ['astryx-widget']);
+      const before = await collectThemingTargets(src);
+      expect(before.map(target => target.key)).toEqual(['widget']);
+      writeWidgetDoc(src, ['astryx-widget', 'astryx-widget-label']);
+      const after = await collectThemingTargets(src);
+      expect(after.map(target => target.key)).toEqual([
+        'widget',
+        'widget-label',
+      ]);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it("gives a src reached through a symlink the scan of its real path, as a project's node_modules reaches Core", async () => {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-targets-'));
+    try {
+      const scope = path.join(project, 'node_modules', '@astryxdesign');
+      fs.mkdirSync(scope, {recursive: true});
+      fs.symlinkSync(coreDir, path.join(scope, 'core'), 'dir');
+      /** @type {Map<string, string>} */
+      const seen = new Map();
+      const linked = await recordReads(seen, () =>
+        collectThemingTargets(path.join(scope, 'core', 'src')),
+      );
+      expect(linked).toEqual(await enumerated);
+      // No doc was read through the link: the call reused the real path's scan.
+      const readThroughLink = [...seen.keys()].filter(
+        file => file.startsWith(project) && file.endsWith('.doc.mjs'),
+      );
+      expect(readThroughLink).toEqual([]);
+    } finally {
+      fs.rmSync(project, {recursive: true, force: true});
+    }
+  });
+
+  it('gives each call its own rows: a caller that changes its rows leaves the next call unchanged', async () => {
+    const expected = structuredClone(await collectThemingTargets(coreSrc));
+    const first = await collectThemingTargets(coreSrc);
+    first[0].props.push('changed');
+    first.length = 0;
+    expect(await collectThemingTargets(coreSrc)).toEqual(expected);
+  });
+});
 
 describe('collectThemingVars', () => {
   it('enumerates the public vars and drops the private plumbing', async () => {
