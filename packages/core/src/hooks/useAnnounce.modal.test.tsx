@@ -318,6 +318,24 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     expect(shared()?.textContent ?? '').toBe('');
   });
 
+  it("routes Lightbox's own position message into its open viewer", async () => {
+    render(
+      <Lightbox
+        isOpen
+        onOpenChange={() => {}}
+        media={[
+          {src: '/a.jpg', alt: 'Harbour'},
+          {src: '/b.jpg', alt: 'Lighthouse'},
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+    await nextFrame();
+    const dialog = screen.getByRole('dialog', {name: 'Lighthouse'});
+    expect(regionIn(dialog)).toHaveTextContent('Lighthouse, 2 of 2');
+    expect(shared()?.textContent ?? '').toBe('');
+  });
+
   it('keeps the shared channel inside a non-modal sheet with no modal above it', async () => {
     render(
       <BottomSheet

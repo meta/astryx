@@ -29,9 +29,11 @@ import {
   thawPage,
   touchDriver,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
+import {paging} from '../../motion/uikit/paging';
 import {nearestStop} from '../snapPagingValue';
 
 const storybook = withStorybook(test);
@@ -139,7 +141,13 @@ async function swipe(
   const from = {x: box.x + box.width / 2 + (rtl ? -half : half), y};
   const to = {x: from.x + (rtl ? px : -px), y};
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: ms, restMs}));
+  // The paging reads a scrolling surface's release and pages from
+  // `advanceSpeed`. A release the page reads on the other side of it from
+  // the script fails by name, never as the paging's verdict.
+  await driver.play(drag(from, to, {durationMs: ms, restMs}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
 }
 
 for (const mode of ['paging', 'item'] as const) {
@@ -446,12 +454,6 @@ const TRACKPAD_IN_CHROMIUM =
   "Chromium's CDP wheels read as a mouse's wheel; the trackpad cases run in WebKit";
 
 /**
- * How long after its last wheel the gesture host ends a horizontal trackpad
- * scroll, ms. A gap this long or longer starts a new gesture.
- */
-const TRACKPAD_SCROLL_END_MS = 220;
-
-/**
  * Reports a coarse primary pointer to script, before the story loads: a
  * tablet with a trackpad, whose wheels a desktop context can inject.
  */
@@ -509,9 +511,7 @@ for (const pointer of ['coarse', 'fine'] as const) {
           steps: Array.from({length: 40}, (_, i) => ({
             dx: i % 2 === 0 ? 7 : 6,
           })),
-          // WebKit stamps wheels in whole ms, so the longest gap that keeps
-          // one scroll is 1 ms shorter than the end.
-          maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+          maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
         });
         await settled(scroller);
         await expect

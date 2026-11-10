@@ -64,16 +64,18 @@
  * learns that start only a frame or more later (Chromium), the call starts
  * at the frame that commits it, the start the compositor takes, so a
  * retarget or a rebase before then continues from the frame on screen. A
- * call that continues motion on
- * screen (a retarget, a catch) keeps an explicit start at the call time, or
- * `options.at` to line several animators up, so the new curve continues
- * from the frame on screen. Keyframes are sampled from the call's start, so
- * a value that keeps moving through a rebuild stays on its curve to the
- * frame. `options.start` changes that per call: `'commit'` dates a retarget
- * by the browser's commit as well, and `'presented'` creates the animations
- * of a call from rest two frames later, once its element at rest has been
- * presented (a UI process that applies commits late); a retarget still starts
- * now, from the value and velocity on screen.
+ * call that continues motion on screen (a retarget, a catch) keeps an
+ * explicit start: the first motion call of its callback, or `options.at`.
+ * So calls on several animators in one callback line up. The new curve
+ * then continues from the frame on screen. A late commit restarts each
+ * spring at its frame (lookAtShown). Keyframes are sampled from the call's
+ * start, so a value that keeps moving through a rebuild stays on its curve
+ * to the frame.
+ * `options.start` changes that per call. `'commit'` dates a retarget by the
+ * browser's commit as well. `'presented'` creates the animations of a call
+ * from rest two frames later, once its element at rest has been presented.
+ * That serves a UI process that applies commits late. It does not change
+ * when a retarget starts.
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -389,7 +391,9 @@ export interface MotionHandle {
   /**
    * When the motion started on the document timeline (ms): for a call from
    * rest, the time the browser committed it (a block before the first frame
-   * moves it later); otherwise the call time, or `at`.
+   * moves it later); otherwise the call time, or `at`. A retarget whose
+   * frame comes late starts its springs at that frame, and this stays the
+   * call time.
    */
   readonly started: Promise<number>;
   /** Presentation value of a property at `time` (default now). */
@@ -401,7 +405,8 @@ export interface MotionHandle {
    * in seconds from the call's start: what the keyframes play. Null for a
    * property the call does not move, or moves without travel (Reduced
    * Motion). Map it onto a companion property with `mapProgress`, and play
-   * that on the same clock.
+   * that on the same clock. A retarget whose frame comes late starts its
+   * spring again at that frame, and this stays the curve the call started.
    */
   curve(property: MotionProperty | 'scale'): MotionCurve | null;
   /** New targets for this call's properties, keeping their velocity. */
@@ -521,6 +526,11 @@ interface Segment {
   speed(t: number): number;
   /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
   readonly jumps: ReadonlyArray<number>;
+  /**
+   * The curve a `play` call gave, which other calls in its task can share. A
+   * segment whose values move from that curve's has none.
+   */
+  readonly source?: MotionCurve;
   /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
   readonly isFade?: true;
   readonly owner: HandleState;
@@ -528,6 +538,10 @@ interface Segment {
   group?: StartGroup;
   /** The spring driving it, when one does (`rebase` keeps it). */
   spring?: SpringDescription;
+  /** The old curve plus a spring of the difference (`additive`). */
+  readonly isAdditive?: true;
+  /** A velocity the call handed the spring, such as a release's. */
+  readonly handedVelocity?: number;
 }
 
 /**
@@ -757,6 +771,116 @@ function markTask(time: number, clock: () => number): TaskMark {
 /** The first read of the time an animation frame runs, by its timestamp. */
 let frameRead: {readonly frame: number; readonly time: number} | null = null;
 
+/** The first motion call on a clock since the last microtask checkpoint. */
+let openCall: {readonly time: number; readonly clock: () => number} | null =
+  null;
+
+/**
+ * The time of a motion call with no explicit clock. It is the time of the
+ * first such call on the same clock since the last microtask checkpoint. One
+ * event listener or frame callback thus shares one clock. So calls on
+ * several animators in one callback, such as a pager's children, line up, as
+ * calls from rest share one start. A call more than LATE_START_MS after the
+ * first opens a new clock: the curves that a block passed restart at their
+ * frame instead.
+ */
+function callTime(clock: () => number): number {
+  const time = clock();
+  if (
+    openCall != null &&
+    openCall.clock === clock &&
+    time - openCall.time <= LATE_START_MS
+  ) {
+    return openCall.time;
+  }
+  const call = {time, clock};
+  openCall = call;
+  queueMicrotask(() => {
+    if (openCall === call) {
+      openCall = null;
+    }
+  });
+  return time;
+}
+
+/**
+ * Promotions that wait for their stylesheet's will-change, from every
+ * animator, until the running callback's microtasks run.
+ */
+const sheetReads: SheetRead[] = [];
+
+/** One element's wait in sheetReads. */
+interface SheetRead {
+  /** Takes the promotion off the element, so a read sees its stylesheet. */
+  readonly lift: () => void;
+  readonly read: () => void;
+  /** Writes the promotion back with the stylesheet's reasons. */
+  readonly write: () => void;
+}
+
+/**
+ * Queues an element's stylesheet read for a microtask after the callback.
+ * That microtask lifts every queued promotion, reads every stylesheet, and
+ * then writes every promotion back. So motions that one callback starts force
+ * one style pass, not one per element.
+ */
+function queueSheetRead(read: SheetRead) {
+  if (sheetReads.length === 0) {
+    queueMicrotask(flushSheetReads);
+  }
+  sheetReads.push(read);
+}
+
+function flushSheetReads() {
+  const reads = sheetReads.splice(0);
+  for (const read of reads) {
+    read.lift();
+  }
+  for (const read of reads) {
+    read.read();
+  }
+  for (const read of reads) {
+    read.write();
+  }
+}
+
+/**
+ * Per animator, the first of its calls that still wait for the frame that
+ * commits them. An animator removes its entry once nothing of its waits: a
+ * rebuild or a hidden page committed its calls, or it was disposed or moved.
+ * The frame's first read takes every entry.
+ */
+const waitingCalls = new Map<object, number>();
+
+/** The first waiting call, read once by the frame with this timestamp. */
+let waitingRead: {readonly frame: number; readonly first: number} | null = null;
+
+/**
+ * The first call that the animation frame with timestamp `frame` commits.
+ * The frame reads it once, so every animator in it judges a late commit from
+ * the same call. `own` is the first of the reading animator's calls.
+ */
+function firstCommitted(frame: number | undefined, own: number): number {
+  if (frame != null && waitingRead?.frame === frame) {
+    return Math.min(waitingRead.first, own);
+  }
+  const first = Math.min(own, ...waitingCalls.values());
+  // The frame commits every call that waits now. An animator whose look
+  // never runs, such as one on another frame source, counts once at most.
+  waitingCalls.clear();
+  if (frame != null) {
+    const read = {frame, first};
+    waitingRead = read;
+    // A browser runs every callback of a frame before its next task.
+    setTimeout(() => {
+      if (waitingRead === read) {
+        waitingRead = null;
+      }
+    }, 0);
+  }
+  return first;
+}
+
 /**
  * The time the animation frame with timestamp `frame` runs, read once in
  * that frame. Every animator's callback in the frame takes that read, so the
@@ -782,6 +906,62 @@ function frameTime(frame: number | undefined, clock: () => number): number {
     }
   }, 0);
   return read.time;
+}
+
+/**
+ * What the calls of the running task have baked. A call that plays the same
+ * curve objects reuses them: a row of items that one curve moves samples it
+ * once. Cleared at the next microtask checkpoint.
+ */
+interface TaskBakes {
+  /** Sample times, from the bake's start, by curve, offset and tolerance. */
+  readonly times: {readonly key: unknown[]; readonly times: number[]}[];
+  /** Keyframes, by curves, offsets and the channel's rest values. */
+  readonly keyframes: {
+    readonly key: unknown[];
+    readonly keyframes: Keyframe[];
+    effect: AnimationEffect | null;
+  }[];
+}
+
+let taskBakes: TaskBakes | null = null;
+
+function bakesOfTask(): TaskBakes {
+  if (taskBakes == null) {
+    const bakes: TaskBakes = {times: [], keyframes: []};
+    taskBakes = bakes;
+    queueMicrotask(() => {
+      if (taskBakes === bakes) {
+        taskBakes = null;
+      }
+    });
+  }
+  return taskBakes;
+}
+
+function isSameKey(a: unknown[], b: unknown[]): boolean {
+  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
+/** Whether the engine can copy an effect with its parsed keyframes. */
+function isCopyable(effect: AnimationEffect | null): effect is KeyframeEffect {
+  return (
+    typeof KeyframeEffect === 'function' &&
+    typeof Animation === 'function' &&
+    effect instanceof KeyframeEffect
+  );
+}
+
+/**
+ * Plays a copy of `effect` on `element`, as `element.animate` would play the
+ * same keyframes and timing, without parsing them again.
+ */
+function copyAnimation(effect: KeyframeEffect, element: Element): Animation {
+  const copy = new KeyframeEffect(effect);
+  copy.target = element;
+  const animation = new Animation(copy, element.ownerDocument.timeline);
+  animation.play();
+  return animation;
 }
 
 /** Above this many keyframes the tolerance is relaxed. */
@@ -957,7 +1137,7 @@ const IDENTITY_TEXT: Record<Channel, string> = {
 };
 
 /** Whether a computed value (or an unset one) is the channel's identity. */
-function isIdentityText(channel: Channel, text: string): boolean {
+export function isIdentityText(channel: Channel, text: string): boolean {
   const value = text.trim();
   if (value === '' || value === 'none') {
     return true;
@@ -986,7 +1166,8 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   return out;
 }
 
-function defaultNow(): number {
+/** The time the motion clock reads (`performance.now()`'s time base). */
+export function motionNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
@@ -1043,7 +1224,7 @@ export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  const now = options.now ?? defaultNow;
+  const now = options.now ?? motionNow;
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
@@ -1144,6 +1325,8 @@ export function createMotionEngine(
   let sheetWillChangeRead = false;
   /** The pending read of sheetWillChange, cancelled with its element. */
   let sheetReadTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The node whose promotion waits in sheetReads for its stylesheet. */
+  let sheetReadQueuedFor: HTMLElement | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -1405,6 +1588,62 @@ export function createMotionEngine(
     }
   };
 
+  /**
+   * What identifies a channel's keyframes across calls of one task: each
+   * moving property's curve object, offset and length, and each other
+   * property's rest value. Null when a moving property has no shared curve
+   * (a spring, a rebase, a jump).
+   */
+  const taskBakeKey = (
+    channel: Channel,
+    moving: MotionProperty[],
+    from: number,
+    end: number,
+    devicePixel: number,
+  ): unknown[] | null => {
+    const key: unknown[] = [channel, end - from, devicePixel];
+    for (const property of CHANNELS[channel]) {
+      const segment = segments.get(property);
+      if (!moving.includes(property)) {
+        key.push(property, resting[property]);
+      } else if (segment?.source != null && segment.jumps.length === 0) {
+        key.push(property, segment.source, segment.start - from);
+        key.push(segment.duration);
+      } else {
+        return null;
+      }
+    }
+    return key;
+  };
+
+  /** `sampleTimes`, shared by the calls of a task that play one curve. */
+  const sharedSampleTimes = (
+    property: MotionProperty,
+    from: number,
+    end: number,
+    tolerance: number,
+  ): number[] => {
+    const segment = segments.get(property);
+    if (segment?.source == null || segment.jumps.length > 0) {
+      return sampleTimes(property, from, end, tolerance);
+    }
+    const key: unknown[] = [
+      segment.source,
+      segment.start - from,
+      segment.duration,
+      end - from,
+      tolerance,
+    ];
+    const {times} = bakesOfTask();
+    const known = times.find(entry => isSameKey(entry.key, key));
+    if (known != null) {
+      return known.times.map(t => t + from);
+    }
+    const sampled = sampleTimes(property, from, end, tolerance);
+    times.push({key, times: sampled.map(t => t - from)});
+    return sampled;
+  };
+
   const sampleTimes = (
     property: MotionProperty,
     from: number,
@@ -1553,12 +1792,16 @@ export function createMotionEngine(
     if (stale.size === 0) {
       return;
     }
-    const properties = [...stale].flatMap(channel => CHANNELS[channel]);
+    // A waiting channel rebuilds at the frame that commits its call.
+    const properties = [...stale]
+      .filter(channel => !heldForFrame.has(channel))
+      .flatMap(channel => CHANNELS[channel]);
     stale.clear();
     commit(properties, now());
   };
 
   const rebuild = (channel: Channel, time: number) => {
+    commitWaitingNow(channel);
     stale.delete(channel);
     const previous = running.get(channel);
     running.delete(channel);
@@ -1701,6 +1944,16 @@ export function createMotionEngine(
     // Read where the keyframes are baked: a page moved to another screen
     // bakes its next motion for that screen.
     const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
+    // An earlier call of this task that played the same curves from the same
+    // offset, over the same rest values, baked these keyframes already.
+    const bakeKey =
+      pseudoElement == null
+        ? taskBakeKey(channel, moving, from, end, devicePixel)
+        : null;
+    const baked =
+      bakeKey == null
+        ? undefined
+        : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
@@ -1708,61 +1961,76 @@ export function createMotionEngine(
           SAMPLE_TOLERANCE[property] *
           scale *
           (property === 'x' || property === 'y' ? devicePixel : 1);
-        for (const t of sampleTimes(property, from, end, tolerance)) {
+        for (const t of sharedSampleTimes(property, from, end, tolerance)) {
           times.add(t);
         }
       }
       return times;
     };
-    let scale = 1;
-    let all = collect(scale);
-    while (all.size > MAX_KEYFRAMES && scale < 64) {
-      scale *= 2;
-      all = collect(scale);
-    }
-    // Jumps become two keyframes at one offset: the value just before, then
-    // the value after. A jump on the last frame (fade out, then move) too.
-    const jumpTimes = new Set<number>();
-    for (const property of moving) {
-      const segment = segments.get(property) as Segment;
-      for (const j of segment.jumps) {
-        const t = segment.start + j;
-        if (t > from && t <= end) {
-          jumpTimes.add(t);
-          all.add(t);
+    const span = end - from + END_HOLD_MS;
+    const bakeKeyframes = (): Keyframe[] => {
+      let scale = 1;
+      let all = collect(scale);
+      while (all.size > MAX_KEYFRAMES && scale < 64) {
+        scale *= 2;
+        all = collect(scale);
+      }
+      // Jumps become two keyframes at one offset: the value just before,
+      // then the value after. A jump on the last frame (fade out, then move)
+      // too.
+      const jumpTimes = new Set<number>();
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        for (const j of segment.jumps) {
+          const t = segment.start + j;
+          if (t > from && t <= end) {
+            jumpTimes.add(t);
+            all.add(t);
+          }
         }
       }
-    }
-    const times = [...all].sort((a, b) => a - b);
-    const span = end - from + END_HOLD_MS;
-    const keyframes: Keyframe[] = [];
-    for (const t of times) {
-      const offset = (t - from) / span;
-      if (jumpTimes.has(t)) {
-        keyframes.push({
+      const times = [...all].sort((a, b) => a - b);
+      const frames: Keyframe[] = [];
+      for (const t of times) {
+        const offset = (t - from) / span;
+        if (jumpTimes.has(t)) {
+          frames.push({
+            offset,
+            [channel]: format(channel, p => valueBefore(p, t)),
+          });
+        }
+        frames.push({
           offset,
-          [channel]: format(channel, p => valueBefore(p, t)),
+          [channel]: format(channel, p =>
+            t >= end ? finalValue(p) : curveAt(p, t),
+          ),
         });
       }
-      keyframes.push({
-        offset,
-        [channel]: format(channel, p =>
-          t >= end ? finalValue(p) : curveAt(p, t),
-        ),
+      frames.push({offset: 1, [channel]: format(channel, finalValue)});
+      return frames;
+    };
+    const keyframes = baked?.keyframes ?? bakeKeyframes();
+    promote(channel);
+    const animation =
+      baked != null && isCopyable(baked.effect)
+        ? copyAnimation(baked.effect, target)
+        : target.animate(keyframes, {
+            duration: span,
+            // The last keyframes hold the end state (END_HOLD_MS); filling both
+            // ways also keeps it where an engine honors the fill on its compositor.
+            // The main thread retires the animation once it runs after the end,
+            // writing the end inline in that task, so that changes no pixel.
+            fill: 'both',
+            easing: 'linear',
+            ...(pseudoElement != null ? {pseudoElement} : {}),
+          });
+    if (bakeKey != null && baked == null) {
+      bakesOfTask().keyframes.push({
+        key: bakeKey,
+        keyframes,
+        effect: animation.effect,
       });
     }
-    keyframes.push({offset: 1, [channel]: format(channel, finalValue)});
-    promote(channel);
-    const animation = target.animate(keyframes, {
-      duration: span,
-      // The last keyframes hold the end state (END_HOLD_MS); filling both
-      // ways also keeps it where an engine honors the fill on its compositor.
-      // The main thread retires the animation once it runs after the end,
-      // writing the end inline in that task, so that changes no pixel.
-      fill: 'both',
-      easing: 'linear',
-      ...(pseudoElement != null ? {pseudoElement} : {}),
-    });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
       // it commits it (StartGroup); the keyframes are sampled from `from`,
@@ -1838,6 +2106,14 @@ export function createMotionEngine(
         retireTimers.delete(channel);
       }
       if (running.get(channel) !== animation) {
+        return;
+      }
+      // The old curve plays on until the frame that commits the call
+      // (lookAtShown).
+      if (heldForFrame.has(channel)) {
+        if (!retireTimers.has(channel)) {
+          retireTimers.set(channel, setTimeout(retire, END_RECHECK_MS));
+        }
         return;
       }
       // Paused or sought (a sampler holding it): retire when its own time
@@ -2126,13 +2402,16 @@ export function createMotionEngine(
     }
     if (ownWillChange == null) {
       ownWillChange = element.style.willChange;
-      // Without an inline value, the stylesheet's reasons stay alongside the
-      // promotion's. They were read in the task after the element was
-      // attached; a promotion that comes first (an element attached in this
-      // task that moves at once) reads them now.
-      if (ownWillChange === '' && !sheetWillChangeRead) {
-        readSheetWillChange(element);
-      }
+    }
+    // Without an inline value, the stylesheet's reasons stay alongside the
+    // promotion's. They were read in the task after the element was attached.
+    // A promotion that comes first (an element attached in this task that
+    // moves at once) is written now. Its reasons join it once the callback's
+    // microtasks run (queueSheetRead).
+    if (ownWillChange === '' && !sheetWillChangeRead) {
+      element.style.willChange = [...promoted].join(', ');
+      queueSheetReadFor(element);
+      return;
     }
     const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
     const own = base === 'auto' ? '' : base;
@@ -2150,6 +2429,41 @@ export function createMotionEngine(
         ?.getComputedStyle(element)
         .getPropertyValue('will-change') ?? '';
     sheetWillChangeRead = true;
+  };
+
+  /** Joins the stylesheet's reasons to a promotion once the callback ends. */
+  const queueSheetReadFor = (element: HTMLElement) => {
+    if (sheetReadQueuedFor === element) {
+      return;
+    }
+    sheetReadQueuedFor = element;
+    // Still waiting: the same node, still promoted, with no inline reason.
+    const waits = () =>
+      sheetReadQueuedFor === element &&
+      target === element &&
+      promoted.size > 0 &&
+      ownWillChange === '';
+    queueSheetRead({
+      lift: () => {
+        if (waits()) {
+          element.style.willChange = '';
+        }
+      },
+      read: () => {
+        if (waits()) {
+          readSheetWillChange(element);
+        }
+      },
+      write: () => {
+        if (sheetReadQueuedFor !== element) {
+          return;
+        }
+        sheetReadQueuedFor = null;
+        if (target === element && promoted.size > 0) {
+          writePromotion(element);
+        }
+      },
+    });
   };
 
   /**
@@ -2284,12 +2598,12 @@ export function createMotionEngine(
       }
       return null;
     }
-    // A call that continues motion starts now, unless it asks for the
-    // browser's start (`commit`). `presented` asks only for a call from rest.
-    // A curve that still moves is not at rest, so a call on it starts now,
-    // from the value and velocity on screen. A tail that shows as at rest
-    // counts as rest, so a call on it waits, under `presented` for its two
-    // frames.
+    // A call that continues motion keeps its call's clock, unless it asks
+    // for the browser's start (`commit`). `presented` asks only for a call
+    // from rest. A curve that still moves is not at rest, so a call on it
+    // continues from the value and velocity on screen. A tail that shows as
+    // at rest counts as rest, so a call on it waits, under `presented` for
+    // its two frames.
     for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
@@ -2330,6 +2644,7 @@ export function createMotionEngine(
     changed: MotionProperty[],
     time: number,
     presented = false,
+    waitsForFrame = false,
   ) => {
     if (group != null) {
       for (const property of changed) {
@@ -2351,6 +2666,10 @@ export function createMotionEngine(
       const call = {group, changed};
       deferredCalls.push(call);
       requestFrame(() => requestFrame(() => flushDeferredThrough(call)));
+      return;
+    }
+    if (group == null && waitsForFrame) {
+      deferRebuild(changed, time);
       return;
     }
     startCall(group, changed, time);
@@ -2792,6 +3111,10 @@ export function createMotionEngine(
       ) {
         continue;
       }
+      if (heldForFrame.has(channel)) {
+        wait = Math.max(wait, END_RECHECK_MS);
+        continue;
+      }
       const remaining = remainingCurve(animation);
       if (remaining != null && remaining > 0) {
         wait = Math.max(
@@ -2916,13 +3239,34 @@ export function createMotionEngine(
     to: number,
     spring: SpringDescription,
     velocity: number,
+  ): Segment | null =>
+    // The motion role it plays, at the tempo of the theme it is in.
+    springFrom(
+      owner,
+      property,
+      start,
+      valueAt(property, start),
+      velocity,
+      to,
+      resolveMotion(target, spring),
+    );
+
+  /**
+   * `resolved` is already at the theme's tempo. A restart passes a segment's
+   * spring as it is.
+   */
+  const springFrom = (
+    owner: HandleState,
+    property: MotionProperty,
+    start: number,
+    from: number,
+    velocity: number,
+    to: number,
+    resolved: SpringDescription,
   ): Segment | null => {
-    const from = valueAt(property, start);
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays, at the tempo of the theme it is in.
-    const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
       MAX_DURATION_MS,
@@ -2977,6 +3321,7 @@ export function createMotionEngine(
         .filter(jump => jump > 0),
       owner,
       spring: resolved,
+      isAdditive: true,
     };
   };
 
@@ -3051,6 +3396,378 @@ export function createMotionEngine(
       owner,
       isFade: true,
     };
+  };
+
+  // -- a retarget's start ----------------------------------------------------
+
+  /**
+   * What the screen shows of a property after a call that continues its
+   * motion: the old curve, or the value at rest. It shows that until the
+   * frame that commits the call. A rebase since then moves the element
+   * under it by `offset`.
+   */
+  interface Shown {
+    readonly segment: Segment | null;
+    readonly resting: number;
+    offset: number;
+    /** When the first such call changed the property. */
+    readonly since: number;
+  }
+
+  const shown = new Map<MotionProperty, Shown>();
+  /**
+   * Channels whose rebuild waits for the frame that commits their call, with
+   * the time of the last call on each.
+   */
+  const heldForFrame = new Map<Channel, number>();
+  let isShownLookQueued = false;
+  let stopWatchingHidden: (() => void) | null = null;
+
+  /** The page whose frames the animator's own frame source draws. */
+  const framePage =
+    options.requestFrame == null && typeof document !== 'undefined'
+      ? document
+      : null;
+
+  /**
+   * Whether no frame comes. A hidden page draws none. The frame source of a
+   * hidden page draws none either, while the element shows elsewhere (a
+   * Picture-in-Picture window's opener).
+   */
+  const isPageHidden = () =>
+    target?.ownerDocument.visibilityState === 'hidden' ||
+    framePage?.visibilityState === 'hidden';
+
+  const forgetShown = () => {
+    shown.clear();
+    syncWaiting();
+    stopWatchingHidden?.();
+  };
+
+  /** This animator's entry in the waiting calls, from what still waits. */
+  const waitKey = {};
+  const syncWaiting = () => {
+    let first = Infinity;
+    for (const entry of shown.values()) {
+      first = Math.min(first, entry.since);
+    }
+    if (first === Infinity) {
+      waitingCalls.delete(waitKey);
+    } else {
+      waitingCalls.set(waitKey, first);
+    }
+  };
+
+  /**
+   * Rebuilds channels from their last calls' times, as those calls would
+   * have rebuilt them: the same keyframes and start time.
+   */
+  const rebuildOnCallClocks = (channels: [Channel, number][]) => {
+    for (const time of new Set(channels.map(([, at]) => at))) {
+      commit(
+        channels
+          .filter(([, at]) => at === time)
+          .flatMap(([channel]) => CHANNELS[channel]),
+        time,
+      );
+    }
+  };
+
+  const flushWaiting = () => {
+    const channels = [...heldForFrame];
+    heldForFrame.clear();
+    rebuildOnCallClocks(channels);
+  };
+
+  /**
+   * A hidden page draws no frames and shows nothing, so its calls keep their
+   * own clock, as the timers do (scheduleRetire). A page that goes hidden
+   * before the frame forgets what it showed and rebuilds what waits.
+   */
+  const watchHidden = () => {
+    const pages = [
+      ...new Set(
+        [target?.ownerDocument, framePage].filter(page => page != null),
+      ),
+    ];
+    if (stopWatchingHidden != null || pages.length === 0) {
+      return;
+    }
+    const onChange = () => {
+      if (isPageHidden()) {
+        forgetShown();
+        flushWaiting();
+      }
+    };
+    for (const page of pages) {
+      page.addEventListener('visibilitychange', onChange);
+    }
+    stopWatchingHidden = () => {
+      for (const page of pages) {
+        page.removeEventListener('visibilitychange', onChange);
+      }
+      stopWatchingHidden = null;
+    };
+  };
+
+  /**
+   * Holds a call's channels for the frame that commits it, which rebuilds
+   * them (lookAtShown). Until then the old curve plays on, and no end look
+   * retires it.
+   */
+  const deferRebuild = (changed: MotionProperty[], time: number) => {
+    for (const property of changed) {
+      const channel = CHANNEL_OF[property];
+      const isNew = !heldForFrame.has(channel);
+      heldForFrame.set(channel, time);
+      if (!isNew) {
+        continue;
+      }
+      stale.delete(channel);
+      clearTimeout(retireTimers.get(channel));
+      retireTimers.delete(channel);
+      clearTimeout(retireLooks.get(channel));
+      retireLooks.delete(channel);
+    }
+  };
+
+  /** A rebuild before that frame commits the channel's calls at once. */
+  const commitWaitingNow = (channel: Channel) => {
+    if (!heldForFrame.delete(channel)) {
+      return;
+    }
+    for (const property of CHANNELS[channel]) {
+      shown.delete(property);
+    }
+    syncWaiting();
+  };
+
+  /**
+   * Rebuilds a waiting channel from what the screen shows, after a rebase
+   * moved the element under it. The old curve plays on, shifted with the
+   * element, until the frame that commits the call.
+   */
+  const rebuildShown = (channel: Channel, time: number) => {
+    const model = new Map<MotionProperty, Segment | undefined>();
+    const rests = new Map<MotionProperty, number>();
+    for (const property of CHANNELS[channel]) {
+      const entry = shown.get(property);
+      if (entry == null) {
+        continue;
+      }
+      model.set(property, segments.get(property));
+      rests.set(property, resting[property]);
+      if (entry.segment == null) {
+        segments.delete(property);
+        resting[property] = entry.resting + entry.offset;
+      } else {
+        segments.set(property, shifted(entry.segment, entry.offset));
+      }
+    }
+    const callTime = heldForFrame.get(channel);
+    heldForFrame.delete(channel);
+    try {
+      rebuild(channel, time);
+    } finally {
+      for (const [property, segment] of model) {
+        if (segment == null) {
+          segments.delete(property);
+        } else {
+          segments.set(property, segment);
+        }
+      }
+      for (const [property, rest] of rests) {
+        resting[property] = rest;
+      }
+      if (callTime != null) {
+        heldForFrame.set(channel, callTime);
+      }
+    }
+  };
+
+  /**
+   * Notes what the screen shows of each property that a call continuing
+   * motion changes, before the call replaces its curve. The call's channels
+   * then wait for the frame that commits it, which rebuilds them
+   * (lookAtShown). That holds for a call in a frame callback of the page's.
+   * A call from rest, a call on an explicit clock and a call in an
+   * animator's frame callback start on their frame already.
+   */
+  const noteShown = (
+    properties: Iterable<MotionProperty>,
+    time: number,
+    group: StartGroup | null,
+    at: number | undefined,
+  ): boolean => {
+    if (
+      group != null ||
+      at != null ||
+      frameDepth > 0 ||
+      requestFrame == null ||
+      target == null ||
+      typeof target.animate !== 'function' ||
+      isPageHidden()
+    ) {
+      return false;
+    }
+    // A curve on these channels may still wait for the browser's start.
+    // Its call's own start then settles where the new curve begins.
+    const list = [...properties];
+    if (
+      list.some(property =>
+        CHANNELS[CHANNEL_OF[property]].some(other => {
+          const segment = segments.get(other);
+          return segment != null && isHeld(segment);
+        }),
+      )
+    ) {
+      return false;
+    }
+    for (const property of list) {
+      if (shown.has(property)) {
+        continue;
+      }
+      shown.set(property, {
+        segment: segments.get(property) ?? null,
+        resting: resting[property],
+        offset: 0,
+        since: time,
+      });
+    }
+    syncWaiting();
+    watchHidden();
+    if (!isShownLookQueued) {
+      isShownLookQueued = true;
+      requestFrame(lookAtShown);
+    }
+    return true;
+  };
+
+  /** The value and velocity that the screen shows of a property at `time`. */
+  const shownAt = (entry: Shown, time: number) => {
+    const {segment, offset} = entry;
+    if (segment == null) {
+      return {value: entry.resting + offset, velocity: 0};
+    }
+    const elapsed = time - segment.start;
+    if (elapsed >= segment.duration) {
+      return {value: segment.target + offset, velocity: 0};
+    }
+    const t = Math.max(0, elapsed);
+    return {value: segment.at(t) + offset, velocity: segment.speed(t)};
+  };
+
+  const shifted = (segment: Segment, offset: number): Segment =>
+    offset === 0
+      ? segment
+      : {
+          ...segment,
+          target: segment.target + offset,
+          at: t => segment.at(t) + offset,
+        };
+
+  /**
+   * The frame that commits calls that continue motion. When it comes more
+   * than LATE_START_MS after the first call it commits on any animator, the
+   * screen has shown the old curve. Each spring that they leave
+   * then starts here, from the value on screen, as UIKit's added spring
+   * begins at its commit. It keeps a velocity that its call handed it, such
+   * as a release's, and otherwise takes the one on screen. A played curve or
+   * a coast keeps its call's clock, and an earlier frame keeps every call on
+   * its own clock.
+   */
+  const lookAtShown = (frame?: number) => {
+    isShownLookQueued = false;
+    const entries = [...shown];
+    const channels = [...heldForFrame];
+    heldForFrame.clear();
+    forgetShown();
+    if (target == null) {
+      return;
+    }
+    const at = frameTime(frame, now);
+    const late =
+      at -
+        firstCommitted(
+          frame,
+          Math.min(...entries.map(([, entry]) => entry.since)),
+        ) >
+      LATE_START_MS;
+    const changed: MotionProperty[] = [];
+    const owners = new Set<HandleState>();
+    for (const [property, entry] of entries) {
+      const current = segments.get(property);
+      if (
+        !late ||
+        current == null ||
+        current.spring == null ||
+        current.isFade === true ||
+        isHeld(current)
+      ) {
+        continue;
+      }
+      const screen = shownAt(entry, at);
+      const next =
+        current.isAdditive === true && entry.segment != null
+          ? additiveSegment(
+              current.owner,
+              property,
+              at,
+              current.target,
+              current.spring,
+              shifted(entry.segment, entry.offset),
+            )
+          : springFrom(
+              current.owner,
+              property,
+              at,
+              screen.value,
+              current.handedVelocity ??
+                // From rest, the call's own start velocity.
+                (entry.segment == null ? current.speed(0) : screen.velocity),
+              current.target,
+              current.spring,
+            );
+      if (next == null) {
+        segments.delete(property);
+        resting[property] = current.target;
+      } else {
+        segments.set(
+          property,
+          current.handedVelocity == null
+            ? next
+            : {...next, handedVelocity: current.handedVelocity},
+        );
+      }
+      owners.add(current.owner);
+      changed.push(property);
+    }
+    const restarted = new Set(changed.map(property => CHANNEL_OF[property]));
+    if (restarted.size > 0) {
+      commit(
+        [...restarted].flatMap(channel => CHANNELS[channel]),
+        at,
+      );
+    }
+    rebuildOnCallClocks(
+      channels.filter(([channel]) => !restarted.has(channel)),
+    );
+    for (const owner of owners) {
+      if (owner.settled || owner.timer == null) {
+        continue;
+      }
+      clearTimeout(owner.timer);
+      let end = at;
+      for (const segment of segments.values()) {
+        if (segment.owner === owner) {
+          end = Math.max(end, segment.start + segment.duration);
+        }
+      }
+      owner.timer = setTimeout(
+        () => settleAtEnd(owner),
+        Math.max(0, end - now()),
+      );
+    }
   };
 
   // -- the animator -----------------------------------------------------------
@@ -3514,6 +4231,9 @@ export function createMotionEngine(
       }
       flushDeferred();
       present(false);
+      // The next node never showed the old curves.
+      forgetShown();
+      heldForFrame.clear();
       if (next == null) {
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
@@ -3693,6 +4413,7 @@ export function createMotionEngine(
       ][]) {
         interrupt(property, time);
         segments.delete(property);
+        shown.delete(property);
         resting[property] = value;
       }
       // Direct manipulation: the layer makes each write a composite only.
@@ -3709,7 +4430,7 @@ export function createMotionEngine(
       if (animateOptions.start !== 'presented') {
         flushDeferred();
       }
-      const time = animateOptions.at ?? now();
+      const time = animateOptions.at ?? callTime(now);
       const targets = expand(to);
       const velocities = expand(transition.velocity ?? {});
       const {owner, finished} = newOwner();
@@ -3745,15 +4466,27 @@ export function createMotionEngine(
             );
             continue;
           }
-          const velocity = velocities[property] ?? velocityAt(property, time);
-          next[property] = springSegment(
+          const handed = velocities[property];
+          const current = velocityAt(property, time);
+          const segment = springSegment(
             owner,
             property,
             time,
             targets[property] as number,
             transition.spring,
-            velocity,
+            handed ?? current,
           );
+          // A velocity that is the curve's own at the call keeps the current
+          // velocity, as no velocity does. Any other is handed on, such as a
+          // release's.
+          const isHanded =
+            handed != null &&
+            Math.abs(handed - current) >
+              SAMPLE_TOLERANCE[property] * REST_FRAMES_PER_SECOND;
+          next[property] =
+            segment != null && isHanded
+              ? {...segment, handedVelocity: handed}
+              : segment;
         }
       }
 
@@ -3762,6 +4495,12 @@ export function createMotionEngine(
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
         animateOptions.start,
+      );
+      const waitsForFrame = noteShown(
+        Object.keys(next) as MotionProperty[],
+        time,
+        group,
+        animateOptions.at,
       );
       const adopted =
         plan?.landing != null
@@ -3792,6 +4531,7 @@ export function createMotionEngine(
         changed,
         time,
         animateOptions.start === 'presented' && animateOptions.at == null,
+        waitsForFrame,
       );
       if (plan?.borrowed != null) {
         // The dip's own commit cleared it; the borrow lasts the dip.
@@ -3815,7 +4555,7 @@ export function createMotionEngine(
       if (playOptions.start !== 'presented') {
         flushDeferred();
       }
-      const time = playOptions.at ?? now();
+      const time = playOptions.at ?? callTime(now);
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
       // `scale` first, so an explicit `scaleX` or `scaleY` beside it wins.
@@ -3884,6 +4624,7 @@ export function createMotionEngine(
                 speed: t => curve.velocity(t / 1000),
                 jumps: [],
                 owner,
+                source: curve,
               };
       }
       const group = beginGroup(
@@ -3891,6 +4632,12 @@ export function createMotionEngine(
         Object.keys(next) as MotionProperty[],
         playOptions.at,
         playOptions.start,
+      );
+      const waitsForFrame = noteShown(
+        Object.keys(next) as MotionProperty[],
+        time,
+        group,
+        playOptions.at,
       );
       const adopted =
         plan?.landing != null
@@ -3921,6 +4668,7 @@ export function createMotionEngine(
         changed,
         time,
         playOptions.start === 'presented' && playOptions.at == null,
+        waitsForFrame,
       );
       if (plan?.borrowed != null) {
         // The dip's own commit cleared it; the borrow lasts the dip.
@@ -3942,7 +4690,7 @@ export function createMotionEngine(
     decay(curves, decayOptions = {}) {
       syncPending();
       flushDeferred();
-      const time = decayOptions.at ?? now();
+      const time = decayOptions.at ?? callTime(now);
       // Under Reduce Motion only momentum keeps moving (DR2, DEC-2): a curve
       // that is a transition plays as `animate` does, a cross-fade or at once.
       const reduce = prefersReducedMotion();
@@ -3970,6 +4718,7 @@ export function createMotionEngine(
         return transitioned;
       }
       const group = beginGroup(time, properties, decayOptions.at);
+      const waitsForFrame = noteShown(properties, time, group, decayOptions.at);
       for (const property of properties) {
         const curve = curves[property] as MotionCurve;
         interrupt(property, time);
@@ -3988,7 +4737,7 @@ export function createMotionEngine(
           owner,
         });
       }
-      commitCall(group, owner, properties, time);
+      commitCall(group, owner, properties, time, false, waitsForFrame);
       const handle = makeHandle(owner, properties, finished, time, group);
       if (transitioned == null) {
         return handle;
@@ -4040,9 +4789,15 @@ export function createMotionEngine(
           continue;
         }
         // A Reduce Motion fade is never left half done: it finishes, and a
-        // dip on the stylesheet's opacity hands that opacity back.
+        // dip on the stylesheet's opacity hands that opacity back. A call
+        // that continued the motion and is still not on screen past its
+        // frame shows the old curve: the element stops where that is.
+        const noted = shown.get(property);
+        shown.delete(property);
         const value = !segment.isFade
-          ? valueAt(property, time)
+          ? noted != null && time - noted.since > LATE_START_MS
+            ? shownAt(noted, time).value
+            : valueAt(property, time)
           : wasBorrowed
             ? IDENTITY.opacity
             : heading;
@@ -4070,6 +4825,10 @@ export function createMotionEngine(
       ][]) {
         if (delta === 0) {
           continue;
+        }
+        const noted = shown.get(property);
+        if (noted != null) {
+          noted.offset += delta;
         }
         const segment = segmentAt(property, time);
         if (segment == null) {
@@ -4154,12 +4913,23 @@ export function createMotionEngine(
           }
           replace({
             ...segment,
+            source: undefined,
             target: segment.target + delta,
             at: t => segment.at(t) + delta,
           });
         }
       }
-      commit(changed, time);
+      // A waiting channel shows its old curve, moved with the element, until
+      // the frame that commits its call.
+      commit(
+        changed.filter(property => !heldForFrame.has(CHANNEL_OF[property])),
+        time,
+      );
+      for (const channel of new Set(changed.map(p => CHANNEL_OF[p]))) {
+        if (heldForFrame.has(channel)) {
+          rebuildShown(channel, time);
+        }
+      }
       // The handles that own the rebased curves finish at their new ends.
       for (const owner of owners) {
         if (owner.settled || owner.timer == null) {
@@ -4242,6 +5012,8 @@ export function createMotionEngine(
       }
       running.clear();
       stale.clear();
+      forgetShown();
+      heldForFrame.clear();
       for (const timer of retireTimers.values()) {
         clearTimeout(timer);
       }

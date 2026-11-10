@@ -81,10 +81,12 @@ import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
+import {CodeTabPlugin} from './CodeTabPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {DisabledLinkGuardPlugin} from './DisabledLinkGuardPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
 import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
@@ -361,7 +363,8 @@ export interface RichTextEditorProps extends Omit<
   isReadOnly?: boolean;
   /**
    * Whether the editor is disabled: non-editable, dimmed, out of the tab
-   * order, and announced as disabled. Wins when `isReadOnly` is also set.
+   * order, and announced as disabled. Its links do not navigate and are not
+   * tab stops. Wins when `isReadOnly` is also set.
    * Takes effect when changed after mount.
    * @default false
    */
@@ -715,6 +718,7 @@ export const RichTextEditor = function RichTextEditor({
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
+              <DisabledLinkGuardPlugin isDisabled={isDisabled} />
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
                   between cells. GFM tables have no merged cells or cell
@@ -738,6 +742,9 @@ export const RichTextEditor = function RichTextEditor({
                   transformers={markdownTransformers}
                 />
               ) : null}
+              {/* In a code block, Tab indents the lines the selection
+                  touches instead of inserting a tab character. */}
+              <CodeTabPlugin />
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
               <SelectAllScopePlugin />
@@ -832,7 +839,8 @@ const ESCAPE_REARM_EXEMPT_KEYS = new Set([
  * listeners from the highest priority down, stopping at the first one that
  * returns true. Registering at COMMAND_PRIORITY_LOW (1) therefore runs first;
  * when the escape is armed we return true WITHOUT calling
- * `event.preventDefault()`, so the indentation handler never sees the event
+ * `event.preventDefault()`, so the indentation handlers (TabIndentationPlugin,
+ * and CodeTabPlugin at the front of the same priority) never see the event
  * and the browser performs its default Tab focus navigation.
  */
 function TabFocusEscapePlugin(): null {
