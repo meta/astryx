@@ -150,13 +150,14 @@ jobs:
             const checks = byBot(allChecks).filter(run => !interactionRun(run) && !webkitWeeklyRun(run));
             const units = byBot(allUnits);
             let heavy = await due(checks, 'release-check', HEAVY_WINDOW_MINUTES, true);
+            let timingGate = false;
             // A person's run of main's tip covers it too.
             let unit = await due(units, 'full unit run', UNIT_WINDOW_MINUTES, false, allUnits);
 
             // The weekday release cut is at 08:00 Pacific: one release-check
-            // starts at about 06:30, whatever the window, so it finishes about
-            // an hour before the cut (FR24). It is dispatched once a day, for
-            // the tip unless the tip already has a check.
+            // starts at about 06:30, whatever the monitoring window, so it
+            // finishes about an hour before the cut (FR24). Every dispatch in
+            // this window runs the timing proof as cut evidence, once a day.
             const pacificParts = when => Object.fromEntries(
               new Intl.DateTimeFormat('en-US', {
                 timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
@@ -167,15 +168,19 @@ jobs:
             const dayOf = parts => `${parts.year}-${parts.month}-${parts.day}`;
             const minuteOf = parts => Number(parts.hour) * 60 + Number(parts.minute);
             const PRE_CUT = 6 * 60 + 30;
-            if (!heavy && !['Sat', 'Sun'].includes(pacific.weekday) && minuteOf(pacific) >= PRE_CUT && minuteOf(pacific) < PRE_CUT + 60) {
+            const inPreCutWindow = !['Sat', 'Sun'].includes(pacific.weekday) && minuteOf(pacific) >= PRE_CUT && minuteOf(pacific) < PRE_CUT + 60;
+            if (inPreCutWindow) {
               const startedToday = checks.some(run => {
                 if (run.conclusion === 'cancelled') return false;
                 const parts = pacificParts(Date.parse(run.created_at));
                 return dayOf(parts) === dayOf(pacific) && minuteOf(parts) >= PRE_CUT;
               });
-              if (!startedToday && !(await covered(checks, true))) {
+              if (heavy) {
+                timingGate = true;
+              } else if (!startedToday) {
                 core.notice(`The pre-cut release-check runs now for ${short}.`);
                 heavy = true;
+                timingGate = true;
               }
             }
 
@@ -202,7 +207,12 @@ jobs:
                 ...context.repo,
                 workflow_id: 'ci.yml',
                 ref: 'main',
-                inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
+                inputs: {
+                  operation: 'release-check',
+                  'release-branch': 'main',
+                  'expected-head': tip,
+                  'timing-gate': String(timingGate),
+                },
               });
             }
 

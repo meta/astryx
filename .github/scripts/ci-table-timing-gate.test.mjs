@@ -39,6 +39,24 @@ describe('Table release timing gate', () => {
   const step = job.steps.find(
     candidate => candidate.env?.ASTRYX_TABLE_TIMING_GATE !== undefined,
   );
+  const condition = conditionFor(job['runs-on'], '4-core-ubuntu');
+  const gates = ({actor = 'github-actions[bot]', timingGate = false} = {}) =>
+    Boolean(
+      Function(
+        'github',
+        'inputs',
+        `return (${condition});`,
+      )(
+        {
+          event_name: 'workflow_dispatch',
+          triggering_actor: actor,
+        },
+        {
+          operation: 'release-check',
+          'timing-gate': timingGate,
+        },
+      ),
+    );
 
   it('is set on the contract shards that run the release proof', () => {
     expect(step).toBeDefined();
@@ -46,7 +64,19 @@ describe('Table release timing gate', () => {
 
   it('gates on exactly the condition that picks 4-core-ubuntu', () => {
     expect(conditionFor(step.env.ASTRYX_TABLE_TIMING_GATE, '1')).toBe(
-      conditionFor(job['runs-on'], '4-core-ubuntu'),
+      condition,
     );
+  });
+
+  it('gates a person or release-tooling dispatch', () => {
+    expect(gates({actor: 'maintainer'})).toBe(true);
+  });
+
+  it('gates a bot re-check or pre-cut evidence dispatch', () => {
+    expect(gates({timingGate: true})).toBe(true);
+  });
+
+  it('keeps a bot monitoring dispatch report-only', () => {
+    expect(gates()).toBe(false);
   });
 });

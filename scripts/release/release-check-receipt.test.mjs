@@ -28,6 +28,15 @@ const run = (id, headSha, conclusion = 'success') => ({
   html_url: `https://github.com/o/r/actions/runs/${id}`,
 });
 const join = conclusion => ({name: 'release-check', conclusion});
+const contractShard = (number, label) => ({
+  name: `Accessibility spec-test contracts (${number}/6)`,
+  conclusion: 'success',
+  labels: [label],
+});
+const releaseJobs = (label = '4-core-ubuntu') => [
+  join('success'),
+  ...Array.from({length: 6}, (_, index) => contractShard(index + 1, label)),
+];
 /** A Main run dispatched for `sha`, as the scheduler names it. */
 const unitRunFor = (id, headSha, conclusion = 'success') => ({
   ...run(id, headSha, conclusion),
@@ -84,10 +93,10 @@ async function require_(options, sha = CUT) {
 }
 
 describe('the release-check receipt for a cut commit', () => {
-  it('accepts the exact cut commit whose release-check join passed', async () => {
+  it('accepts the exact cut commit whose 4-core release-check join passed', async () => {
     const {result, messages, listed} = await require_({
       runs: [run(7, CUT)],
-      jobs: {7: [join('success')]},
+      jobs: {7: releaseJobs()},
     });
     expect(result.id).toBe(7);
     expect(messages.failed).toEqual([]);
@@ -108,12 +117,41 @@ describe('the release-check receipt for a cut commit', () => {
       runs: [run(8, CUT), run(7, CUT)],
       jobs: {
         8: [{name: 'maintenance-request', conclusion: 'success'}],
-        7: [join('success')],
+        7: releaseJobs(),
       },
     });
     expect(
       (await findReleaseCheck({github, owner: 'o', repo: 'r', sha: CUT})).id,
     ).toBe(7);
+  });
+
+  it('rejects a bot-dispatched check whose timing contracts ran on the standard runner', async () => {
+    const {result, messages} = await require_({
+      runs: [run(7, CUT)],
+      jobs: {7: releaseJobs('ubuntu-latest')},
+    });
+    expect(result).toBeNull();
+    expect(messages.failed[0]).toMatch(
+      /^No passing timing-gated 4-core release-check for the cut commit/,
+    );
+  });
+
+  it('rejects a passing join with no timing-gated contract shard receipt', async () => {
+    const {result} = await require_({
+      runs: [run(7, CUT)],
+      jobs: {7: [join('success')]},
+    });
+    expect(result).toBeNull();
+  });
+
+  it('rejects an incomplete set of timing-gated contract shard receipts', async () => {
+    const {result} = await require_({
+      runs: [run(7, CUT)],
+      jobs: {
+        7: [join('success'), ...releaseJobs().slice(1, 6)],
+      },
+    });
+    expect(result).toBeNull();
   });
 
   it("fails naming main's last commit with both receipts when the cut commit has no passing release-check", async () => {
@@ -123,9 +161,9 @@ describe('the release-check receipt for a cut commit', () => {
       runs: [run(10, NEWER), run(9, CUT, 'failure'), run(8, OTHER)],
       units: [unitRunFor(21, NEWER, 'failure'), unitRunFor(20, OTHER)],
       jobs: {
-        10: [join('success')],
+        10: releaseJobs(),
         9: [join('failure')],
-        8: [join('success')],
+        8: releaseJobs(),
         20: [
           {name: 'test-ui (1/4)', conclusion: 'success'},
           {name: 'test-node (1/4)', conclusion: 'success'},
@@ -134,7 +172,7 @@ describe('the release-check receipt for a cut commit', () => {
     });
     expect(result).toBeNull();
     expect(messages.failed).toEqual([
-      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with both a passing release-check and a passing full unit run, ${OTHER}, or wait for main's next checks and cut from them.`,
+      `No passing timing-gated 4-core release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with both a passing release-check and a passing full unit run, ${OTHER}, or wait for main's next checks and cut from them.`,
     ]);
   });
 
@@ -145,7 +183,7 @@ describe('the release-check receipt for a cut commit', () => {
     });
     expect(result).toBeNull();
     expect(messages.failed[0]).toMatch(
-      /^No passing release-check for the cut commit/,
+      /^No passing timing-gated 4-core release-check for the cut commit/,
     );
     expect(messages.failed[0]).toMatch(
       /No recent main commit has both a passing release-check and a passing full unit run/,

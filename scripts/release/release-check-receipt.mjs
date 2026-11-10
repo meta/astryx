@@ -4,15 +4,16 @@
  * @file The passing canonical release-check for a release's exact cut commit.
  *
  * @input  the GitHub REST client and the cut commit from the release marker
- * @output the passing ci.yml release-check run for that commit, or a failure
- *   that names main's last commit with one (spec:AST-030 FR12, DEC-11)
+ * @output the passing 4-core ci.yml release-check run for that commit, or a
+ *   failure that names main's last commit with one (spec:AST-030 FR12, DEC-11)
  * @position read by release.yml's stable publish before anything is built
  */
 
 /**
  * Whether a ci.yml run is a passing canonical release-check: its
- * `release-check` join succeeded. A maintenance capture, also a dispatch of
- * ci.yml on main, has no such job.
+ * `release-check` join succeeded and every timing-contract shard passed on the
+ * release runner. A maintenance capture, also a dispatch of ci.yml on main,
+ * has no such jobs.
  */
 async function passedReleaseCheck({github, owner, repo, run}) {
   if (run.conclusion !== 'success') return false;
@@ -24,8 +25,18 @@ async function passedReleaseCheck({github, owner, repo, run}) {
     run_id: run.id,
     per_page: 100,
   });
-  return jobs.some(
-    job => job.name === 'release-check' && job.conclusion === 'success',
+  const contractShards = jobs.filter(job =>
+    job.name.startsWith('Accessibility spec-test contracts ('),
+  );
+  return (
+    jobs.some(
+      job => job.name === 'release-check' && job.conclusion === 'success',
+    ) &&
+    contractShards.length === 6 &&
+    contractShards.every(
+      job =>
+        job.conclusion === 'success' && job.labels?.includes('4-core-ubuntu'),
+    )
   );
 }
 
@@ -79,13 +90,15 @@ export async function requireReleaseCheck({github, core, owner, repo, sha}) {
   }
   const run = await findReleaseCheck({github, owner, repo, sha});
   if (run) {
-    core.info(`Cut commit ${sha} passed release-check in ${run.html_url}.`);
+    core.info(
+      `Cut commit ${sha} passed the 4-core release-check in ${run.html_url}.`,
+    );
     return run;
   }
   // A check can only be dispatched for main's tip, so the way forward is a
   // cut from a commit that has one.
   core.setFailed(
-    `No passing release-check for the cut commit ${sha}. ` +
+    `No passing timing-gated 4-core release-check for the cut commit ${sha}. ` +
       (await recutAdvice({github, owner, repo})),
   );
   return null;

@@ -293,7 +293,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     return calls;
   }
 
-  const releaseCheck = tip => ({
+  const releaseCheck = (tip, timingGate = false) => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'ci.yml',
@@ -302,6 +302,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       operation: 'release-check',
       'release-branch': 'main',
       'expected-head': tip,
+      'timing-gate': String(timingGate),
     },
   });
   // A unit run names the commit it tests (FR21, FR22).
@@ -370,7 +371,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           runs: [at(now, 90)],
           units: [at(now, 20)],
         });
-        expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+        expect(calls.dispatch).toEqual([releaseCheck(sha, true), unitRun]);
         expect(calls.notices).toContain(
           'The pre-cut release-check runs now for aaaaaaa.',
         );
@@ -387,7 +388,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.dispatch).toEqual([]);
     });
 
-    it('is not needed when the tip already has a check', async () => {
+    it('still starts cut evidence when the tip has only a monitoring check', async () => {
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 90, {head_sha: sha})],
@@ -398,7 +399,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           }),
         ],
       });
-      expect(calls.dispatch).toEqual([]);
+      expect(calls.dispatch).toEqual([releaseCheck(sha, true)]);
     });
 
     it.each([
