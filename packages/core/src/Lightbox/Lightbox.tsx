@@ -1261,11 +1261,14 @@ export function Lightbox({
     );
     const middle = boxRect.left + box.clientWidth / 2;
     const shown = media.getBoundingClientRect();
-    // A gallery's caption row can sit apart from the photo. There the media is
-    // the photo's rows and the caption's own box. So the band between them,
-    // and the row beside the caption, are outside it.
+    // A gallery's caption band can sit apart from the photo. There the media
+    // is the photo's rows, the band and the caption's own box, which an open
+    // caption lifts over the photo. So the space between the photo and the
+    // band is outside it.
     const captionBox =
       page === viewer ? null : caption?.getBoundingClientRect();
+    const bandBox =
+      page === viewer ? null : caption?.parentElement?.getBoundingClientRect();
     const isOutside = ({x, y}: {x: number; y: number}) => {
       const isOnShownPhoto =
         x >= shown.left &&
@@ -1287,7 +1290,13 @@ export function Lightbox({
         y <= captionBox.bottom &&
         x >= captionBox.left &&
         x <= captionBox.right;
-      return !isOnPhotoRows && !isOnCaption;
+      const isOnBand =
+        bandBox != null &&
+        y >= bandBox.top &&
+        y <= bandBox.bottom &&
+        x >= bandBox.left &&
+        x <= bandBox.right;
+      return !isOnPhotoRows && !isOnCaption && !isOnBand;
     };
     const press = pressPointRef.current;
     return (
