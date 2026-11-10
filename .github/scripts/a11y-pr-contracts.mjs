@@ -639,14 +639,16 @@ export function renderingFolders(importers, touched) {
 }
 
 /**
- * The files each interaction proof loads through its value imports, followed
- * file by file: relative and `@astryxdesign/<package>/<path>` specifiers. A
- * unit test, doc, record or accessibility spec in a component folder puts
- * nothing on a proof's page and selects no proof, unless a proof imports it;
- * this map finds that case (spec:AST-030 FR31). It throws when a proof or a
- * file it loads cannot be read, so a caller runs every proof instead.
+ * The files each proof page loads through value imports, followed file by
+ * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
+ * The roots are the interaction specs and what their pages render: the
+ * Storybook stories and Storybook's preview. A unit test, doc, record or
+ * accessibility spec in a component folder puts nothing on a proof's page and
+ * selects no proof, unless a root loads it; this map finds that case
+ * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
+ * read, so a caller runs every proof instead.
  * @param {{root: string, listed: string[], isProof: (file: string) => boolean}} options
- * @returns {Map<string, Set<string>>} each loaded file, to the proofs that load it
+ * @returns {Map<string, Set<string>>} each loaded file, to the roots that load it
  */
 export function proofImporters({root, listed, isProof}) {
   const known = new Set(listed);
@@ -660,19 +662,31 @@ export function proofImporters({root, listed, isProof}) {
       return resolve(
         path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
       );
-    const match = /^@astryxdesign\/([^/]+)\/(.+)$/.exec(specifier);
-    return match ? resolve(`packages/${match[1]}/src/${match[2]}`) : null;
+    const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+    return match
+      ? resolve(`packages/${match[1]}/src/${match[2] ?? 'index'}`)
+      : null;
+  };
+  const imports = new Map();
+  const importsOf = file => {
+    if (!imports.has(file)) {
+      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      imports.set(
+        file,
+        valueImports(text)
+          .map(({specifier}) => targetOf(file, specifier))
+          .filter(Boolean),
+      );
+    }
+    return imports.get(file);
   };
   const importers = new Map();
   for (const proof of listed.filter(isProof)) {
     const seen = new Set([proof]);
     const queue = [proof];
     while (queue.length > 0) {
-      const file = queue.pop();
-      const text = fs.readFileSync(path.join(root, file), 'utf8');
-      for (const {specifier} of valueImports(text)) {
-        const target = targetOf(file, specifier);
-        if (target == null || seen.has(target)) continue;
+      for (const target of importsOf(queue.pop())) {
+        if (seen.has(target)) continue;
         seen.add(target);
         queue.push(target);
         if (!importers.has(target)) importers.set(target, new Set());

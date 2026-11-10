@@ -327,9 +327,16 @@ export function selectProofs({listed, changed, shared, filters}) {
   return [...out];
 }
 
-// Files under a package's src that put nothing on a page a proof loads.
+// Files in a component package that put nothing on a page a proof loads.
+// Theme sources and every other package are shared code.
 const NOT_ON_A_PAGE =
-  /(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$/;
+  /^packages\/(?:core|lab|charts|richtext|vega)\/src\/(?!theme\/).*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$/;
+
+/** What a proof's page loads: the specs, the stories they open, the preview. */
+export const isProofPage = file =>
+  isInteractionSpec(file) ||
+  /\.stories\.[cm]?[jt]sx?$/.test(file) ||
+  file === 'apps/storybook/.storybook/preview.tsx';
 // A Storybook story, which renders the component it is named for.
 const STORY = /^apps\/storybook\/stories\/([A-Z][^/.]*)\.stories\.tsx$/;
 
@@ -381,12 +388,20 @@ export function chromiumSelection({
   const touched = new Set();
   const relevant = changed.filter(file => scope.test(file));
   for (const file of relevant) {
-    for (const proof of proofs.get(file) ?? []) specs.add(proof);
+    const loaders = [...(proofs.get(file) ?? [])];
+    for (const loader of loaders)
+      if (isInteractionSpec(loader)) specs.add(loader);
     if (isInteractionSpec(file)) {
       if (present.has(file)) specs.add(file);
       continue;
     }
-    if (NOT_ON_A_PAGE.test(file)) continue;
+    if (NOT_ON_A_PAGE.test(file)) {
+      // A story or the preview that loads it is on every page that opens it,
+      // and no map says which proofs open which story.
+      if (loaders.some(loader => !isInteractionSpec(loader)))
+        return full(`${file} is loaded by a story or Storybook's preview`);
+      continue;
+    }
     const story = STORY.exec(file);
     if (story) {
       const named = [
@@ -706,8 +721,7 @@ function selectChromium(args) {
   }
   if (importers != null && importers.size === 0) importers = null;
   try {
-    if (root)
-      proofs = proofImporters({root, listed, isProof: isInteractionSpec});
+    if (root) proofs = proofImporters({root, listed, isProof: isProofPage});
   } catch (error) {
     console.error(
       `The proofs' imports could not be followed: ${error.message}`,

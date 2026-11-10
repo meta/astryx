@@ -2629,10 +2629,10 @@ jobs:
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The Chromium selection (spec:AST-030 FR31): the specs a pull request
-      # reaches, or `full`. Its import graphs read the merge commit's package
-      # and harness sources. The leg count and every leg read its output; an
-      # empty output (a failed or skipped step) runs the full suite. The
-      # artifact feeds the escape log.
+      # reaches, or `full`. Its import graphs read the merge commit's package,
+      # harness and Storybook sources. The leg count and every leg read its
+      # output; an empty output (a failed or skipped step) runs the full
+      # suite. The artifact feeds the escape log.
       - name: Select the Chromium proofs
         id: select-chromium
         if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
@@ -2645,7 +2645,7 @@ jobs:
           listed="$RUNNER_TEMP/interaction-legs/listed.txt"
           git -C .test-scope ls-tree -r --name-only HEAD > "$listed"
           mapfile -t SOURCES < <(grep -oE '^packages/[^/]+/src/' "$listed" | sort -u)
-          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal
+          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal apps/storybook/stories apps/storybook/.storybook
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select-chromium \
             --listed "$listed" --changed "${CHANGED_FILES:-}" \
             --scope "$SCOPE_PATHS" --full-suite "${FULL_SUITE:-true}" \

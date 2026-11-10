@@ -11,6 +11,7 @@ import yaml from 'yaml';
 
 import {
   chromiumSelection,
+  isProofPage,
   costsFor,
   countTests,
   estimateSeconds,
@@ -1341,7 +1342,9 @@ describe('what a Chromium run covers for a pull request', () => {
     'packages/lab/src/Tour/Tour.tsx':
       "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport function Tour() {}\n",
     'packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts': '',
-    'apps/storybook/stories/Menu.stories.tsx': '',
+    'apps/storybook/stories/Menu.stories.tsx':
+      "import {Menu} from '@astryxdesign/core/Menu/Menu';\nimport {notes} from '../../../packages/core/src/Menu/Menu.doc.mjs';\n",
+    'packages/core/src/Menu/Menu.doc.mjs': '',
   };
   const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-selection-'));
   for (const [file, text] of Object.entries(files)) {
@@ -1369,7 +1372,7 @@ describe('what a Chromium run covers for a pull request', () => {
       scope,
       fullSuite: false,
       importers: importerGraph(tree),
-      proofs: proofImporters({root: tree, listed, isProof: isInteractionSpec}),
+      proofs: proofImporters({root: tree, listed, isProof: isProofPage}),
       selection,
       primitives,
       ...overrides,
@@ -1432,6 +1435,23 @@ describe('what a Chromium run covers for a pull request', () => {
     expect(
       select(['packages/core/src/Menu/__tests__/fixtures/press.ts']).specs,
     ).toContain(spec('Card'));
+  });
+
+  it('runs the full suite for a doc a story loads, since any proof may open the story', () => {
+    expect(select(['packages/core/src/Menu/Menu.doc.mjs'])).toMatchObject({
+      full: true,
+      reason:
+        "packages/core/src/Menu/Menu.doc.mjs is loaded by a story or Storybook's preview",
+    });
+  });
+
+  it('runs the full suite for a test outside the component packages or in a theme folder', () => {
+    for (const file of [
+      'packages/build/src/babel.test.mjs',
+      'packages/native/src/contract/contracts.test.ts',
+      'packages/core/src/theme/Theme.test.tsx',
+    ])
+      expect(select([file]), file).toMatchObject({full: true});
   });
 
   it('runs the full suite for a path in no component folder', () => {
