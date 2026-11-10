@@ -190,8 +190,8 @@ shared icon names under FR17.
   not run in Expo Go, and no package requires an Expo runtime library
   (`spec:AST-082/FR13`). Expo's API shapes do not limit the platform's API.
 - **FR12 — Astryx Stage is the contract developers build against.** Astryx
-  Stage is a development runtime, distributed as prebuilt binaries, that runs a
-  React Native Astryx app headless or in a window for previews, scripted
+  Stage is a development runtime, distributed as prebuilt binaries, that runs an app built
+  with these packages headless or in a window for previews, scripted
   checks, and agent loops.
   - Every public platform API has a Stage implementation whose behavior
     matches iOS and Android, or a documented gap.
