@@ -58,7 +58,18 @@ export interface StoryboardOptions {
   readonly columns?: number;
   /** Cell scale relative to CSS px (default 0.5). */
   readonly cellScale?: number;
+  /** How long `write` may compose the sheet, ms (default SHEET_BUDGET_MS). */
+  readonly sheetBudgetMs?: number;
 }
+
+/**
+ * How long `write` gives the sheet's composition, ms. A test writes its
+ * storyboard before its assertions, or in its catch before it rethrows. A
+ * composition the page cannot finish must not use the test's own time, or
+ * the test's error never surfaces. Past this, `write` writes each frame on
+ * its own instead, and says why in the trace.
+ */
+export const SHEET_BUDGET_MS = 10_000;
 
 export class Storyboard {
   readonly frames: StoryboardFrame[] = [];
@@ -136,7 +147,12 @@ export class Storyboard {
     };
   }
 
-  /** Composes the sheet, writes `sheet.png` + `trace.json`, attaches both. */
+  /**
+   * Composes the sheet, writes `sheet.png` + `trace.json`, attaches both. A
+   * composition that fails or runs past `sheetBudgetMs` writes each frame as
+   * `frame-NN.png` instead, with the reason in the trace's `sheet`. It never
+   * throws for that, so a failing test's own error is the one that surfaces.
+   */
   async write(
     testInfo?: TestInfo,
     extra: Readonly<Record<string, unknown>> = {},
@@ -144,14 +160,33 @@ export class Storyboard {
     if (this.frames.length === 0) {
       throw new Error(`storyboard ${this.options.name}: no frames`);
     }
-    const sheet = await composeSheet(this.page, this.frames, this.options);
+    const sheet = await composeSheetWithin(
+      this.page,
+      this.frames,
+      this.options,
+    );
     const browser =
       this.page.context().browser()?.browserType().name() ?? 'browser';
+    const images: Record<string, Buffer> =
+      'png' in sheet
+        ? {'sheet.png': sheet.png}
+        : Object.fromEntries(
+            this.frames.map((frame, i) => [
+              `frame-${String(i).padStart(2, '0')}.png`,
+              frame.png,
+            ]),
+          );
     return writeEvidence(
       `storyboards/${this.options.name}.${browser}`,
       {
-        'sheet.png': sheet,
-        'trace.json': JSON.stringify(this.trace(extra), null, 2),
+        ...images,
+        'trace.json': JSON.stringify(
+          this.trace(
+            'skipped' in sheet ? {...extra, sheet: sheet.skipped} : extra,
+          ),
+          null,
+          2,
+        ),
       },
       testInfo,
     );
@@ -162,8 +197,10 @@ async function composeSheet(
   page: Page,
   frames: readonly StoryboardFrame[],
   options: StoryboardOptions,
+  onScratch: (scratch: Page) => void = () => undefined,
 ): Promise<Buffer> {
   const scratch = await page.context().newPage();
+  onScratch(scratch);
   try {
     const dataUrl = await scratch.evaluate(
       async ({cells, columns, scale, title}) => {
@@ -233,6 +270,51 @@ async function composeSheet(
     return Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64');
   } finally {
     await scratch.close();
+  }
+}
+
+/**
+ * The sheet, or why it was skipped: the composition failed, or ran past the
+ * budget. Past the budget the scratch page closes, which ends the composition.
+ */
+async function composeSheetWithin(
+  page: Page,
+  frames: readonly StoryboardFrame[],
+  options: StoryboardOptions,
+): Promise<{png: Buffer} | {skipped: string}> {
+  const budgetMs = options.sheetBudgetMs ?? SHEET_BUDGET_MS;
+  let scratch: Page | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // A scratch page that opens after the budget closes at once, so nothing
+  // composes after `write` returns.
+  let lapsed = false;
+  const composing = composeSheet(page, frames, options, opened => {
+    scratch = opened;
+    if (lapsed) {
+      void opened.close().catch(() => undefined);
+    }
+  }).then(png => ({png}));
+  // Once the budget has passed, the composition's later rejection is moot.
+  composing.catch(() => undefined);
+  try {
+    return await Promise.race([
+      composing,
+      new Promise<{skipped: string}>(resolve => {
+        timer = setTimeout(() => {
+          lapsed = true;
+          resolve({
+            skipped: `the sheet's composition ran past ${budgetMs} ms, so each frame is written on its own`,
+          });
+        }, budgetMs);
+      }),
+    ]);
+  } catch (error) {
+    return {
+      skipped: `the sheet's composition failed (${error instanceof Error ? error.message : String(error)}), so each frame is written on its own`,
+    };
+  } finally {
+    clearTimeout(timer);
+    await scratch?.close().catch(() => undefined);
   }
 }
 

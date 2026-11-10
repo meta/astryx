@@ -6704,6 +6704,64 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(files['sheet.png']).toMatch(/sheet\.png$/);
   });
 
+  test("a storyboard whose sheet runs past its budget writes each frame and the reason, and doesn't throw", async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    // A 1 ms budget ends before the scratch page that composes the sheet
+    // opens. A sheet the page cannot finish on a loaded runner ends the same
+    // way.
+    const storyboard = new Storyboard(page, {
+      name: 'harness-self-test-sheet-budget',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      sheetBudgetMs: 1,
+    });
+    await storyboard.capture('first', 0);
+    await storyboard.capture('second', 16.7);
+    const files = await storyboard.write(testInfo);
+    expect(Object.keys(files).sort()).toEqual([
+      'frame-00.png',
+      'frame-01.png',
+      'trace.json',
+    ]);
+    const trace = JSON.parse(fs.readFileSync(files['trace.json'], 'utf8')) as {
+      sheet?: string;
+    };
+    expect(trace.sheet).toMatch(/composition ran past 1 ms/);
+  });
+
+  test('a scratch page that opens after the sheet budget closes, so nothing composes after write returns', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    const storyboard = new Storyboard(page, {
+      name: 'harness-self-test-sheet-budget-late-page',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      sheetBudgetMs: 50,
+    });
+    await storyboard.capture('first', 0);
+    // The scratch page opens 300 ms after `write` asks for it, past the
+    // 50 ms budget, as on a loaded runner. Its composition never finishes,
+    // so only the budget's close can close it.
+    const context = page.context();
+    const newPage = context.newPage.bind(context);
+    let opened: Page | undefined;
+    context.newPage = async () => {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      opened = await newPage();
+      opened.evaluate = (() =>
+        new Promise(() => undefined)) as Page['evaluate'];
+      return opened;
+    };
+    try {
+      const files = await storyboard.write(testInfo);
+      expect(Object.keys(files).sort()).toEqual(['frame-00.png', 'trace.json']);
+      await expect.poll(() => opened?.isClosed() ?? false).toBe(true);
+    } finally {
+      context.newPage = newPage;
+    }
+  });
+
   test('a capture the engine fails throws its error and records no frame', async ({
     page,
   }) => {

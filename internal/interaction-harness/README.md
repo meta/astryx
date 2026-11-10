@@ -557,7 +557,10 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
 `startScreencast` and `castStoryboard`. A photograph the engine fails
-throws the engine's error; a storyboard never takes it again.
+throws the engine's error; a storyboard never takes it again. `write`
+composes the sheet within `sheetBudgetMs` (10 s by default). Past it, or when
+the composition fails, `write` writes each frame on its own and gives the
+reason in the trace's `sheet`, so the test's own error still surfaces.
 
 ## Page freeze
 
