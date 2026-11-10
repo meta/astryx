@@ -61,6 +61,12 @@ export const overlayPaddingReset = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
+    // The corner a full-bleed descendant takes: the overlay root is not the
+    // page container's corner.
+    '--container-corner-start-start': '0px',
+    '--container-corner-start-end': '0px',
+    '--container-corner-end-start': '0px',
+    '--container-corner-end-end': '0px',
     // Added by descendants — fall through to each reader's own default.
     '--layout-padding-outer-x': 'initial',
     '--layout-padding-outer-y': 'initial',

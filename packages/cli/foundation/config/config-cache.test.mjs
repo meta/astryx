@@ -9,11 +9,12 @@ import {
   configContentHash,
   NO_CONFIG_HASH,
 } from './config-cache.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-cache-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-cache-test-'));
 });
 
 afterEach(() => {

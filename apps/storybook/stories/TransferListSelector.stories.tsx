@@ -14,8 +14,9 @@
  * SYNC: When selector commit behavior changes, update source, docs, and tests.
  */
 
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {createReorderable} from '@astryxdesign/core';
 import {TransferListSelector} from '@astryxdesign/lab';
 import type {TransferListOption, TransferListProps} from '@astryxdesign/lab';
 
@@ -92,15 +93,37 @@ const BASIC_TRANSFER_LIST_PROPS = {
   hasClear: true,
 } satisfies Omit<TransferListProps<string>, 'value' | 'onChange'>;
 
+/** The owner's reorder: each move lands in `setValue`'s value where reported. */
+function useMoveReorderable<T extends string>(
+  setValue: (update: (value: readonly T[]) => readonly T[]) => void,
+  isReorderable?: (value: T) => boolean,
+) {
+  return useMemo(
+    () =>
+      createReorderable<T>({
+        onReorder: ({key, to}) =>
+          setValue(current => {
+            const next = current.filter(item => item !== key);
+            next.splice(to, 0, key);
+            return next;
+          }),
+        isReorderable,
+      }),
+    [setValue, isReorderable],
+  );
+}
+
 function DefaultExample() {
   const defaults = ['name', 'owner', 'status'];
   const [value, setValue] = useState<readonly string[]>(defaults);
+  const reorderable = useMoveReorderable(setValue);
   return (
     <TransferListSelector
       {...BASIC_TRANSFER_LIST_PROPS}
       description={BASIC_DESCRIPTION}
       value={value}
       onChange={setValue}
+      reorderable={reorderable}
       triggerLabel={`${value.length} visible fields`}
     />
   );
@@ -113,12 +136,15 @@ export const Default: Story = {
 function StagedChangesExample() {
   const defaults = ['name', 'owner', 'status'];
   const [value, setValue] = useState<readonly string[]>(defaults);
+  // Staged: the selector moves its draft, and Apply commits it.
+  const stagedReorderable = useMoveReorderable(setValue);
   return (
     <TransferListSelector
       {...BASIC_TRANSFER_LIST_PROPS}
       description="Review the complete field selection before applying it."
       value={value}
       onChange={setValue}
+      reorderable={stagedReorderable}
       commitBehavior="staged"
       triggerLabel={`${value.length} visible fields`}
     />
@@ -136,7 +162,6 @@ const GROUPED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
     description: 'Required identity field',
     group: 'Identity',
     isTransferDisabled: true,
-    isReorderDisabled: true,
     disabledMessage: 'Name is required and fixed in position.',
   },
   {
@@ -158,9 +183,6 @@ const GROUPED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
     label: 'Status',
     description: 'Current workflow state',
     group: 'Planning',
-    isReorderDisabled: true,
-    disabledMessage:
-      'Status can be hidden but its current position is fixed while selected.',
   },
   {
     value: 'priority',
@@ -188,9 +210,13 @@ const GROUPED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   },
 ];
 
+const isMovableField = (field: string) =>
+  field !== 'name' && field !== 'status';
+
 function GroupedAndLockedExample() {
   const defaults = ['name', 'owner', 'status', 'updated'];
   const [value, setValue] = useState<readonly string[]>(defaults);
+  const reorderable = useMoveReorderable(setValue, isMovableField);
 
   return (
     <TransferListSelector
@@ -199,6 +225,8 @@ function GroupedAndLockedExample() {
       options={GROUPED_OPTIONS}
       value={value}
       onChange={setValue}
+      // Name and Status keep their place.
+      reorderable={reorderable}
       selectedLabel="Shown"
       availableLabel="Hidden"
       hasSelectAll
@@ -228,7 +256,6 @@ function UnorderedExample() {
       onChange={setValue}
       selectedLabel="Included"
       availableLabel="Not included"
-      isReorderable={false}
       hasSelectAll
       hasClear
       triggerLabel={`${value.length} included filters`}
@@ -258,7 +285,6 @@ function NarrowContainerExample() {
       placement="below"
       selectedLabel="Visible"
       availableLabel="Available"
-      isReorderable={false}
       hasSelectAll
       hasClear
     />

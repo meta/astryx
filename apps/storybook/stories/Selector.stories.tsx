@@ -4,8 +4,11 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {expect, waitFor} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
+import {VStack} from '@astryxdesign/core/Layout';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {RadioIndicator} from '@astryxdesign/core/Indicator';
 import {
@@ -1103,6 +1106,37 @@ export const PreSelected: Story = {
   },
 };
 
+/**
+ * A text field above a Selector. On a phone, focus the field so that its
+ * software keyboard rises, then open the Selector. Its list slides above the
+ * keyboard, with every option in view.
+ */
+export const OverlayBesideKeyboard: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [name, setName] = useState('');
+    const [value, setValue] = useState<string | undefined>('Banana');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '96px 24px 0',
+        }}>
+        <TextInput label="Name" value={name} onChange={setName} />
+        <div style={{height: 64}} />
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry', 'Fig']}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
+    );
+  },
+};
+
 // All variations
 export const AllVariations: Story = {
   render: () => {
@@ -1653,4 +1687,41 @@ export const IndicatorSpaceBottomSheetWideStart: Story = {
     usesRadioIndicator: true,
   }),
   tags: ['visual-baseline'],
+};
+
+/**
+ * Required search Selectors in the four ways a closed trigger gets its name:
+ * the field label with its marker, a form whose default hides the marker, a
+ * caller `aria-label`, and an InputGroup.
+ */
+export const SearchableRequired: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const options = ['Apple', 'Banana', 'Cherry'];
+    return (
+      <VStack gap={4}>
+        <Selector label="Fruit" options={options} hasSearch isRequired />
+        <FormLayout defaultOptionality="required">
+          <Selector label="Vegetable" options={options} hasSearch />
+        </FormLayout>
+        <Selector
+          label="Herb"
+          aria-label="Pick an herb"
+          options={options}
+          hasSearch
+          isRequired
+        />
+        <InputGroup label="Nut">
+          <InputGroupText>Kind</InputGroupText>
+          <Selector
+            label="Nut kind"
+            isLabelHidden
+            options={options}
+            hasSearch
+            isRequired
+          />
+        </InputGroup>
+      </VStack>
+    );
+  },
 };

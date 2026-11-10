@@ -9,6 +9,7 @@ import {
   IntegrationRootConflictError,
   patchIntegrationRoot,
 } from './manifest-writer.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -20,7 +21,7 @@ function manifest(source = 'export default {};\n', ext = 'mjs') {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-manifest-writer-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-manifest-writer-'));
 });
 
 afterEach(() => {
@@ -198,7 +199,7 @@ describe('patchIntegrationRoot', () => {
   it('refuses a manifest symlink whose target escapes the package', async () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"fixture"}\n');
     const outside = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-manifest-outside-'),
+      path.join(REPO_ROOT, '.astryx-manifest-outside-'),
     );
     try {
       const target = path.join(outside, 'integration.mjs');

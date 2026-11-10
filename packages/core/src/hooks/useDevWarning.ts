@@ -5,18 +5,17 @@
 /**
  * @file useDevWarning.ts
  * @input A component name, a message, and a boolean condition
- * @output Fires a dev-only `Component: message` warning once per mount
- * @position Core hook; the render-safe way to warn the builder from a component.
- *   A ref and an effect fire the warning once per mount, never during
- *   render, and without a re-render.
+ * @output Public once-per-mount warnings and an internal per-message variant
+ * @position Core hook; both paths share one render-safe diagnostic owner.
+ *   A stable instance and an effect warn after commit, without a re-render.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
  * - /packages/core/src/utils/devWarning.ts (the imperative counterpart)
  */
 
-import {useEffect, useRef} from 'react';
-import {devWarn} from '../utils/devWarning';
+import {useEffect, useState} from 'react';
+import {createDevWarnings} from '../utils/devWarning';
 
 /**
  * Fire a dev-only warning once per mount while `condition` is true.
@@ -39,13 +38,30 @@ export function useDevWarning(
   message: string,
   condition: boolean = true,
 ): void {
-  const hasWarnedRef = useRef(false);
-  // The console is outside React. The ref prints the warning one time, also
-  // when StrictMode runs the Effect again.
+  useWarning(component, message, condition, false);
+}
+
+/** Warns once for each distinct message. Internal. */
+export function useDevWarningPerMessage(
+  component: string,
+  message: string,
+  condition: boolean = true,
+): void {
+  useWarning(component, message, condition, true);
+}
+
+function useWarning(
+  component: string,
+  message: string,
+  condition: boolean,
+  isPerMessage: boolean,
+): void {
+  // State survives Fast Refresh, so a hot update does not repeat a warning.
+  const [warn] = useState(createDevWarnings);
   useEffect(() => {
-    if (condition && !hasWarnedRef.current) {
-      hasWarnedRef.current = true;
-      devWarn(component, message);
+    // Synchronize the development diagnostic sink after committed renders.
+    if (condition) {
+      warn(component, message, isPerMessage ? message : '');
     }
-  }, [component, message, condition]);
+  }, [component, message, condition, isPerMessage, warn]);
 }

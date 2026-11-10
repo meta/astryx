@@ -1624,9 +1624,10 @@ export function Step({
             className,
             style,
           )}
-          aria-current={isActive ? 'step' : undefined}
           data-testid={dataTestId}
-          {...rest}>
+          {...rest}
+          // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+          aria-current={isActive ? 'step' : undefined}>
           {hasButton ? (
             <button
               type="button"
@@ -1720,9 +1721,10 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
+        {...rest}
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+        aria-current={isActive ? 'step' : undefined}>
         {hasButton ? (
           <button
             type="button"
@@ -1769,9 +1771,10 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
+        {...rest}
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+        aria-current={isActive ? 'step' : undefined}>
         {/* 4px progress bar */}
         <div
           {...mergeProps(
@@ -1837,9 +1840,10 @@ export function Step({
         className,
         style,
       )}
-      aria-current={isActive ? 'step' : undefined}
       data-testid={dataTestId}
-      {...rest}>
+      {...rest}
+      // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+      aria-current={isActive ? 'step' : undefined}>
       {/* 4px progress bar segment for this step */}
       <div
         {...mergeProps(

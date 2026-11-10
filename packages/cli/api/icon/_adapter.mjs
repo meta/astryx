@@ -6,8 +6,8 @@
  *
  * @position api/icon — adapter for api/icon/{search,detail,list,use,map,add,
  *   new-set,new-definition}; it also carries the icon ranking, the icon-set
- *   writer, the set and definition authoring writes, and the config writer
- *   the leaves use
+ *   writer, the set and definition authoring writes, the default-look
+ *   rule, and the config writer the leaves use
  */
 
 import * as fs from 'node:fs';
@@ -28,15 +28,24 @@ export {
   importLine,
   leadingReading,
   matchIcon,
+  answeringMatches,
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
 export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
-export {setConfigString} from '../../foundation/config/config-writer.mjs';
+export {
+  setConfigString,
+  setConfigValue,
+} from '../../foundation/config/config-writer.mjs';
+export {
+  ICON_USE_ORDER_COMMAND,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   assertIconExport,
   checkNewDefinition,
+  definitionNameFromInput,
   definitionFile,
   findLocalIconSet,
   writeDefinitionFile,
@@ -53,6 +62,9 @@ export {
   iconExportName,
   iconNaming,
   modulePrefix,
+  moduleNaming,
+  iconNamingWithoutLook,
+  splitLook,
   setModuleNote,
   variantExportName,
   writeGeneratedIcons,
@@ -65,6 +77,7 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
+export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 
 /**
  * Refuse a command that writes to a project or package when `cwd` is outside
@@ -171,9 +184,10 @@ function findProjectDir(cwd) {
  * `experimental.iconSet`, read from the project's package.json; null when
  * nothing says so.
  * @param {string} projectDir
+ * @param {{list?: boolean}} [options] `list`: the value written is a list
  * @returns {string | null}
  */
-export function iconSetConfigCliWarning(projectDir) {
+export function iconSetConfigCliWarning(projectDir, options = {}) {
   let pkg;
   try {
     pkg = JSON.parse(
@@ -182,5 +196,5 @@ export function iconSetConfigCliWarning(projectDir) {
   } catch {
     return null;
   }
-  return projectIconSetCliWarning(pkg);
+  return projectIconSetCliWarning(pkg, options);
 }

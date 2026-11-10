@@ -133,6 +133,61 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * The name of a named native radio, or null for any other element and for an
+ * unnamed radio, which is its own Tab stop.
+ */
+function radioNameOf(el: Element): string | null {
+  if (!el.matches('input[type="radio"][name]')) {
+    return null;
+  }
+  return (el as HTMLInputElement).name || null;
+}
+
+/**
+ * Whether two radios are one group: the same name and the same form owner (or
+ * both with no form).
+ */
+function isSameRadioGroup(a: Element, b: Element): boolean {
+  const name = radioNameOf(a);
+  return (
+    name != null &&
+    name === radioNameOf(b) &&
+    (a as HTMLInputElement).form === (b as HTMLInputElement).form
+  );
+}
+
+/**
+ * Drop the radios the browser skips for Tab, leaving every other element, and
+ * each kept radio, at its own place. In a named group the browser stops only at
+ * the focused radio, else the checked one; a group with nothing checked keeps
+ * every radio, so a forward entry reaches its first and a backward entry its
+ * last.
+ *
+ * Exported for menus that walk their own Tab stops (DropdownMenu's header and
+ * footer), so they skip radios exactly as the focus region does.
+ */
+export function collapseRadioGroups(
+  elements: HTMLElement[],
+  active: Element | null,
+): HTMLElement[] {
+  return elements.filter(el => {
+    if (radioNameOf(el) == null) {
+      return true;
+    }
+    if (active != null && isSameRadioGroup(el, active)) {
+      return el === active;
+    }
+    return (
+      (el as HTMLInputElement).checked ||
+      !elements.some(
+        other =>
+          isSameRadioGroup(el, other) && (other as HTMLInputElement).checked,
+      )
+    );
+  });
+}
+
+/**
  * The document a trap lives in: its container's. An app that renders into a
  * same-origin iframe or a Document Picture-in-Picture window through a portal
  * puts the trap in that window's document, whose key presses and focus
@@ -376,8 +431,13 @@ export function useFocusRegionContainment(
           return;
         }
 
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
+        // jsdom groups a selector list by selector, not in document order.
+        const stops = collapseRadioGroups(
+          [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
+          active,
+        );
+        const first = stops[0];
+        const last = stops[stops.length - 1];
 
         if (doc.activeElement === container) {
           // Programmatic initial focus can sit on the trap container itself
@@ -500,14 +560,36 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    * falls back to the element focused at activation.
    */
   getRestoreTarget?: () => HTMLElement | null;
+  /**
+   * Where focus goes on deactivation when the restore target is gone (no
+   * longer connected), read at deactivation. Without it, focus is left where
+   * the browser puts it.
+   */
+  getRestoreFallback?: () => HTMLElement | null;
+  /**
+   * Moves focus to the element the trap restores to on deactivation, in
+   * place of `element.focus()`, so the caller knows which focus is the
+   * return.
+   */
+  restoreFocusTo?: (element: HTMLElement) => void;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape, getRestoreTarget} = options;
+  const {
+    isActive,
+    onEscape,
+    getRestoreTarget,
+    getRestoreFallback,
+    restoreFocusTo,
+  } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
+  const getRestoreFallbackRef = useRef(getRestoreFallback);
+  getRestoreFallbackRef.current = getRestoreFallback;
+  const restoreFocusToRef = useRef(restoreFocusTo);
+  restoreFocusToRef.current = restoreFocusTo;
 
   const containerRef = useRef<T | null>(null);
 
@@ -599,6 +681,15 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     };
     doc.addEventListener('focusin', markFocusInside, true);
 
+    const restoreFocus = (element: HTMLElement) => {
+      const restoreTo = restoreFocusToRef.current;
+      if (restoreTo == null) {
+        element.focus();
+      } else {
+        restoreTo(element);
+      }
+    };
+
     return () => {
       doc.removeEventListener('focusin', markFocusInside, true);
 
@@ -610,12 +701,23 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
         return;
       }
 
+      // The page itself is no place to return to: an opener removed before
+      // the overlay opened leaves the body as the element focused then.
+      const isPage =
+        previouslyFocused === doc.body ||
+        previouslyFocused === doc.documentElement;
       if (
         previouslyFocused != null &&
         previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function'
+        typeof previouslyFocused.focus === 'function' &&
+        !(isPage && getRestoreFallbackRef.current != null)
       ) {
-        previouslyFocused.focus();
+        restoreFocus(previouslyFocused);
+        return;
+      }
+      const fallback = getRestoreFallbackRef.current?.();
+      if (fallback != null && fallback.isConnected) {
+        restoreFocus(fallback);
       }
     };
   }, [isActive]);

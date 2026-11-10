@@ -2,7 +2,14 @@
 
 'use client';
 
-import {type CSSProperties, type ReactNode} from 'react';
+/**
+ * @file Theme comparison shell and embeddable preview.
+ * @input Optional product images, product descriptions, and inventory fixtures
+ * @output One responsive showcase built from Astryx components
+ * @position Theme preview shared by the sandbox, docsite, and playground
+ */
+
+import {type CSSProperties, useRef, useState} from 'react';
 import {
   Plus,
   Search,
@@ -23,11 +30,20 @@ import {
   User,
 } from 'lucide-react';
 import {Text, Heading} from '@astryxdesign/core/Text';
-import {VStack, HStack} from '@astryxdesign/core/Layout';
-import {useAppShellMobile} from '@astryxdesign/core/AppShell';
-import {Grid, GridSpan} from '@astryxdesign/core/Grid';
+import {
+  VStack,
+  HStack,
+  Layout,
+  LayoutContent,
+  LayoutHeader,
+  LayoutFooter,
+} from '@astryxdesign/core/Layout';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
+import {Grid} from '@astryxdesign/core/Grid';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
 import {Link} from '@astryxdesign/core/Link';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
@@ -44,7 +60,7 @@ import {Center} from '@astryxdesign/core/Center';
 import {Section} from '@astryxdesign/core/Section';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
-import {OverflowList} from '@astryxdesign/core/OverflowList';
+import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {
   ChatComposer,
@@ -52,204 +68,17 @@ import {
   ChatMessageBubble,
   ChatMessageList,
   ChatSystemMessage,
+  useChatNewMessages,
+  useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
 
-// Styles passed to Astryx components via their `style` prop. Astryx components
-// forward the DOM `style` prop, so these work with no CSS compiler — in
-// compiled builds and in the live playground preview alike.
+// StackItem has no wrapping basis; Stack has no body variant.
+// LayoutContent has no height cap; keep the message viewport bounded.
 const styles: Record<string, CSSProperties> = {
-  card: {
-    backgroundColor: 'var(--color-background-body)',
-    color: 'var(--color-text-primary)',
-    minWidth: 0,
-    borderColor: 'transparent',
-  },
-  checkoutStack: {
-    minWidth: 0,
-    width: '100%',
-  },
-  paymentCardContent: {
-    minWidth: 0,
-    width: '100%',
-    textAlign: 'center',
-    wordBreak: 'break-word',
-  },
-  inventoryCard: {
-    backgroundColor: 'var(--color-background-surface)',
-    color: 'var(--color-text-primary)',
-    overflow: 'hidden',
-  },
-  inventoryHeader: {
-    paddingBlock: 'var(--spacing-6)',
-    paddingInline: 'var(--spacing-6)',
-  },
-  inventoryFilterRow: {
-    paddingBlock: 'var(--spacing-4)',
-    paddingInline: 'var(--spacing-6)',
-    width: '100%',
-    overflowX: 'auto' as const,
-  },
-  // Inset the table by --spacing-6 (the card is padding={0}) so its edge lines
-  // up with the header/filter row in every theme's spacing scale.
-  inventoryTableWrap: {
-    paddingInline: 'var(--spacing-6)',
-    paddingBlockEnd: 'var(--spacing-2)',
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    maxWidth: 240,
-  },
-  activityCard: {
-    backgroundColor: 'var(--color-background-surface)',
-    color: 'var(--color-text-primary)',
-    minWidth: 0,
-    height: '100%',
-  },
-  chatCard: {
-    backgroundColor: 'var(--color-background-surface)',
-    color: 'var(--color-text-primary)',
-    minWidth: 0,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  chatHeader: {
-    paddingBlock: 'var(--spacing-4)',
-    paddingInline: 'var(--spacing-4)',
-  },
-  activityCardStack: {
-    height: '100%',
-  },
-  activityListFade: {
-    flex: 1,
-    minHeight: 0,
-    overflow: 'hidden',
-    maskImage:
-      'linear-gradient(to bottom, black calc(100% - 48px), transparent)',
-    WebkitMaskImage:
-      'linear-gradient(to bottom, black calc(100% - 48px), transparent)',
-    marginInline: 'calc(var(--spacing-2) * -1)',
-  },
-  content: {
-    maxWidth: 960,
-    marginInline: 'auto',
-    minWidth: 0,
-  },
-  contentFluid: {
-    maxWidth: 880,
-  },
-  heroText: {
-    textAlign: 'center' as const,
-    maxWidth: 560,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  cardStack: {
-    height: '100%',
-  },
-  cardDescription: {
-    flex: 1,
-  },
-  quantityInput: {
-    flexShrink: 0,
-  },
-  // `auto` basis so the button wraps to its own line rather than ellipsizing.
-  cartButton: {
-    flex: '1 1 auto',
-    minWidth: 0,
-  },
-  cartRow: {
-    width: '100%',
-    minWidth: 0,
-  },
-};
-
-// Styles applied directly to plain DOM elements via the `style` prop.
-// Plain inline styles so they render with no CSS compiler. All are static
-// (no media/pseudo variants), so inline styles reproduce them exactly.
-const inlineStyles: Record<string, CSSProperties> = {
-  inventoryBannerWrap: {
-    paddingInline: 'var(--spacing-6)',
-    paddingBottom: 'var(--spacing-4)',
-  },
-  thumbnail: {
-    width: 40,
-    height: 40,
-    borderRadius: 'var(--radius-element)',
-    objectFit: 'cover',
-    display: 'block',
-    flexShrink: 0,
-  },
-  thumbnailFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 'var(--radius-element)',
-    backgroundColor: 'var(--color-background-muted)',
-    color: 'var(--color-text-secondary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 'var(--font-size-sm)',
-    fontWeight: 600,
-    flexShrink: 0,
-  },
-  kpiValue: {
-    fontSize: 24,
-    fontWeight: 700,
-    lineHeight: 1.1,
-    color: 'var(--color-text-primary)',
-    fontFamily: 'var(--font-family-heading)',
-    letterSpacing: '-0.01em',
-  },
-  chatBody: {
-    flex: 1,
-    minHeight: 0,
-    overflow: 'hidden',
-  },
-  chatSuggestions: {
-    paddingInline: 'var(--spacing-4)',
-    paddingBottom: 'var(--spacing-2)',
-  },
-  chatComposer: {
-    paddingInline: 'var(--spacing-4)',
-    paddingBottom: 'var(--spacing-4)',
-  },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 'var(--radius-full)',
-    backgroundColor: 'var(--color-background-muted)',
-    color: 'var(--color-text-secondary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  cardBody: {
-    padding: 'var(--spacing-4)',
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  // Flex bases, not grid tracks: the checkout form needs a width floor, and the
-  // chat wraps to its own row rather than squeezing it under one.
-  checkoutColumn: {
-    flex: '1 1 300px',
-    minWidth: 0,
-    display: 'grid',
-  },
-  chatColumn: {
-    flex: '2 1 520px',
-    minWidth: 0,
-    display: 'grid',
-  },
+  preview: {backgroundColor: 'var(--color-background-body)'},
+  checkoutColumn: {flex: '1 1 300px'},
+  chatColumn: {flex: '2 1 520px'},
+  chatViewport: {maxHeight: 720},
 };
 
 const PRODUCT_IMAGE_KEYS = ['watch', 'headphones', 'backpack'];
@@ -294,8 +123,6 @@ const DEFAULT_PRODUCTS: ProductSpec[] = [
   },
 ];
 
-// Neutral product photos, served from the shared astryx asset CDN so the
-// scaffolded template renders real imagery without needing local public assets.
 const DEFAULT_IMAGES: Record<string, string> = {
   watch: '/template-assets/Neutral-Watch.png',
   headphones: '/template-assets/Neutral-Headphones.png',
@@ -314,39 +141,106 @@ export interface ThemeShowcaseProps {
   inventory?: InventoryRow[];
 }
 
-// Default export is the route page (sandbox renders this as a Next.js page, so
-// it must take no props / satisfy PageProps). It renders the store with the
-// neutral defaults. Consumers that need per-theme content import the named
-// `ThemeShowcaseStore` below and pass images/products/inventory.
 export default function ThemeShowcase() {
-  return <ThemeShowcaseStore />;
+  return (
+    <AppShell
+      height="auto"
+      variant="surface"
+      contentPadding={0}
+      data-theme-preview="true"
+      topNav={<ShowcaseNavigation />}>
+      <ShowcaseContent headingLevel={1} />
+    </AppShell>
+  );
 }
 
-export function ThemeShowcaseStore({
+/** Embeddable comparison surface: the host owns its application shell. */
+export function ThemeShowcaseStore(props: ThemeShowcaseProps = {}) {
+  return (
+    <VStack gap={0} data-theme-preview="true" style={styles.preview}>
+      <ShowcaseNavigation />
+      <ShowcaseContent {...props} />
+    </VStack>
+  );
+}
+
+function ShowcaseContent({
   images = DEFAULT_IMAGES,
   products = DEFAULT_PRODUCTS,
   inventory = DEFAULT_INVENTORY,
-}: ThemeShowcaseProps = {}) {
+  headingLevel = 2,
+}: ThemeShowcaseProps & {headingLevel?: 1 | 2} = {}) {
   const {isMobile} = useAppShellMobile();
   return (
-    <div
-      style={{
-        minHeight: '100%',
-        backgroundColor: 'var(--color-background-body)',
-      }}>
-      <StorePreview images={images} products={products} isMobile={isMobile} />
-      <div
-        style={{
-          padding: 'var(--spacing-6)',
-          backgroundColor: 'var(--color-background-surface)',
-        }}>
-        <CardShowcase
-          images={images}
-          inventory={inventory}
-          isMobile={isMobile}
-        />
-      </div>
-    </div>
+    <Layout height="auto" padding={0}>
+      <LayoutContent padding={0} isScrollable={false}>
+        <VStack gap={0}>
+          <StorePreview
+            images={images}
+            products={products}
+            headingLevel={headingLevel}
+          />
+          <Section padding={6} variant="transparent">
+            <CardShowcase
+              images={images}
+              inventory={inventory}
+              isMobile={isMobile}
+            />
+          </Section>
+        </VStack>
+      </LayoutContent>
+    </Layout>
+  );
+}
+
+function ShowcaseNavigation() {
+  const {isMobile} = useAppShellMobile();
+  return (
+    <TopNav
+      label="Theme preview navigation"
+      heading={<TopNavHeading heading="Studio" />}
+      centerContent={
+        isMobile ? undefined : (
+          <>
+            <TopNavItem label="Shop" href="#" isSelected />
+            <TopNavItem label="New In" href="#" />
+            <TopNavItem label="Stories" href="#" />
+            <TopNavItem label="Help" href="#" />
+          </>
+        )
+      }
+      endContent={
+        <HStack gap={2} vAlign="center">
+          <HStack gap={0.5}>
+            <Button
+              label="Search"
+              tooltip="Search"
+              variant="ghost"
+              isIconOnly
+              icon={<Icon icon={Search} size="md" />}
+              href="#"
+            />
+            <Button
+              label="Account"
+              tooltip="Account"
+              variant="ghost"
+              isIconOnly
+              icon={<Icon icon={User} size="md" />}
+              href="#"
+            />
+            <Button
+              label="Cart"
+              tooltip="Cart"
+              variant="ghost"
+              isIconOnly
+              icon={<Icon icon={ShoppingBag} size="md" />}
+              href="#"
+            />
+          </HStack>
+          <Button label="Sign in" variant="primary" href="#" />
+        </HStack>
+      }
+    />
   );
 }
 
@@ -359,26 +253,32 @@ function CardShowcase({
   inventory: InventoryRow[];
   isMobile: boolean;
 }) {
-  const columns = isMobile ? 1 : ({minWidth: 200, repeat: 'fit'} as const);
-
+  const activity = <LatestActivityCard />;
   return (
     <VStack gap={8}>
       <HStack gap={4} wrap="wrap">
-        <div style={inlineStyles.checkoutColumn}>
-          <CheckoutCard isMobile={isMobile} />
-        </div>
-        <div style={inlineStyles.chatColumn}>
+        <StackItem size="fill" style={styles.checkoutColumn}>
+          <CheckoutCard />
+        </StackItem>
+        <StackItem size="fill" style={styles.chatColumn}>
           <ChatCard />
-        </div>
+        </StackItem>
       </HStack>
-      <Grid columns={columns} gap={4}>
-        <GridSpan columns={isMobile ? 1 : 3}>
-          <InventoryCard images={images} inventory={inventory} />
-        </GridSpan>
-        <GridSpan columns={1}>
-          <LatestActivityCard isMobile={isMobile} />
-        </GridSpan>
-      </Grid>
+      <HStack gap={isMobile ? 4 : 0} wrap={isMobile ? 'wrap' : 'nowrap'}>
+        <StackItem size="fill">
+          <InventoryCard
+            key={inventory.map(row => row.name).join('|')}
+            images={images}
+            inventory={inventory}
+          />
+        </StackItem>
+        <VStack
+          as={StackItem}
+          width={isMobile ? '100%' : 280}
+          paddingInlineStart={isMobile ? 0 : 4}>
+          {activity}
+        </VStack>
+      </HStack>
     </VStack>
   );
 }
@@ -386,163 +286,137 @@ function CardShowcase({
 function StorePreview({
   images,
   products,
-  isMobile,
+  headingLevel,
 }: {
   images: Record<string, string>;
   products: ProductSpec[];
-  isMobile: boolean;
+  headingLevel: 1 | 2;
 }) {
   return (
-    <div data-theme-preview="true">
-      <VStack gap={0}>
-        <TopNav
-          label="Theme preview navigation"
-          heading={<TopNavHeading heading="Studio" />}
-          centerContent={
-            isMobile ? undefined : (
-              <>
-                <TopNavItem label="Shop" href="#" isSelected />
-                <TopNavItem label="New In" href="#" />
-                <TopNavItem label="Stories" href="#" />
-                <TopNavItem label="Help" href="#" />
-              </>
-            )
-          }
-          endContent={
-            <HStack gap={2} vAlign="center">
-              <HStack gap={0.5}>
-                <Button
-                  label="Search"
-                  tooltip="Search"
-                  variant="ghost"
-                  isIconOnly
-                  icon={<Search size={20} />}
-                  href="#"
-                />
-                <Button
-                  label="Account"
-                  tooltip="Account"
-                  variant="ghost"
-                  isIconOnly
-                  icon={<User size={20} />}
-                  href="#"
-                />
-                <Button
-                  label="Cart"
-                  tooltip="Cart"
-                  variant="ghost"
-                  isIconOnly
-                  icon={<ShoppingBag size={20} />}
-                  href="#"
-                />
-              </HStack>
-              <Button label="Sign in" variant="primary" href="#" />
-            </HStack>
-          }
-        />
-
-        <Section padding={6} variant="transparent">
-          <VStack gap={10} style={{...styles.content, ...styles.contentFluid}}>
-            <Center>
-              <VStack gap={4} hAlign="center" style={styles.heroText}>
-                <Text type="display-2" color="accent">
+    <Section padding={6} variant="transparent">
+      <Center>
+        <VStack gap={10} width="100%" maxWidth={880}>
+          <Center>
+            <VStack gap={4} hAlign="center" maxWidth={560}>
+              <Heading
+                level={1}
+                accessibilityLevel={headingLevel}
+                type="display-2"
+                color="accent"
+                justify="center">
+                <Text type="inherit" display="block">
                   Little joys,
-                  <br />
+                </Text>
+                <Text type="inherit" display="block">
                   everywhere you go
                 </Text>
-                <Text type="body" color="secondary">
-                  We believe the smallest details are the ones that matter most.
-                  Turn an ordinary day into something worth remembering.
-                </Text>
-              </VStack>
-            </Center>
-
-            <Grid columns={isMobile ? 1 : {minWidth: 200, max: 3}} gap={4}>
-              {products.map((p, i) => (
-                <Card key={p.name} padding={0} height="100%">
-                  <VStack gap={0} style={styles.cardStack}>
-                    <AspectRatio ratio={1}>
-                      <img
-                        src={images[PRODUCT_IMAGE_KEYS[i]]}
-                        alt={p.name}
-                        style={inlineStyles.productImage}
-                      />
-                    </AspectRatio>
-                    <div style={inlineStyles.cardBody}>
-                      <VStack gap={2} hAlign="center" style={styles.cardStack}>
-                        <HStack>
-                          <Badge label={p.badge} variant={p.badgeVariant} />
-                        </HStack>
-                        <Heading level={2} style={styles.centerText}>
-                          {p.name}
-                        </Heading>
-                        <Text
-                          type="supporting"
-                          color="secondary"
-                          style={{
-                            ...styles.cardDescription,
-                            ...styles.centerText,
-                          }}>
-                          {p.description}
-                        </Text>
-                        <HStack
-                          gap={2}
-                          vAlign="center"
-                          hAlign="center"
-                          wrap="wrap"
-                          style={styles.cartRow}>
-                          <NumberInput
-                            label="Quantity"
-                            isLabelHidden
-                            value={1}
-                            onChange={() => {}}
-                            min={1}
-                            max={99}
-                            size="sm"
-                            width={72}
-                            controlStyle={styles.quantityInput}
-                          />
-                          <Button
-                            label="Add to cart"
-                            variant="secondary"
-                            size="sm"
-                            href="#"
-                            style={styles.cartButton}
-                          />
-                        </HStack>
-                      </VStack>
-                    </div>
-                  </VStack>
-                </Card>
-              ))}
-            </Grid>
-          </VStack>
-        </Section>
-      </VStack>
-    </div>
+              </Heading>
+              <Text type="body" color="secondary" justify="center">
+                We believe the smallest details are the ones that matter most.
+                Turn an ordinary day into something worth remembering.
+              </Text>
+            </VStack>
+          </Center>
+          <Grid columns={{minWidth: 200, max: 3}} gap={4}>
+            {products.map((product, index) => (
+              <ProductCard
+                key={product.name}
+                product={product}
+                image={images[PRODUCT_IMAGE_KEYS[index]]}
+              />
+            ))}
+          </Grid>
+        </VStack>
+      </Center>
+    </Section>
   );
 }
 
-function CheckoutCard({isMobile}: {isMobile: boolean}) {
+function ProductCard({product, image}: {product: ProductSpec; image?: string}) {
+  const [quantity, setQuantity] = useState<number | null>(1);
+  const [isAdded, setIsAdded] = useState(false);
   return (
-    <Card padding={isMobile ? 4 : 5} style={styles.card}>
-      <VStack gap={4} style={styles.checkoutStack}>
-        <Heading level={2}>Checkout</Heading>
+    <Card padding={0} height="100%">
+      <VStack gap={0} height="100%">
+        <AspectRatio ratio={1} fit="cover">
+          <img src={image} alt={product.name} />
+        </AspectRatio>
+        <StackItem size="fill">
+          <VStack padding={4} gap={2} hAlign="center" height="100%">
+            <Badge label={product.badge} variant={product.badgeVariant} />
+            <Heading level={2} justify="center">
+              {product.name}
+            </Heading>
+            <StackItem size="fill">
+              <Text
+                type="supporting"
+                color="secondary"
+                justify="center"
+                display="block">
+                {product.description}
+              </Text>
+            </StackItem>
+            <HStack
+              gap={2}
+              vAlign="center"
+              hAlign="center"
+              wrap="wrap"
+              width="100%">
+              <NumberInput
+                label="Quantity"
+                isLabelHidden
+                value={quantity}
+                onChange={value => {
+                  setQuantity(value);
+                  setIsAdded(false);
+                }}
+                min={1}
+                max={99}
+                size="sm"
+                width={72}
+              />
+              <Button
+                label={isAdded ? 'Added to cart' : 'Add to cart'}
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsAdded(true)}
+              />
+            </HStack>
+          </VStack>
+        </StackItem>
+      </VStack>
+    </Card>
+  );
+}
 
-        <VStack gap={3} style={styles.checkoutStack}>
+function CheckoutCard() {
+  const {isMobile} = useAppShellMobile();
+  const [email, setEmail] = useState('');
+  const [shipping, setShipping] = useState('economy');
+  const [payment, setPayment] = useState('card');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [country, setCountry] = useState<string | undefined>('us');
+  const [saveInformation, setSaveInformation] = useState(true);
+  const [showPaymentPreview, setShowPaymentPreview] = useState(false);
+  return (
+    <Card height="100%" padding={isMobile ? 4 : 5}>
+      <VStack gap={4}>
+        <Heading level={2}>Checkout</Heading>
+        <VStack gap={3}>
           <TextInput
             label="Email"
             placeholder="you@studio.com"
-            value=""
-            onChange={() => {}}
+            value={email}
+            onChange={setEmail}
             size="lg"
           />
-
           <RadioList
             label="Shipping method"
             description="Delivery time may vary based on location and availability."
-            value="economy"
-            onChange={() => {}}>
+            value={shipping}
+            onChange={setShipping}>
             <RadioListItem
               value="economy"
               label="Economy Shipping"
@@ -574,90 +448,85 @@ function CheckoutCard({isMobile}: {isMobile: boolean}) {
               }
             />
           </RadioList>
-
-          <VStack gap={2} style={styles.checkoutStack}>
+          <VStack gap={2}>
             <Text type="supporting" weight="bold">
               Payment method
             </Text>
-            <Grid columns={isMobile ? 1 : {minWidth: 80, max: 3}} gap={2}>
+            <Grid
+              columns={
+                isMobile ? {minWidth: 80, max: 1} : {minWidth: 80, max: 3}
+              }
+              gap={2}>
               <SelectableCard
                 label="Pay with card"
-                isSelected={true}
-                onChange={() => {}}
+                isSelected={payment === 'card'}
+                onChange={() => setPayment('card')}
                 padding={3}>
-                <VStack
-                  gap={1}
-                  hAlign="center"
-                  style={styles.paymentCardContent}>
-                  <CreditCard size={20} />
-                  <Text type="supporting" weight="bold">
+                <VStack gap={1} hAlign="center">
+                  <Icon icon={CreditCard} size="md" />
+                  <Text type="supporting" weight="bold" justify="center">
                     Card
                   </Text>
                 </VStack>
               </SelectableCard>
               <SelectableCard
                 label="Pay with Apple Pay"
-                isSelected={false}
-                onChange={() => {}}
+                isSelected={payment === 'apple'}
+                onChange={() => setPayment('apple')}
                 padding={3}>
-                <VStack
-                  gap={1}
-                  hAlign="center"
-                  style={styles.paymentCardContent}>
-                  <Smartphone size={20} />
-                  <Text type="supporting" weight="bold">
+                <VStack gap={1} hAlign="center">
+                  <Icon icon={Smartphone} size="md" />
+                  <Text type="supporting" weight="bold" justify="center">
                     Apple Pay
                   </Text>
                 </VStack>
               </SelectableCard>
               <SelectableCard
                 label="Pay with Google Pay"
-                isSelected={false}
-                onChange={() => {}}
+                isSelected={payment === 'google'}
+                onChange={() => setPayment('google')}
                 padding={3}>
-                <VStack
-                  gap={1}
-                  hAlign="center"
-                  style={styles.paymentCardContent}>
-                  <Wallet size={20} />
-                  <Text type="supporting" weight="bold">
+                <VStack gap={1} hAlign="center">
+                  <Icon icon={Wallet} size="md" />
+                  <Text type="supporting" weight="bold" justify="center">
                     Google Pay
                   </Text>
                 </VStack>
               </SelectableCard>
             </Grid>
           </VStack>
-
           <TextInput
             label="Card number"
             placeholder="1234 1234 1234 1234"
-            value=""
-            onChange={() => {}}
-            startIcon={isMobile ? undefined : <CreditCard size={16} />}
+            value={cardNumber}
+            onChange={setCardNumber}
+            startIcon={
+              isMobile ? undefined : <Icon icon={CreditCard} size="sm" />
+            }
             size="lg"
           />
-
-          <Grid columns={isMobile ? 1 : {minWidth: 90, max: 2}} gap={2}>
+          <Grid
+            columns={isMobile ? {minWidth: 90, max: 1} : {minWidth: 90, max: 2}}
+            gap={2}>
             <TextInput
               label="Expiry"
               placeholder="MM / YY"
-              value=""
-              onChange={() => {}}
+              value={expiry}
+              onChange={setExpiry}
               size="lg"
             />
             <TextInput
               label="CVC"
               placeholder="123"
-              value=""
-              onChange={() => {}}
+              value={cvc}
+              onChange={setCvc}
               size="lg"
             />
           </Grid>
-
           <Selector
             label="Country"
-            value="us"
-            onChange={() => {}}
+            value={country}
+            onChange={setCountry}
             size="lg"
             options={[
               {value: 'us', label: 'United States'},
@@ -669,19 +538,25 @@ function CheckoutCard({isMobile}: {isMobile: boolean}) {
             ]}
           />
         </VStack>
-
         <CheckboxInput
           label="Securely save my information for 1-click checkout"
           description="Pay faster on Studio and everywhere Link is accepted."
-          value={true}
-          onChange={() => {}}
+          value={saveInformation}
+          onChange={setSaveInformation}
         />
-
+        {showPaymentPreview && (
+          <Banner
+            status="info"
+            title="Payment preview only"
+            description="No payment is submitted or saved."
+          />
+        )}
         <Button
           variant="primary"
           size="lg"
           label="Pay now"
-          icon={<Lock size={16} />}
+          icon={<Icon icon={Lock} size="sm" />}
+          onClick={() => setShowPaymentPreview(true)}
         />
       </VStack>
     </Card>
@@ -695,201 +570,224 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 function ChatCard() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const {lock, isLocked, scrollIfLocked} = useChatStreamScroll({scrollRef});
+  const {contentRef} = useChatNewMessages({isLocked, onResize: scrollIfLocked});
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<Array<{id: number; text: string}>>(
+    [],
+  );
+  function submitMessage() {
+    const message = draft.trim();
+    if (!message) {
+      return;
+    }
+    lock();
+    setMessages(previous => [
+      ...previous,
+      {id: (previous.at(-1)?.id ?? 0) + 1, text: message},
+    ]);
+    setDraft('');
+  }
   return (
-    <Card padding={0} style={styles.chatCard}>
-      <HStack
-        hAlign="between"
-        vAlign="center"
-        gap={3}
-        style={styles.chatHeader}>
-        <Heading level={2}>Studio AI</Heading>
-
-        <HStack gap={1} vAlign="center">
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            label="Export conversation"
-            tooltip="Export conversation"
-            icon={<Download size={16} />}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            label="Close chat"
-            tooltip="Close chat"
-            icon={<X size={16} />}
-          />
-        </HStack>
-      </HStack>
-
-      <Divider variant="subtle" />
-
-      <div style={inlineStyles.chatBody}>
-        <ChatMessageList>
-          <ChatSystemMessage>Today</ChatSystemMessage>
-
-          <ChatMessage sender="user">
-            <ChatMessageBubble variant="filled">
-              Where’s my order?
-            </ChatMessageBubble>
-          </ChatMessage>
-
-          <ChatMessage sender="assistant">
-            <VStack gap={3}>
-              <Text type="body">
-                Your order #1043 — the Minimalist Watch and Linen Throw —
-                shipped this morning from the Aisle 3 warehouse and is currently
-                in transit with UPS. It’s on track to arrive at your address by
-                end of day tomorrow.
-              </Text>
-              <Text type="body">
-                Let me know if you’d like to reschedule the delivery, redirect
-                it to a pickup point, or start a return once it arrives.
-              </Text>
+    <Card padding={0} height="100%">
+      <Layout
+        height="fill"
+        padding={4}
+        header={
+          <LayoutHeader hasDivider>
+            <HStack hAlign="between" vAlign="center" gap={3}>
+              <Heading level={2}>Studio AI</Heading>
+              <HStack gap={1} vAlign="center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  label="Export conversation"
+                  tooltip="Export conversation"
+                  icon={<Icon icon={Download} size="sm" />}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  label="Close chat"
+                  tooltip="Close chat"
+                  icon={<Icon icon={X} size="sm" />}
+                />
+              </HStack>
+            </HStack>
+          </LayoutHeader>
+        }
+        footer={
+          <LayoutFooter>
+            <VStack gap={2}>
+              <HStack gap={1} hAlign="center" wrap="wrap">
+                {SUGGESTED_QUESTIONS.map(question => (
+                  <Button
+                    key={question}
+                    variant="secondary"
+                    size="sm"
+                    label={question}
+                    onClick={() => setDraft(question)}
+                  />
+                ))}
+              </HStack>
+              <ChatComposer
+                value={draft}
+                onChange={setDraft}
+                onSubmit={submitMessage}
+                placeholder="Ask Studio AI…"
+                footerActions={
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    isIconOnly
+                    label="Attach"
+                    tooltip="Attach"
+                    icon={<Icon icon={Plus} size="sm" />}
+                  />
+                }
+                sendActions={
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    isIconOnly
+                    label="Voice input"
+                    tooltip="Voice input"
+                    icon={<Icon icon={Mic} size="sm" />}
+                  />
+                }
+              />
             </VStack>
-          </ChatMessage>
-
-          <ChatMessage sender="user">
-            <ChatMessageBubble variant="filled">
-              Can you show me the full details?
-            </ChatMessageBubble>
-          </ChatMessage>
-
-          <ChatMessage sender="assistant">
-            <VStack gap={3}>
-              <Text type="body">Here’s everything I have on order #1043:</Text>
-              <Card padding={3}>
-                <VStack gap={1}>
-                  <Item
-                    label="Items"
-                    description="Minimalist Watch · Linen Throw"
-                    endContent={
-                      <Text type="body" weight="bold">
-                        $248
-                      </Text>
-                    }
-                  />
-                  <Item
-                    label="Shipping"
-                    description="UPS Ground"
-                    endContent={
-                      <Text type="body" weight="bold">
-                        $12
-                      </Text>
-                    }
-                  />
-                  <Item
-                    label="Estimated arrival"
-                    description="Tomorrow by 8pm"
-                    endContent={<Badge variant="green" label="On time" />}
-                  />
-                  <Item
-                    label="Tracking"
-                    description="UPS 1Z 999 AA1 0123 4567 84"
-                    endContent={<Link href="#">Track →</Link>}
-                  />
-                </VStack>
-              </Card>
-            </VStack>
-          </ChatMessage>
-        </ChatMessageList>
-      </div>
-
-      <div style={inlineStyles.chatSuggestions}>
-        <HStack gap={1} hAlign="center" wrap="wrap">
-          {SUGGESTED_QUESTIONS.map(question => (
-            <Button
-              key={question}
-              variant="secondary"
-              size="sm"
-              label={question}
-            />
-          ))}
-        </HStack>
-      </div>
-
-      <div style={inlineStyles.chatComposer}>
-        <ChatComposer
-          value=""
-          onChange={() => {}}
-          onSubmit={() => {}}
-          placeholder="Ask Studio AI…"
-          footerActions={
-            <Button
-              variant="ghost"
-              size="md"
-              isIconOnly
-              label="Attach"
-              tooltip="Attach"
-              icon={<Plus size={16} />}
-            />
-          }
-          sendActions={
-            <Button
-              variant="ghost"
-              size="md"
-              isIconOnly
-              label="Voice input"
-              tooltip="Voice input"
-              icon={<Mic size={16} />}
-            />
-          }
-        />
-      </div>
+          </LayoutFooter>
+        }>
+        <LayoutContent
+          ref={scrollRef}
+          style={styles.chatViewport}
+          padding={0}
+          label="Studio AI conversation">
+          <ChatMessageList ref={contentRef}>
+            <ChatSystemMessage>Today</ChatSystemMessage>
+            <ChatMessage sender="user">
+              <ChatMessageBubble variant="filled">
+                Where’s my order?
+              </ChatMessageBubble>
+            </ChatMessage>
+            <ChatMessage sender="assistant">
+              <VStack gap={3}>
+                <Text type="body">
+                  Your order #1043 — the Minimalist Watch and Linen Throw —
+                  shipped this morning from the Aisle 3 warehouse and is
+                  currently in transit with UPS. It’s on track to arrive at your
+                  address by end of day tomorrow.
+                </Text>
+                <Text type="body">
+                  Let me know if you’d like to reschedule the delivery, redirect
+                  it to a pickup point, or start a return once it arrives.
+                </Text>
+              </VStack>
+            </ChatMessage>
+            <ChatMessage sender="user">
+              <ChatMessageBubble variant="filled">
+                Can you show me the full details?
+              </ChatMessageBubble>
+            </ChatMessage>
+            <ChatMessage sender="assistant">
+              <VStack gap={3}>
+                <Text type="body">
+                  Here’s everything I have on order #1043:
+                </Text>
+                <Card padding={3}>
+                  <VStack gap={1}>
+                    <Item
+                      label="Items"
+                      description="Minimalist Watch · Linen Throw"
+                      endContent={
+                        <Text type="body" weight="bold">
+                          $248
+                        </Text>
+                      }
+                    />
+                    <Item
+                      label="Shipping"
+                      description="UPS Ground"
+                      endContent={
+                        <Text type="body" weight="bold">
+                          $12
+                        </Text>
+                      }
+                    />
+                    <Item
+                      label="Estimated arrival"
+                      description="Tomorrow by 8pm"
+                      endContent={<Badge variant="green" label="On time" />}
+                    />
+                    <Item
+                      label="Tracking"
+                      description="UPS 1Z 999 AA1 0123 4567 84"
+                      endContent={<Link href="#">Track</Link>}
+                    />
+                  </VStack>
+                </Card>
+              </VStack>
+            </ChatMessage>
+            {messages.map(message => (
+              <ChatMessage key={message.id} sender="user">
+                <ChatMessageBubble variant="filled">
+                  {message.text}
+                </ChatMessageBubble>
+              </ChatMessage>
+            ))}
+          </ChatMessageList>
+        </LayoutContent>
+      </Layout>
     </Card>
   );
 }
 
 interface ActivityRow {
   id: string;
-  icon: ReactNode;
+  kind: 'order' | 'refund';
   label: string;
   detail: string;
-  time: string;
   amount: number;
 }
 
 const ACTIVITY: ActivityRow[] = [
   {
     id: '1',
-    icon: <ShoppingBag size={16} />,
+    kind: 'order',
     label: 'Order #1043',
     detail: 'Placed · 1:59 pm',
-    time: '1:59 pm',
     amount: 248,
   },
   {
     id: '2',
-    icon: <Banknote size={16} />,
+    kind: 'refund',
     label: 'Order #1041',
     detail: 'Refunded · 12:40 pm',
-    time: '12:40 pm',
     amount: -89,
   },
   {
     id: '3',
-    icon: <ShoppingBag size={16} />,
+    kind: 'order',
     label: 'Order #1040',
     detail: 'Placed · 10:30 am',
-    time: '10:30 am',
     amount: 156,
   },
   {
     id: '4',
-    icon: <ShoppingBag size={16} />,
+    kind: 'order',
     label: 'Order #1038',
     detail: 'Placed · 9:11 am',
-    time: '9:11 am',
     amount: 412,
   },
   {
     id: '5',
-    icon: <ShoppingBag size={16} />,
+    kind: 'order',
     label: 'Order #1037',
     detail: 'Placed · 8:42 am',
-    time: '8:42 am',
     amount: 95,
   },
 ];
@@ -899,57 +797,68 @@ function formatAmount(amount: number): string {
   return sign + '$' + Math.abs(amount).toLocaleString();
 }
 
-function LatestActivityCard({isMobile}: {isMobile: boolean}) {
+function LatestActivityCard() {
+  const {isMobile} = useAppShellMobile();
   return (
-    <Card padding={5} style={styles.activityCard}>
-      <VStack gap={4} style={styles.activityCardStack}>
+    <Card height="100%" padding={5}>
+      <VStack gap={4} height="100%">
         <Heading level={2}>Revenue</Heading>
-
-        <Grid columns={isMobile ? 1 : 2} gap={3}>
+        <Grid
+          columns={isMobile ? {minWidth: 80, max: 1} : {minWidth: 80, max: 2}}
+          gap={3}>
           <VStack gap={0}>
-            <span style={inlineStyles.kpiValue}>18K</span>
+            <Text type="large" weight="bold" hasTabularNumbers>
+              18K
+            </Text>
             <Text type="supporting" color="secondary">
               Monthly revenue
             </Text>
           </VStack>
           <VStack gap={0}>
-            <span style={inlineStyles.kpiValue}>+12%</span>
+            <Text type="large" weight="bold" hasTabularNumbers>
+              +12%
+            </Text>
             <Text type="supporting" color="secondary">
               Order growth
             </Text>
           </VStack>
         </Grid>
-
         <Divider variant="subtle" />
-
         <HStack hAlign="between" vAlign="center">
           <Heading level={3}>Activity</Heading>
           <Link href="#">See all</Link>
         </HStack>
-
-        <VStack gap={1} style={styles.activityListFade}>
-          {ACTIVITY.map(item => (
-            <Item
-              key={item.id}
-              startContent={
-                <div style={inlineStyles.activityIcon} aria-hidden="true">
-                  {item.icon}
-                </div>
-              }
-              label={item.label}
-              description={item.detail}
-              endContent={
-                <Text
-                  type="body"
-                  weight="bold"
-                  color={item.amount < 0 ? 'secondary' : 'primary'}>
-                  {formatAmount(item.amount)}
-                </Text>
-              }
-              href="#"
-            />
-          ))}
-        </VStack>
+        <StackItem size="fill">
+          <ScrollableArea label="Recent order activity" height="100%">
+            <VStack gap={1}>
+              {ACTIVITY.map(item => (
+                <Item
+                  key={item.id}
+                  startContent={
+                    <Center width={32} height={32}>
+                      <Icon
+                        icon={item.kind === 'refund' ? Banknote : ShoppingBag}
+                        size="sm"
+                        color="secondary"
+                      />
+                    </Center>
+                  }
+                  label={item.label}
+                  description={item.detail}
+                  endContent={
+                    <Text
+                      type="body"
+                      weight="bold"
+                      color={item.amount < 0 ? 'secondary' : 'primary'}>
+                      {formatAmount(item.amount)}
+                    </Text>
+                  }
+                  href="#"
+                />
+              ))}
+            </VStack>
+          </ScrollableArea>
+        </StackItem>
       </VStack>
     </Card>
   );
@@ -963,6 +872,8 @@ export interface InventoryRow extends Record<string, unknown> {
   meta: string;
   available: number;
   location: string;
+  /** Optional category supplied by a preview's inventory fixtures. */
+  category?: string;
   tags: TagSpec[];
   imageKey?: string;
   thumbnailFallback: string;
@@ -976,6 +887,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'Stainless steel, sapphire crystal',
     available: 42,
     location: 'Aisle 3',
+    category: 'Wearables',
     tags: [{label: 'New', variant: 'blue'}],
     imageKey: 'watch',
     thumbnailFallback: 'M',
@@ -987,6 +899,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'ANC, 30hr battery',
     available: 128,
     location: 'Aisle 1',
+    category: 'Audio',
     tags: [{label: 'Popular', variant: 'green'}],
     imageKey: 'headphones',
     thumbnailFallback: 'W',
@@ -998,6 +911,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'Water-resistant, 25L',
     available: 63,
     location: 'Aisle 2',
+    category: 'Bags',
     tags: [{label: 'Limited', variant: 'yellow'}],
     imageKey: 'backpack',
     thumbnailFallback: 'C',
@@ -1009,6 +923,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'Full-grain, RFID blocking',
     available: 15,
     location: 'Aisle 4',
+    category: 'Wearables',
     tags: [{label: 'Leather', variant: 'yellow'}],
     imageKey: 'wallet',
     thumbnailFallback: 'L',
@@ -1020,6 +935,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'Vacuum insulated, 16oz',
     available: 87,
     location: 'Aisle 5',
+    category: 'Drinkware',
     tags: [{label: 'Drinkware', variant: 'green'}],
     imageKey: 'tumbler',
     thumbnailFallback: 'T',
@@ -1031,6 +947,7 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
     meta: 'Heavyweight, oat',
     available: 24,
     location: 'Aisle 6',
+    category: 'Home',
     tags: [{label: 'Home', variant: 'orange'}],
     imageKey: 'throw_',
     thumbnailFallback: 'L',
@@ -1039,17 +956,6 @@ const DEFAULT_INVENTORY: InventoryRow[] = [
 ];
 
 const LOW_STOCK_THRESHOLD = 25;
-
-function SelectCell({row}: {row: InventoryRow}) {
-  return (
-    <CheckboxInput
-      label={'Select ' + row.name}
-      isLabelHidden
-      value={row.selected}
-      onChange={() => {}}
-    />
-  );
-}
 
 function ItemCell({
   row,
@@ -1061,21 +967,31 @@ function ItemCell({
   const thumbnailSrc = row.imageKey ? images[row.imageKey] : undefined;
   return (
     <HStack gap={3} vAlign="center">
-      {thumbnailSrc ? (
-        <img src={thumbnailSrc} alt="" style={inlineStyles.thumbnail} />
-      ) : (
-        <div style={inlineStyles.thumbnailFallback} aria-hidden="true">
-          {row.thumbnailFallback}
-        </div>
-      )}
-      <VStack gap={0} style={{minWidth: 0}}>
-        <Text type="body" weight="bold">
-          {row.name}
-        </Text>
-        <Text type="supporting" color="secondary">
-          {row.meta}
-        </Text>
-      </VStack>
+      <StackItem>
+        <VStack width={40}>
+          {thumbnailSrc ? (
+            <AspectRatio ratio={1} fit="cover">
+              <img src={thumbnailSrc} alt="" />
+            </AspectRatio>
+          ) : (
+            <Center width={40} height={40} aria-hidden="true">
+              <Text type="supporting" weight="bold">
+                {row.thumbnailFallback}
+              </Text>
+            </Center>
+          )}
+        </VStack>
+      </StackItem>
+      <StackItem size="fill">
+        <VStack gap={0}>
+          <Text type="body" weight="bold">
+            {row.name}
+          </Text>
+          <Text type="supporting" color="secondary">
+            {row.meta}
+          </Text>
+        </VStack>
+      </StackItem>
     </HStack>
   );
 }
@@ -1113,180 +1029,196 @@ function InventoryCard({
   images: Record<string, string>;
   inventory: InventoryRow[];
 }) {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState(
+    () => new Set(inventory.filter(row => row.selected).map(row => row.id)),
+  );
   const lowStockCount = inventory.filter(
     row => row.available < LOW_STOCK_THRESHOLD,
   ).length;
+  const categories = [
+    ...new Set(inventory.flatMap(row => (row.category ? [row.category] : []))),
+  ];
+  const rows = inventory.filter(
+    row =>
+      (!query ||
+        `${row.name} ${row.meta}`
+          .toLowerCase()
+          .includes(query.toLowerCase())) &&
+      (!category || row.category === category) &&
+      (!location || row.location === location) &&
+      (!tag || row.tags.some(value => value.label === tag)),
+  );
+  function selectRow(id: string, selected: boolean) {
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
   return (
-    <Card padding={0} style={styles.inventoryCard}>
-      <HStack hAlign="between" vAlign="center" style={styles.inventoryHeader}>
-        <Heading level={2}>Inventory</Heading>
-        <Button
-          label="Add item"
-          variant="primary"
-          size="sm"
-          icon={<Plus size={16} />}
-        />
-      </HStack>
-
-      <Divider variant="subtle" />
-
-      <HStack
-        gap={3}
-        vAlign="center"
-        hAlign="between"
-        style={styles.inventoryFilterRow}>
-        <HStack gap={2} vAlign="center" style={{flex: 1, minWidth: 0}}>
-          <TextInput
-            label="Search inventory"
-            isLabelHidden
-            placeholder="Type and hit enter…"
-            value=""
-            onChange={() => {}}
-            startIcon={<Search size={16} />}
-            controlStyle={styles.searchInput}
+    <Card padding={0}>
+      <VStack gap={0}>
+        <HStack hAlign="between" vAlign="center" padding={6}>
+          <Heading level={2}>Inventory</Heading>
+          <Button
+            label="Add item"
+            variant="primary"
+            size="sm"
+            icon={<Icon icon={Plus} size="sm" />}
           />
-          <OverflowList
-            gap={2}
-            overflowRenderer={() => (
+        </HStack>
+        <Divider variant="subtle" />
+        <ScrollableArea
+          label="Inventory filters"
+          axis="inline"
+          paddingBlock={4}
+          paddingInline={6}>
+          <HStack gap={3} vAlign="center" hAlign="between">
+            <HStack gap={2} vAlign="center">
+              <TextInput
+                label="Search inventory"
+                isLabelHidden
+                placeholder="Type and hit enter…"
+                value={query}
+                onChange={setQuery}
+                startIcon={<Icon icon={Search} size="sm" />}
+                width={240}
+              />
+              <HStack gap={2} wrap="wrap" vAlign="center">
+                <Selector
+                  label="Categories"
+                  isLabelHidden
+                  placeholder="Categories"
+                  size="sm"
+                  startIcon={<Icon icon={Folder} size="sm" />}
+                  value={category}
+                  hasClear
+                  onChange={setCategory}
+                  options={categories}
+                  isDisabled={categories.length === 0}
+                />
+                <Selector
+                  label="Locations"
+                  isLabelHidden
+                  placeholder="Locations"
+                  size="sm"
+                  startIcon={<Icon icon={MapPin} size="sm" />}
+                  value={location}
+                  hasClear
+                  onChange={setLocation}
+                  options={[...new Set(inventory.map(row => row.location))]}
+                />
+                <Selector
+                  label="Tags"
+                  isLabelHidden
+                  placeholder="Tags"
+                  size="sm"
+                  startIcon={<Icon icon={Tag} size="sm" />}
+                  value={tag}
+                  hasClear
+                  onChange={setTag}
+                  options={[
+                    ...new Set(
+                      inventory.flatMap(row =>
+                        row.tags.map(value => value.label),
+                      ),
+                    ),
+                  ]}
+                />
+              </HStack>
+            </HStack>
+            <HStack gap={1} vAlign="center">
               <Button
-                label="Filters"
                 variant="ghost"
                 size="sm"
-                icon={<Tag size={16} />}
+                isIconOnly
+                label="List view"
+                tooltip="List view"
+                icon={<List size={18} />}
               />
-            )}>
-            <Selector
-              label="Categories"
-              isLabelHidden
-              placeholder="Categories"
-              size="sm"
-              startIcon={<Folder size={16} />}
-              value={undefined}
-              onChange={() => {}}
-              options={['Wearables', 'Audio', 'Bags', 'Drinkware', 'Home']}
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                label="Grid view"
+                tooltip="Grid view"
+                icon={<LayoutGrid size={18} />}
+              />
+            </HStack>
+          </HStack>
+        </ScrollableArea>
+        {lowStockCount > 0 && (
+          <VStack paddingInline={6} paddingBlockEnd={4}>
+            <Banner
+              status="warning"
+              title={lowStockCount + ' items are running low'}
             />
-            <Selector
-              label="Locations"
-              isLabelHidden
-              placeholder="Locations"
-              size="sm"
-              startIcon={<MapPin size={16} />}
-              value={undefined}
-              onChange={() => {}}
-              options={[
-                'Aisle 1',
-                'Aisle 2',
-                'Aisle 3',
-                'Aisle 4',
-                'Aisle 5',
-                'Aisle 6',
-              ]}
-            />
-            <Selector
-              label="Tags"
-              isLabelHidden
-              placeholder="Tags"
-              size="sm"
-              startIcon={<Tag size={16} />}
-              value={undefined}
-              onChange={() => {}}
-              options={[
-                'New',
-                'Popular',
-                'Limited',
-                'Leather',
-                'Drinkware',
-                'Home',
-              ]}
-            />
-          </OverflowList>
-        </HStack>
-        <HStack gap={1} vAlign="center">
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            label="List view"
-            tooltip="List view"
-            icon={<List size={18} />}
+          </VStack>
+        )}
+        <VStack paddingInline={6} paddingBlockEnd={2}>
+          <Table<InventoryRow>
+            data={rows}
+            columns={[
+              {
+                key: 'select',
+                header: '',
+                width: pixel(64),
+                renderCell: row => (
+                  <CheckboxInput
+                    label={'Select ' + row.name}
+                    isLabelHidden
+                    value={selectedIds.has(row.id)}
+                    onChange={value => selectRow(row.id, value)}
+                  />
+                ),
+              },
+              {
+                key: 'item',
+                header: 'Item',
+                width: proportional(3, {minWidth: 80}),
+                renderCell: row => <ItemCell row={row} images={images} />,
+              },
+              {
+                key: 'available',
+                header: 'Available',
+                width: pixel(100),
+                renderCell: row => <Text type="body">{row.available}</Text>,
+              },
+              {
+                key: 'location',
+                header: 'Location',
+                width: pixel(100),
+                renderCell: row => <Text type="body">{row.location}</Text>,
+              },
+              {
+                key: 'tags',
+                header: 'Tags',
+                width: proportional(2, {minWidth: 80}),
+                align: 'end',
+                renderCell: row => <TagsCell row={row} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                width: pixel(64),
+                align: 'end',
+                renderCell: () => <ActionsCell />,
+              },
+            ]}
+            density="spacious"
+            dividers="rows"
+            hasHover
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            label="Grid view"
-            tooltip="Grid view"
-            icon={<LayoutGrid size={18} />}
-          />
-        </HStack>
-      </HStack>
-
-      {lowStockCount > 0 && (
-        <div style={inlineStyles.inventoryBannerWrap}>
-          <Banner
-            status="warning"
-            title={lowStockCount + ' items are running low'}
-          />
-        </div>
-      )}
-
-      <div style={styles.inventoryTableWrap}>
-        <Table<InventoryRow>
-          data={inventory}
-          columns={[
-            {
-              key: 'select',
-              header: '',
-              // Wide enough that the control + the theme's cell padding (up to
-              // --spacing-4 = 16px/side on spacious density) fit inside the cell,
-              // so the control's hover background doesn't overflow toward the
-              // card's clipped (rounded) edge on larger-padding themes.
-              width: pixel(64),
-              renderCell: row => <SelectCell row={row} />,
-            },
-            {
-              key: 'item',
-              header: 'Item',
-              // Lower min-width (default 120) so the table fits its container on
-              // larger-spacing themes instead of overflowing the actions column.
-              width: proportional(3, {minWidth: 80}),
-              renderCell: row => <ItemCell row={row} images={images} />,
-            },
-            {
-              key: 'available',
-              header: 'Available',
-              width: pixel(100),
-              renderCell: row => <Text type="body">{row.available}</Text>,
-            },
-            {
-              key: 'location',
-              header: 'Location',
-              width: pixel(100),
-              renderCell: row => <Text type="body">{row.location}</Text>,
-            },
-            {
-              key: 'tags',
-              header: 'Tags',
-              width: proportional(2, {minWidth: 80}),
-              align: 'end',
-              renderCell: row => <TagsCell row={row} />,
-            },
-            {
-              key: 'actions',
-              header: '',
-              // Match the select column: fit the sm more-menu button + cell
-              // padding so its hover background stays clear of the card's
-              // clipped rounded edge across themes.
-              width: pixel(64),
-              align: 'end',
-              renderCell: () => <ActionsCell />,
-            },
-          ]}
-          density="spacious"
-          dividers="rows"
-          hasHover
-        />
-      </div>
+        </VStack>
+      </VStack>
     </Card>
   );
 }
