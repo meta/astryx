@@ -14,7 +14,7 @@ vi.mock('../hooks/useAnnounce', async importOriginal => ({
 const announced = () =>
   vi.mocked(announceMessage).mock.calls.map(([message]) => message);
 
-type Apply = 'sync' | 'microtask' | 'never' | 'late';
+type Apply = 'sync' | 'microtask' | 'chained' | 'rerender' | 'never' | 'late';
 
 /** A plain list the app renders: one `<li>` per item, each with a button. */
 function renderPlainList(
@@ -24,11 +24,13 @@ function renderPlainList(
     isReorderable,
     handleTag = 'button',
     handleDescribedBy,
+    handleText,
   }: {
     apply?: Apply;
     isReorderable?: (key: string | number) => boolean;
     handleTag?: 'button' | 'span';
     handleDescribedBy?: string;
+    handleText?: string;
   } = {},
 ) {
   const container = document.createElement('ul');
@@ -43,6 +45,9 @@ function renderPlainList(
       handle.type = 'button';
     }
     handle.className = 'grip';
+    if (handleText != null) {
+      handle.textContent = handleText;
+    }
     if (handleDescribedBy != null) {
       handle.setAttribute('aria-describedby', handleDescribedBy);
     }
@@ -68,6 +73,15 @@ function renderPlainList(
       } else if (apply === 'microtask') {
         // What React's flush of a setState made in this task does.
         queueMicrotask(() => move(next));
+      } else if (apply === 'chained') {
+        // A flush queued after attach's own check, still in this task.
+        queueMicrotask(() => queueMicrotask(() => move(next)));
+      } else if (apply === 'rerender') {
+        // An app that renders every row again: new elements, same keys.
+        move(next);
+        for (const row of rows()) {
+          row.replaceWith(row.cloneNode(true));
+        }
       } else if (apply === 'late') {
         setTimeout(() => move(next), 0);
       }
@@ -169,6 +183,40 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(announced()).toEqual([
       'Milk, position 2 of 3, after Eggs, before Bread',
     ]);
+  });
+
+  it("names a handle after its item without the handle's own text", () => {
+    const {handle} = track(renderPlainList(['Milk'], {handleText: '⋮⋮'}));
+    expect(handle('Milk')).toHaveAccessibleName('Reorder Milk');
+  });
+
+  it('commits a move the app applies in a later microtask of the same task', async () => {
+    const {handle, order} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread'], {apply: 'chained'}),
+    );
+    const milk = handle('Milk');
+    act(() => milk.click());
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    expect(order()).toEqual(['Eggs', 'Milk', 'Bread']);
+    expect(announced()).toEqual([
+      'Milk, position 2 of 3, after Eggs, before Bread',
+    ]);
+  });
+
+  it('commits a move the app applies by rendering its rows again, and the new handle keeps the mode and the focus', async () => {
+    const {handle, order} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread'], {apply: 'rerender'}),
+    );
+    act(() => handle('Milk').click());
+    fireEvent.keyDown(handle('Milk'), {key: 'ArrowDown'});
+    await settle();
+    expect(order()).toEqual(['Eggs', 'Milk', 'Bread']);
+    expect(announced()).toEqual([
+      'Milk, position 2 of 3, after Eggs, before Bread',
+    ]);
+    expect(handle('Milk')).toHaveAttribute('aria-pressed', 'true');
+    expect(handle('Milk')).toHaveFocus();
   });
 
   it('refuses and announces a move the app does not apply', async () => {

@@ -10,13 +10,15 @@
  * @output `attachReorderable`, which reorders plain elements without a
  *   collection component, and its item and attachment types
  * @position Internal to the reorder; createReorderable's `attach` calls it.
- *   Pointer and touch drags are not attached yet
+ *   Pointer and touch drags are not attached yet, and items move along the
+ *   vertical axis only
  *
  * The app owns its elements, so this module reads `items()` when it
  * attaches, at each press, key or `start` on a handle, and after each move.
- * It watches no mutations. A move counts when `items()` reports the new
- * order by the end of the task that ran `onReorder`; otherwise the
- * controller announces that it did not happen. Nothing touches the DOM until
+ * It watches no mutations. A move counts when `items()` reports the moved
+ * key at its new place, in a microtask after `onReorder` or as the move's
+ * end-of-task fallback starts; otherwise the controller announces that it
+ * did not happen. Nothing touches the DOM until
  * `attach` is called, so importing this module is safe on the server.
  */
 
@@ -40,6 +42,7 @@ import {
 } from '../List/listReorderEngine';
 import type {ListReorderOptions, ReorderRows} from '../List/listReorderContext';
 import {markReorderHandle} from '../privateAttributes/listReorder.stylex';
+import {readAccessibleName} from '../utils/accessibleName';
 import {devWarn} from '../utils/devWarning';
 
 registerEnglishFallback(english);
@@ -92,27 +95,11 @@ interface WiredHandle {
 let nextHintId = 0;
 
 /**
- * The name announcements and the handle give an item: the element's own
- * accessible name, else its text.
+ * The name announcements and the handle give an item: the element's
+ * accessible name, with its handle left out.
  */
-function nameOf(element: HTMLElement): string {
-  const label = element.getAttribute('aria-label')?.trim();
-  if (label) {
-    return label;
-  }
-  const labelledBy = element.getAttribute('aria-labelledby');
-  if (labelledBy) {
-    const text = labelledBy
-      .split(/\s+/)
-      .map(id => element.ownerDocument.getElementById(id)?.textContent ?? '')
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (text) {
-      return text;
-    }
-  }
-  return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+function nameOf(item: ReorderableItem): string {
+  return readAccessibleName(item.element, {exclude: item.handle}) ?? '';
 }
 
 /** Whether `element` takes focus without a `tabindex`. */
@@ -140,13 +127,21 @@ function snapshot(element: Element, names: ReadonlyArray<string>): () => void {
   };
 }
 
-/** A controller whose `start` reads the app's items first. */
+/**
+ * A controller that reads the app's items again before `start` and before a
+ * move's end-of-task fallback.
+ */
 class AttachedController extends ListReorderController {
   beforeStart: () => void = () => {};
+  settle: () => void = () => {};
 
   startByKey(key: string | number): boolean {
     this.beforeStart();
     return super.startByKey(key);
+  }
+
+  protected beforeFallback(): void {
+    this.settle();
   }
 }
 
@@ -221,7 +216,7 @@ export function attachReorderable(
     const present = new Set<HTMLElement>();
     for (const item of readItems()) {
       present.add(item.element);
-      const name = nameOf(item.element);
+      const name = nameOf(item);
       const entry = named.get(item.element);
       if (entry == null || entry.name !== name) {
         entry?.release();
@@ -269,7 +264,7 @@ export function attachReorderable(
     const {handle, element, key} = item;
     const restore = snapshot(handle, HANDLE_ATTRIBUTES);
     const unmark = markReorderHandle(handle);
-    const name = nameOf(element);
+    const name = nameOf(item);
     if (name === '') {
       devWarn(
         'createReorderable',
@@ -324,7 +319,8 @@ export function attachReorderable(
   };
 
   // Reorder mode's look, set at its first use: the container takes the
-  // insertion line, and a positioned box for it, and the hint mounts.
+  // insertion line's style, and the hint mounts. The controller positions
+  // the container for the line while the mode lasts.
   let restoreContainer: (() => void) | null = null;
   let hintRoot: Root | null = null;
   let hintHost: HTMLElement | null = null;
@@ -335,14 +331,7 @@ export function attachReorderable(
       if (className) {
         container.classList.add(...className.split(/\s+/).filter(Boolean));
       }
-      const inlinePosition = container.style.position;
-      if (doc.defaultView?.getComputedStyle(container).position === 'static') {
-        container.style.position = 'relative';
-      }
-      restoreContainer = () => {
-        restoreClass();
-        container.style.position = inlinePosition;
-      };
+      restoreContainer = restoreClass;
     }
     if (hintRoot == null) {
       hintHost = doc.createElement('div');
@@ -373,10 +362,7 @@ export function attachReorderable(
         options.onReorder(move);
         // The app applies the move by the end of this task; a React app's
         // flush is queued before this check.
-        queueMicrotask(() => {
-          sync();
-          controller.commit();
-        });
+        queueMicrotask(settle);
       },
       isReorderable: options.isReorderable,
       startedBy: options.startedBy ?? options,
@@ -388,7 +374,14 @@ export function attachReorderable(
     },
     presentation: 'theme',
   });
+  // Reads the items after a move: a move that landed commits, and its row's
+  // new handle takes the mode.
+  const settle = () => {
+    sync();
+    controller.commit();
+  };
   controller.beforeStart = sync;
+  controller.settle = settle;
   const unmount = mountSession(options.startedBy ?? options, controller);
 
   const onClick = (event: MouseEvent) => {

@@ -565,6 +565,8 @@ interface PendingMove {
  */
 interface PendingAnnouncement {
   readonly row: HTMLElement;
+  /** The moved row's key: a re-rendered row with it has landed too. */
+  readonly key?: Key;
   readonly to: number;
   /** Read as the move lands, so it names the rows as they are named then. */
   readonly landed: () => string;
@@ -1734,7 +1736,7 @@ export class ListReorderController implements ListReorderSession {
     const announcement = this.announcement;
     if (
       announcement != null &&
-      this.rows.read(list).indexOf(announcement.row) === announcement.to
+      this.hasLanded(this.rows.read(list), announcement)
     ) {
       this.announcement = null;
       if (this.announcementFallback != null) {
@@ -2023,6 +2025,7 @@ export class ListReorderController implements ListReorderSession {
     this.lastStep = delta;
     this.announceWhenCommitted({
       row,
+      key,
       to,
       landed: () => this.placeIn(this.rows.read(list), to),
       kept:
@@ -2073,6 +2076,29 @@ export class ListReorderController implements ListReorderSession {
    * Announces a move once it commits; if the consumer keeps the order by the
    * end of the task, announces that the row stayed instead.
    */
+  /**
+   * Whether the announced move is in `rows`: its row, or a row rendered
+   * again with its key, at its new place.
+   */
+  private hasLanded(
+    rows: ReadonlyArray<HTMLElement>,
+    announcement: PendingAnnouncement,
+  ): boolean {
+    const at = rows[announcement.to];
+    return (
+      at != null &&
+      (at === announcement.row ||
+        (announcement.key != null && this.keyOf(at) === announcement.key))
+    );
+  }
+
+  /**
+   * Runs as a move's end-of-task fallback starts, before it announces that
+   * the row stayed. A List's commits have run by then; an attached
+   * container reads its items again here.
+   */
+  protected beforeFallback(): void {}
+
   private announceWhenCommitted(announcement: PendingAnnouncement): void {
     this.announcement = announcement;
     if (this.announcementFallback != null) {
@@ -2080,6 +2106,7 @@ export class ListReorderController implements ListReorderSession {
     }
     this.announcementFallback = setTimeout(() => {
       this.announcementFallback = null;
+      this.beforeFallback();
       const pending = this.announcement;
       if (pending != null) {
         this.announcement = null;

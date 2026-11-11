@@ -258,7 +258,9 @@ const {detach} = reorderable.attach(listElement, {
   `attach(container, {items})`, where `items()` returns one
   `{key, element, handle}` per item in order, and it returns `{detach}`.
   Implementation gap: an attached handle starts no drag yet, so FR3's drag
-  and `positions` do not apply to attached containers. An
+  and `positions` do not apply to attached containers; and an attached
+  container moves items along the vertical axis only, so Up and Down move
+  an item and the hint offers those two moves. An
   attached container gets FR3's drag, FR4's reorder mode on each handle, and
   their announcements, with no collection component; `positions` and
   `isReorderable` apply as they do for a collection. `attach` gives each `handle` FR4's
@@ -272,7 +274,10 @@ const {detach} = reorderable.attach(listElement, {
   no element. `attach` reads `items()` when it attaches, at each press, key
   or `start` on a handle, and after each move. Implementation gap: an item
   the app adds after `attach` gets no handle role, name, or Tab stop until
-  the next such read. A move
+  the next such read. `attach` drives List's reorder engine: it reuses the
+  engine's session registry (`mountSession`), its strings (`messagesFrom` and
+  `ReorderMessages`), and its hint (`ListReorderModeHint`), so plain elements
+  and List share one engine. A move
   commits when `items()` reports the new order after `onReorder`: `attach`
   announces it and plays the drop then; while a modal dialog encloses the
   container, `attach` announces through a persistent polite container inside

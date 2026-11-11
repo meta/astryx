@@ -8,13 +8,40 @@
  *   input button's value, its visible text (`aria-hidden` left out, an inner
  *   image's alt, `aria-label` or svg title counted), then `title`
  * @position Internal utility, not exported from the package: DropdownMenu
- *   names a menu after a custom trigger, and SideNav finds a re-rendered
- *   header or footer control again by name (`component:SideNav` AR3)
+ *   names a menu after a custom trigger, SideNav finds a re-rendered header
+ *   or footer control again by name (`component:SideNav` AR3), and
+ *   reorderable attach names each item without its handle
  */
 
-/** Text an assistive technology reads from `element`, `aria-hidden` left out. */
-function visibleText(element: Element): string {
+/** Where `node` sits under `root`: each ancestor's child index, root first. */
+function pathTo(root: Element, node: Element): number[] | null {
+  const path: number[] = [];
+  let current: Element | null = node;
+  while (current != null && current !== root) {
+    const parent: Element | null = current.parentElement;
+    if (parent == null) {
+      return null;
+    }
+    path.unshift(Array.prototype.indexOf.call(parent.children, current));
+    current = parent;
+  }
+  return current === root ? path : null;
+}
+
+/**
+ * Text an assistive technology reads from `element`, `aria-hidden` left out,
+ * and `exclude`'s subtree left out when it is inside `element`.
+ */
+function visibleText(element: Element, exclude?: Element | null): string {
   const copy = element.cloneNode(true) as Element;
+  const path = exclude == null ? null : pathTo(element, exclude);
+  if (path != null && path.length > 0) {
+    let excluded: Element | undefined = copy;
+    for (const index of path) {
+      excluded = excluded?.children[index];
+    }
+    excluded?.remove();
+  }
   for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) {
     hidden.remove();
   }
@@ -36,10 +63,12 @@ function visibleText(element: Element): string {
  * The accessible name of `element`: its own `aria-labelledby` targets, its
  * `aria-label`, its labels, an input button's value, its text, or its
  * `title`, in that order. A custom DropdownMenu trigger names the menu it
- * labels this way.
+ * labels this way. `exclude`'s subtree is left out of the text, so a row is
+ * named without the control inside it.
  */
 export function readAccessibleName(
   element: HTMLElement | null,
+  {exclude}: {exclude?: Element | null} = {},
 ): string | undefined {
   if (element == null) {
     return undefined;
@@ -50,7 +79,7 @@ export function readAccessibleName(
       .split(/\s+/)
       .map(id => element.ownerDocument.getElementById(id))
       .filter((node): node is HTMLElement => node != null)
-      .map(visibleText)
+      .map(node => visibleText(node))
       .join(' ')
       .trim();
     if (text !== '') {
@@ -66,7 +95,10 @@ export function readAccessibleName(
     'labels' in element
       ? Array.from((element as HTMLInputElement).labels ?? [])
       : [];
-  const labelText = labels.map(visibleText).join(' ').trim();
+  const labelText = labels
+    .map(node => visibleText(node))
+    .join(' ')
+    .trim();
   if (labelText !== '') {
     return labelText;
   }
@@ -79,7 +111,7 @@ export function readAccessibleName(
       return value;
     }
   }
-  const text = visibleText(element);
+  const text = visibleText(element, exclude);
   if (text !== '') {
     return text;
   }

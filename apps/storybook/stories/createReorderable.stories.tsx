@@ -9,7 +9,7 @@
  *   reorderable attach browser specs open it
  */
 
-import {useMemo, useState} from 'react';
+import {useCallback, useMemo, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {createReorderable} from '@astryxdesign/core';
@@ -89,29 +89,33 @@ function AttachDemo() {
       }),
     [],
   );
+  // A stable ref callback: React calls it once per element, so the list is
+  // attached once, not on every render.
+  const attachList = useCallback(
+    (element: HTMLOListElement | null) => {
+      if (element == null) {
+        return undefined;
+      }
+      const attachment = reorderable.attach(element, {
+        items: () =>
+          Array.from(element.querySelectorAll('li')).map(row => ({
+            key: row.dataset.card ?? '',
+            element: row,
+            handle: row.querySelector('button') as HTMLElement,
+          })),
+      });
+      return () => attachment.detach();
+    },
+    [reorderable],
+  );
   return (
     <div {...stylex.props(styles.stack)}>
-      <ol
-        ref={element => {
-          if (element == null) {
-            return undefined;
-          }
-          const attachment = reorderable.attach(element, {
-            items: () =>
-              Array.from(element.querySelectorAll('li')).map(row => ({
-                key: row.dataset.card ?? '',
-                element: row,
-                handle: row.querySelector('button') as HTMLElement,
-              })),
-          });
-          return () => attachment.detach();
-        }}
-        {...stylex.props(styles.list)}>
+      <ol ref={attachList} {...stylex.props(styles.list)}>
         {cards.map(card => (
           <li key={card} data-card={card} {...stylex.props(styles.card)}>
             <span>{card}</span>
             <button type="button" {...stylex.props(styles.grip)}>
-              ⋮⋮
+              <span aria-hidden>⋮⋮</span>
             </button>
           </li>
         ))}
