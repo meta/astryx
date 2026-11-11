@@ -103,6 +103,13 @@ const FAMILY_MEMBERS = 3;
 const mentionPatterns = new Map();
 
 /**
+ * How many terms' patterns are kept before the cache starts over. A compiled
+ * pattern is several kilobytes and a long-running caller sees ever new
+ * terms, so this cache stays small; one search uses a handful of terms.
+ */
+const MENTION_LIMIT = 1_000;
+
+/**
  * @param {string} term
  * @param {ReturnType<typeof termWords>} t - the term's words
  * @returns {RegExp}
@@ -110,7 +117,7 @@ const mentionPatterns = new Map();
 function mentionPattern(term, t) {
   let re = mentionPatterns.get(term);
   if (!re) {
-    if (mentionPatterns.size >= CACHE_LIMIT) mentionPatterns.clear();
+    if (mentionPatterns.size >= MENTION_LIMIT) mentionPatterns.clear();
     // Any form of the term, with any common suffix: `spacing` finds
     // "space" and "spaces", `tables` finds "table".
     const roots = [...new Set([stem(term), ...t.forms])]
@@ -129,7 +136,7 @@ function mentionPattern(term, t) {
  */
 const lowered = new Map();
 
-/** How many entries each of these caches keeps before it starts over. */
+/** How many texts are kept lowercased before the cache starts over. */
 const CACHE_LIMIT = 100_000;
 
 /**
