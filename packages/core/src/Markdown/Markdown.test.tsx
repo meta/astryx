@@ -1026,7 +1026,17 @@ describe('Markdown', () => {
         </Markdown>,
       );
 
-      expect(committed.join('\n')).not.toContain('never commits');
+      // None of the discarded render's own text shows: not its paragraph, its
+      // list or its tail.
+      for (const text of [
+        'Other',
+        'never commits',
+        'a list',
+        'of items',
+        'More',
+      ]) {
+        expect(committed.join('\n')).not.toContain(text);
+      }
       expect(committed).toEqual(control);
     });
   });
