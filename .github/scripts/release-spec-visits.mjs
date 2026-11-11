@@ -22,6 +22,9 @@ import path from 'node:path';
 
 import {
   componentFolderNamed,
+  storyFiles,
+  storyIdOf,
+  storyIdsOpened,
   componentFolderOf,
   componentPathOf,
   localModules,
@@ -29,6 +32,9 @@ import {
   resolveModule as resolve,
   valueImports,
 } from './a11y-pr-contracts.mjs';
+
+/** A release file: FR32's release spec by name. */
+export {storyFiles, storyIdOf};
 
 /** A release file: FR32's release spec by name. */
 export const isReleaseFile = file => /\.release\.[^/]*\.spec\.ts$/.test(file);
@@ -54,51 +60,6 @@ export function releaseSpecs(listed, read) {
     .sort();
 }
 
-/**
- * Storybook's id for a title: lower case, each run of other characters a
- * single `-`, as Storybook's own `sanitize` makes it.
- * @param {string} title
- */
-export function storyIdOf(title) {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-const STORY_FILE = /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/;
-const TITLE = /^\s*title:\s*['"`]([^'"`]+)['"`]/m;
-/** A meta's own `id`, which replaces the title's id, on the lines after it. */
-const META_ID =
-  /^\s*title:\s*['"`][^'"`]+['"`],?\s*\n(?:\s*\/\/[^\n]*\n)*\s*id:\s*['"`]([a-z0-9-]+)['"`]/m;
-
-/**
- * Each story id prefix (a title's id, or a meta's own id), to the story files
- * that make it.
- * @param {string[]} listed
- * @param {(file: string) => string} read
- * @returns {Map<string, string[]>}
- */
-export function storyFiles(listed, read) {
-  const byId = new Map();
-  for (const file of listed.filter(each => STORY_FILE.test(each))) {
-    const text = read(file);
-    const title = TITLE.exec(text)?.[1];
-    if (title == null) continue;
-    const ids = new Set([storyIdOf(title)]);
-    const own = META_ID.exec(text)?.[1];
-    if (own) ids.add(own);
-    for (const id of ids) byId.set(id, [...(byId.get(id) ?? []), file]);
-  }
-  return byId;
-}
-
-/** A story id prefix in a spec or its helpers: `core-bottomsheet--…`. */
-const STORY_ID = /(?:id=|['"`])([a-z0-9][a-z0-9-]*?)--(?:[a-z0-9$]|['"`])/g;
-/** A story id whose component part a template fills: `core-${name}--`. */
-const TEMPLATED_ID = /([a-z0-9]+)-\$\{[^}]+\}--/g;
-/** A quoted name a template can fill. */
-const NAME = /['"`]([a-z0-9][a-z0-9-]*)['"`]/g;
 /** A page a spec opens on the served Storybook, other than a story. */
 const PAGE = /origin\}\/(?!iframe\.html)([\w.-]+)/g;
 /** A spec opens Storybook stories, by id. */
@@ -174,22 +135,14 @@ function subjectFolder(file, id, listed, read) {
 export function specVisits(spec, {listed, read, stories, map}) {
   const known = new Set(listed);
   const texts = localModules(spec, known, read).map(read);
-  const ids = new Set(
-    texts.flatMap(text => [...text.matchAll(STORY_ID)].map(m => m[1])),
-  );
-  const folders = new Set();
-  const unresolved = [];
   // A templated id (`core-${component}--`) visits each story its quoted
   // names make; a template that no quoted name fills stays unresolved.
-  for (const text of texts)
-    for (const [template, prefix] of text.matchAll(TEMPLATED_ID)) {
-      const filled = [...text.matchAll(NAME)]
-        .map(m => `${prefix}-${m[1]}`)
-        .filter(id => stories.has(id));
-      if (filled.length === 0)
-        unresolved.push(`no quoted name fills the story id ${template}`);
-      for (const id of filled) ids.add(id);
-    }
+  const opened = storyIdsOpened(spec, {listed, read, stories});
+  const ids = new Set(opened.ids);
+  const folders = new Set();
+  const unresolved = opened.unfilled.map(
+    template => `no quoted name fills the story id ${template}`,
+  );
   for (const id of ids) {
     if (id.startsWith('a11y-')) {
       const mapped = map.stories[id];

@@ -25,6 +25,7 @@ import {
   recordLog,
   selectProofs,
   testsReader,
+  storyScopeFor,
 } from './playwright-legs.mjs';
 import {matrixFor} from './ci-matrix.mjs';
 
@@ -144,7 +145,7 @@ describe('storyComponentFolders', () => {
   };
   const MENU = {'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n'};
 
-  it('maps each branch of a story import: a component, an unknown root name, a whole package, a shared subpath', () => {
+  it('maps each branch of a story import: a component, an unknown root name, a name another package holds, a whole package, a shared subpath', () => {
     const component = scratch({
       ...MENU,
       'apps/storybook/stories/X.stories.tsx':
@@ -166,6 +167,13 @@ describe('storyComponentFolders', () => {
         "import * as core from '@astryxdesign/core';\n",
     });
     expect(whole.unresolved).toHaveLength(1);
+    const otherPackage = scratch({
+      'packages/lab/src/Chart/ChartLegend.tsx':
+        'export const ChartLegend = 1;\n',
+      'apps/storybook/stories/X.stories.tsx':
+        "import {ChartLegend} from '@astryxdesign/charts';\n",
+    });
+    expect(otherPackage.unresolved).toHaveLength(1);
     const shared = scratch({
       ...MENU,
       'packages/core/src/hooks/index.ts': 'export const useAnnounce = 1;\n',
@@ -199,10 +207,7 @@ describe('storyComponentFolders', () => {
       selection: JSON.parse(read('.github/interaction-selection.json')),
       primitives: JSON.parse(read('.github/a11y-shared-primitives.json'))
         .primitives,
-      storyFolders: file =>
-        storyComponentFolders(file, {listed, read}).folders.map(
-          componentFolderOf,
-        ),
+      storyScope: storyScopeFor({listed, read}),
     });
     expect(plan.full).toBe(false);
     expect(plan.stories).toContain('lab/Chat');
@@ -211,6 +216,26 @@ describe('storyComponentFolders', () => {
         spec.startsWith('packages/lab/src/Chat/__tests__/ChatVirtualizer'),
       ),
     ).toBe(true);
+  });
+
+  it('selects the specs in other folders that open a changed story by id', () => {
+    const scope = storyScopeFor({listed, read})(
+      'apps/storybook/stories/TextInput.stories.tsx',
+    );
+    expect(scope.folders).toContain('core/TextInput');
+    expect(scope.specs).toContain(
+      'packages/core/src/Field/__tests__/TextFieldFocusTiming.interaction.browser.spec.ts',
+    );
+  });
+
+  it('runs the full suite for a removed story, or a name its package does not hold', () => {
+    const scope = storyScopeFor({listed, read});
+    expect(scope('apps/storybook/stories/Removed.stories.tsx')).toBe(null);
+    // ChartLegend comes from the Charts root, which holds no such folder;
+    // Lab's Chart folder must not answer for it.
+    expect(scope('apps/storybook/stories/charts/Legend.stories.tsx')).toBe(
+      null,
+    );
   });
 });
 
@@ -1586,19 +1611,14 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  const storyFolders = file => {
-    const story = storyComponentFolders(file, {
-      listed,
-      read: each => fs.readFileSync(path.join(tree, each), 'utf8'),
-    });
-    return story.unresolved.length > 0
-      ? null
-      : story.folders.map(componentFolderOf).filter(Boolean);
-  };
+  const storyScope = storyScopeFor({
+    listed,
+    read: each => fs.readFileSync(path.join(tree, each), 'utf8'),
+  });
 
   it('runs the specs of the component folders a changed story imports', () => {
     expect(
-      select(['apps/storybook/stories/Menu.stories.tsx'], {storyFolders}),
+      select(['apps/storybook/stories/Menu.stories.tsx'], {storyScope}),
     ).toEqual({
       full: false,
       specs: [spec('Menu')],
@@ -1611,7 +1631,7 @@ describe('what a Chromium run covers for a pull request', () => {
   it('runs the full suite for a story whose imports do not resolve', () => {
     expect(
       select(['apps/storybook/stories/Menu.stories.tsx'], {
-        storyFolders: () => null,
+        storyScope: () => null,
       }),
     ).toMatchObject({
       full: true,

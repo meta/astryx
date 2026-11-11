@@ -1495,16 +1495,87 @@ export function localModules(file, known, read) {
  * its source file (`SideNavCollapseButton` lives in `SideNav/`).
  * @param {string} name
  * @param {string[]} listed
+ * @param {string} [pkg] the package to look in, as a pattern; any by default
  */
-export function componentFolderNamed(name, listed) {
+export function componentFolderNamed(name, listed, pkg = '[^/]+') {
   const own = listed.find(file =>
-    new RegExp(`^packages/[^/]+/src/${name}/`).test(file),
+    new RegExp(`^packages/${pkg}/src/${name}/`).test(file),
   );
   if (own) return componentPathOf(own);
   const source = listed.find(file =>
-    new RegExp(`^packages/[^/]+/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
+    new RegExp(`^packages/${pkg}/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
   );
   return source ? componentPathOf(source) : null;
+}
+
+/**
+ * Storybook's id for a title: lower case, each run of other characters a
+ * single `-`, as Storybook's own `sanitize` makes it.
+ * @param {string} title
+ */
+export function storyIdOf(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+const STORY_FILE_PATH = /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/;
+const TITLE = /^\s*title:\s*['"`]([^'"`]+)['"`]/m;
+/** A meta's own `id`, which replaces the title's id, on the lines after it. */
+const META_ID =
+  /^\s*title:\s*['"`][^'"`]+['"`],?\s*\n(?:\s*\/\/[^\n]*\n)*\s*id:\s*['"`]([a-z0-9-]+)['"`]/m;
+
+/**
+ * Each story id prefix (a title's id, or a meta's own id), to the story files
+ * that make it.
+ * @param {string[]} listed
+ * @param {(file: string) => string} read
+ * @returns {Map<string, string[]>}
+ */
+export function storyFiles(listed, read) {
+  const byId = new Map();
+  for (const file of listed.filter(each => STORY_FILE_PATH.test(each))) {
+    const text = read(file);
+    const title = TITLE.exec(text)?.[1];
+    if (title == null) continue;
+    const ids = new Set([storyIdOf(title)]);
+    const own = META_ID.exec(text)?.[1];
+    if (own) ids.add(own);
+    for (const id of ids) byId.set(id, [...(byId.get(id) ?? []), file]);
+  }
+  return byId;
+}
+
+/** A story id prefix in a spec or its helpers: `core-bottomsheet--…`. */
+const STORY_ID = /(?:id=|['"`])([a-z0-9][a-z0-9-]*?)--(?:[a-z0-9$]|['"`])/g;
+/** A story id whose component part a template fills: `core-${name}--`. */
+const TEMPLATED_ID = /([a-z0-9]+)-\$\{[^}]+\}--/g;
+/** A quoted name a template can fill. */
+const NAME = /['"`]([a-z0-9][a-z0-9-]*)['"`]/g;
+/**
+ * The story ids a file and its local helpers open: each literal id, and each
+ * templated id (`core-${name}--`) a quoted name in the same file fills to a
+ * story that exists. `unfilled` lists each template no quoted name fills.
+ * @param {string} file
+ * @param {{listed: string[], read: (file: string) => string, stories: Map<string, string[]>}} options
+ * @returns {{ids: string[], unfilled: string[]}}
+ */
+export function storyIdsOpened(file, {listed, read, stories}) {
+  const texts = localModules(file, new Set(listed), read).map(read);
+  const ids = new Set(
+    texts.flatMap(text => [...text.matchAll(STORY_ID)].map(m => m[1])),
+  );
+  const unfilled = [];
+  for (const text of texts)
+    for (const [template, prefix] of text.matchAll(TEMPLATED_ID)) {
+      const filled = [...text.matchAll(NAME)]
+        .map(m => `${prefix}-${m[1]}`)
+        .filter(id => stories.has(id));
+      if (filled.length === 0) unfilled.push(template);
+      for (const id of filled) ids.add(id);
+    }
+  return {ids: [...ids], unfilled};
 }
 
 /**
@@ -1537,7 +1608,7 @@ export function storyComponentFolders(file, {listed, read}) {
         continue;
       }
       for (const name of names) {
-        const folder = componentFolderNamed(name, listed);
+        const folder = componentFolderNamed(name, listed, pkg);
         if (folder) folders.add(folder);
         else unresolved.push(`${module} takes ${name}, which no folder holds`);
       }
