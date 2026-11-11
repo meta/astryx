@@ -1186,6 +1186,11 @@ export function keepFieldAboveKeyboard(
   };
   field.addEventListener('focus', onFocus);
   field.addEventListener('blur', onBlur);
+  // A field that has focus before this path attaches, as with `hasAutoFocus`,
+  // gets no later focus event. Its session starts here.
+  if (doc.activeElement === field) {
+    onFocus();
+  }
   return () => {
     field.removeEventListener('focus', onFocus);
     field.removeEventListener('blur', onBlur);

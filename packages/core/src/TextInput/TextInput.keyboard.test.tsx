@@ -53,6 +53,21 @@ it('scrolls the page in the keyboard report until the focused input sits above i
   });
 });
 
+it('keeps an input focused as it mounts (hasAutoFocus) above the keyboard', () => {
+  keyboard = installKeyboardTestDouble();
+  const scrollBy = vi.fn();
+  vi.stubGlobal('scrollBy', scrollBy);
+  render(<TextInput label="Notes" value="" onChange={() => {}} hasAutoFocus />);
+  const field = screen.getByRole('textbox');
+  expect(field).toHaveFocus();
+  boxAt(field, 660, 40);
+  keyboard.show(300);
+  expect(scrollBy).toHaveBeenCalledWith({
+    top: 700 + FIELD_OFFSET - (window.innerHeight - 300),
+    behavior: 'instant',
+  });
+});
+
 it("rides an app's fixed bar at the viewport's bottom with the focused input, and brings it back once the keyboard goes", () => {
   keyboard = installKeyboardTestDouble();
   const bottom = window.innerHeight;
