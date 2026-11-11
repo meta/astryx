@@ -36,6 +36,7 @@ modules:
     module:Table/useTableActivation,
     module:Table/useTableRowExpansion,
     module:Table/useTableTreeData,
+    module:Table/useTableTreegrid,
     module:Table/useTableInfiniteScroll,
     module:Table/useTableRowStatus,
     module:Table/useTableRowsVirtualization,
@@ -350,7 +351,9 @@ removal, the shared focus owner may use temporary programmatic-only focusability
 as FR22 specifies without adding a lasting tab stop or stealing caller-moved
 focus. Native Table structure, header scope, sort/selection/expansion semantics
 remain independently owned; the shared pipeline never confers correctness on a
-module's output.
+module's output. A composed `module:Table/useTableTreegrid` replaces the native
+table role with `treegrid` for a tree table and owns its row focus and keys; the
+Scroll region rule above is unchanged.
 
 ## Design relationships
 
@@ -442,6 +445,9 @@ for this aggregate ownership.
   additions are optional transform context, the `rowModel`, `wholeRowOwner` and
   `renderState` plugin fields, and the atomic data-mode windowing opt-in;
   ordinary Table callers do not acquire new required fields.
+- `module:Table/useTableTreegrid` owns the treegrid role, row state, roving
+  row focus and key model of a tree table. It adds no protocol field; Table
+  owns only its admission (FR17) and ordering (FR9).
 - `module:Table/useTableRowStatus` owns the row-status module's API, generated
   anatomy, resolution and warning precedence, accessibility, performance,
   migration, and evidence. Table owns only the shared plugin protocol and its
