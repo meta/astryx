@@ -46,7 +46,10 @@ import {
 import {build} from '../build/build.mjs';
 import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
-import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {
+  analyzeTemplateNeeds,
+  extractImportedPackages,
+} from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -260,23 +263,25 @@ function sameUrlPage(cwd, app, dir) {
 }
 
 /**
- * The folder that holds the root layout when the routes folder has none
- * of its own, such as `[locale]/` in an app with a locale in every URL.
+ * The folders that hold a root layout when the routes folder has none of
+ * its own: each route group with a layout (`(shop)/`, `(marketing)/`), or
+ * a `[locale]/` in an app with the locale in every URL. Empty when the
+ * routes folder has its own root layout.
  * @param {string} app
- * @returns {string | null}
+ * @returns {string[]}
  */
-function nestedRootLayout(app) {
-  if (fs.readdirSync(app).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)))
-    return null;
-  for (const e of fs.readdirSync(app, {withFileTypes: true}))
-    if (
-      e.isDirectory() &&
-      fs
-        .readdirSync(path.join(app, e.name))
-        .some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+function nestedRootLayouts(app) {
+  const LAYOUT = /^layout\.(tsx|ts|jsx|js)$/;
+  if (fs.readdirSync(app).some(f => LAYOUT.test(f))) return [];
+  return fs
+    .readdirSync(app, {withFileTypes: true})
+    .filter(
+      e =>
+        e.isDirectory() &&
+        fs.readdirSync(path.join(app, e.name)).some(f => LAYOUT.test(f)),
     )
-      return path.join(app, e.name);
-  return null;
+    .map(e => path.join(app, e.name))
+    .sort();
 }
 
 /**
@@ -336,7 +341,11 @@ function checkPlacement(cwd, dir, where, retry) {
   const app = [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(r =>
     dir.startsWith(r + path.sep),
   );
-  const rootLayout = served ? nestedRootLayout(served) : null;
+  const rootLayouts = served ? nestedRootLayouts(served) : [];
+  // The root layout above the folder, when the app has several (one per
+  // route group) or one in [locale]/.
+  const rootLayout =
+    rootLayouts.find(r => dir.startsWith(r + path.sep)) ?? null;
   // A [param] folder that holds the root layout (an app with the locale in
   // every URL) is where its pages go.
   const unrouted =
@@ -372,11 +381,15 @@ function checkPlacement(cwd, dir, where, retry) {
       `next.config sets pageExtensions to ${exts.join(', ')}, so Next does not serve page.tsx, the route file the preview writes.`,
       {fix: 'add "tsx" to pageExtensions to use the preview in this app'},
     );
-  if (rootLayout && !dir.startsWith(rootLayout + path.sep))
+  if (rootLayouts.length && !rootLayout)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `${where} has no root layout above it: the app's root layout is in ${shown(cwd, rootLayout)}/, so a page there would have no html, global CSS or providers.`,
-      {run: [retry(shown(cwd, path.join(rootLayout, 'theme-preview')))]},
+      `${where} has no root layout above it: the app's root ${rootLayouts.length > 1 ? 'layouts are' : 'layout is'} in ${rootLayouts.map(r => `${shown(cwd, r)}/`).join(', ')}, so a page there would have no html, global CSS or providers.`,
+      {
+        run: rootLayouts.map(r =>
+          retry(shown(cwd, path.join(r, 'theme-preview'))),
+        ),
+      },
     );
   const clash = sameUrlPage(cwd, app, dir);
   if (clash) {
@@ -464,7 +477,8 @@ function previewDir(cwd, where, opts = {}) {
   }
   // The routes folder Next serves: app/ when both app/ and src/app/ are there.
   const served = routes[0];
-  const nested = served && !known ? nestedRootLayout(served) : null;
+  const nested =
+    served && !known ? (nestedRootLayouts(served)[0] ?? null) : null;
   const dir = known ?? (served && path.join(nested ?? served, 'theme-preview'));
   if (!dir && opts.optional) return /** @type {any} */ (null);
   if (!dir)
@@ -1880,85 +1894,6 @@ function installed(cwd, pkg) {
 }
 
 /**
- * The packages a source really imports: import and export-from statements
- * and `import('…')` calls in code, never words in comments, strings or
- * template literals (a template's sample text may read `from "Next"`).
- * Only valid npm package names count.
- * @param {string} source
- * @returns {string[]}
- */
-function importedPackages(source) {
-  /** @type {string[]} */
-  const strings = [];
-  let code = '';
-  let i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    if (c === '/' && source[i + 1] === '/') {
-      const end = source.indexOf('\n', i);
-      i = end === -1 ? source.length : end;
-      code += ' ';
-    } else if (c === '/' && source[i + 1] === '*') {
-      const end = source.indexOf('*/', i + 2);
-      i = end === -1 ? source.length : end + 2;
-      code += ' ';
-    } else if (c === '`') {
-      let j = i + 1;
-      let depth = 0;
-      while (j < source.length && !(source[j] === '`' && depth === 0)) {
-        if (source[j] === '\\') j++;
-        else if (source[j] === '$' && source[j + 1] === '{') depth++;
-        else if (source[j] === '}' && depth > 0) depth--;
-        j++;
-      }
-      i = j + 1;
-      code += '``';
-    } else if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < source.length && source[j] !== c && source[j] !== '\n')
-        j += source[j] === '\\' ? 2 : 1;
-      if (source[j] === c) {
-        strings.push(source.slice(i + 1, j));
-        code += `"\u0000${strings.length - 1}\u0000"`;
-        i = j + 1;
-      } else {
-        // An apostrophe in JSX text, not a string.
-        code += c;
-        i++;
-      }
-    } else {
-      code += c;
-      i++;
-    }
-  }
-  const STR = '"\\u0000(\\d+)\\u0000"';
-  const patterns = [
-    new RegExp(
-      `(?:^|[;}\\n])\\s*import\\s+(?:type\\s+)?(?:[\\w$*{}\\s,]+?\\s+from\\s*)?${STR}`,
-      'g',
-    ),
-    new RegExp(
-      `(?:^|[;}\\n])\\s*export\\s+(?:type\\s+)?(?:\\*(?:\\s+as\\s+[\\w$]+)?|\\{[^}]*\\})\\s*from\\s*${STR}`,
-      'g',
-    ),
-    new RegExp(`\\bimport\\s*\\(\\s*${STR}\\s*\\)`, 'g'),
-  ];
-  /** @type {Set<string>} */
-  const out = new Set();
-  for (const re of patterns)
-    for (const m of code.matchAll(re)) {
-      const spec = strings[Number(m[1])];
-      if (!spec || /^[./]/.test(spec) || spec.startsWith('node:')) continue;
-      const name = spec.startsWith('@')
-        ? spec.split('/').slice(0, 2).join('/')
-        : spec.split('/')[0];
-      if (/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name))
-        out.add(name);
-    }
-  return [...out];
-}
-
-/**
  * The package-manager command that adds packages to the app.
  * @param {string} cwd
  * @param {string[]} pkgs
@@ -1977,13 +1912,8 @@ function addCommandOf(cwd, pkgs) {
  * @param {string} source
  */
 function pageNeeds(cwd, source) {
-  const pkgs = importedPackages(source);
-  // The shared check reads its own regex over the source; it gets only the
-  // real imports here.
-  const needs = analyzeTemplateNeeds(
-    pkgs.map(p => `import '${p}';`).join('\n'),
-    cwd,
-  );
+  const pkgs = [...extractImportedPackages(source)];
+  const needs = analyzeTemplateNeeds(source, cwd);
   /** @type {Record<string, string>} */
   let declared = {};
   try {

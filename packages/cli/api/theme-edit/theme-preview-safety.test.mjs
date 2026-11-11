@@ -1157,3 +1157,26 @@ describe('pass 3', () => {
     expect(r.data.notes.join(' ')).toContain('gone2, which is gone');
   }, 120_000);
 });
+
+describe('pass 4', () => {
+  it('places the preview under any of several root layouts, one per route group', async () => {
+    const layout =
+      'export default function L({children}: any) { return children; }\n';
+    write('src/app/(marketing)/layout.tsx', layout);
+    write('src/app/(shop)/layout.tsx', layout);
+    const r = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/(shop)/theme-preview',
+    });
+    expect(r.data.folder).toBe('src/app/(shop)/theme-preview');
+    expect(r.data.open).toBe('open /theme-preview in the running app');
+    const outside = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'src/app/pv'}),
+    );
+    expect(outside.message).toContain('no root layout above it');
+    expect(outside.run).toEqual([
+      "astryx experimental theme preview add --path 'src/app/(marketing)/theme-preview'",
+      "astryx experimental theme preview add --path 'src/app/(shop)/theme-preview'",
+    ]);
+  }, 120_000);
+});
