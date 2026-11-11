@@ -13,7 +13,7 @@ export const doc = {
   summary:
     'Put the theme back as it was before its last change, or remove one setting.',
   description:
-    'Steps back one change: the settings file, the theme source and the build go back to how they were before the last set, unset, or base or mode change, and the preview is rewritten. The result names what was undone and how many earlier steps are left. When the settings file is damaged (not valid JSON), the step back restores the settings from before the last change without reading it. With `thing`, it removes that one setting instead, wherever it is in the settings, so it goes back to the value of the base theme; name it the way it was set, with the same `on`, `when`, `state`, `mode` and `only`. Removing a color (accent, neutral, success, warning, danger, info) stops generating it, and the tokens it fed go back to the base theme; with no color left, the generated color files are deleted. Removing vibrancy makes the colors again at the default, 50. Experimental: it may change or be removed in a patch release.',
+    'With only the theme, it steps back one change: the settings file, the theme source and the build go back to how they were before the last change, and the preview is rewritten; the result names what was undone and how many earlier steps are left. When the settings file is damaged (not valid JSON), the step back restores the settings from before the last change without reading it. With `thing`, it removes that one setting instead, wherever it is in the settings, so it goes back to the value of the base theme; name it the way it was set, with the same `on`, `when`, `state`, `mode` and `only`. Removing a color (accent, neutral, success, warning, danger, info) stops generating it, and the tokens it fed go back to the base theme; with no color left, the generated color files are deleted. Removing vibrancy makes the colors again at the default, 50. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditUndo(theme: string, options?: object): Promise<object>',
   keywords: [
@@ -34,7 +34,7 @@ export const doc = {
       name: 'options.thing',
       type: 'string',
       description:
-        "Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; it goes back to the base theme's value.",
+        "Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; the result's `now` says what applies instead: a whole-theme setting of the same thing, or the base theme's value.",
     },
     {
       name: 'options.value',

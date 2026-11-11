@@ -4,7 +4,8 @@
 
 /**
  * @file page.tsx
- * @input Nothing: a fixed conversation of 400 messages of mixed height
+ * @input Nothing: a conversation of 400 messages of mixed height, and an
+ *   Add message button that appends one more
  * @output Lab's ChatVirtualizer attached to the page's own scroller, with a
  *   heading and a card above the list, anchored to the first message
  * @position Raw page for phone checks of ChatVirtualizer on the page scroller.
@@ -13,6 +14,7 @@
 
 import {useLayoutEffect, useRef, useState} from 'react';
 import {Avatar} from '@astryxdesign/core/Avatar';
+import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {ChatMessage, ChatMessageBubble} from '@astryxdesign/core/Chat';
 import {VStack} from '@astryxdesign/core/Layout';
@@ -37,7 +39,7 @@ const LINES = [
   'The harbor has a few small seafood places. Most close their kitchens at 9, so book a table for the evening if you can. The one by the ferry steps has a terrace that stays warm after dark, and it takes walk-ins before 7.',
 ];
 
-const MESSAGES: Message[] = Array.from({length: 400}, (_, id) => {
+const messageAt = (id: number): Message => {
   const minutes = 9 * 60 + id;
   return {
     id,
@@ -49,10 +51,13 @@ const MESSAGES: Message[] = Array.from({length: 400}, (_, id) => {
     ).join(' '),
     time: `${Math.floor(minutes / 60) % 12 || 12}:${String(minutes % 60).padStart(2, '0')}`,
   };
-});
+};
+
+const MESSAGES: Message[] = Array.from({length: 400}, (_, id) => messageAt(id));
 
 export default function ChatPageScrollerPage() {
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const [messages, setMessages] = useState(MESSAGES);
   const handle = useRef<ChatVirtualizerHandle>(null);
   // The page's own scroller exists only in the browser.
   useLayoutEffect(() => {
@@ -70,7 +75,8 @@ export default function ChatPageScrollerPage() {
         <Text color="secondary">
           A long conversation on the page&apos;s own scroller. The heading and
           the card sit above the list, in the same scroller. Scroll with a
-          finger, fling, and let the momentum end.
+          finger, fling, and let the momentum end. At the end of the
+          conversation, Add message appends one more.
         </Text>
         <Card>
           <VStack gap={1}>
@@ -83,7 +89,7 @@ export default function ChatPageScrollerPage() {
         </Card>
       </VStack>
       <ChatVirtualizer<Message>
-        data={MESSAGES}
+        data={messages}
         getRowKey={message => String(message.id)}
         estimatedItemSize={96}
         handleRef={handle}
@@ -106,6 +112,14 @@ export default function ChatPageScrollerPage() {
           </VStack>
         )}
       />
+      <div style={{position: 'fixed', insetInlineEnd: 16, insetBlockEnd: 16}}>
+        <Button
+          label="Add message"
+          onClick={() =>
+            setMessages(current => [...current, messageAt(current.length)])
+          }
+        />
+      </div>
     </VStack>
   );
 }

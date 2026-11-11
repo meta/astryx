@@ -323,7 +323,7 @@ function changeBlocks(r) {
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; it is back to the base theme's value`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // On undo, `setting` and `removed` both name the setting removed, as in
   // the JSON; the status line says the base theme's value is back.
   return [status, ...project(/** @type {any} */ (d))];
@@ -624,7 +624,6 @@ export function registerExperimentalTheme(group, program) {
             themeEditPreviewApp(dir, {
               cwd: process.cwd(),
               theme: o.theme,
-              overwrite: o.overwrite ?? false,
             }),
           r => [
             `[ok] new app in ${r.data.folder} with the theme preview`,
@@ -683,7 +682,7 @@ export function registerExperimentalTheme(group, program) {
     defineCommand(editor, howDoc, {
       fn: howFn,
       action: async (/** @type {string[]} */ words, /** @type {any} */ o) => {
-        if (!words.length && o.list == null && !(o.at ?? []).length) {
+        if (!words.length && !o.list && !(o.at ?? []).length) {
           const c = editor.commands.find(
             x => x.name() === howDoc.name.split(' ').pop(),
           );
@@ -691,7 +690,7 @@ export function registerExperimentalTheme(group, program) {
           if (program.opts().json) c?.outputHelp();
           else
             print([
-              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties]`,
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
               '',
               'Examples:',
               ...(howDoc.examples ?? []).flatMap(e => [
@@ -710,13 +709,19 @@ export function registerExperimentalTheme(group, program) {
           /^\d+$/.test(words[1])
             ? Number(words[1])
             : undefined;
-        const subject = count == null ? words.join(' ') : words[0];
+        // --list is a switch, as everywhere in the CLI: the first word is
+        // what to list, and the rest filters it.
+        const subject = o.list
+          ? words.slice(1).join(' ')
+          : count == null
+            ? words.join(' ')
+            : words[0];
         return run(
           program,
           () =>
             themeEditHow(subject, {
               cwd: process.cwd(),
-              list: o.list === true ? '' : o.list,
+              list: o.list ? (words[0] ?? '') : undefined,
               at: o.at ?? [],
               count,
             }),
