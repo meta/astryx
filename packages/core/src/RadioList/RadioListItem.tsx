@@ -98,16 +98,16 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The row remains the large press target, but nested controls keep their
-  // independent action and do not make the radio appear pressed: the
-  // row declares the mouse press's paint (`rowStyles.press`) and this layer
-  // reads it. This owner-drawn layer also survives a theme replacing the
+  // The row remains the large press target. Nested controls keep their own
+  // action and do not make the radio look pressed. The row declares the paint
+  // of a press the controller does not paint (`rowStyles.press`), and this
+  // layer reads it. This owner-drawn layer also survives a theme replacing the
   // indicator component.
   // The press controller writes its press attribute on the row for every
   // pointer: a finger, a mouse and a pen. This layer reads it off the same
   // scope marker as the hover tint. The controller paints the innermost pressable.
   // A press on a control nested in the row is that control's. The row's
-  // container rule (cancelNestedTouchPress) ends the row's paint at once.
+  // container rule (cancelNestedPress) ends the row's paint at once.
   // `:active` paints only a press the controller does not paint, and under a
   // coarse pointer it is dropped.
   indicatorPressOverlay: {
