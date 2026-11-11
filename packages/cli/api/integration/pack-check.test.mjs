@@ -90,9 +90,7 @@ export const ${slug}Theme = {name: '${slug}'};`,
       );
       expect(
         normalizeThemeVerifyForCompare(builtModule('npx astryx', slug)),
-      ).toBe(
-        normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)),
-      );
+      ).toBe(normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)));
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
       ).not.toBe(
@@ -1862,13 +1860,16 @@ describe('integrationPackCheck', () => {
       );
     const found = async () =>
       (await integrationPackCheck({cwd: tmpDir})).data.issues.filter(
-        (/** @type {{code: string}} */ issue) => issue.code === 'doc_tokens_need_cli',
+        (/** @type {{code: string}} */ issue) =>
+          issue.code === 'doc_tokens_need_cli',
       );
     // An escaped token is shown as written by every release.
     write('escaped', 'Write {@@pm install x} for an install.');
     expect(await found()).toEqual([]);
     write('tokens', 'Run {@command doctor} first.');
-    expect((await found()).map((/** @type {any} */ issue) => issue.severity)).toEqual(['warning']);
+    expect(
+      (await found()).map((/** @type {any} */ issue) => issue.severity),
+    ).toEqual(['warning']);
     const pkgFile = path.join(tmpDir, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
     pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.3'};
@@ -2242,8 +2243,10 @@ describe('integrationPackCheck', () => {
   it('does not execute shell metacharacters embedded in the cwd', async () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
+    // No `#`: npm 10 reads the cwd as a file URL, cuts it at `#`, and packs
+    // the package above it instead.
     const weirdDir = fs.mkdtempSync(
-      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;#-'),
+      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;-'),
     );
     try {
       const pkg = {name: 'safe-pkg', version: '1.0.0'};
@@ -2257,6 +2260,7 @@ describe('integrationPackCheck', () => {
       );
       const result = await integrationPackCheck({cwd: weirdDir});
       expect(result.type).toBe('integration.pack-check');
+      expect(result.data.tarball?.filename).toBe('safe-pkg-1.0.0.tgz');
       expect(fs.existsSync(marker)).toBe(false);
     } finally {
       fs.rmSync(weirdDir, {recursive: true, force: true});
