@@ -23,6 +23,7 @@ import {baseResolved, openProject} from './_project.mjs';
 import {
   loadTheme,
   nearest,
+  q,
   refuse,
   shown,
   themeFiles,
@@ -38,6 +39,7 @@ import {
 } from './_preview.mjs';
 import {paletteFiles, paletteMapping} from './_palette.mjs';
 import {build} from '../build/build.mjs';
+import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
@@ -381,8 +383,11 @@ async function colorsPage(cwd, dir, slug) {
     const byMode = (uses[v.family] ??= {light: {}, dark: {}});
     for (const m of /** @type {const} */ (['light', 'dark'])) {
       const r = v[m];
-      (byMode[m][r.stop] ??= []).push(
-        r.alpha ? `${token} (opacity ${r.alpha})` : token,
+      // A dark fill that keeps the exact color uses the light ramp's shade:
+      // it is marked there, for dark mode.
+      const ramp = r.from ?? m;
+      (byMode[ramp][r.stop] ??= []).push(
+        `${token}${r.alpha ? ` (opacity ${r.alpha})` : ''}${ramp !== m ? ` (${m} mode too)` : ''}`,
       );
     }
   }
@@ -555,69 +560,192 @@ function skipReason(s) {
 }
 
 /**
- * The page templates the build ranking picks for a description, best first,
- * each with why. App frames (the Shell templates) are left out: the preview
- * is an app shell already, and `--template` can still name one. When the
- * ranking says no page is really this one, it refuses with the closest
- * pages to name instead, and nothing is written.
+ * The page templates for a description, best first, each with why: the
+ * build ranking's picks, then the template search's, so a page the app
+ * cannot show has a next match. App frames (the Shell templates) are left
+ * out: the preview is an app shell already, and `--template` can still name
+ * one. The closest page is added even when it is not exactly the page asked
+ * for, with a note; only a description no page relates to is refused, with
+ * the closest pages to name instead, and nothing is written.
  * @param {string} words
  * @param {string} cwd
- * @param {string[]} notes skipped frames are noted here
+ * @param {string[]} notes notes for the result
+ * @param {string} flags the caller's other flags, for the suggestions
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes) {
+async function rankedPages(words, cwd, notes, flags) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
     );
   const start = kit.data.start;
-  const all = start ? [start, ...start.alternatives] : [];
-  const listed = /** @type {Array<{id: string, category?: string}>} */ (
-    (await template(undefined, {list: true, type: 'page', cwd})).data
-  );
+  const listed = await pageTemplates(cwd);
   const frames = new Set(
     listed.filter(t => /^Shell\b/.test(t.category ?? '')).map(t => t.id),
   );
-  const pages = all.filter(p => !frames.has(p.name));
-  const skippedFrames = all.filter(p => frames.has(p.name)).map(p => p.name);
-  if (!pages.length)
+  const found = /** @type {any} */ (
+    await search(words, {cwd, type: 'template', limit: 20})
+  ).data.results.filter((/** @type {any} */ r) => r.kind === 'page');
+  /** @type {Map<string, string>} */
+  const matchedWords = new Map(
+    found.map((/** @type {any} */ r) => [
+      r.name,
+      String(r.reason ?? '').replace(/^matches \d+\/\d+ terms: /, ''),
+    ]),
+  );
+  const names = [
+    ...(start ? [start.name, ...start.alternatives.map(a => a.name)] : []),
+    ...found.map((/** @type {any} */ r) => r.name),
+  ].filter((n, i, a) => a.indexOf(n) === i);
+  const skippedFrames = names.filter(n => frames.has(n));
+  const pages = names.filter(n => !frames.has(n));
+  /** @param {string} name */
+  const label = name => listed.find(t => t.id === name)?.name ?? name;
+  const suggest = (/** @type {string[]} */ list) =>
+    list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
+  // No page relates when the ranking fell back to a frame with no direct
+  // match, and no page the search found matches three words of the request
+  // or two fifths of them.
+  const termsMatched = (/** @type {any} */ r) => {
+    const m = /^matches (\d+)\/(\d+)/.exec(String(r.reason ?? ''));
+    if (!m) return 0;
+    const [hit, of] = [Number(m[1]), Number(m[2])];
+    return hit >= 3 || hit / of >= 0.4 ? hit : 0;
+  };
+  const unrelated =
+    !pages.length ||
+    (start &&
+      start.basis === 'fallback' &&
+      frames.has(start.name) &&
+      !kit.data.directMatch &&
+      !found.some(
+        (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
+      ) &&
+      !APP_PAGES.some(([re]) => re.test(words.toLowerCase())));
+  if (unrelated)
     refuse(
       E.ERR_NOT_FOUND,
-      `No page template to show for "${words}": ${all.length ? `the ranking found only app frames (${skippedFrames.join(', ')}), and the preview is a frame already` : 'this project has none'}. Nothing was written.`,
-      {
-        run: skippedFrames
-          .slice(0, 3)
-          .map(n => `${PREVIEW} add --template ${n}`),
-      },
-    );
-  // The ranking's own verdict: a closest page that is not this one, or a
-  // frame it fell back to because no page matched, adds nothing unrelated.
-  const unmatched =
-    start &&
-    ((start.basis === 'closest' && !frames.has(start.name)) ||
-      (start.basis === 'fallback' &&
-        frames.has(start.name) &&
-        !kit.data.directMatch));
-  if (unmatched)
-    refuse(
-      E.ERR_NOT_FOUND,
-      `No page template really matches "${words}"${start.basis === 'closest' ? `: the closest is ${start.name}, and none is exactly this page` : ''}. Nothing was written. Name one of the closest pages to add it anyway.`,
-      {run: pages.slice(0, 3).map(p => `${PREVIEW} add --template ${p.name}`)},
+      `No page template relates to "${words}". Name a page to add it anyway.`,
+      {run: suggest(pages.length ? pages : skippedFrames)},
     );
   if (skippedFrames.length)
     notes.push(
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
     );
-  return pages.map((p, i) => ({
-    name: p.name,
-    displayName: p.displayName,
-    why:
-      i === 0 && p === start
-        ? (start.reason ?? 'the best match')
-        : i === 0
-          ? 'the best match after leaving out app frames'
-          : 'the next best match',
-  }));
+  const closest = start && start.basis === 'closest';
+  const text = words.toLowerCase();
+  // An app the description names (an app screenshot, an issue tracker, a
+  // board) shows its theme better than a hero, so a page for it goes first.
+  const exists = (/** @type {string} */ id) =>
+    listed.some(t => t.id === id) && !frames.has(id);
+  const app = APP_PAGES.find(([re, ids]) => re.test(text) && ids.some(exists));
+  // A hero described as left-aligned or split takes the side layout.
+  const side =
+    /\bleft[- ]aligned\b|\bsplit\b|\bside[- ]by[- ]side\b|\basymmetric/.test(
+      text,
+    ) &&
+    pages[0] !== 'side-gallery' &&
+    /hero|landing/.test(text);
+  /** @type {Map<string, string>} */
+  const reasons = new Map();
+  if (app) {
+    // The ranked page stays first when it already serves the app named;
+    // the app's pages come next, in order, so the next one is taken when
+    // one cannot be shown here.
+    const named = /** @type {RegExpExecArray} */ (app[0].exec(text))[0];
+    const keep = app[1].includes(pages[0]) ? pages[0] : null;
+    const ids = app[1].filter(id => exists(id) && id !== keep);
+    for (const id of [...ids].reverse()) {
+      if (pages.includes(id)) pages.splice(pages.indexOf(id), 1);
+      pages.splice(keep ? 1 : 0, 0, id);
+    }
+    if (keep)
+      reasons.set(
+        keep,
+        `the description names ${named}, and this page is that app`,
+      );
+    ids.forEach((id, k) =>
+      reasons.set(
+        id,
+        k === 0 && !keep
+          ? `the description names ${named}, and an app page shows a theme better than a hero`
+          : `the next page for ${named}`,
+      ),
+    );
+  } else if (side && listed.some(t => t.id === 'side-gallery')) {
+    if (pages.includes('side-gallery'))
+      pages.splice(pages.indexOf('side-gallery'), 1);
+    pages.unshift('side-gallery');
+    reasons.set(
+      'side-gallery',
+      'the description asks for a left-aligned or split hero, and this hero puts the copy beside the picture',
+    );
+  }
+  if (/\btop[- ]?nav|\bnav ?bar|\bnavigation bar|\bheader nav/.test(text))
+    notes.push(
+      'no page has a top nav of its own: the preview frame has one, and your app keeps its own',
+    );
+  return pages.map((name, i) => {
+    const words = matchedWords.get(name);
+    const doc = listed.find(t => t.id === name)?.description ?? '';
+    const shape = doc.split(/(?<=\.)\s/)[0];
+    const reason = reasons.get(name);
+    return {
+      name,
+      displayName: label(name),
+      why: reason
+        ? `${reason}${words ? `; it covers ${words}` : ''}. ${shape}`
+        : i === 0 && closest
+          ? `the closest page, not exactly the one described${words ? `: it covers ${words}` : ''}; the rest of the description is not on it. ${shape}`
+          : `${i === 0 ? 'the best match' : 'the next match'}${words ? `: it covers ${words}` : ''}. ${shape}`,
+    };
+  });
+}
+
+/**
+ * App pages for the apps a description names, best first. Each is matched
+ * by a phrase, never one loose word, so "buy tickets" is not an issue
+ * tracker and "an AI tool" is not a chat. A detail view comes before its
+ * list.
+ * @type {Array<[RegExp, string[]]>}
+ */
+const APP_PAGES = [
+  [
+    /\b(issue|ticket|bug|task|work[- ]item|story) (detail|details|view|page)\b/,
+    ['work-item-detail', 'detail-page'],
+  ],
+  [
+    /\b(issue[- ]?tracker|bug[- ]tracker|issue (list|table|queue|board)|ticket(ing)? (system|queue|tracker)|backlog)\b/,
+    ['table-grouped', 'table'],
+  ],
+  [/\b(kanban|task board|project board)\b/, ['kanban-board']],
+  [/\b(analytics )?dashboard\b|\banalytics (app|page|view)\b/, ['dashboard']],
+  [
+    /\b(email|mail) (inbox|client|app)\b|\binbox (app|view|page)\b/,
+    ['table-inbox'],
+  ],
+  [
+    /\b(chat (app|interface|ui|window|screen|view)|chatbot|ai (chat|assistant) (app|interface|ui))\b/,
+    ['ai-chat'],
+  ],
+  [/\b(settings|preferences) (page|screen|panel|view)\b/, ['settings']],
+  [/\b(docs|documentation) (site|page|portal)\b/, ['documentation']],
+  [/\b(data ?table|spreadsheet|data grid)\b/, ['table']],
+  [
+    /\b(app|product) (screenshot|window|preview|ui)\b/,
+    ['table-grouped', 'dashboard', 'table'],
+  ],
+];
+
+/**
+ * The page templates this project has, with their display names.
+ * @param {string} cwd
+ * @returns {Promise<Array<{id: string, name: string, category?: string, description?: string}>>}
+ */
+async function pageTemplates(cwd) {
+  return /** @type {any} */ (
+    (await template(undefined, {list: true, type: 'page', cwd})).data
+  );
 }
 
 /**
@@ -706,15 +834,26 @@ export async function themeEditPreviewAdd(description, options = {}) {
     /** @type {Array<{name: string, displayName: string, why: string}>} */
     let picks;
     const explicit = options.template != null;
-    if (explicit)
+    if (explicit) {
+      const name = /** @type {string} */ (options.template);
       picks = [
         {
-          name: /** @type {string} */ (options.template),
-          displayName: /** @type {string} */ (options.template),
+          name,
+          displayName:
+            (await pageTemplates(cwd)).find(t => t.id === name)?.name ?? name,
           why: 'named with --template',
         },
       ];
-    else picks = await rankedPages(words, cwd, notes);
+    } else
+      picks = await rankedPages(
+        words,
+        cwd,
+        notes,
+        [
+          ...(options.theme != null ? [` --theme ${q(options.theme)}`] : []),
+          ...(options.path != null ? [` --path ${q(options.path)}`] : []),
+        ].join(''),
+      );
     for (const pick of picks) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -762,6 +901,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
 
   /** @type {string[]} */
   const added = [];
+  /** Pages that were there already and are written again. @type {string[]} */
+  const refreshed = [];
   for (const page of add) {
     const file = `pages/${page.id}`;
     if (page.template != null) {
@@ -781,9 +922,13 @@ export async function themeEditPreviewAdd(description, options = {}) {
         `${file}.tsx`,
         /** @type {string} */ (page.source),
       );
-    if (!data.pages.some(x => x.id === page.id)) {
+    const had = data.pages.find(x => x.id === page.id);
+    if (!had) {
       data.pages.push({id: page.id, label: page.label, file});
       added.push(page.id);
+    } else {
+      had.label = page.label;
+      refreshed.push(page.id);
     }
   }
   await writeRoute(cwd, at.dir, data, theme);
@@ -794,6 +939,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
       folder: shown(cwd, at.dir),
       theme: data.theme,
       added,
+      refreshed,
       matched,
       skipped,
       notes,

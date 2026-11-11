@@ -323,7 +323,9 @@ function changeBlocks(r) {
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `undid ${describe(s)}: back to the base theme's value`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; it is back to the base theme's value`}`;
+  // On undo, `setting` and `removed` both name the setting removed, as in
+  // the JSON; the status line says the base theme's value is back.
   return [status, ...project(/** @type {any} */ (d))];
 }
 
@@ -583,7 +585,18 @@ export function registerExperimentalTheme(group, program) {
           r => {
             const {matched, skipped, ...rest} = r.data;
             return [
-              `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}`,
+              `[ok] theme preview in ${r.data.folder}: ${
+                [
+                  ...(r.data.added.length
+                    ? [`added ${r.data.added.join(', ')}`]
+                    : []),
+                  ...(r.data.refreshed.length
+                    ? [
+                        `${r.data.refreshed.join(', ')} ${r.data.refreshed.length > 1 ? 'were' : 'was'} there already and ${r.data.refreshed.length > 1 ? 'are' : 'is'} written again`,
+                      ]
+                    : []),
+                ].join('; ') || 'pages refreshed'
+              }`,
               ...project(/** @type {any} */ (rest)),
               ...(matched.length
                 ? [section('matched:'), records(matched)]
