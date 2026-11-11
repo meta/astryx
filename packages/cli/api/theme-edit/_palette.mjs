@@ -5,7 +5,9 @@
  * each color dial is one family in the theme's palette.config.json, grown by
  * the palette generator (the same function as `theme palette generate`), and
  * the theme's color tokens point at stops of that palette. Contrast moves a
- * token to a nearer stop that passes; it never makes a new color.
+ * token to a nearer stop that passes; it never makes a new color. The
+ * `vibrancy` dial is the generator's `vibrancy`. Users see "colors" and
+ * "shades": the words palette, family and stop stay in the code.
  *
  * @position api/theme-edit — imported by _settings.mjs, _check.mjs, _how.mjs
  */
@@ -19,6 +21,7 @@ import {
   perceptualDelta,
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {parseColor, hex, ratio} from './_color.mjs';
 
 /** @typedef {'light' | 'dark'} Mode */
@@ -28,6 +31,7 @@ import {parseColor, hex, ratio} from './_color.mjs';
  * One token pointed at a palette stop in each mode.
  * @typedef {object} StopRef
  * @property {number} stop
+ * @property {Mode} [from] - The ramp the stop is from when it is not the token's own mode: a dark fill that keeps the exact color takes the light ramp's stop.
  * @property {string} color - The stop's color, with `alpha` appended when set.
  * @property {string} [alpha] - Two hex digits of opacity.
  */
@@ -52,6 +56,7 @@ import {parseColor, hex, ratio} from './_color.mjs';
  * @property {Array<{id: string, dial: string, seed: string, value: string}>} families
  * @property {Record<string, {family: string, light: StopRef, dark: StopRef}>} tokens
  * @property {ContrastCheck[]} contrast
+ * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
  */
 
 /** The color dials. Each one is a palette family of the same id. */
@@ -63,6 +68,21 @@ export const PALETTE_DIALS = [
   'danger',
   'info',
 ];
+
+/** The generator's vibrancy when the theme sets none. */
+export const VIBRANCY_DEFAULT = 50;
+
+/**
+ * The vibrancy the theme sets, or null.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {number | null}
+ */
+function dialVibrancy(data) {
+  const s = [...data.settings]
+    .reverse()
+    .find(x => x.source === 'dial' && x.thing === 'vibrancy');
+  return s ? Number(s.value) : null;
+}
 
 /** The Core token word of each status family. */
 const STATUS_TOKEN = /** @type {Record<string, string>} */ ({
@@ -80,7 +100,7 @@ export const paletteToken = dial =>
   dial === 'accent'
     ? '--color-accent'
     : dial === 'neutral'
-      ? '--color-background-body'
+      ? '--color-background-surface'
       : `--color-${STATUS_TOKEN[dial]}`;
 
 /** Text contrast (WCAG AA) and non-text contrast (focus rings, icons). */
@@ -89,7 +109,9 @@ const NON_TEXT = 3;
 
 /**
  * The stop each token starts from, `[light, dark]`, as the official themes
- * map them: neutral surfaces, text and borders as in the neutral theme; an
+ * map them: neutral surfaces, text and borders as in the neutral theme (the
+ * page background, `--color-background-body`, stays the base theme's, so a
+ * tinted gray never tints the page); an
  * accent or status fill at its seed's anchored stop in light (as the neutral
  * theme anchors its blue) and 70 in dark (as the theme authoring guide maps
  * it); status text, tints and borders as the neutral theme maps its hue
@@ -97,7 +119,6 @@ const NON_TEXT = 3;
  */
 const NEUTRAL_STOPS = /** @type {Record<string, [number, number]>} */ ({
   '--color-background-surface': [100, 15],
-  '--color-background-body': [95, 10],
   '--color-background-card': [100, 10],
   '--color-background-popover': [100, 10],
   '--color-background-muted': [95, 10],
@@ -164,6 +185,15 @@ export function seedOf(value) {
 }
 
 /**
+ * Below this OKLCH chroma a seed reads as gray: its family is generated as a
+ * neutral, so no hue is invented for it in either mode.
+ */
+const GRAY_CHROMA = 0.02;
+
+/** @param {string} seed */
+const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
+
+/**
  * The color dial settings of a theme, in dial order.
  * @param {import('./_settings.mjs').ThemeData} data
  */
@@ -201,13 +231,15 @@ function readConfig(file) {
  * never hold an anchor.
  * @param {string} seed
  * @param {any} config - Its `stops`, `vibrancy` and `neutralProfile` shape the ramp.
+ * @param {'chromatic' | 'neutral'} [kind]
  */
-function seedStop(seed, config) {
+function seedStop(seed, config, kind = 'chromatic') {
   const {stops, palette} = generate({
     ...(config.stops ? {stops: config.stops} : {}),
     ...(config.vibrancy != null ? {vibrancy: config.vibrancy} : {}),
+    ...(kind === 'neutral' ? {neutralProfile: 'custom'} : {}),
     modeStrategy: 'light-only',
-    families: [{id: 'seed', seed}],
+    families: [{id: 'seed', seed, kind}],
   });
   const ramp = /** @type {Record<number, string>} */ (
     /** @type {any} */ (palette.seed).light
@@ -223,8 +255,9 @@ function seedStop(seed, config) {
 /**
  * The palette config a theme's settings ask for: the existing config, with
  * each color dial's family written in place and families the dials no longer
- * set removed. Families and fields the editor does not own are kept. Null
- * when the config would hold no family.
+ * set removed, and `vibrancy` as the vibrancy dial sets it (absent without
+ * the dial). Other families and fields are kept. Null when the config would
+ * hold no family.
  * @param {string} cwd
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -235,30 +268,39 @@ export function paletteConfig(cwd, slug, data) {
   const fams = dialFamilies(data);
   if (!existing && !fams.length) return null;
   const config = {...(existing ?? {})};
+  const vibrancy = dialVibrancy(data);
+  if (vibrancy == null) delete config.vibrancy;
+  else config.vibrancy = vibrancy;
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
   /** @param {{id: string, seed: string}} f */
-  const familyOf = f =>
-    f.id === 'neutral'
-      ? {id: f.id, name: 'Neutral', seed: f.seed, kind: 'neutral'}
-      : {
-          id: f.id,
-          name: f.id[0].toUpperCase() + f.id.slice(1),
-          seed: f.seed,
-          anchors: [
-            {
-              mode: 'light',
-              stop: seedStop(f.seed, config),
-              color: f.seed,
-              policy: 'exact',
-            },
-          ],
-        };
+  const familyOf = f => {
+    if (f.id === 'neutral')
+      return {id: f.id, name: 'Neutral', seed: f.seed, kind: 'neutral'};
+    const kind = isGray(f.seed) ? 'neutral' : 'chromatic';
+    return {
+      id: f.id,
+      name: f.id[0].toUpperCase() + f.id.slice(1),
+      seed: f.seed,
+      ...(kind === 'neutral' ? {kind} : {}),
+      anchors: [
+        {
+          mode: 'light',
+          stop: seedStop(f.seed, config, kind),
+          color: f.seed,
+          policy: 'exact',
+        },
+      ],
+    };
+  };
   const families = before
     .map(f => {
       if (!PALETTE_DIALS.includes(f?.id)) return f;
       const mine = fams.find(x => x.id === f.id);
-      return mine ? {...f, ...familyOf(mine)} : null;
+      if (!mine) return null;
+      const {kind, ...rest} = f;
+      void kind;
+      return {...rest, ...familyOf(mine)};
     })
     .filter(Boolean);
   for (const f of fams)
@@ -266,7 +308,8 @@ export function paletteConfig(cwd, slug, data) {
   if (!families.length) return null;
   config.modeStrategy = 'light-and-dark';
   // The neutral profiles other than `custom` ignore the seed.
-  if (fams.some(f => f.id === 'neutral')) config.neutralProfile = 'custom';
+  if (families.some(f => f?.kind === 'neutral'))
+    config.neutralProfile = 'custom';
   config.families = families;
   return config;
 }
@@ -426,18 +469,115 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       if (/** @type {{r: number}} */ (best).r >= TEXT) break;
     }
     const b = /** @type {{fill: number, on: number, r: number}} */ (best);
+    // The other text shade's ratio on the same fill, so a switch between
+    // white and near-black text says why.
+    const other = ON_FILL[m].find(on => on !== b.on);
+    const otherR =
+      other == null
+        ? null
+        : round(contrast(ref(id, m, other).color, ref(id, m, b.fill).color));
     if (has(onToken))
       checks.push({
         token: onToken,
         mode: m,
         stop: b.on,
         preferred: ON_FILL[m][0],
-        against: `${fillToken} (stop ${b.fill})`,
+        against: `${fillToken} (shade ${b.fill})${otherR == null ? '' : `, where ${other === 100 ? 'white' : other === 0 || other === 5 ? 'near-black' : `shade ${other}`} text reads at only ${otherR}:1`}`,
         ratio: round(b.r),
         needs: TEXT,
         pass: b.r >= TEXT,
       });
     return {fill: ref(id, m, b.fill), on: ref(id, m, b.on), moved: b.fill};
+  };
+
+  /**
+   * The dark fill as the exact color given, when text on it reads at 4.5:1
+   * (white first, then the dark text stop) and it stands out from the dark
+   * surfaces at 3:1; no pair otherwise, with why.
+   * @param {string} fillToken @param {string} onToken @param {string} id @param {number} seedStop
+   * @returns {{pair: ReturnType<typeof fillPair> | null, ratio: number, why: string}}
+   */
+  const exactDarkFill = (fillToken, onToken, id, seedStop) => {
+    const fill = ref(id, 'light', seedStop);
+    const best = [...ON_FILL.dark]
+      .reverse()
+      .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill.color)}))
+      .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
+    if (best.r < TEXT)
+      return {
+        pair: null,
+        ratio: round(best.r),
+        why: `your exact color reads at only ${round(best.r)}:1 with any text shade, and text needs ${TEXT}:1`,
+      };
+    // The fill must also stand out from the dark surfaces it sits on.
+    const page = Math.min(
+      ...surfaces('dark', id).map(([, bg]) => contrast(fill.color, bg)),
+    );
+    if (page < NON_TEXT)
+      return {
+        pair: null,
+        ratio: round(page),
+        why: `your exact color stands out from the dark page at only ${round(page)}:1, and a fill needs ${NON_TEXT}:1`,
+      };
+    if (has(onToken))
+      checks.push({
+        token: onToken,
+        mode: 'dark',
+        stop: best.on,
+        preferred: ON_FILL.dark[1],
+        against: `${fillToken} (your exact color)`,
+        ratio: round(best.r),
+        needs: TEXT,
+        pass: true,
+      });
+    return {
+      pair: {
+        fill: {...fill, from: /** @type {Mode} */ ('light')},
+        on: ref(id, 'dark', best.on),
+        moved: FILL[1],
+      },
+      ratio: round(best.r),
+      why: '',
+    };
+  };
+
+  /**
+   * The dark shade nearest the seed's own shade (a lighter one on a tie)
+   * where text on it reads at 4.5:1 and it stands out from the dark
+   * surfaces at 3:1; null when no shade does both.
+   * @param {string} onToken @param {string} id @param {number} seedStop
+   */
+  const nearestDarkFill = (onToken, id, seedStop) => {
+    const page = surfaces('dark', id);
+    const order = [...stops]
+      .filter(s => s > 0 && s < 100)
+      .sort((a, b) => Math.abs(a - seedStop) - Math.abs(b - seedStop) || b - a);
+    for (const stop of order) {
+      const fill = ref(id, 'dark', stop).color;
+      if (Math.min(...page.map(([, bg]) => contrast(fill, bg))) < NON_TEXT)
+        continue;
+      const best = ON_FILL.dark
+        .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill)}))
+        .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
+      if (best.r < TEXT) continue;
+      if (has(onToken))
+        checks.push({
+          token: onToken,
+          mode: 'dark',
+          stop: best.on,
+          preferred: ON_FILL.dark[0],
+          against: `the fill (shade ${stop})`,
+          ratio: round(best.r),
+          needs: TEXT,
+          pass: true,
+        });
+      return {
+        fill: ref(id, 'dark', stop),
+        on: ref(id, 'dark', best.on),
+        moved: stop,
+      };
+    }
+    return null;
   };
 
   const modes = /** @type {Mode[]} */ (['light', 'dark']);
@@ -479,7 +619,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     }
     if (!out.length)
       out.push([
-        `${id} stop ${NEUTRAL_STOPS['--color-background-surface'][m === 'light' ? 0 : 1]}`,
+        `${id} shade ${NEUTRAL_STOPS['--color-background-surface'][m === 'light' ? 0 : 1]}`,
         ref(
           id,
           m,
@@ -543,9 +683,27 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         };
     const muted = modes.map((m, i) => ref(f.id, m, MUTED[i]));
     put(names.muted, f.id, muted[0], muted[1]);
-    const pairs = modes.map((m, i) =>
-      fillPair(names.fill, names.on, f.id, m, i ? FILL[1] : fillStart(f.id)),
-    );
+    const pairs = modes.map(m => {
+      if (m === 'light')
+        return fillPair(names.fill, names.on, f.id, m, fillStart(f.id));
+      const exact = exactDarkFill(names.fill, names.on, f.id, fillStart(f.id));
+      if (exact.pair) return exact.pair;
+      const pair =
+        nearestDarkFill(names.on, f.id, fillStart(f.id)) ??
+        fillPair(names.fill, names.on, f.id, m, FILL[1]);
+      if (has(names.fill))
+        checks.push({
+          token: names.fill,
+          mode: 'dark',
+          stop: pair.fill.stop,
+          preferred: fillStart(f.id),
+          against: `the text on it: ${exact.why}`,
+          ratio: exact.ratio,
+          needs: TEXT,
+          pass: true,
+        });
+      return pair;
+    });
     put(names.fill, f.id, pairs[0].fill, pairs[1].fill);
     put(names.on, f.id, pairs[0].on, pairs[1].on);
     const text = modes.map((m, i) =>
@@ -594,8 +752,36 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       put(names.focus, f.id, ring[0], ring[1]);
     }
   }
-  return {candidate, families: fams, tokens, contrast: checks};
+  return {
+    candidate,
+    families: fams,
+    tokens,
+    contrast: checks,
+    vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
+  };
 }
+
+/** Every token a color dial can point at a generated shade. */
+export const PALETTE_TOKENS = new Set([
+  ...Object.keys(NEUTRAL_STOPS),
+  '--color-background-body',
+  ...Object.keys(NEUTRAL_TINTS),
+  '--color-accent',
+  '--color-on-accent',
+  '--color-text-accent',
+  '--color-icon-accent',
+  '--color-accent-muted',
+  '--focus-outline-color',
+  ...Object.values(STATUS_TOKEN).flatMap(w => [
+    `--color-${w}`,
+    `--color-on-${w}`,
+    `--color-text-${w}`,
+    `--color-icon-${w}`,
+    `--color-${w}-muted`,
+    `--color-on-${w}-muted`,
+    `--color-border-${w}`,
+  ]),
+]);
 
 /**
  * Where each token starts, for `how`: `token: light stop L, dark stop D`.
@@ -607,11 +793,11 @@ export function mappingRows(dial) {
     return [
       ...Object.entries(NEUTRAL_STOPS).map(
         ([t, [l, d]]) =>
-          `${t}: light stop ${l}, dark stop ${d}${t.endsWith('-secondary') ? ` (moves to a stop that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : ''}`,
+          `${t}: light shade ${l}, dark shade ${d}${t.endsWith('-secondary') ? ` (moves to a shade that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : ''}`,
       ),
       ...Object.entries(NEUTRAL_TINTS).map(
         ([t, [[l, la], [d, da]]]) =>
-          `${t}: light stop ${l} at opacity ${la}, dark stop ${d} at opacity ${da}`,
+          `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
     ];
   const word = dial === 'accent' ? null : STATUS_TOKEN[dial];
@@ -619,54 +805,66 @@ export function mappingRows(dial) {
   const t = (/** @type {string} */ a, /** @type {string} */ b) =>
     word ? a.replace('$', word) : b;
   const rows = [
-    `${t('--color-$', '--color-accent')}: in light, the stop the color lands on (anchored there exactly, so it stays the color you gave); in dark, stop ${FILL[1]}; either moves until the text on it reads at ${TEXT}:1`,
-    `${t('--color-on-$', '--color-on-accent')}: stop ${ON_FILL.light[0]} or ${ON_FILL.light[1]} in light, ${ON_FILL.dark[0]} or ${ON_FILL.dark[1]} in dark, whichever reads better on the fill`,
-    `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light stop ${TEXT_STOP[0]}, dark stop ${TEXT_STOP[1]} (moves until it reads at ${TEXT}:1 on the surfaces and the muted tint)`,
-    `${t('--color-$-muted', '--color-accent-muted')}: light stop ${MUTED[0]}, dark stop ${MUTED[1]}`,
+    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light and in dark; in dark, when no text on it reads at ${TEXT}:1, shade ${FILL[1]} or the nearest shade where text does, and the result says so`,
+    `${t('--color-on-$', '--color-on-accent')}: shade ${ON_FILL.light[0]} or ${ON_FILL.light[1]} in light, ${ON_FILL.dark[0]} or ${ON_FILL.dark[1]} in dark, whichever reads better on the fill`,
+    `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves until it reads at ${TEXT}:1 on the surfaces and the muted tint)`,
+    `${t('--color-$-muted', '--color-accent-muted')}: light shade ${MUTED[0]}, dark shade ${MUTED[1]}`,
   ];
   if (word)
     rows.push(
-      `--color-on-${word}-muted: light stop ${ON_MUTED[0]}, dark stop ${ON_MUTED[1]} (moves until it reads at ${TEXT}:1 on the muted tint)`,
-      `--color-border-${word}: light stop ${BORDER[0]}, dark stop ${BORDER[1]}`,
+      `--color-on-${word}-muted: light shade ${ON_MUTED[0]}, dark shade ${ON_MUTED[1]} (moves until it reads at ${TEXT}:1 on the muted tint)`,
+      `--color-border-${word}: light shade ${BORDER[0]}, dark shade ${BORDER[1]}`,
     );
   else
     rows.push(
-      `--focus-outline-color (the focus ring): the accent's stop, moved until it reads at ${NON_TEXT}:1 on the surfaces`,
+      `--focus-outline-color (the focus ring): the accent's shade, moved until it reads at ${NON_TEXT}:1 on the surfaces`,
       'links and selection read --color-text-accent and --color-accent; Core has no separate accent hover or pressed tokens (buttons tint with the overlay tokens, which the neutral dial sets)',
     );
   return rows;
 }
 
 /**
- * What one color dial did, for the result notes: where its palette lives,
- * the stop of its main token in each mode, and every token contrast moved.
+ * What one color dial did, for the result notes: the shade of its main token
+ * in each mode, every token contrast moved, and last the generated files.
  * @param {PaletteMapping | null} pal
  * @param {string} dial
  * @param {string} slug
+ * @param {Mode[]} [modes] the modes the theme has
  * @returns {string[]}
  */
-export function paletteNotes(pal, dial, slug) {
+export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   if (!pal) return [];
   const f = paletteFiles(slug);
   const main = pal.tokens[paletteToken(dial)];
   /** @type {string[]} */
-  const notes = [
-    `the ${dial} family is in ${f.config}; the palette and its receipt are ${f.palette} and ${f.receipt}`,
-  ];
+  const notes = [];
+  const lightPart = `${dial} shade ${main?.light.stop} (${main?.light.color}) in light`;
+  const darkPart = main?.dark.from
+    ? 'the same exact color in dark'
+    : `shade ${main?.dark.stop} (${main?.dark.color}) in dark`;
   if (main)
     notes.push(
-      `${paletteToken(dial)} is ${dial} stop ${main.light.stop} (${main.light.color}) in light and stop ${main.dark.stop} (${main.dark.color}) in dark`,
+      `${paletteToken(dial)} uses ${modes.length > 1 ? `${lightPart} and ${darkPart}` : modes[0] === 'light' ? lightPart : darkPart.replace(/^shade/, `${dial} shade`).replace(/^the same exact color/, 'your exact color')}`,
     );
   for (const c of pal.contrast) {
     if (pal.tokens[c.token]?.family !== dial) continue;
-    if (!c.pass)
+    // A theme with one mode never shows the other one's shades.
+    if (!modes.includes(c.mode)) continue;
+    if (c.against.startsWith('the text on it'))
       notes.push(
-        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at stop ${c.stop}, the most contrasting stop: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
+        `in dark, ${c.token} is shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}`,
+      );
+    else if (!c.pass)
+      notes.push(
+        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${c.stop}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
       );
     else if (c.stop !== c.preferred)
       notes.push(
-        `${c.token} uses stop ${c.stop} in ${c.mode}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`,
+        `${c.token} uses shade ${c.stop} in ${c.mode}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
+  notes.push(
+    `the generated colors are in ${f.palette}, made from ${f.config} (receipt: ${f.receipt})`,
+  );
   return notes;
 }

@@ -203,6 +203,8 @@ function ShowcaseNavigation() {
     width: 400,
     'aria-label': 'Sign in',
   });
+  // A new key on each open mounts a new form, so a reopened dialog starts empty.
+  const signInOpens = useRef(0);
   return (
     <>
       <TopNav
@@ -249,7 +251,14 @@ function ShowcaseNavigation() {
             <Button
               label="Sign in"
               variant="primary"
-              onClick={() => signIn.show(<SignInForm onClose={signIn.hide} />)}
+              onClick={() =>
+                signIn.show(
+                  <SignInForm
+                    key={++signInOpens.current}
+                    onClose={signIn.hide}
+                  />,
+                )
+              }
             />
           </HStack>
         }
@@ -260,8 +269,7 @@ function ShowcaseNavigation() {
 }
 
 /** Sign in opens a real dialog, so a theme's header, close control, fields
- * and footer buttons can be reviewed together. Its content mounts on first
- * open, so the page carries no hidden duplicate fields. */
+ * and footer buttons can be reviewed together. */
 function SignInForm({onClose}: {onClose: () => void}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

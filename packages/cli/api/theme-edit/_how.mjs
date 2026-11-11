@@ -2,7 +2,7 @@
 
 /**
  * @file The lookup behind `astryx experimental theme editor how`: a part, a
- * family, a setting, an aspect, a plain-words question, a PNG picture's
+ * group, a setting, an aspect, a plain-words question, a PNG picture's
  * colors, or a list of what a change can name.
  *
  * @position api/theme-edit — imported only by _adapter.mjs
@@ -19,7 +19,9 @@ import {
   FAMILIES,
   GROUPS,
   HOW,
+  INTENTS,
   P,
+  PART_WORDS,
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
@@ -33,18 +35,22 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 const E = ERROR_CODES;
 
 /** What `how --list` takes. */
-const HOW_LISTS = ['dials', 'tokens', 'parts', 'families', 'properties'];
+const HOW_LISTS = ['dials', 'tokens', 'parts', 'groups', 'properties'];
+
+/** The in-app preview, whose Colors page shows every shade. */
+const PREVIEW = 'astryx experimental theme preview';
 
 /**
  * Explain anything a theme change can name, or answer a question about one:
  * a part (what it reads for each aspect, its variants, states and the parts
- * inside it), a family (its members), a setting (a dial's rungs, a token's
- * type and readers, a CSS property), an aspect (colors, text, corners...: the
- * whole-theme tokens and dial), a plain-words question (exact commands), a
- * PNG picture (its main colors, or the color at points), or with `list` a
- * list of dials, tokens, parts, families or CSS properties.
+ * inside it), a group (its members), a setting (a dial's rungs, a token's
+ * type and readers, a CSS property), an aspect (text, corners...: the
+ * whole-theme tokens and dial), `colors` (how the theme's colors are made),
+ * a plain-words question (exact commands), a PNG picture (its main colors,
+ * or the color at points), or with `list` a list of dials, tokens, parts,
+ * groups or CSS properties.
  * @experimental
- * @param {string} subject a part, family, setting, aspect, question, or PNG file; with `list`, a filter
+ * @param {string} subject a part, group, setting, aspect, question, or PNG file; with `list`, a filter
  * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse>}
  */
@@ -52,6 +58,19 @@ export async function themeEditHow(subject, options = {}) {
   const {cwd = process.cwd(), list, at = [], count} = options;
   requireProject(cwd);
   const t = (subject ?? '').trim();
+  if (list === '')
+    return {
+      type: 'themeEdit.how',
+      data: {
+        kind: 'list',
+        subject: t,
+        list: 'kinds',
+        items: HOW_LISTS.map(name => ({
+          name,
+          example: `${HOW} --list ${name}`,
+        })),
+      },
+    };
   if (list != null) {
     if (at.length)
       refuse(
@@ -81,7 +100,7 @@ export async function themeEditHow(subject, options = {}) {
   if (!t) {
     refuse(
       E.ERR_MISSING_ARGUMENT,
-      'Name a part, a family, a setting, an aspect, a question in quotes, or a PNG picture.',
+      'Name a part, a group, a setting, an aspect, a question in quotes, or a PNG picture.',
       {
         run: [
           `${HOW} card`,
@@ -93,20 +112,25 @@ export async function themeEditHow(subject, options = {}) {
   }
   const ctx = await context(cwd);
   const {C} = ctx;
+  // Without part data, what each part reads is unknown: answers that need
+  // it say so instead of reporting nothing read.
+  const unknown = ctx.unchecked
+    ? {notChecked: {code: E.ERR_THEME_NOT_CHECKED, cause: ctx.unchecked}}
+    : {};
   if (FAMILIES[t]) {
     return {
       type: 'themeEdit.how',
       data: {
-        kind: 'family',
+        kind: 'group',
         subject: t,
-        family: t,
+        group: t,
         members: FAMILIES[t],
         spreads: AUTO_SPREAD.includes(t),
       },
     };
   }
   if (ctx.project.target.has(t)) {
-    const fam = familyOf(t);
+    const group = familyOf(t);
     return {
       type: 'themeEdit.how',
       data: {
@@ -114,28 +138,42 @@ export async function themeEditHow(subject, options = {}) {
         subject: t,
         component: ctx.project.target.get(t)?.component ?? null,
         recorded: Boolean(C.MAP[t]),
-        family: fam,
-        familyMembers: fam ? FAMILIES[fam] : [],
-        spreads: fam ? AUTO_SPREAD.includes(fam) : false,
+        group,
+        groupMembers: group ? FAMILIES[group] : [],
+        spreads: group ? AUTO_SPREAD.includes(group) : false,
         variants: C.variantValues(t),
         states: ctx.project.target.get(t)?.states ?? [],
         reads: Object.fromEntries(
           Object.keys(GROUPS).map(g => [g, C.partReads(t, g)]),
         ),
         contains: C.MAP[t]?.contains ?? [],
+        ...unknown,
       },
     };
   }
+  if (t === 'colors' || t === 'palette')
+    return {
+      type: 'themeEdit.how',
+      data: {
+        kind: 'aspect',
+        subject: t,
+        results: [
+          ...colorsAnswer(),
+          ...['text', 'background', 'border'].flatMap(a =>
+            wholeThemeTokens(ctx, a),
+          ),
+        ],
+      },
+    };
   if (ASPECTS.includes(t)) {
-    const aspects = t === 'colors' ? ['text', 'background', 'border'] : [t];
-    const results = aspects.flatMap(a => wholeThemeTokens(ctx, a));
+    const results = wholeThemeTokens(ctx, t);
     const dial = /** @type {Record<string, string>} */ ({
       corners: 'corners',
       spacing: 'spacing',
       font: 'font',
       size: 'text-size',
     })[t];
-    if (t === 'colors' || t === 'text' || t === 'background')
+    if (t === 'text' || t === 'background')
       results.unshift(
         ...['accent', 'neutral'].map(d => ({
           text: DIALS[d].help,
@@ -156,32 +194,6 @@ export async function themeEditHow(subject, options = {}) {
       data: {kind: 'aspect', subject: t, results},
     };
   }
-  if (t === 'palette') {
-    const f = paletteFiles('<theme>');
-    return {
-      type: 'themeEdit.how',
-      data: {
-        kind: 'aspect',
-        subject: t,
-        results: [
-          {
-            text: `The color dials (${PALETTE_DIALS.join(', ')}) each seed one family of the theme palette. The editor writes ${f.config} in the shape \`theme palette generate\` reads, runs the same generator to write ${f.palette} and its receipt, and points the color tokens at palette stops, light and dark from one color. The generated <theme>.settings.ts imports the palette, so regenerating it moves the theme with it. A token moves to a nearer stop of the same family when it must read: text at 4.5:1 on the surfaces, the focus ring and secondary icons at 3:1, a fill until the text on it reads at 4.5:1. It never mixes a new color. An exact token setting always wins over the palette. Undo a dial to remove its family and its tokens.`,
-            commands: [
-              `${P} set <theme> accent "#7c3aed"`,
-              `${P} set <theme> neutral "#64748b"`,
-              `${P} show <theme>`,
-              `${P} set <theme> --color-accent "#7c3aed"`,
-              `${P} undo <theme> accent`,
-            ],
-          },
-          ...PALETTE_DIALS.map(d => ({
-            text: `${d}: ${mappingRows(d).join('; ')}`,
-            commands: DIALS[d].examples.map(e => `${P} ${e}`),
-          })),
-        ],
-      },
-    };
-  }
   if (DIALS[t]) {
     const d = DIALS[t];
     return {
@@ -192,7 +204,7 @@ export async function themeEditHow(subject, options = {}) {
         source: 'dial',
         values: d.values,
         help: d.help,
-        ...(PALETTE_DIALS.includes(t) ? {stops: mappingRows(t)} : {}),
+        ...(PALETTE_DIALS.includes(t) ? {shades: mappingRows(t)} : {}),
         examples: d.examples.map(e => `${P} ${e}`),
       },
     };
@@ -210,6 +222,7 @@ export async function themeEditHow(subject, options = {}) {
         default: String(ctx.project.core.tokenDefaults[t]),
         perMode: MODAL.has(type),
         readBy: readers,
+        ...unknown,
         examples: [
           `${P} set <theme> ${t} <value>`,
           ...(readers[0]
@@ -228,12 +241,26 @@ export async function themeEditHow(subject, options = {}) {
         subject: t,
         source: 'property',
         setBy: setters,
+        ...unknown,
         examples: [
           `${P} set <theme> ${t} <value> --on ${setters[0] ?? '<part>'}`,
         ],
       },
     };
   }
+  const colors = PART_WORDS.some(([re]) => re.test(t.toLowerCase()))
+    ? null
+    : colorQuestion(t);
+  if (colors)
+    return {
+      type: 'themeEdit.how',
+      data: {
+        kind: 'question',
+        subject: t,
+        understood: {parts: [], aspects: ['colors']},
+        results: colors,
+      },
+    };
   const h = answerHow(ctx, t);
   return {
     type: 'themeEdit.how',
@@ -242,8 +269,160 @@ export async function themeEditHow(subject, options = {}) {
       subject: t,
       understood: {parts: h.parts, aspects: h.aspects},
       results: h.results,
+      ...unknown,
     },
   };
+}
+
+/**
+ * How the theme's colors are made, for `how colors`: one line on the
+ * generator, one per color with the shade each token starts from, then
+ * vibrancy, every shade, and the exact-token escape hatch.
+ * @returns {Array<{text: string, commands: string[]}>}
+ */
+function colorsAnswer() {
+  const f = paletteFiles('<theme>');
+  return [
+    {
+      text: `Each color you set (${PALETTE_DIALS.join(', ')}) is one seed: the editor generates its shades from it, light and dark, with the same generator as \`theme palette generate\`, and points the color tokens at those shades. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring and secondary icons at 3:1, a fill until the text on it reads. It never mixes a new color. The generated files are ${f.palette}, made from ${f.config}, and the theme imports them, so every change moves the theme with it.`,
+      commands: [
+        `${P} set <theme> accent "#7c3aed"`,
+        `${P} set <theme> neutral "#64748b"`,
+        `${P} show <theme>`,
+        `${P} undo <theme> accent`,
+      ],
+    },
+    ...PALETTE_DIALS.map(d => ({
+      text: `${d}: ${mappingRows(d).join('; ')}`,
+      commands: DIALS[d].examples.map(e => `${P} ${e}`),
+    })),
+    {
+      text: DIALS.vibrancy.help,
+      commands: DIALS.vibrancy.examples.map(e => `${P} ${e}`),
+    },
+    {
+      text: 'Every shade, light and dark, with the tokens that use each: the Colors page of the in-app preview. It changes with every set.',
+      commands: [`${PREVIEW} add --theme <theme>`],
+    },
+    {
+      text: 'An exact color for one token: set the token itself. It always wins over the generated colors, whatever order you set them in.',
+      commands: [`${P} set <theme> --color-accent "#7c3aed"`],
+    },
+  ];
+}
+
+/**
+ * Plain-words questions about colors, as `[words, answer]`: the first match
+ * answers, with what happens and the commands. Asked only when the question
+ * names no part.
+ * @type {Array<[RegExp, (q: string) => {text: string, commands: string[]}]>}
+ */
+const COLOR_QUESTIONS = [
+  [
+    /\b(exact|one token|single token|specific token|override)\b/,
+    () => ({
+      text: 'An exact color for one token: set the token itself. It always wins over the generated colors, whatever order you set them in. Add --mode light|dark for one mode, or --on <part> for one part.',
+      commands: [
+        `${P} set <theme> --color-accent "#7c3aed"`,
+        `${P} set <theme> --color-text-primary "#111827" --mode light`,
+        `${HOW} --list tokens`,
+      ],
+    }),
+  ],
+  [
+    /\b(shades?|swatch(es)?|ramps?|all (the )?colou?rs|every colou?r|see (the )?colou?rs)\b/,
+    () => ({
+      text: 'Every shade of every color, light and dark, with the tokens that use each, is on the Colors page of the in-app preview. It changes with every set.',
+      commands: [`${PREVIEW} add --theme <theme>`, `${P} show <theme>`],
+    }),
+  ],
+  [
+    /\b(colou?rful|(de)?saturat\w*|vivid|vibran\w*|muted|dull|washed|pastel|intense|punch\w*|gr[ae]yer)\b/,
+    q => {
+      const less =
+        /\b(less|desaturat\w*|muted|dull|washed|pastel|gr[ae]yer|calm\w*|softer)\b/.test(
+          q,
+        ) && !/\bmore\b/.test(q);
+      return {
+        text: `vibrancy sets how saturated every generated color is: 0 is gray, 100 the most vivid, 50 the default; ${less ? 'less' : 'more'} steps it by 10.`,
+        commands: [
+          `${P} set <theme> vibrancy ${less ? 'less' : 'more'}`,
+          `${P} set <theme> vibrancy ${less ? 30 : 70}`,
+        ],
+      };
+    },
+  ],
+  [
+    /\bdark\b.*\b(colou?rs?|mode|shades?)\b|\bcolou?rs?\b.*\bdark\b/,
+    () => ({
+      text: 'Each color you set makes its dark shades too, so dark mode follows by itself. For one token in dark mode only, set it with --mode dark; for a theme with only a dark mode, set mode.',
+      commands: [
+        `${P} set <theme> accent "#7c3aed"`,
+        `${P} set <theme> --color-background-body "#0b0b0f" --mode dark`,
+        `${P} set <theme> mode dark-only`,
+      ],
+    }),
+  ],
+  [
+    /\b(status|errors?|danger|destructive|success|warnings?|caution|info|notices?|red|green|yellow|amber)\b/,
+    q => {
+      const all = [
+        ['danger', /\b(errors?|danger|destructive|red)\b/, '"#dc2626"'],
+        ['success', /\b(success|green)\b/, '"#16a34a"'],
+        ['warning', /\b(warnings?|caution|yellow|amber)\b/, '"#f59e0b"'],
+        ['info', /\b(info|notices?)\b/, '"#0284c7"'],
+      ];
+      const named = all.filter(([, re]) => /** @type {RegExp} */ (re).test(q));
+      const order = [...named, ...all.filter(x => !named.includes(x))];
+      return {
+        text: 'Status colors are four settings: danger (errors and destructive actions: the --color-error tokens), success, warning and info. Each one makes its light and dark shades from one color.',
+        commands: order.map(([d, , v]) => `${P} set <theme> ${d} ${v}`),
+      };
+    },
+  ],
+  [
+    /\b(brand|accent|primary colou?r|main colou?r|key colou?r)\b/,
+    () => ({
+      text: 'The brand color is accent: primary buttons, links, selection and the focus ring. It makes its light and dark shades from the one color, and the fill keeps that exact color.',
+      commands: [`${P} set <theme> accent "#7c3aed"`, `${HOW} accent`],
+    }),
+  ],
+  [
+    /\b(gr[ae]y|neutral|warm|cool)\b/,
+    () => ({
+      text: 'The gray of surfaces, text and borders is neutral. A gray with a little color makes a cool or warm theme.',
+      commands: [
+        `${P} set <theme> neutral "#64748b"`,
+        `${P} set <theme> neutral "#78716c"`,
+      ],
+    }),
+  ],
+];
+
+/**
+ * The answer to a plain-words color question, or null when it is not one:
+ * a question that names a part, or an aspect other than color, is not.
+ * @param {string} question
+ * @returns {Array<{text: string, commands: string[]}> | null}
+ */
+export function colorQuestion(question) {
+  const q = question.toLowerCase();
+  // A question about another aspect ("make the text red", "override the
+  // corner radius", "a yellow background") is answered for that aspect, not
+  // as a color question. Color words alone raise the background aspect, so
+  // only a background named outright counts, and not for a status: "the
+  // error background" is the danger color.
+  const status =
+    /\b(errors?|danger|destructive|success|warnings?|caution|info|notices?)\b/.test(
+      q,
+    );
+  if (
+    INTENTS.some(([aspect, re]) => aspect !== 'background' && re.test(q)) ||
+    (/\b(background|bg|backdrop|fill)\b/.test(q) && !status)
+  )
+    return null;
+  const hit = COLOR_QUESTIONS.find(([re]) => re.test(q));
+  return hit ? [hit[1](q)] : null;
 }
 
 /**
@@ -277,7 +456,7 @@ async function listItems(kind, filter, cwd) {
           examples: d.examples.map(e => `${P} ${e}`),
         })),
     };
-  if (kind === 'families')
+  if (kind === 'groups')
     return {
       list: kind,
       items: Object.entries(FAMILIES)
@@ -304,7 +483,7 @@ async function listItems(kind, filter, cwd) {
         name: k,
         type: C.typeOf(k),
         default: String(ctx.project.core.tokenDefaults[k]),
-        readBy: C.anyReader(k).length,
+        readBy: ctx.unchecked ? null : C.anyReader(k).length,
       })),
     };
   }
@@ -314,7 +493,7 @@ async function listItems(kind, filter, cwd) {
     items: targets.map(x => ({
       name: x.key,
       component: x.component,
-      family: familyOf(x.key),
+      group: familyOf(x.key),
       variants: C.variantValues(x.key),
       states: x.states,
       recorded: Boolean(C.MAP[x.key]),

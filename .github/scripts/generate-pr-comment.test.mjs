@@ -232,14 +232,23 @@ describe('comment length budget', () => {
   // merge-guard, which reads a run's file up to a day later. The shape below
   // is what both read; a change to it breaks merge-guard as well.
   it("keeps api-changes.json's shape for its readers, the PR report and merge-guard", () => {
-    const base = fs.readFileSync(
-      path.join(repoRoot, 'packages/build/api-report.md'),
-      'utf8',
-    );
+    const base = [
+      '# API report: @astryxdesign/build',
+      '',
+      '## `.`',
+      '',
+      '### Functions',
+      '',
+      '```text',
+      'function astryx: (options?: AstryxOptions) => Plugin',
+      'function postcss: (options?: PostcssOptions) => Plugin',
+      '```',
+      '',
+    ].join('\n');
     const head = base.replace(/^function postcss: .*\n/m, '');
     const changes = computeChanges([
-      {pkg: '@astryxdesign/build', base, head, committed: base},
-      {pkg: '@astryxdesign/new', base: null, head, committed: null},
+      {pkg: '@astryxdesign/build', base, head},
+      {pkg: '@astryxdesign/new', base: null, head},
     ]);
     const file = changesFile(changes, {haveSurface: true, baseRecord: 'main'});
     expect(Object.keys(file).sort()).toEqual([
@@ -255,21 +264,10 @@ describe('comment length budget', () => {
     expect(changesFile(changes, {haveSurface: false}).baseRecord).toBeNull();
     for (const pkg of file.packages) {
       expect(Object.keys(pkg).sort()).toEqual(
-        [
-          'baseSource',
-          'baseline',
-          'counts',
-          'missing',
-          'pkg',
-          'rows',
-          'stale',
-          'staleOwnRows',
-          'staleRows',
-        ].sort(),
+        ['baseSource', 'baseline', 'counts', 'pkg', 'rows'].sort(),
       );
       expect(typeof pkg.pkg).toBe('string');
-      for (const key of ['baseline', 'stale', 'missing'])
-        expect(typeof pkg[key], key).toBe('boolean');
+      expect(typeof pkg.baseline).toBe('boolean');
       expect(Object.keys(pkg.counts).sort()).toEqual([
         'added',
         'changed',
@@ -287,7 +285,7 @@ describe('comment length budget', () => {
       change: 'removed',
       item: 'function postcss',
     });
-    expect(added).toMatchObject({baseline: true, missing: true, rows: []});
+    expect(added).toMatchObject({baseline: true, rows: []});
     // The artifact that carries it outlives a day, so merge-guard can read it.
     const ci = yaml.parse(
       fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),

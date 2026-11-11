@@ -37,7 +37,10 @@ import * as stylex from '@stylexjs/stylex';
 import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
-import {useCommittedChoices} from './committedChoicesKey';
+import {
+  CommittedChoicesKeyContext,
+  useCommittedChoices,
+} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -574,6 +577,10 @@ function startsWithRows<T extends SearchableItem>(
  * threshold. An empty query is not "below the minimum" — it is the
  * untouched state, and `hasEntriesOnFocus` owns what happens there.
  */
+function preventOptionFocus(event: React.MouseEvent) {
+  event.preventDefault();
+}
+
 function isBelowMinQueryLength(query: string, minQueryLength: number): boolean {
   const length = characterCount(query);
   return length > 0 && length < minQueryLength;
@@ -951,6 +958,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Set when a pick kept the menu open; the open after the commit then
   // reloads a listbox or lets a dialog take focus.
   const pickKeptOpenRef = useRef(false);
+  // The ids picked from a kept focus list since the last committed change.
+  // The caller's next committed change decides what happens to the list. When
+  // it adds one of these ids, the list keeps the rows that the commit's render
+  // filtered. The source is not asked again. Otherwise the list closes, as
+  // after any other pick. Typing, a close, or a pick that closes the list
+  // clears the set.
+  const keptFocusListPicksRef = useRef<Set<string> | null>(null);
+  // True while a list that a pick kept open is shown. That list closes when
+  // the field becomes disabled.
+  const isFocusListKeptRef = useRef(false);
   const isDialogMenu = menu?.role === 'dialog';
 
   // Layer for dropdown. The list is a manual popover (see usePopover below):
@@ -1027,6 +1044,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
+    isFocusListKeptRef.current = false;
+    if (keptFocusListPicksRef.current != null) {
+      // The list closed before a commit decided a pick. Its rows drop, as
+      // after a pick that closes the list, so a later focus does not show
+      // them again.
+      keptFocusListPicksRef.current = null;
+      searchGenRef.current++;
+      replaceResults([]);
+      setHasSearched(false);
+    }
     openerAtRequestRef.current = null;
     outsidePress.stop();
     onOpenChange?.(false);
@@ -1034,7 +1061,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     searchSource.cancel?.();
-  }, [onOpenChange, searchSource, outsidePress]);
+  }, [onOpenChange, searchSource, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
     onShow: handleLayerShow,
@@ -1063,6 +1090,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
     }
   }, [popover]);
+  // The latest hideList, read by the effect that runs when the field becomes
+  // disabled, as an effect event.
+  const hideListRef = useRef(hideList);
+  useIsomorphicLayoutEffect(() => {
+    hideListRef.current = hideList;
+  });
   // Show the layer, deferring past the active click if a pointer is down
   // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
@@ -1086,6 +1119,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     if (loadingRef.current) {
       loadingRef.current = false;
       onLoadingChangeRef.current?.(false);
+    }
+    if (isFocusListKeptRef.current) {
+      hideListRef.current();
     }
   }, [isDisabled]);
   const showLayer = useCallback(() => {
@@ -1381,6 +1417,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   //   an empty or failed answer closes (FR15);
   // - a focus list with focus entries off: close.
   const reloadForCommittedChoices = useCallback(() => {
+    const keptFocusListPicks = keptFocusListPicksRef.current;
+    keptFocusListPicksRef.current = null;
     // A search waiting for its debounce would use the source from before the
     // commit, so the reload replaces it.
     const hadPendingSearch = searchTimeoutRef.current != null;
@@ -1393,6 +1431,25 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
     if (isAtCommitLimit) {
       hideList();
+      return;
+    }
+    if (keptFocusListPicks != null) {
+      const committedIds = committedChoices?.ids;
+      const isPickCommitted =
+        committedIds != null &&
+        [...keptFocusListPicks].some(id => committedIds.has(id));
+      if (!isPickCommitted || results.length === 0) {
+        // The close drops the rows, as after a pick that closes the list.
+        if (isShowingRef.current) {
+          keptFocusListPicksRef.current = keptFocusListPicks;
+        }
+        hideList();
+        return;
+      }
+      // The commit replaced the filtered source, and the pick's render
+      // already filtered the rows the same way. They stay current, so the
+      // next pick keeps the list too.
+      resultsGenRef.current = searchGenRef.current;
       return;
     }
     if (!isShowingRef.current && !hadPendingSearch) {
@@ -1412,6 +1469,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [
     isDisabled,
     isAtCommitLimit,
+    committedChoices,
     query,
     minQueryLength,
     hasEntriesOnFocus,
@@ -1444,6 +1502,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle query change
   const handleQueryChange = useCallback(
     (newQuery: string) => {
+      isFocusListKeptRef.current = false;
+      keptFocusListPicksRef.current = null;
       setQuery(newQuery);
       onChangeQuery?.(newQuery);
 
@@ -1534,6 +1594,44 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (isDisabled) {
         return;
       }
+      // A pick from the settled focus list of a field with committed choices
+      // keeps the input focused and the list open while another loaded choice
+      // remains. The next choice in the shown order becomes active, or the
+      // one before it when the pick was last. The list keeps its rows, so a
+      // press elsewhere or Tab still closes it as usual.
+      const pickedIndex = displayedResults.findIndex(
+        other => other.id === item.id,
+      );
+      const nextIndex =
+        pickedIndex + 1 < displayedResults.length
+          ? pickedIndex + 1
+          : pickedIndex - 1;
+      const keepsFocusList =
+        committedChoices != null &&
+        !isAtCommitLimit &&
+        hasEntriesOnFocus &&
+        query === '' &&
+        !isLoading &&
+        searchTimeoutRef.current == null &&
+        !isDialogMenu &&
+        popover.isOpen &&
+        resultsGenRef.current === searchGenRef.current &&
+        pickedIndex >= 0 &&
+        nextIndex >= 0;
+      if (keepsFocusList) {
+        keptFocusListPicksRef.current = new Set([
+          ...(keptFocusListPicksRef.current ?? []),
+          item.id,
+        ]);
+        isFocusListKeptRef.current = true;
+        openRequestedRef.current = false;
+        onChange(item);
+        openRequestedRef.current = false;
+        setHighlightedIndex(nextIndex);
+        inputRef.current?.focus();
+        return;
+      }
+      keptFocusListPicksRef.current = null;
       // Bump generation to invalidate any in-flight async searches
       searchGenRef.current++;
       if (searchTimeoutRef.current) {
@@ -1570,6 +1668,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     },
     [
       isDisabled,
+      displayedResults,
+      committedChoices,
+      isAtCommitLimit,
+      hasEntriesOnFocus,
+      isLoading,
+      isDialogMenu,
       onChange,
       onChangeQuery,
       query,
@@ -1579,6 +1683,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       replaceResults,
     ],
   );
+
+  // A pick from a list that can stay open keeps DOM focus on the input. A
+  // press on an option then does not move focus into the popup, so the
+  // popup does not return focus to the input when a later press elsewhere
+  // closes it.
+  const canKeepFocusList =
+    committedChoices != null &&
+    hasEntriesOnFocus &&
+    query === '' &&
+    !isDialogMenu;
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
   // loaded yet, or re-show cached results that haven't been invalidated by
@@ -2041,6 +2155,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 role="option"
                 aria-selected={isSelected}
                 tabIndex={-1}
+                onMouseDown={canKeepFocusList ? preventOptionFocus : undefined}
                 onClick={() => handleSelect(item)}
                 // Highlight follows pointer movement, not pointer
                 // presence: a menu that opens or reflows under a resting
@@ -2200,21 +2315,28 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           </SpinnerOwnerContext>
         </span>
       )}
-      {popover.render(menuContent, {
-        placement: 'below',
-        alignment: 'start',
-        offset: spacingVars['--spacing-1'],
-        xstyle: [
-          styles.popover,
-          menuWidth != null &&
-            styles.popoverCustomWidth(
-              clampInlineSize(
-                menuWidth,
-                layerViewportInset.maxInlineSizeFallback,
+      {popover.render(
+        // The committed values belong to this field. A field rendered in its
+        // menu has its own values, so it does not read them.
+        <CommittedChoicesKeyContext value={undefined}>
+          {menuContent}
+        </CommittedChoicesKeyContext>,
+        {
+          placement: 'below',
+          alignment: 'start',
+          offset: spacingVars['--spacing-1'],
+          xstyle: [
+            styles.popover,
+            menuWidth != null &&
+              styles.popoverCustomWidth(
+                clampInlineSize(
+                  menuWidth,
+                  layerViewportInset.maxInlineSizeFallback,
+                ),
               ),
-            ),
-        ],
-      })}
+          ],
+        },
+      )}
     </>
   );
   return focusWiring == null ? (

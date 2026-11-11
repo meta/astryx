@@ -54,8 +54,6 @@ import {doc as previewAppDoc} from '../experimental-theme-preview-app.doc.mjs';
 import {doc as previewListDoc} from '../experimental-theme-preview-list.doc.mjs';
 import {doc as previewRemoveDoc} from '../experimental-theme-preview-remove.doc.mjs';
 import {doc as howDoc} from '../experimental-theme-editor-how.doc.mjs';
-import {doc as paletteDoc} from '../experimental-theme-palette.doc.mjs';
-import {doc as paletteGenerateDoc} from '../experimental-theme-palette-generate.doc.mjs';
 import {doc as compileDoc} from '../experimental-theme-compile.doc.mjs';
 import {doc as listDoc} from '../experimental-theme-list.doc.mjs';
 import {doc as addDoc} from '../experimental-theme-add.doc.mjs';
@@ -129,12 +127,20 @@ function flatRecord(o) {
   const out = {};
   for (const [k, v] of Object.entries(o)) {
     if (Array.isArray(v) && !v.length) continue;
-    if (v && typeof v === 'object' && !Array.isArray(v))
-      Object.assign(
-        out,
-        flatRecord(/** @type {Record<string, unknown>} */ (v)),
-      );
-    else out[k] = shownValue(v);
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const inner = Object.entries(/** @type {Record<string, unknown>} */ (v));
+      // A map of objects keeps one field per entry, so no entry overwrites
+      // another.
+      if (
+        inner.some(([, x]) => x && typeof x === 'object' && !Array.isArray(x))
+      )
+        for (const [name, x] of inner) out[name] = shownValue(x);
+      else
+        Object.assign(
+          out,
+          flatRecord(/** @type {Record<string, unknown>} */ (v)),
+        );
+    } else out[k] = shownValue(v);
   }
   return out;
 }
@@ -186,20 +192,50 @@ function project(data) {
           section(`${k}:`),
           record(flatRecord(Object.fromEntries(entries))),
         );
-      else
+      else {
+        // Plain fields of a mixed object print first, as `<key> <field>`.
+        /** @type {Record<string, string>} */
+        const head = {};
+        /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+        const nested = [];
         for (const [name, x] of entries) {
           if (Array.isArray(x) && !x.length) continue;
-          const items = Array.isArray(x) ? x : [x];
-          parts.push(
-            section(`${k} ${name}:`),
-            records(
-              /** @type {Record<string, unknown>[]} */ (items).map(flatRecord),
-            ),
-          );
+          if (x === null || typeof x !== 'object')
+            head[`${k} ${name}`] = shownValue(x);
+          else if (Array.isArray(x) && typeof x[0] !== 'object') {
+            const joined = x.join(', ');
+            if (x.length <= 3 && joined.length <= 80)
+              head[`${k} ${name}`] = joined;
+            else nested.push(section(`${k} ${name}:`), list(x.map(String)));
+          } else {
+            const items = Array.isArray(x) ? x : [x];
+            nested.push(
+              section(`${k} ${name}:`),
+              records(
+                /** @type {Record<string, unknown>[]} */ (items).map(
+                  flatRecord,
+                ),
+              ),
+            );
+          }
         }
+        if (Object.keys(head).length) parts.push(record(head));
+        parts.push(...nested);
+      }
     }
   }
   return [record(plain), ...parts];
+}
+
+/**
+ * A result whose change was saved but not checked leads with a warning
+ * line naming the cause.
+ * @param {unknown} result
+ * @returns {string[]}
+ */
+function notCheckedLine(result) {
+  const n = /** @type {any} */ (result)?.data?.notChecked;
+  return n ? [`[warn] saved, not checked (${n.code}): ${n.cause}`] : [];
 }
 
 /**
@@ -233,7 +269,7 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  print(render(result));
+  print([...notCheckedLine(result), ...render(result)]);
   return answered;
 }
 
@@ -260,6 +296,24 @@ const changeOptions = o => ({
 });
 
 /**
+ * The dial settings `new` takes as flags, by dial name: every option of its
+ * CommandDoc that `set` would take as a dial.
+ * @param {any} o
+ * @returns {Record<string, string>}
+ */
+function newSettings(o) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const opt of newDoc.options ?? []) {
+    if (opt.param !== 'options.settings') continue;
+    const name = opt.flag.split(' ')[0].slice(2);
+    const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (value != null) out[name] = String(value);
+  }
+  return out;
+}
+
+/**
  * The receipt of a change: a status line, then the change data.
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} r
  */
@@ -269,8 +323,42 @@ function changeBlocks(r) {
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `undid ${describe(s)}: back to the base theme's value`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; it is back to the base theme's value`}`;
+  // On undo, `setting` and `removed` both name the setting removed, as in
+  // the JSON; the status line says the base theme's value is back.
   return [status, ...project(/** @type {any} */ (d))];
+}
+
+/**
+ * The text of `show`: the theme, then each color with its seed and the shade
+ * each token uses, the notes on moved shades, and the generated files last.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowResponse['data']} d
+ */
+function showBlocks(d) {
+  const {settings, colors, colorNotes, colorFiles, ...rest} = d;
+  const [head, ...others] = project(/** @type {any} */ (rest));
+  return [
+    head,
+    // Each setting as named fields: its whole scope, the parts it reaches,
+    // and what a stronger setting hides of it.
+    ...(settings.length
+      ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
+      : []),
+    ...others,
+    ...(colors.length
+      ? [
+          section('colors:'),
+          ...colors.flatMap(c => [
+            record({color: c.color, seed: c.seed}),
+            record(c.tokens),
+          ]),
+        ]
+      : []),
+    ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
+    colorFiles
+      ? [section('colorFiles:'), record(colorFiles)]
+      : record({colorFiles: 'none'}),
+  ].flat();
 }
 
 /**
@@ -389,6 +477,7 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
+              settings: newSettings(o),
             }),
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
@@ -430,9 +519,9 @@ export function registerExperimentalTheme(group, program) {
             themeEditShow(name, {
               cwd: process.cwd(),
               png: o.png ?? false,
-              group: o.group,
+              section: o.section,
             }),
-          r => project(/** @type {any} */ (r.data)),
+          r => showBlocks(r.data),
         ),
     }),
     showDoc,
@@ -493,10 +582,33 @@ export function registerExperimentalTheme(group, program) {
               top: o.top == null ? undefined : Number(o.top),
               path: o.path,
             }),
-          r => [
-            `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}`,
-            ...project(/** @type {any} */ (r.data)),
-          ],
+          r => {
+            const {matched, skipped, ...rest} = r.data;
+            return [
+              `[ok] theme preview in ${r.data.folder}: ${
+                [
+                  ...(r.data.added.length
+                    ? [`added ${r.data.added.join(', ')}`]
+                    : []),
+                  ...(r.data.refreshed.length
+                    ? [
+                        `${r.data.refreshed.join(', ')} ${r.data.refreshed.length > 1 ? 'were' : 'was'} there already and ${r.data.refreshed.length > 1 ? 'are' : 'is'} written again`,
+                      ]
+                    : []),
+                ].join('; ') || 'pages refreshed'
+              }`,
+              ...project(/** @type {any} */ (rest)),
+              ...(matched.length
+                ? [section('matched:'), records(matched)]
+                : []),
+              ...(skipped.length
+                ? [
+                    section('skipped:'),
+                    records(skipped.map(s => flatRecord(s))),
+                  ]
+                : []),
+            ];
+          },
         ),
     }),
     previewAddDoc,
@@ -579,7 +691,7 @@ export function registerExperimentalTheme(group, program) {
           if (program.opts().json) c?.outputHelp();
           else
             print([
-              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|families|properties]`,
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties]`,
               '',
               'Examples:',
               ...(howDoc.examples ?? []).flatMap(e => [
@@ -604,7 +716,7 @@ export function registerExperimentalTheme(group, program) {
           () =>
             themeEditHow(subject, {
               cwd: process.cwd(),
-              list: o.list,
+              list: o.list === true ? '' : o.list,
               at: o.at ?? [],
               count,
             }),
@@ -630,8 +742,6 @@ export function registerExperimentalTheme(group, program) {
     theme,
     program,
     {
-      palette: paletteDoc,
-      paletteGenerate: paletteGenerateDoc,
       build: compileDoc,
       list: listDoc,
       add: addDoc,

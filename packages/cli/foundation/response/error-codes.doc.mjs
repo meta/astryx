@@ -395,6 +395,12 @@ export const doc = {
         'The change could not take effect: neither the part nor any part inside it reads the token (or, for the whole theme, no part reads it). The suggestions name the token the part really reads and the property that sets it directly. Nothing was changed. Raised only by the experimental theme command.',
     },
     {
+      value: 'ERR_THEME_NOT_CHECKED',
+      stability: 'experimental',
+      description:
+        "Not an error and never an exit code: the change is saved, but the components could not be rendered, so it was not checked against what they read and has no preview. The result carries it in `notChecked` with the cause, such as two copies of React (the app's and the one Core resolves). Reported only by the experimental theme command.",
+    },
+    {
       value: 'ERR_THEME_UNKNOWN_THING',
       stability: 'experimental',
       description:
