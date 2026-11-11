@@ -13,7 +13,11 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {laneScope, reviewKey} from './interaction-selection-replay.mjs';
+import {
+  failedInteractionJobs,
+  laneScope,
+  reviewKey,
+} from './interaction-selection-replay.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const record = JSON.parse(
@@ -95,5 +99,51 @@ describe('the Chromium selection replay record', () => {
     for (const key of Object.keys(record.reviewed))
       expect(key).toMatch(/^#\d+ packages\/[^/]+\/src\/\S+\.spec\.ts$/);
     expect(reviewKey(10816, 'a.spec.ts')).toBe('#10816 a.spec.ts');
+  });
+});
+
+describe('failedInteractionJobs', () => {
+  const commit = (oid, runs, extraSuites = 0) => ({
+    commit: {
+      oid,
+      checkSuites: {
+        totalCount: 1 + extraSuites,
+        nodes: [{checkRuns: {nodes: runs}}],
+      },
+    },
+  });
+
+  it("reads every page of a pull request's commits, not only the newest", () => {
+    const pages = {
+      null: {
+        pageInfo: {hasPreviousPage: true, startCursor: 'c2'},
+        nodes: [commit('b', [{name: 'pr-interaction (2/4)', databaseId: 2}])],
+      },
+      c2: {
+        pageInfo: {hasPreviousPage: false, startCursor: 'c1'},
+        nodes: [
+          commit('a', [
+            {name: 'pr-interaction (1/4)', databaseId: 1},
+            {name: 'test', databaseId: 9},
+          ]),
+        ],
+      },
+    };
+    const asked = [];
+    const jobs = failedInteractionJobs(1, before => {
+      asked.push(before);
+      return pages[before];
+    });
+    expect(asked).toEqual([null, 'c2']);
+    expect(jobs.sort()).toEqual([1, 2]);
+  });
+
+  it('fails loudly when a commit has more check suites than one page lists', () => {
+    expect(() =>
+      failedInteractionJobs(1, () => ({
+        pageInfo: {hasPreviousPage: false, startCursor: 'c1'},
+        nodes: [commit('a', [], 40)],
+      })),
+    ).toThrow('more check suites than one page lists');
   });
 });

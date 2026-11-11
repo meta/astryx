@@ -66,9 +66,40 @@ export const reviewKey = (pr, spec) => `#${pr} ${spec}`;
 
 const PR_QUERY = `query($n: Int!) { repository(owner: "meta", name: "astryx") {
   pullRequest(number: $n) { number mergeCommit { oid } headRefOid
-    files(first: 100) { totalCount nodes { path } }
-    commits(last: 15) { nodes { commit { oid checkSuites(first: 30) { nodes {
+    files(first: 100) { totalCount nodes { path } } } } }`;
+
+const COMMITS_QUERY = `query($n: Int!, $before: String) { repository(owner: "meta", name: "astryx") {
+  pullRequest(number: $n) { commits(last: 50, before: $before) {
+    pageInfo { hasPreviousPage startCursor }
+    nodes { commit { oid checkSuites(first: 30) { totalCount nodes {
       checkRuns(first: 100, filterBy: {conclusions: [FAILURE]}) { nodes { name databaseId } } } } } } } } } }`;
+
+/**
+ * The failed Chromium interaction jobs on every commit of a pull request,
+ * page by page from its newest commit back to its first.
+ * @param {number} number
+ * @param {(before: string | null) => {pageInfo: {hasPreviousPage: boolean, startCursor: string}, nodes: object[]}} page
+ *   one page of commits, before a cursor
+ * @returns {number[]}
+ */
+export function failedInteractionJobs(number, page) {
+  const jobs = [];
+  let before = null;
+  for (;;) {
+    const commits = page(before);
+    for (const {commit} of commits.nodes) {
+      if (commit.checkSuites.totalCount > commit.checkSuites.nodes.length)
+        throw new Error(
+          `#${number} ${commit.oid} has more check suites than one page lists`,
+        );
+      for (const suite of commit.checkSuites.nodes)
+        for (const run of suite.checkRuns.nodes)
+          if (/^pr-interaction \(/.test(run.name)) jobs.push(run.databaseId);
+    }
+    if (!commits.pageInfo.hasPreviousPage) return jobs;
+    before = commits.pageInfo.startCursor;
+  }
+}
 
 /** A pull request's commit, files and failed Chromium interaction jobs. */
 function pullRequest(number) {
@@ -77,11 +108,21 @@ function pullRequest(number) {
   ).data.repository.pullRequest;
   if (data.files.totalCount > data.files.nodes.length)
     throw new Error(`#${number} changes more files than one page lists`);
-  const jobs = [];
-  for (const {commit} of data.commits.nodes)
-    for (const suite of commit.checkSuites.nodes)
-      for (const run of suite.checkRuns.nodes)
-        if (/^pr-interaction \(/.test(run.name)) jobs.push(run.databaseId);
+  const jobs = failedInteractionJobs(
+    number,
+    before =>
+      JSON.parse(
+        gh(
+          'api',
+          'graphql',
+          '-f',
+          `query=${COMMITS_QUERY}`,
+          '-F',
+          `n=${number}`,
+          ...(before ? ['-f', `before=${before}`] : []),
+        ),
+      ).data.repository.pullRequest.commits,
+  );
   return {
     number,
     commit: data.mergeCommit?.oid ?? data.headRefOid,
