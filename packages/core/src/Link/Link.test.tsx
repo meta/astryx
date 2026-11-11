@@ -14,6 +14,7 @@ import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import type {ReactNode} from 'react';
+import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {Text} from '../Text/Text';
 import {Link} from './Link';
@@ -679,5 +680,162 @@ describe('Link label color', () => {
       expect(label).toHaveAttribute('data-color', 'inherit');
       unmount();
     }
+  });
+});
+
+describe('Link disabled exposure', () => {
+  it('keeps aria-disabled and the link role when a caller passes its own', () => {
+    const callerProps = {'aria-disabled': false, role: 'button'} as const;
+    render(
+      <Link href="/billing" isDisabled {...callerProps}>
+        Billing
+      </Link>,
+    );
+    const link = screen.getByText('Billing').closest('a') as HTMLElement;
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).toHaveAttribute('role', 'link');
+    expect(link).toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps aria-disabled and the button role on the button form when a caller passes its own', () => {
+    const callerProps = {'aria-disabled': false, role: 'link'} as const;
+    render(
+      <Link onClick={() => {}} isDisabled {...callerProps}>
+        Retry
+      </Link>,
+    );
+    const button = screen.getByText('Retry').closest('button') as HTMLElement;
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toHaveAttribute('role');
+  });
+
+  it('passes keys other than Enter and Space to the caller onKeyDown', () => {
+    const onKeyDown = vi.fn();
+    render(
+      <Link href="/billing" isDisabled onKeyDown={onKeyDown}>
+        Billing
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Billing'});
+    fireEvent.keyDown(link, {key: 'Enter'});
+    fireEvent.keyDown(link, {key: ' '});
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.keyDown(link, {key: 'Escape'});
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown.mock.calls[0][0].key).toBe('Escape');
+  });
+});
+
+describe('Link inherited interactive role', () => {
+  it('renders a button inside a button-role owner', () => {
+    render(
+      <InteractiveRoleContext value="button">
+        <Link>Open menu</Link>
+      </InteractiveRoleContext>,
+    );
+    const button = screen.getByRole('button', {name: 'Open menu'});
+    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('type', 'button');
+  });
+
+  it('renders the link component inside a link-role owner', () => {
+    render(
+      <InteractiveRoleContext value="link">
+        <Link as={CustomLink}>Profile</Link>
+      </InteractiveRoleContext>,
+    );
+    expect(screen.getByText('Profile').closest('a')).toHaveAttribute(
+      'data-custom-link',
+    );
+  });
+
+  it('renders the disabled anchor for a disabled Link inside a link-role owner', () => {
+    render(
+      <InteractiveRoleContext value="link">
+        <Link href="/profile" as={CustomLink} isDisabled>
+          Profile
+        </Link>
+      </InteractiveRoleContext>,
+    );
+    const link = screen.getByRole('link', {name: 'Profile'});
+    expect(link).not.toHaveAttribute('data-custom-link');
+    expect(link).not.toHaveAttribute('href');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('renders a disabled button for a disabled Link with href inside a button-role owner', () => {
+    render(
+      <InteractiveRoleContext value="button">
+        <Link href="/profile" isDisabled>
+          Profile
+        </Link>
+      </InteractiveRoleContext>,
+    );
+    const button = screen.getByRole('button', {name: 'Profile'});
+    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('Link names and native attributes', () => {
+  it('uses only the label as the name of an external link', () => {
+    render(
+      <Link href="https://example.com" isExternalLink label="Example site">
+        Example
+      </Link>,
+    );
+    expect(
+      screen.getByRole('link', {name: 'Example site'}),
+    ).toBeInTheDocument();
+  });
+
+  it('lets a caller aria-label replace the label', () => {
+    render(
+      <Link href="/docs" label="Documentation" aria-label="Product docs">
+        Docs
+      </Link>,
+    );
+    expect(screen.getByRole('link')).toHaveAttribute(
+      'aria-label',
+      'Product docs',
+    );
+  });
+
+  it('passes referrerPolicy and download to the anchor', () => {
+    render(
+      <Link
+        href="/report.csv"
+        download="report.csv"
+        referrerPolicy="no-referrer">
+        Report
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Report'});
+    expect(link).toHaveAttribute('referrerpolicy', 'no-referrer');
+    expect(link).toHaveAttribute('download', 'report.csv');
+  });
+
+  it('adds caller className and style to the root and keeps the link target', () => {
+    render(
+      <Link href="/docs" className="caller-class" style={{marginInline: 4}}>
+        Docs
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Docs'});
+    expect(link.className).toContain('astryx-link');
+    expect(link.className).toContain('caller-class');
+    expect(link.style.marginInline).toBe('4px');
+  });
+
+  it('describes the link with its tooltip text', () => {
+    render(
+      <Link href="/settings" tooltip="Configure settings">
+        Settings
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Settings'});
+    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    expect(tooltip).toHaveTextContent('Configure settings');
+    expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 });
