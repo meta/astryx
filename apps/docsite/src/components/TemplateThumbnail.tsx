@@ -3,14 +3,13 @@
 /**
  * @file Renders a scaled live template preview inside a gallery tile.
  * @input Uses the template slug, theme mode, visibility, and measured tile size.
- * @output Downloads the template when the tile is visible, or in idle time when it is within one viewport of the screen. Renders the loaded page in a normalized viewport while the tile is visible, and releases the global queue after each committed render.
+ * @output Downloads the template when the tile is visible, or in idle time when it is within one viewport of the screen; a fast scroll holds every download. Renders the loaded page in a normalized viewport while the tile is visible, and releases the global queue after each committed render.
  * @position Client-side live preview for template gallery cards.
  */
 
 'use client';
 
 import {
-  type ComponentType,
   Suspense,
   startTransition,
   useCallback,
@@ -106,11 +105,7 @@ export function TemplateThumbnail({
   const containerRef = useRef<HTMLDivElement>(null);
   const [tileWidth, setTileWidth] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  const [isNear, setIsNear] = useState(false);
   const [isRenderReady, setIsRenderReady] = useState(false);
-  const [LoadedTemplate, setLoadedTemplate] = useState<ComponentType | null>(
-    null,
-  );
   const isVisibleRef = useRef(false);
   const isRenderReadyRef = useRef(false);
   const resolveRenderRef = useRef<(() => void) | null>(null);
@@ -135,13 +130,41 @@ export function TemplateThumbnail({
   // Scale so the rendered width fits the tile width.
   const scale = renderWidth > 0 ? tileWidth / renderWidth : FIXED_SCALE;
 
-  // Only visible tiles join the activation queue. A zero root margin avoids
-  // importing heavy template dependencies before their tiles enter the viewport.
+  // Syncs visibility and the template chunk download with the page scroll.
+  // Only visible tiles join the render queue: the visibility observer has a
+  // zero root margin. The shared near-viewport observer has a lead margin, so
+  // it reports a tile before the tile is visible. A visible tile starts its
+  // import at once, so the downloads of visible tiles run in parallel. A tile
+  // that is only near the viewport starts its import in idle time, after the
+  // visible tiles render, so it is ready before it scrolls in. During a fast
+  // scroll both wait.
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) {
+    if (!el || Component == null) {
       return;
     }
+
+    let isNear = false;
+    let cancelDownload = () => {};
+    const startImport = () => {
+      preloadTemplate(slug).catch(() => {});
+    };
+    const updateDownload = () => {
+      cancelDownload();
+      cancelDownload = () => {};
+      if (isVisibleRef.current) {
+        cancelDownload = whenScrollIsCalm(startImport);
+      } else if (isNear) {
+        let cancelPrefetch = () => {};
+        const cancelGate = whenScrollIsCalm(() => {
+          cancelPrefetch = scheduleThumbnailPrefetch(startImport);
+        });
+        cancelDownload = () => {
+          cancelGate();
+          cancelPrefetch();
+        };
+      }
+    };
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -152,48 +175,21 @@ export function TemplateThumbnail({
           isRenderReadyRef.current = false;
           setIsRenderReady(false);
         }
+        updateDownload();
       },
       {rootMargin: '0px'},
     );
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // Syncs "near the viewport" with the page scroll. The shared observer has
-  // a lead margin, so it reports a tile before the tile is visible.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) {
-      return;
-    }
-    return observeNearViewport(el, setIsNear);
-  }, []);
-
-  // Syncs the template chunk download with the viewport. A visible tile
-  // starts its import at once, so the downloads of visible tiles run in
-  // parallel. A tile that is only near the viewport starts its import in idle
-  // time, after the visible tiles, so it is ready before it scrolls in. During
-  // a fast scroll both wait, so tiles that only pass by download nothing. Only
-  // the render waits for the queue.
-  useEffect(() => {
-    if (Component == null || !(isVisible || isNear)) {
-      return;
-    }
-    const startImport = () => {
-      preloadTemplate(slug).catch(() => {});
-    };
-    if (isVisible) {
-      return whenScrollIsCalm(startImport);
-    }
-    let cancelPrefetch = () => {};
-    const cancelGate = whenScrollIsCalm(() => {
-      cancelPrefetch = scheduleThumbnailPrefetch(startImport);
+    const stopNear = observeNearViewport(el, nextIsNear => {
+      isNear = nextIsNear;
+      updateDownload();
     });
     return () => {
-      cancelGate();
-      cancelPrefetch();
+      observer.disconnect();
+      stopNear();
+      cancelDownload();
     };
-  }, [Component, isNear, isVisible, slug]);
+  }, [Component, slug]);
 
   // The queue does not release the next thumbnail until this preview commits,
   // so template renders stay sequential. The job renders the loaded component,
@@ -205,6 +201,7 @@ export function TemplateThumbnail({
     }
 
     let isActive = true;
+    let cancelImport = () => {};
     const cancel = scheduleThumbnailRender(
       () =>
         new Promise<void>(resolve => {
@@ -215,25 +212,27 @@ export function TemplateThumbnail({
           // Cleanup calls settleRender, so an import that is still in flight
           // never holds the queue.
           resolveRenderRef.current = resolve;
-          const show = (template: ComponentType) => {
+          const show = () => {
             if (!isActive) {
               return;
             }
             startTransition(() => {
               if (isVisibleRef.current) {
                 isRenderReadyRef.current = true;
-                setLoadedTemplate(() => template);
                 setIsRenderReady(true);
               } else {
                 settleRender();
               }
             });
           };
-          const loaded = getLoadedTemplate(slug);
-          if (loaded) {
-            show(loaded);
+          if (getLoadedTemplate(slug)) {
+            show();
           } else {
-            preloadTemplate(slug).then(show, settleRender);
+            // A fast scroll holds this download too, so a tile that leaves
+            // before the scroll slows down downloads nothing.
+            cancelImport = whenScrollIsCalm(() => {
+              preloadTemplate(slug).then(show, settleRender);
+            });
           }
         }),
     );
@@ -241,6 +240,7 @@ export function TemplateThumbnail({
     return () => {
       isActive = false;
       cancel();
+      cancelImport();
       settleRender();
     };
   }, [Component, isVisible, settleRender, slug]);
@@ -260,6 +260,9 @@ export function TemplateThumbnail({
   if (!Component) {
     return null;
   }
+  // A ready tile renders its loaded page. The lazy component is the fallback
+  // when the slug changes before the next render turn.
+  const Template = getLoadedTemplate(slug) ?? Component;
 
   return (
     <div
@@ -292,7 +295,7 @@ export function TemplateThumbnail({
               }>
               <Theme theme={neutralTheme} mode={mode}>
                 <div className={previewCss.viewport}>
-                  {LoadedTemplate ? <LoadedTemplate /> : <Component />}
+                  <Template />
                   <ThumbnailRenderSettled onSettled={settleRender} />
                 </div>
               </Theme>

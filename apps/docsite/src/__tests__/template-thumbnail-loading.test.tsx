@@ -10,6 +10,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 const previewState = vi.hoisted(() => ({renders: [] as string[]}));
 const loadState = vi.hoisted(() => ({
   isLoaded: true,
+  loaded: new Set<string>(),
   preloads: [] as string[],
   resolvers: [] as Array<() => void>,
 }));
@@ -70,11 +71,12 @@ vi.mock('../components/templateComponents', () => {
     first: () => <div>Lazy first preview</div>,
     second: () => <div>Lazy second preview</div>,
   };
-  const loaded = new Set<string>();
   return {
     TEMPLATE_COMPONENTS: lazyComponents,
     getLoadedTemplate: (slug: string) =>
-      loadState.isLoaded || loaded.has(slug) ? components[slug] : undefined,
+      loadState.isLoaded || loadState.loaded.has(slug)
+        ? components[slug]
+        : undefined,
     preloadTemplate: (slug: string) => {
       loadState.preloads.push(slug);
       if (loadState.isLoaded) {
@@ -82,7 +84,7 @@ vi.mock('../components/templateComponents', () => {
       }
       return new Promise(resolve => {
         loadState.resolvers.push(() => {
-          loaded.add(slug);
+          loadState.loaded.add(slug);
           resolve(components[slug]);
         });
       });
@@ -118,9 +120,15 @@ let intersectionCallbacks: IntersectionCallback[];
 let intersectionOptions: Array<IntersectionObserverInit | undefined>;
 let idleCallbacks: IdleRequestCallback[];
 
+const idleDeadline = {
+  didTimeout: false,
+  timeRemaining: () => 50,
+} as IdleDeadline;
+
 beforeEach(() => {
   previewState.renders.length = 0;
   loadState.isLoaded = true;
+  loadState.loaded.clear();
   loadState.preloads.length = 0;
   loadState.resolvers.length = 0;
   scrollGate.isCalm = true;
@@ -173,18 +181,22 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  // The scheduler is shared by every test. Run the idle turns that are still
+  // requested, so the next test starts with an idle scheduler.
+  await Promise.resolve();
+  await Promise.resolve();
+  while (idleCallbacks.length > 0) {
+    idleCallbacks.shift()?.(idleDeadline);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
   vi.unstubAllGlobals();
 });
 
 const visibleEntry = {isIntersecting: true} as IntersectionObserverEntry;
 const hiddenEntry = {isIntersecting: false} as IntersectionObserverEntry;
-const idleDeadline = {
-  didTimeout: false,
-  timeRemaining: () => 50,
-} as IdleDeadline;
-
 describe('TemplateThumbnail loading', () => {
   it('renders visible templates one per idle turn instead of during hydration', async () => {
     render(
@@ -408,6 +420,65 @@ describe('TemplateThumbnail loading', () => {
     expect(idleCallbacks).toHaveLength(0);
   });
 
+  it('holds the download of a visible tile during a fast scroll', async () => {
+    loadState.isLoaded = false;
+    scrollGate.isCalm = false;
+    render(<TemplateThumbnail slug="first" />);
+
+    act(() =>
+      intersectionCallbacks[0]?.([visibleEntry], {} as IntersectionObserver),
+    );
+    // The render turn arrives during the scroll and waits for the download.
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(loadState.preloads).toEqual([]);
+
+    scrollGate.isCalm = true;
+    await act(async () => {
+      for (const run of [...scrollGate.waiting]) {
+        run();
+      }
+      for (const resolve of loadState.resolvers) {
+        resolve();
+      }
+      // Lets the import's promise chain reach the render before act returns.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(new Set(loadState.preloads)).toEqual(new Set(['first']));
+    await waitFor(() =>
+      expect(screen.queryByText('First preview')).not.toBeNull(),
+    );
+  });
+
+  it('downloads nothing for a tile that leaves during a fast scroll', () => {
+    loadState.isLoaded = false;
+    scrollGate.isCalm = false;
+    render(
+      <>
+        <TemplateThumbnail slug="first" />
+        <TemplateThumbnail slug="second" />
+      </>,
+    );
+
+    act(() => {
+      for (const callback of intersectionCallbacks) {
+        callback([visibleEntry], {} as IntersectionObserver);
+      }
+    });
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    act(() =>
+      intersectionCallbacks[0]?.([hiddenEntry], {} as IntersectionObserver),
+    );
+
+    expect(scrollGate.waiting.size).toBe(1);
+    act(() => {
+      for (const run of [...scrollGate.waiting]) {
+        run();
+      }
+    });
+    expect(loadState.preloads).toEqual(['second']);
+  });
+
   it('releases the queue when a thumbnail unmounts during its import', async () => {
     loadState.isLoaded = false;
     const view = render(
@@ -455,7 +526,8 @@ describe('TemplateThumbnail loading', () => {
       for (const resolve of loadState.resolvers) {
         resolve();
       }
-      await Promise.resolve();
+      // Lets the import's promise chain reach the render before act returns.
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
     await waitFor(() =>

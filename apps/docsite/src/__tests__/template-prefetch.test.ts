@@ -132,6 +132,7 @@ describe('observeNearViewport', () => {
   it('owns one scroll listener and releases it with the last element', async () => {
     const add = vi.spyOn(document, 'addEventListener');
     const remove = vi.spyOn(document, 'removeEventListener');
+    const removeFromWindow = vi.spyOn(window, 'removeEventListener');
     const {observeNearViewport} = await loadModule();
 
     const stopFirst = observeNearViewport(
@@ -155,6 +156,9 @@ describe('observeNearViewport', () => {
     expect(observers[0].isDisconnected).toBe(true);
     expect(
       remove.mock.calls.filter(([type]) => type === 'scroll'),
+    ).toHaveLength(1);
+    expect(
+      removeFromWindow.mock.calls.filter(([type]) => type === 'resize'),
     ).toHaveLength(1);
 
     observeNearViewport(document.createElement('div'), () => {});
@@ -222,6 +226,22 @@ describe('whenScrollIsCalm', () => {
     const run = vi.fn();
     whenScrollIsCalm(run);
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it('follows the viewport height after a resize', async () => {
+    const {whenScrollIsCalm} = await loadObserving();
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 4 * VIEWPORT_HEIGHT,
+    });
+    window.dispatchEvent(new Event('resize'));
+    // 3,125 px per second: fast for a 1,000 px viewport, slow for 4,000 px.
+    scrollBy(50, 16);
+    scrollBy(50, 16);
+
+    const run = vi.fn();
+    whenScrollIsCalm(run);
+    expect(run).toHaveBeenCalledOnce();
   });
 
   it('does not run cancelled work', async () => {

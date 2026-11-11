@@ -4,7 +4,7 @@
  * @file Decides when a template thumbnail may download its template ahead of its render.
  * @input Reads thumbnail positions, scroll events, the viewport height, and the connection's data-saving hints.
  * @output Reports thumbnails that are near the viewport, and holds work while the page scrolls fast.
- * @position Client-side policy shared by every TemplateThumbnail. It owns one observer and one scroll listener while a thumbnail is mounted.
+ * @position Client-side policy shared by every TemplateThumbnail. It owns one observer, one scroll listener and one resize listener while a thumbnail is mounted.
  */
 
 // Above this speed, in viewport heights per second, tiles cross the screen
@@ -45,14 +45,20 @@ const waiting = new Set<() => void>();
 let lastScrollTime = Number.NEGATIVE_INFINITY;
 let pixelsPerMs = 0;
 let restTimer: number | undefined;
+// Read on resize only. A read during a scroll can force a layout.
+let viewportHeight = 0;
 
 function isCalm(): boolean {
   if (performance.now() - lastScrollTime > SCROLL_REST_MS) {
     return true;
   }
   return (
-    pixelsPerMs < (FAST_SCROLL_VIEWPORTS_PER_SECOND * window.innerHeight) / 1000
+    pixelsPerMs < (FAST_SCROLL_VIEWPORTS_PER_SECOND * viewportHeight) / 1000
   );
+}
+
+function onResize(): void {
+  viewportHeight = window.innerHeight;
 }
 
 function runWaiting(): void {
@@ -102,12 +108,15 @@ function startWatching(): void {
   // Scroll events do not bubble. The capture phase also reports scrolls of
   // nested containers.
   document.addEventListener('scroll', onScroll, {capture: true, passive: true});
+  viewportHeight = window.innerHeight;
+  window.addEventListener('resize', onResize, {passive: true});
 }
 
 function stopWatching(): void {
   nearObserver?.disconnect();
   nearObserver = null;
   document.removeEventListener('scroll', onScroll, {capture: true});
+  window.removeEventListener('resize', onResize);
   window.clearTimeout(restTimer);
   lastScrollTime = Number.NEGATIVE_INFINITY;
   pixelsPerMs = 0;
