@@ -145,4 +145,31 @@ describe('theme build with several files', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/expanded by your shell/);
   }, 120_000);
+
+  it('refuses a file given twice before writing anything', async () => {
+    const dir = themeDir();
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'alpha.mjs', './alpha.mjs'],
+      dir,
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout)).toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+  }, 120_000);
+
+  it('refuses a second theme with the same name instead of replacing the first', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(
+      path.join(dir, 'alpha2.mjs'),
+      `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
+    );
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'alpha2.mjs'], dir);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(
+      /alpha2\.mjs: alpha\.mjs already wrote alpha\.css in this run/,
+    );
+    expect(fs.readFileSync(path.join(dir, 'alpha.css'), 'utf-8')).toMatch(
+      /#ffffff/,
+    );
+  }, 120_000);
 });

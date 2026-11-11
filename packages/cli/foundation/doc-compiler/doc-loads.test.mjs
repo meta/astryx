@@ -476,6 +476,10 @@ const RUNNERS = {
     runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
     sites: ['child_process.spawnSync ×2'],
   },
+  'scripts/generate-stored-docs.mjs': {
+    runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',
+    sites: ['import(<computed>)'],
+  },
   'scripts/sync-api-types.mjs': {
     runs: '`tsc`, to emit the API declarations (build time, not shipped)',
     sites: ['child_process.execFileSync'],
