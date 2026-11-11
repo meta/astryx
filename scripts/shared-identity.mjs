@@ -415,7 +415,10 @@ export function sharedSlots() {
           file,
           line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
           helper: 'Symbol.for',
-          slot: node.arguments[0].text,
+          // Versioned like a helper slot, or null so the check reports it.
+          slot: /\/v\d+$/.test(node.arguments[0].text)
+            ? node.arguments[0].text
+            : null,
         });
       }
       ts.forEachChild(node, visit);

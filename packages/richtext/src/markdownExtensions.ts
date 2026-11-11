@@ -62,9 +62,8 @@ export interface RichTextMarkdownExtension {
   /** The adopted plugin's name. */
   readonly name: string;
   /**
-   * A brand that is never present on the type. Only
-   * `createRichTextExtension` makes an extension, and the package and a
-   * swizzled copy name the brand alike.
+   * Type-only brand. No extension has this property at runtime. Only
+   * `createRichTextExtension` makes an extension.
    */
   readonly '@astryxdesign/richtext/markdown-extension/v1': never;
 }
