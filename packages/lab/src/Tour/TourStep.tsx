@@ -12,11 +12,12 @@
  * with a heading, body, optional step progress ("2 of 5"), and back / next /
  * close controls. It registers with the parent `<Tour>` on mount (so step
  * order follows the children) and only renders its callout while it is the
- * active step. The callout is a non-modal `useLayer` anchored to the step's
- * target, which can be any element. The target gets no trigger wiring, so a
- * press on it does not end the tour, and focus can leave the callout for the
- * page. Escape ends the tour through the shared layer dismissal stack; the
- * step's own controls advance or close it.
+ * active step. The target can be any element. The callout is a non-modal
+ * `useLayer` anchored to the highlight ring drawn over the target, so a
+ * press that scales the target does not move it. The target gets no trigger
+ * wiring: without a backdrop a press on it does not end the tour, and focus
+ * can leave the callout for the page. Escape ends the tour through the shared
+ * layer dismissal stack; the step's own controls advance or close it.
  *
  * The highlight is drawn as a separate overlay tracking the target's box — the
  * consumer's element is never restyled, so there is no cascade fight with the
@@ -247,10 +248,11 @@ function TourHighlight({
 export interface TourStepProps {
   /**
    * Ref to the element this step points at: any element, such as a button, a
-   * card, a table cell or a chart region. The callout anchors to it. The
-   * target keeps its own behavior: pressing it does not end the tour, and
-   * keyboard focus can reach it while the step shows. Accepts a ref to any
-   * HTMLElement subtype (e.g. `useRef<HTMLDivElement>(null)`).
+   * card, a table cell or a chart region. The callout sits beside it. The
+   * target keeps its own behavior: without a backdrop, pressing it does not
+   * end the tour, and keyboard focus can reach it while the step shows.
+   * Accepts a ref to any HTMLElement subtype (e.g.
+   * `useRef<HTMLDivElement>(null)`).
    */
   targetRef: React.RefObject<HTMLElement | null>;
   /** Step heading. */

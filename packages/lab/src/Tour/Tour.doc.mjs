@@ -56,13 +56,13 @@ export const docs = {
       name: 'TourStep',
       displayName: 'Tour Step',
       description:
-        'A single spotlight step. Highlights a target element with a ring drawn as a separate overlay (the target is never restyled) and renders a non-modal callout anchored to it, with a heading, body, optional step progress, and back / next / close controls. The callout is a region named by its heading. Focus moves to it when the step starts, and Tab can leave it for the page, so a step can introduce a control the user then operates. Pressing the target or the page leaves the tour running; Escape ends it. Registers with the parent Tour on mount and renders its callout only while active.',
+        'A single spotlight step. Highlights a target element with a ring drawn as a separate overlay (the target is never restyled) and renders a non-modal callout anchored to it, with a heading, body, optional step progress, and back / next / close controls. The callout is a region named by its heading. Focus moves to it when the step starts, and Tab can leave it for the page, so a step can introduce a control the user then operates. Without a backdrop, pressing the target or the page leaves the tour running; Escape ends it. Registers with the parent Tour on mount and renders its callout only while active.',
       props: [
         {
           name: 'targetRef',
           type: 'RefObject<HTMLElement>',
           description:
-            'Ref to the element this step points at: any element, such as a button, a card, a table cell or a chart region. The callout anchors to it. The target keeps its own behavior: pressing it does not end the tour, and keyboard focus can reach it while the step shows.',
+            'Ref to the element this step points at: any element, such as a button, a card, a table cell or a chart region. The callout sits beside it. The target keeps its own behavior: without a backdrop, pressing it does not end the tour, and keyboard focus can reach it while the step shows. Under the Tour's backdrop, a press on the target ends the tour with "backdrop".',
           required: true,
         },
         {
