@@ -34,7 +34,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {MENU_ITEM_SELECTOR} from '../DropdownMenu/menuItemRoles';
 import {useListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTabListContext} from './TabListContext';
@@ -315,7 +315,7 @@ export function TabMenu({
   // A press that slides across the options picks the one it lifts on, the
   // highlight following the pointer, as DropdownMenu's does
   // (`family:action-groups` FR1-FR3, FR5); a mouse released outside closes it.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: popover.hide,

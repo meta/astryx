@@ -26,7 +26,7 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -465,7 +465,7 @@ export function TopNavMenu({
   // A press that slides across the items acts on the item it lifts on, the
   // highlight following the pointer, as every menu does
   // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: '[role="menuitem"]',
     onDismiss: close,

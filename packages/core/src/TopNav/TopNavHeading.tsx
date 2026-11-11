@@ -38,7 +38,7 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -413,7 +413,7 @@ export function TopNavHeading({
   // FR1-FR3, FR5); a mouse released outside closes it. Only the role="menu"
   // region is tracked, not the heading above it.
   const productMenuRef = useRef<HTMLDivElement>(null);
-  const productMenuPress = useMenuPress({
+  const productMenuPress = useMenuSurfacePress({
     menuRef: productMenuRef,
     itemSelector: '[role="menuitem"]:not([aria-disabled="true"])',
     onDismiss: closeMenu,

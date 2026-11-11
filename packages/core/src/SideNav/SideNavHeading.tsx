@@ -47,7 +47,7 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -442,7 +442,7 @@ export function SideNavHeading({
   // FR5); a mouse released outside closes it. Only the role="menu" region is
   // tracked, not the heading button above it.
   const headingMenuRef = useRef<HTMLDivElement>(null);
-  const headingMenuPress = useMenuPress({
+  const headingMenuPress = useMenuSurfacePress({
     menuRef: headingMenuRef,
     itemSelector: HEADING_MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,
