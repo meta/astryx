@@ -683,9 +683,10 @@ export class SegmentedSelectionMotion {
 
   /**
    * The lens binds on the selected segment and grows by `liftGrowth` on the
-   * `lift` spring. Any pointer lifts it under the touch presentation, as
-   * Switch's thumb does. A fine primary pointer and Reduce Motion keep it at
-   * its resting size.
+   * `lift` spring. A slide still on its way goes on to that segment on the
+   * slide spring, at its own speed. Any pointer lifts it under the touch
+   * presentation, as Switch's thumb does. A fine primary pointer and Reduce
+   * Motion keep it at its resting size.
    */
   private lift(): void {
     if (
@@ -707,6 +708,8 @@ export class SegmentedSelectionMotion {
     };
     this.isLifted = true;
     this.hasLiftedEdge = true;
+    const position = {x: 0} as const;
+    this.springLens(position, this.springFrom(position, 'selection'));
     this.springLens(lifted, this.springFrom(lifted, 'lift'));
     this.showLiftedEdge();
   }

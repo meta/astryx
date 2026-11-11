@@ -692,6 +692,31 @@ describe('under a finger', () => {
     expect(ctx.layer('lens', 'box-shadow')).toBe('');
   });
 
+  it('a finger pressing the segment a tap just chose, while the lens slides there, lifts the lens and it keeps sliding to that segment', async () => {
+    const ctx = setup('grid');
+    // The tap chose List: the lens slides there.
+    select(ctx, 'grid', 'list');
+    await advance(80);
+    const centerBefore = centerOf('list') + ctx.animator.get('x');
+    const vBefore = ctx.animator.getVelocity('x');
+    expect(centerBefore).toBeLessThan(centerOf('list') - 10);
+    expect(vBefore).toBeGreaterThan(100);
+    // The finger presses List before the lens lands.
+    press(ctx, clientCenterOf('list'));
+    // No jump and no lost velocity at the press.
+    expect(centerOf('list') + ctx.animator.get('x')).toBeCloseTo(
+      centerBefore,
+      6,
+    );
+    expect(ctx.animator.getVelocity('x')).toBeCloseTo(vBefore, 3);
+    // Lifted, it lands on List on the slide spring, grown by 24 × 16 pt.
+    await advance(1500);
+    expect(ctx.animator.get('x')).toBeCloseTo(0, 3);
+    expect(ctx.animator.get('scaleX') * 100).toBeCloseTo(124, 3);
+    expect(ctx.animator.get('scaleY') * 27).toBeCloseTo(43, 3);
+    expect(ctx.motion.isSliding).toBe(true);
+  });
+
   it('a drag holds the lifted lens until the finger lets go, then it shrinks back and hands back', async () => {
     const ctx = setup('grid');
     press(ctx, clientCenterOf('grid'));
