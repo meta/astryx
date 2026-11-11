@@ -25,7 +25,7 @@ import {colorVars} from '../theme/tokens.stylex';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import {DateTimeInput, type DateTimeInputProps} from './DateTimeInput';
 import type {ISODateTimeString} from './DateTimeInput';
-import type {DateEntryError} from '../DateInput/DateInput';
+import type {DateInputEntryError} from './DateTimeInput';
 import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -3176,7 +3176,9 @@ describe('DateTimeInput onEntryErrorChange', () => {
   it('with the callback, shows and announces the app error once, in place of the field message', async () => {
     const announced = recordAssertiveAnnouncements();
     function WordedField() {
-      const [entryError, setEntryError] = useState<DateEntryError | null>(null);
+      const [entryError, setEntryError] = useState<DateInputEntryError | null>(
+        null,
+      );
       return field({
         onEntryErrorChange: setEntryError,
         status:
@@ -3201,6 +3203,48 @@ describe('DateTimeInput onEntryErrorChange', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(announced).toEqual(['Pick a date in 2026']);
   });
+
+  it('announces an unchanged app error once through the date alert when a rejection starts', () => {
+    const {container} = render(
+      field({
+        status: {type: 'error', message: 'Required'},
+        onEntryErrorChange: () => {},
+      }),
+    );
+    const [dateAlert] = within(container).getAllByRole('alert');
+    expect(dateAlert).toHaveTextContent('');
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '01/05/2027'},
+    });
+    expect(dateAlert).toHaveTextContent('Required');
+    expect(screen.queryByText(OUT_OF_RANGE_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it.each(['native', 'bottom-sheet'] as const)(
+    'reports null when a %s presentation takes over during a rejection',
+    presentation => {
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const onEntryErrorChange = vi.fn();
+      const {rerender} = render(
+        field({presentation: 'popover', onEntryErrorChange}),
+      );
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '02/31/2026'},
+      });
+      rerender(field({presentation, onEntryErrorChange}));
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [{kind: 'nonexistent', text: '02/31/2026'}],
+        [null],
+      ]);
+    },
+  );
 
   it('with the callback, a warning status never replaces a rejection', () => {
     render(

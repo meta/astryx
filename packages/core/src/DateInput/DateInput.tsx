@@ -5,7 +5,7 @@
 /**
  * @file DateInput.tsx
  * @input Uses React, useId, useCallback, useRef, useTypedDateField, Field, Icon, Calendar, usePopover, InputGroupContext
- * @output Exports DateInput component, DateInputProps, and DateEntryError
+ * @output Exports DateInput component, DateInputProps, and DateInputEntryError
  * @position Core implementation; consumed by index.ts, tested by DateInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -75,7 +75,7 @@ import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {type DateEntryError, useTypedDateField} from './useTypedDate';
+import {type DateInputEntryError, useTypedDateField} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
   resolvePickerPresentation,
@@ -193,7 +193,7 @@ export type {
   InputStatus as DateInputStatus,
   InputStatusType as DateInputStatusType,
 } from '../Field';
-export type {DateEntryError} from './useTypedDate';
+export type {DateInputEntryError} from './useTypedDate';
 import {mergeProps, isFocusDetached} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -352,13 +352,16 @@ export interface DateInputProps extends Omit<
    *
    * It also runs when a new `min`, `max`, `dateConstraints`, or `value`, a
    * calendar pick, disabling the field, or Enter or blur changes the
-   * rejection, and never twice for the same rejection. Passing it lets an
-   * `error` `status` word the rejection (see `status`). The native and touch
-   * pickers produce no typed rejections, so it never runs there.
+   * rejection, and never twice for the same rejection. It reports `null` when
+   * the typed field leaves while its rejection stands, as when a presentation
+   * or pointer change shows the native or touch picker. Passing it lets an
+   * `error` `status` word the rejection (see `status`). A rejection that
+   * starts under an unchanged error message announces that message once. The
+   * native and touch pickers take no typed text, so they report no rejection.
    *
    * @example
    * ```
-   * const [entryError, setEntryError] = useState<DateEntryError | null>(null);
+   * const [entryError, setEntryError] = useState<DateInputEntryError | null>(null);
    * <DateInput
    *   label="Due"
    *   value={date}
@@ -373,7 +376,7 @@ export interface DateInputProps extends Omit<
    * />
    * ```
    */
-  onEntryErrorChange?: (error: DateEntryError | null) => void;
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
 
   /**
    * How the status message is placed relative to the input.

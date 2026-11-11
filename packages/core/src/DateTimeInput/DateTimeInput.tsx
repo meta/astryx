@@ -5,7 +5,7 @@
 /**
  * @file DateTimeInput.tsx
  * @input Uses React, Field, Calendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
- * @output Exports DateTimeInput component, DateTimeInputProps, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
+ * @output Exports DateTimeInput component, DateTimeInputProps, DateInputEntryError, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -89,7 +89,7 @@ import {joinAriaIDs} from '../utils/inputAria';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
 import {
-  type DateEntryError,
+  type DateInputEntryError,
   useTypedDateField,
 } from '../DateInput/useTypedDate';
 
@@ -129,6 +129,7 @@ import {
 import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.generated';
 
 registerEnglishFallback(english);
+export type {DateInputEntryError} from '../DateInput/useTypedDate';
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -519,11 +520,14 @@ export interface DateTimeInputProps extends Omit<
    *
    * It also runs when a new `min`, `max`, `dateConstraints`, or `value`, a
    * calendar pick, disabling the field, or Enter or blur changes the
-   * rejection, and never twice for the same rejection. Passing it lets an
-   * `error` `status` word the rejection (see `status`). The native and touch
-   * pickers produce no typed rejections, so it never runs there.
+   * rejection, and never twice for the same rejection. It reports `null` when
+   * the typed field leaves while its rejection stands, as when a presentation
+   * or pointer change shows the native or touch picker. Passing it lets an
+   * `error` `status` word the rejection (see `status`). A rejection that
+   * starts under an unchanged error message announces that message once. The
+   * native and touch pickers take no typed text, so they report no rejection.
    */
-  onEntryErrorChange?: (error: DateEntryError | null) => void;
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -1057,7 +1061,9 @@ function PointerDateTimeField({
     onChange: handleTypedDateChange,
     onClear: clearTypedDate,
     onTypedDate: navigateToTypedDate,
-    isDisabled: isEffectivelyDisabled,
+    // The native date control takes no typed text, so kept typed text and its
+    // rejection wait for the typed field.
+    isDisabled: isEffectivelyDisabled || usesNativePicker,
     status,
     isStatusAnnounced: true,
     onEntryErrorChange,

@@ -8,8 +8,8 @@
  *   calendarDateParser, and parseDateInput for other Gregorian text
  * @output Typed-date reading, committed text, the format hint, the calendar
  *   description and rejection messages for a date text field, the typed
- *   entry state that DateInput and DateTimeInput share, and the DateEntryError
- *   that the field reports to its caller
+ *   entry state that DateInput and DateTimeInput share, and the
+ *   DateInputEntryError that the field reports to its caller
  * @position DateInput helper hook; used by DateInput and DateTimeInput
  */
 
@@ -55,7 +55,7 @@ export type TypedDateError = 'unreadable' | 'nonexistent' | 'outOfRange';
  * Why a date field rejects the text that a person typed. The field reports it
  * through `onEntryErrorChange`, so the app can word its own message.
  */
-export interface DateEntryError {
+export interface DateInputEntryError {
   /**
    * The reason, independent of the locale and the calendar:
    * - `'unreadable'`: text that is not a date
@@ -76,8 +76,8 @@ export interface DateEntryError {
 }
 
 function isSameEntryError(
-  a: DateEntryError | null,
-  b: DateEntryError | null,
+  a: DateInputEntryError | null,
+  b: DateInputEntryError | null,
 ): boolean {
   return (
     a === b ||
@@ -161,7 +161,7 @@ function dateEntryError(
   text: string,
   min: ISODateString | undefined,
   max: ISODateString | undefined,
-): DateEntryError | null {
+): DateInputEntryError | null {
   const error = typedDateError(result, isCommitted);
   if (error == null || result == null) {
     return null;
@@ -343,8 +343,11 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   status?: InputStatus;
   /** Whether the shown status announces itself, as Field's status does. */
   isStatusAnnounced: boolean;
-  /** Reports each change of the typed rejection, and null when it ends. */
-  onEntryErrorChange?: (error: DateEntryError | null) => void;
+  /**
+   * Reports each change of the typed rejection, and null when it ends or when
+   * the field unmounts while it stands.
+   */
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
 }
@@ -432,10 +435,11 @@ export function useTypedDateField({
   // reaches the caller only after the render. Until then the field keeps the
   // caller's status, so it never shows and announces its own message just
   // before the caller's message replaces it.
-  const [heardEntryError, setHeardEntryError] = useState<DateEntryError | null>(
-    null,
-  );
-  const reportedEntryErrorRef = useRef<DateEntryError | null>(null);
+  const [heardEntryError, setHeardEntryError] =
+    useState<DateInputEntryError | null>(null);
+  const reportedEntryErrorRef = useRef<DateInputEntryError | null>(null);
+  // The callback of the latest commit, for the report at unmount.
+  const latestEntryErrorCallbackRef = useRef(onEntryErrorChange);
   const hasEntryErrorCallback = onEntryErrorChange != null;
   const isCallerBehind =
     hasEntryErrorCallback && !isSameEntryError(entryError, heardEntryError);
@@ -449,11 +453,51 @@ export function useTypedDateField({
     isCallerBehind || callerErrorMessage != null
       ? status
       : (typedStatus ?? status);
+
+  // Field announces its status when the status appears or changes. A
+  // rejection that starts under the caller's error message changes no status,
+  // so the field's alert announces that message once for it. This record
+  // holds the error message that the status showed while no rejection stood.
+  // A change of the shown message during the rejection ends the repeat,
+  // because Field announces that change.
+  const shownErrorMessage =
+    fieldStatus?.type === 'error' ? (fieldStatus.message ?? null) : null;
+  const [statusRecord, setStatusRecord] = useState<{
+    message: string | null;
+    isRepeatable: boolean;
+  }>({message: shownErrorMessage, isRepeatable: true});
+  // Updated during render, like the `value` check below, not in an Effect.
+  const statusRecordInput = `${entryError != null}:${shownErrorMessage}`;
+  const prevStatusRecordInputRef = useRef(statusRecordInput);
+  if (
+    hasEntryErrorCallback &&
+    statusRecordInput !== prevStatusRecordInputRef.current
+  ) {
+    prevStatusRecordInputRef.current = statusRecordInput;
+    if (entryError == null) {
+      if (
+        statusRecord.message !== shownErrorMessage ||
+        !statusRecord.isRepeatable
+      ) {
+        setStatusRecord({message: shownErrorMessage, isRepeatable: true});
+      }
+    } else if (
+      statusRecord.isRepeatable &&
+      statusRecord.message !== shownErrorMessage
+    ) {
+      setStatusRecord({message: statusRecord.message, isRepeatable: false});
+    }
+  }
+
   let alertMessage = '';
   if (errorMessage != null && !isCallerBehind) {
     if (callerErrorMessage != null) {
+      const isStatusRepeated =
+        statusRecord.isRepeatable &&
+        statusRecord.message === callerErrorMessage;
       // Inside an InputGroup no Field announces the caller's status.
-      alertMessage = isStatusAnnounced ? '' : callerErrorMessage;
+      alertMessage =
+        !isStatusAnnounced || isStatusRepeated ? callerErrorMessage : '';
     } else {
       alertMessage =
         isStatusAnnounced && typedStatus != null ? '' : errorMessage;
@@ -461,7 +505,7 @@ export function useTypedDateField({
   }
 
   const reportEntryError = useCallback(
-    (error: DateEntryError | null) => {
+    (error: DateInputEntryError | null) => {
       if (onEntryErrorChange == null) {
         return;
       }
@@ -477,6 +521,7 @@ export function useTypedDateField({
   // Syncs the caller's entry error with a rejection that a new `min`, `max`,
   // `dateConstraints`, `value`, or disabled state starts, changes, or ends.
   useEffect(() => {
+    latestEntryErrorCallbackRef.current = onEntryErrorChange;
     if (onEntryErrorChange == null) {
       return;
     }
@@ -489,6 +534,19 @@ export function useTypedDateField({
       setHeardEntryError(entryError);
     }
   }, [entryError, heardEntryError, onEntryErrorChange]);
+
+  // Syncs the caller's entry error at unmount. A presentation or pointer
+  // change can replace the field while its reported rejection stands, and
+  // the rejection ends with the field.
+  useEffect(
+    () => () => {
+      if (reportedEntryErrorRef.current != null) {
+        reportedEntryErrorRef.current = null;
+        latestEntryErrorCallbackRef.current?.(null);
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     setPendingInput(null);

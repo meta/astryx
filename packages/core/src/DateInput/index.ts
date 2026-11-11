@@ -16,5 +16,5 @@ export type {
   DateInputPresentation,
   DateInputStatus,
   DateInputStatusType,
-  DateEntryError,
+  DateInputEntryError,
 } from './DateInput';

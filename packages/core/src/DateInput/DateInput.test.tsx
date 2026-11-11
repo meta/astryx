@@ -21,7 +21,11 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
-import {DateInput, type DateEntryError, type DateInputProps} from './DateInput';
+import {
+  DateInput,
+  type DateInputEntryError,
+  type DateInputProps,
+} from './DateInput';
 import {Icon} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
@@ -2146,9 +2150,11 @@ describe('DateInput onEntryErrorChange', () => {
     onEntryErrorChange,
     ...props
   }: Omit<DateInputProps, 'label'> & {
-    wording: (error: DateEntryError) => string | undefined;
+    wording: (error: DateInputEntryError) => string | undefined;
   }) {
-    const [entryError, setEntryError] = useState<DateEntryError | null>(null);
+    const [entryError, setEntryError] = useState<DateInputEntryError | null>(
+      null,
+    );
     const message = entryError != null ? wording(entryError) : undefined;
     return (
       <DateInput
@@ -2163,7 +2169,9 @@ describe('DateInput onEntryErrorChange', () => {
     );
   }
 
-  it.each<[string, Partial<DateInputProps>, string, boolean, DateEntryError]>([
+  it.each<
+    [string, Partial<DateInputProps>, string, boolean, DateInputEntryError]
+  >([
     [
       'unreadable',
       {},
@@ -2479,24 +2487,58 @@ describe('DateInput onEntryErrorChange', () => {
     expect(screen.getByText(NONEXISTENT_MESSAGE)).toBeInTheDocument();
   });
 
-  it('with the callback, a static error status wins for text that is not yet committed', () => {
+  it('announces an unchanged app error once through the field alert when a rejection starts', async () => {
+    const announced = recordAssertiveAnnouncements();
     const {container} = render(
       <DateInput
         label="Due"
         onChange={() => {}}
-        status={{type: 'error', message: 'HOST MESSAGE'}}
+        status={{type: 'error', message: 'Required'}}
         onEntryErrorChange={() => {}}
       />,
     );
+    await waitFor(() => {
+      expect(announced).toEqual(['Required']);
+    });
     const input = screen.getByRole('combobox');
+    const alert = within(container).getByRole('alert');
+    expect(alert).toHaveTextContent('');
+
     fireEvent.change(input, {target: {value: 'tomorrowish'}});
-    expect(screen.getByText('HOST MESSAGE')).toBeInTheDocument();
-    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
+      'Required',
+    );
+    expect(alert).toHaveTextContent('Required');
     expect(input).toHaveAttribute('aria-invalid', 'true');
 
+    // The same rejection keeps the alert text, so nothing announces again.
+    fireEvent.change(input, {target: {value: 'tomorrowis'}});
     fireEvent.change(input, {target: {value: '02/31/2026'}});
-    expect(screen.getByText('HOST MESSAGE')).toBeInTheDocument();
+    expect(alert).toHaveTextContent('Required');
     expect(screen.queryByText(NONEXISTENT_MESSAGE)).not.toBeInTheDocument();
+
+    fireEvent.change(input, {target: {value: '02/28/2026'}});
+    expect(alert).toHaveTextContent('');
+    fireEvent.change(input, {target: {value: '02/30/2026'}});
+    expect(alert).toHaveTextContent('Required');
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Required']);
+  });
+
+  it('leaves the field alert empty when the app error changes as the rejection starts', () => {
+    const {container} = render(
+      <WordedDateInput
+        onChange={() => {}}
+        status={{type: 'error', message: 'Required'}}
+        wording={() => 'Enter a real date'}
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '02/31/2026'},
+    });
+    expect(screen.getByText('Enter a real date')).toBeInTheDocument();
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
   });
 
   it('without the callback, the rejection replaces an error status as it always has', () => {
@@ -2591,6 +2633,58 @@ describe('DateInput onEntryErrorChange', () => {
         },
       );
     }
+
+    it.each(['native', 'bottom-sheet'] as const)(
+      'reports null when a %s presentation replaces the field during a rejection',
+      presentation => {
+        stubCoarsePointer();
+        const onEntryErrorChange = vi.fn();
+        const field = (
+          surface: 'popover' | 'native' | 'bottom-sheet',
+          callback: (error: DateInputEntryError | null) => void,
+        ) => (
+          <DateInput
+            label="Due"
+            presentation={surface}
+            onChange={() => {}}
+            onEntryErrorChange={callback}
+          />
+        );
+        const {rerender} = render(field('popover', onEntryErrorChange));
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: '02/31/2026'},
+        });
+        const latest = vi.fn();
+        rerender(field('popover', latest));
+        rerender(field(presentation, latest));
+        expect(onEntryErrorChange.mock.calls).toEqual([
+          [{kind: 'nonexistent', text: '02/31/2026'}],
+        ]);
+        expect(latest.mock.calls).toEqual([[null]]);
+      },
+    );
+
+    it('reports nothing at unmount when no rejection stands', () => {
+      const onEntryErrorChange = vi.fn();
+      const {unmount} = render(
+        <DateInput
+          label="Due"
+          onChange={() => {}}
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '02/31/2026'},
+      });
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '02/28/2026'},
+      });
+      unmount();
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [{kind: 'nonexistent', text: '02/31/2026'}],
+        [null],
+      ]);
+    });
 
     it('never reports from the native picker, and keeps the prop off the DOM', () => {
       stubCoarsePointer();
