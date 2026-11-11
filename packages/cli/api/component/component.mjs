@@ -45,6 +45,7 @@ import {componentDetailProps} from './detail/props/props.mjs';
 import {componentDetailSource} from './detail/source/source.mjs';
 import {componentDetailShowcase} from './detail/showcase/showcase.mjs';
 import {componentDetailBlocks} from './detail/blocks/blocks.mjs';
+import {discoverAll} from '../../foundation/discovery/template-adapter.mjs';
 
 /** Maximum selectors accepted before any component resolution starts. */
 export const COMPONENT_BATCH_SELECTOR_LIMIT = 100;
@@ -623,7 +624,13 @@ async function componentRead(name, options = {}) {
     });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+  }).catch(async error => {
+    throw (await exampleBlockError(error, dirName, cwd)) ?? error;
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────
@@ -661,5 +668,51 @@ async function componentRead(name, options = {}) {
     },
     resolved.resolvedName,
     coreDir,
+  );
+}
+
+/**
+ * The error for a name that is not a component but is an example block that
+ * `component <Parent> --blocks` lists: it keeps the unknown-component code and
+ * points at the commands that show the example and its siblings. Returns null
+ * for any other error, or a name that is no example block.
+ * @param {unknown} error
+ * @param {string} dirName
+ * @param {string} cwd
+ * @returns {Promise<AstryxError | null>}
+ */
+async function exampleBlockError(error, dirName, cwd) {
+  if (
+    !(error instanceof AstryxError) ||
+    error.code !== ERROR_CODES.ERR_UNKNOWN_COMPONENT
+  ) {
+    return null;
+  }
+  const typed = dirName.toLowerCase();
+  const block = (await discoverAll(cwd)).find(
+    template =>
+      template.type === 'block' && template.dirName.toLowerCase() === typed,
+  );
+  if (block == null) {
+    return null;
+  }
+  const parent =
+    block.exampleFor ?? (block.category ?? '').split('/').filter(Boolean).pop();
+  /** @type {import('../../foundation/response/base').Suggestion[]} */
+  const suggestions = [
+    {name: `template ${block.dirName}`, reason: "show this example's source"},
+  ];
+  if (parent) {
+    suggestions.push({
+      name: `component ${parent} --blocks`,
+      reason: `list ${parent}'s examples`,
+    });
+  }
+  return new AstryxError(
+    `No component named "${dirName}". It is an example block${
+      parent ? ` of ${parent}` : ''
+    }.`,
+    suggestions,
+    ERROR_CODES.ERR_UNKNOWN_COMPONENT,
   );
 }
