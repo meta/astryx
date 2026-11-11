@@ -297,7 +297,12 @@ a measured, sourced difference exists.
   keeps the call's clock. Calls made in one callback, such as one event
   listener or one observer callback, share the clock of its first call, so
   several elements line up; a call more than 34 ms after that first call
-  starts a new clock.
+  starts a new clock. A swipe row's close that a touch tap on its content,
+  Escape or a press outside it starts is made in that input event's own task.
+  It uses the animator's internal `start: 'next-frame'`
+  (`architecture:react-component-runtime` INV13). The first frame after the
+  task commits it, however long a later listener holds the page, so the close
+  never skips ahead into its curve.
 - **FR7 — Exits keep the native counterpart's look.** A touch presentation MUST
   play an exit with the look of its UIKit counterpart's exit, on every touch
   platform: a menu shrinks into its trigger, and an alert fades. In a component
