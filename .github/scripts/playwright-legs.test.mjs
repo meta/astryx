@@ -44,6 +44,74 @@ const durations = JSON.parse(
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
 
+describe('plan', () => {
+  /**
+   * Runs `plan` with a stand-in pnpm that answers `playwright test --list` as
+   * Playwright does when no spec file matches: exit 1, unless the listing
+   * passes `--pass-with-no-tests`, which writes an empty report instead.
+   */
+  function planWithNothingListed(filters) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'legs-plan-'));
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'pnpm'),
+      [
+        '#!/bin/sh',
+        'case " $* " in',
+        '  *" --pass-with-no-tests "*) echo \'{"suites":[]}\' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;',
+        '  *) echo "Error: No tests found" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+      {mode: 0o755},
+    );
+    const result = spawnSync(
+      'node',
+      [
+        path.join(root, '.github/scripts/playwright-legs.mjs'),
+        'plan',
+        '--key',
+        'interaction',
+        '--config',
+        'playwright.interaction.config.ts',
+        '--leg',
+        '1',
+        '--of',
+        '1',
+        '--out',
+        path.join(dir, 'plan.json'),
+        ...(filters.length > 0 ? ['--', ...filters] : []),
+      ],
+      {
+        cwd: root,
+        env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
+        encoding: 'utf8',
+      },
+    );
+    fs.rmSync(dir, {recursive: true, force: true});
+    return result;
+  }
+
+  it('tells the author to update a branch whose head lacks every selected spec', () => {
+    const result = planWithNothingListed([
+      'packages/core/src/Added/__tests__/Added.interaction.spec.ts',
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'they were added on main after the branch point. Update the branch to run them.',
+    );
+  });
+
+  it('still fails a suite that lists no spec files at all', () => {
+    const result = planWithNothingListed([]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Playwright listed no interaction spec files',
+    );
+  });
+});
+
 describe('nearCeilingMessage', () => {
   const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 6};
 
@@ -371,6 +439,7 @@ describe('the interaction leg count job in ci.yml', () => {
     expect(counter.outputs).toEqual({
       chromium: '${{ steps.matrix.outputs.chromium }}',
       webkit: '${{ steps.matrix.outputs.webkit }}',
+      chromium_specs: '${{ steps.select-chromium.outputs.specs }}',
     });
   });
 
@@ -400,12 +469,15 @@ describe('the interaction leg count job in ci.yml', () => {
       expect(mine.if).toBe(`steps.scope-${lane.key}.outputs.applies == 'true'`);
       // A failed count falls back to ten legs that each decide for themselves.
       expect(mine['continue-on-error']).toBe(true);
+      // Each leg reads the Chromium selection from this job's output.
       expect(mine.env ?? {}).toEqual(
         JSON.parse(
-          JSON.stringify(theirs.env ?? {}).replaceAll(
-            'steps.scope.',
-            `steps.scope-${lane.key}.`,
-          ),
+          JSON.stringify(theirs.env ?? {})
+            .replaceAll('steps.scope.', `steps.scope-${lane.key}.`)
+            .replaceAll(
+              'needs.interaction-legs.outputs.chromium_specs',
+              'steps.select-chromium.outputs.specs',
+            ),
         ),
       );
       expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
@@ -1537,10 +1609,14 @@ describe('what a Chromium run covers for a pull request', () => {
   });
 });
 
-describe('the Chromium selection in ci.yml, in shadow', () => {
+describe('the Chromium selection in ci.yml', () => {
   const counter = ci.jobs['interaction-legs'];
-  const select = step(counter, 'Select the Chromium proofs, in shadow');
+  const proofs = ci.jobs['pr-interaction'];
+  const select = step(counter, 'Select the Chromium proofs');
   const scope = counter.steps.find(each => each.id === 'scope-chromium');
+  const count = step(counter, 'Count the Chromium legs');
+  const legsStep = step(proofs, "Count this run's legs");
+  const planStep = step(proofs, "Plan this leg's interaction proofs");
 
   it('runs on a pull request in scope, never on a Lab-only change, and never fails the job', () => {
     expect(select.if).toBe(
@@ -1568,20 +1644,89 @@ describe('the Chromium selection in ci.yml, in shadow', () => {
     expect(select.run).toContain(
       '--every-spec "${WEBKIT_RELEASE_CHECK:-false}"',
     );
+    expect(select.run).toContain(
+      'specs=${r.full ? "full" : JSON.stringify(r.specs)}',
+    );
   });
 
-  it('keeps the selection as an artifact, and still runs every Chromium spec', () => {
+  it('is decided before the leg count, and every leg reads the same selection', () => {
+    const ids = counter.steps.map(each => each.id ?? each.name);
+    expect(ids.indexOf('select-chromium')).toBeLessThan(
+      ids.indexOf('count-chromium'),
+    );
+    expect(counter.outputs.chromium_specs).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    expect(count.env.CHROMIUM_SPECS).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    for (const each of [legsStep, planStep])
+      expect(each.env.CHROMIUM_SPECS).toBe(
+        '${{ needs.interaction-legs.outputs.chromium_specs }}',
+      );
+    // The WebKit lane keeps its own selection.
+    expect(JSON.stringify(ci.jobs['pr-interaction-webkit'])).not.toContain(
+      'CHROMIUM_SPECS',
+    );
+  });
+
+  it('keeps the selection as an artifact for the escape log', () => {
     const keep = step(counter, 'Keep the Chromium selection');
     expect(keep.if).toBe("steps.select-chromium.outcome == 'success'");
     expect(keep.with.name).toBe(
       'interaction-selection-${{ github.run_attempt }}',
     );
-    for (const run of [
-      step(counter, 'Count the Chromium legs').run,
-      step(ci.jobs['pr-interaction'], "Count this run's legs").run,
-      step(ci.jobs['pr-interaction'], "Plan this leg's interaction proofs").run,
-    ])
-      expect(run).not.toContain('chromium-selection');
+  });
+
+  /** Runs a step's filter block in bash and reports what it planned. */
+  function filters(run, env) {
+    const start = run.indexOf('FILTERS=()');
+    const end = run.indexOf('\nfi\n', start) + '\nfi'.length;
+    const out = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'filters-')),
+      'out',
+    );
+    fs.writeFileSync(out, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', `${run.slice(start, end)}\nprintf '%s\\n' "\${FILTERS[@]}"`],
+      {
+        env: {...process.env, GITHUB_OUTPUT: out, LAB_SPECS: '', ...env},
+        encoding: 'utf8',
+      },
+    );
+    return {
+      status: result.status,
+      filters: result.stdout
+        .split('\n')
+        .filter(
+          line => line && !line.startsWith('No ') && !line.startsWith('::'),
+        ),
+      output: fs.readFileSync(out, 'utf8'),
+    };
+  }
+
+  it('plans the selected specs, one skip leg for none, and every spec for `full` or no selection', () => {
+    for (const run of [count.run, legsStep.run, planStep.run]) {
+      expect(
+        filters(run, {
+          CHROMIUM_SPECS: JSON.stringify(['a.spec.ts', 'b.spec.ts']),
+        }).filters,
+      ).toEqual(['--', 'a.spec.ts', 'b.spec.ts']);
+      expect(filters(run, {CHROMIUM_SPECS: '[]'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: 'count=0\nruns=false\nleg=1\n',
+      });
+      expect(filters(run, {CHROMIUM_SPECS: 'full'}).filters).toEqual([]);
+      expect(filters(run, {CHROMIUM_SPECS: ''}).filters).toEqual([]);
+      // A selection that does not parse runs every spec, never none.
+      expect(filters(run, {CHROMIUM_SPECS: '["a.spec.ts"'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: '',
+      });
+    }
   });
 });
 
@@ -1627,5 +1772,77 @@ describe('checkoutReader', () => {
     expect([...proofs.get('packages/core/src/Sheet/ease.test.ts')]).toEqual([
       'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts',
     ]);
+  });
+});
+
+describe("the Chromium selection on this repository's own proofs", () => {
+  const listed = execFileSync('git', ['-C', root, 'ls-files'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const scope = new RegExp(
+    ci.jobs['interaction-legs'].steps.find(
+      each => each.id === 'select-chromium',
+    ).env.SCOPE_PATHS,
+  );
+  const readJson = file =>
+    JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+  const options = {
+    listed,
+    scope,
+    fullSuite: false,
+    importers: importerGraph(root),
+    proofs: proofImporters({root, listed, isProof: isProofPage}),
+    selection: readJson('.github/interaction-selection.json'),
+    primitives: readJson('.github/a11y-shared-primitives.json').primitives,
+  };
+
+  /** Each interaction proof in another folder that a component record names. */
+  function recordNamedProofs() {
+    const named = [];
+    for (const record of listed.filter(file =>
+      /^docs\/specs\/components\/[^/]+\/[^/]+\.spec\.md$/.test(file),
+    )) {
+      const folder = listed
+        .map(file => /^packages\/[^/]+\/src\/[^/]+\//.exec(file)?.[0])
+        .find(prefix => prefix?.endsWith(`/${record.split('/')[3]}/`));
+      if (folder == null) continue;
+      const front = fs.readFileSync(path.join(root, record), 'utf8');
+      const verified = /^verified_by:\s*\[([^\]]*)\]/m.exec(front)?.[1] ?? '';
+      for (const spec of verified.split(',').map(each => each.trim()))
+        if (isInteractionSpec(spec) && !spec.startsWith(folder))
+          named.push({folder, spec});
+    }
+    return named;
+  }
+
+  // Proofs a record's requirements name in its text, not in `verified_by`.
+  const TEXT_NAMED = [
+    {
+      folder: 'packages/core/src/Collapsible/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/TreeList/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/Layout/',
+      spec: 'packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts',
+    },
+  ];
+
+  it('runs every record-named proof in another folder when its component changes', () => {
+    const named = [...recordNamedProofs(), ...TEXT_NAMED];
+    expect(named.length).toBeGreaterThanOrEqual(9);
+    for (const {folder, spec} of named) {
+      const source = listed.find(
+        file => file.startsWith(folder) && /\/[A-Z][^/.]*\.tsx$/.test(file),
+      );
+      const picked = chromiumSelection({...options, changed: [source]});
+      expect(picked.full, source).toBe(false);
+      expect(picked.specs, `${source} → ${spec}`).toContain(spec);
+    }
   });
 });
