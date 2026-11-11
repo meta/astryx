@@ -519,8 +519,8 @@ no theming target or theme state; the root element keeps the existing
 - **Capability:** date values that PowerSearch (its tokens in both
   presentations, and the sheet's Filters rows and removal announcement) and
   PowerSearchToken write in the provider's calendar (`spec:AST-111` FR18), for
-  calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and
-  `japanese`, which need the runtime's `Temporal`.
+  calendars other than the Gregorian, Buddhist, Minguo, and Japanese calendars,
+  which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing or does not support the calendar,
   as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
   the first render and warns once in development, on the server and in the
@@ -531,9 +531,9 @@ no theming target or theme state; the root element keeps the existing
   `Temporal` does not match, so a server-rendered application loads `Temporal`
   on the server too.
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 whenever the
-  server and the browser resolve the calendar the same way, outside the
-  `chinese` and `dangi` case of `spec:AST-111` FR19. The filter flow and the
-  filter values do not change; nothing throws.
+  server and the browser resolve the calendar the same way, outside the case of
+  the Chinese and Dangi calendars in `spec:AST-111` FR19. The filter flow and
+  the filter values do not change; nothing throws.
 - **Evidence:** `PowerSearch.calendarSystems.test.tsx` with a `Temporal`
   polyfill and with `Temporal` removed; `PowerSearchBottomSheet.test.tsx`
   ("writes the trigger token and the Filters row in the provider calendar").

@@ -88,7 +88,7 @@ describe('liftTargetAt', () => {
     expect(liftAt(315, 50, segments)).toBe('table');
   });
 
-  it('commits nothing for a lift outside the control: a press that slides off cancels (spec:AST-020 FR9, DEC-5)', () => {
+  it('counts nothing outside the control: the tracker reads a held pointer on its center line', () => {
     const segments = spans(layout);
     // Past either end, above, below.
     expect(liftAt(5, 35, segments)).toBeNull();
