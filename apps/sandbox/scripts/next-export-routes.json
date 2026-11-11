@@ -810,6 +810,7 @@
     "/templates/useCalendarConstraintsHookUsage/",
     "/templates/useCalendarDaysHookUsage/",
     "/templates/useCalendarNavigationHookUsage/",
+    "/templates/useChatPasteAsTokenHookUsage/",
     "/templates/useClickableContainerHookUsage/",
     "/templates/useClipboardHookUsage/",
     "/templates/useCollatorHookUsage/",
