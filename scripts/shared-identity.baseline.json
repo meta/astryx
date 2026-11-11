@@ -245,10 +245,6 @@
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
-    "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
       "group": "triage"
