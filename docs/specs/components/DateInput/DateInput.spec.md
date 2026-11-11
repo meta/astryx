@@ -124,6 +124,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   and looks wherever DateInput, TimeInput, or DateTimeInput renders it in a sheet
   (FR13–FR15, FR17, FR18, DEC-1, DEC-2), and DateInput's own month and year
   wheels (FR23).
+- The loop's steps in `DateInput/wheelOptions.ts`: `restingLoopStep`, a rest's
+  turn to the nearest enabled row, and `loopedStep`, a key's step across the
+  seam (FR13, FR17, DEC-3).
 - The disabled-reason Tooltip composition: DateInput renders the reason Tooltip
   and links it from its focusable controls (`family:input-fields`
   representative matrix, "Member with `disabledMessage`").
