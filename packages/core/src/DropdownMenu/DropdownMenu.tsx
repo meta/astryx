@@ -47,7 +47,7 @@ import React, {
 } from 'react';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {
   claimPress,
@@ -79,10 +79,11 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useDropdownMenuPress} from '../hooks/useMenuPress';
+import {isInScrollView} from '../hooks/menuScrollView';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
 import {moveRegionsTab} from './menuRegionStops';
@@ -468,10 +469,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Surface used to present the actions. Pass a value selected by product
    * policy (for example, a compact-touch media query) when the presentation
    * should adapt. Bottom-sheet presentation is intended for short action sets.
-   * Omitted, the menu is the anchored popover. Under a finger, on every
-   * device, the finger that opened it picks as UIMenu's does, once it has
-   * moved. `'popover'` pins the anchored popover with the pointer behavior on
-   * every device (the opening press follows the settle rule).
+   * Omitted, the menu is the anchored popover. On every device, a finger or
+   * a pen opens it as it presses the trigger, as UIMenu's pull-down button
+   * does. The finger that opened it picks once it has moved. `'popover'`
+   * pins the anchored popover with the pointer behavior on every device. A
+   * finger held for 500 ms opens it, and the settle rule decides its release.
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -480,9 +482,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
   /**
-   * `'popover'` pins the pointer behavior on every device (the opening press
-   * follows the settle rule). Omitted, on every device, the finger
-   * that opened the menu picks as UIMenu's does, once it has moved.
+   * `'popover'` pins the pointer behavior on every device. A finger held for
+   * 500 ms opens the menu, and the settle rule decides its release. Omitted,
+   * on every device, a finger or a pen opens the menu as it presses, as
+   * UIMenu's pull-down button does. The finger that opened it picks once it
+   * has moved.
    */
   presentation?: 'popover';
   items?: undefined;
@@ -1108,10 +1112,12 @@ function DropdownMenuPopover({
         ? button.label
         : undefined;
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasCloseButton: false,
     hasAutoFocus: false,
     // Without a header or footer the popup's own role="menu" is the exposed
@@ -1439,8 +1445,11 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern).
-      buttonRef.current?.focus({preventScroll: true});
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
+      if (buttonRef.current != null) {
+        focusForLastInput(buttonRef.current, {preventScroll: true});
+      }
       openingPressRef.current = {gesture: currentGesture()};
       const didOpen = openAndFocus('pointer', true);
       // A mouse can release away from the trigger, or the trigger can move
@@ -1475,9 +1484,8 @@ function DropdownMenuPopover({
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
-    // Under a finger, on every device, the opening finger picks as UIMenu's
-    // does. `presentation="popover"` pins the pointer model.
     touchModel: pressTouchModel,
+    isInScrollView,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 

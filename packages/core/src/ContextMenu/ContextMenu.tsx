@@ -78,7 +78,7 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -768,7 +768,7 @@ export function ContextMenu({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer, a mouse released outside dismisses and a finger leaves the
   // menu open.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,

@@ -29,7 +29,7 @@ import {
   radiusVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {Link} from '../Link';
 import {Icon} from '../Icon';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -38,7 +38,7 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -383,7 +383,9 @@ export function TopNavHeading({
 
   const rootRef = useRef<HTMLElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     dialogLabel: t('@astryx.topNav.heading.dialogLabel'),
     // The popup exposes its own role="menu" semantics; a role="dialog"
     // aria-modal wrapper would announce "dialog, Navigation menu" around a
@@ -411,7 +413,7 @@ export function TopNavHeading({
   // FR1-FR3, FR5); a mouse released outside closes it. Only the role="menu"
   // region is tracked, not the heading above it.
   const productMenuRef = useRef<HTMLDivElement>(null);
-  const productMenuPress = useMenuPress({
+  const productMenuPress = useMenuSurfacePress({
     menuRef: productMenuRef,
     itemSelector: '[role="menuitem"]:not([aria-disabled="true"])',
     onDismiss: closeMenu,

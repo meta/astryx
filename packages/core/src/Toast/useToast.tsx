@@ -16,6 +16,7 @@ import type {
   ShowToastFn,
   ToastEntry,
 } from './types';
+import {sharedSequence} from '../utils/sharedRealm';
 
 // Fallback singleton
 let fallbackContext: ToastContextValue | null = null;
@@ -68,7 +69,7 @@ function getFallbackContext(): ToastContextValue {
   if (typeof document === 'undefined') {
     throw new Error(
       'useToast: Cannot create fallback viewport during SSR. ' +
-        'Wrap your app with <LayerProvider> or <AppShell>.',
+        'Wrap your app with <LayerProvider>.',
     );
   }
 
@@ -76,7 +77,7 @@ function getFallbackContext(): ToastContextValue {
     'toast-fallback-viewport',
     'useToast',
     'No LayerProvider found. Using fallback viewport. ' +
-      'Wrap your app with <LayerProvider> or <AppShell> for full control.',
+      'Wrap your app with <LayerProvider> for full control.',
   );
 
   const container = document.createElement('div');
@@ -101,9 +102,11 @@ function getFallbackContext(): ToastContextValue {
   return queue.context;
 }
 
-let toastIdCounter = 0;
+// One sequence for every copy of Core: toasts from a swizzled copy share the
+// package's queue, so their ids must not repeat.
+const nextToastId = sharedSequence('toast/use-toast/toast-id', 1);
 function generateToastId(): string {
-  return `astryx-toast-${++toastIdCounter}`;
+  return `astryx-toast-${nextToastId()}`;
 }
 
 /**

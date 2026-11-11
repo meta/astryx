@@ -13,7 +13,9 @@
  *   scrolls in, and stops at the end. A wheel during a drag scrolls the
  *   page, and the preview and the drop stay under the pointer. Each scrolled
  *   frame reads the scroll offset once at most and forces no layout. A drop
- *   measures the rows in one pass, before its writes, whatever their count. The
+ *   measures the rows in one pass, before its writes, whatever their count. A
+ *   wheel at a box's end scrolls the page or a box around it, and the drop
+ *   still lands under the pointer. The
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
  *   checked through the drag. With a mouse, the handle keeps a plain
@@ -247,7 +249,7 @@ test('a wheel during a drag scrolls the page, and the preview and the drop stay 
     // shows the preview and the line under the pointer again.
     await page.evaluate(target => {
       const state = {frame: 0, lastScroll: -1, settledAt: -1};
-      Object.assign(window, {c06Frames: state});
+      Object.assign(window, {scrollFrames: state});
       const check = () => {
         if (state.lastScroll < 0 || state.settledAt >= 0) {
           return;
@@ -306,9 +308,9 @@ test('a wheel during a drag scrolls the page, and the preview and the drop stay 
         () =>
           (
             window as unknown as {
-              c06Frames: {lastScroll: number; settledAt: number};
+              scrollFrames: {lastScroll: number; settledAt: number};
             }
-          ).c06Frames,
+          ).scrollFrames,
       );
     // The preview and the line come back under the pointer.
     await expect
@@ -353,7 +355,7 @@ test('a wheel during a drag forces no layout, and reads the scroll offset once a
         'scrollTop',
       );
       const counts = {reads: 0, frames: 0};
-      Object.assign(window, {c06Counts: counts});
+      Object.assign(window, {scrollCounts: counts});
       Object.defineProperty(scroller, 'scrollTop', {
         configurable: true,
         get() {
@@ -407,8 +409,8 @@ test('a wheel during a drag forces no layout, and reads the scroll offset once a
     };
     const counts = await page.evaluate(
       () =>
-        (window as unknown as {c06Counts: {reads: number; frames: number}})
-          .c06Counts,
+        (window as unknown as {scrollCounts: {reads: number; frames: number}})
+          .scrollCounts,
     );
     await page.mouse.up();
     const mainThreads = new Set(
@@ -431,6 +433,126 @@ test('a wheel during a drag forces no layout, and reads the scroll offset once a
           `${e.name} in ${e.args?.beginData?.stackTrace?.[0]?.functionName ?? '?'}`,
       ),
     ).toEqual([]);
+    expect(counts.frames).toBeGreaterThan(0);
+    expect(counts.reads).toBeGreaterThan(0);
+    expect(counts.reads).toBeLessThanOrEqual(counts.frames);
+  } finally {
+    await story.close();
+  }
+});
+
+test('a wheel at the end of a box during a drag forces no layout, and measures the box once a scrolled frame at most', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'the layout trace is Chromium CDP');
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    // The list scrolls in a 400 px box, scrolled to its end, on a page that
+    // can scroll too.
+    await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('#storybook-root');
+      if (root == null) {
+        return;
+      }
+      root.style.blockSize = '400px';
+      root.style.overflowY = 'auto';
+      const room = document.createElement('div');
+      room.style.blockSize = '2000px';
+      root.after(room);
+      root.scrollTop = root.scrollHeight;
+    });
+    const order = await labels(page);
+    const {at, rowHeight} = await handleOf(page, order[order.length - 4]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y - rowHeight * 1.5, {steps: 8});
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    // Counts the measures of the box, and the frames a scroll of the box or
+    // the page lands in.
+    await page.evaluate(() => {
+      const box = document.querySelector<HTMLElement>('#storybook-root');
+      if (box == null) {
+        return;
+      }
+      const counts = {reads: 0, frames: 0};
+      Object.assign(window, {boxCounts: counts});
+      const measure = Element.prototype.getBoundingClientRect;
+      box.getBoundingClientRect = function getBoundingClientRect() {
+        counts.reads += 1;
+        return measure.call(this);
+      };
+      let isCounted = false;
+      document.addEventListener(
+        'scroll',
+        () => {
+          if (!isCounted) {
+            isCounted = true;
+            counts.frames += 1;
+            requestAnimationFrame(() => {
+              isCounted = false;
+            });
+          }
+        },
+        {capture: true, passive: true},
+      );
+    });
+    await browser.startTracing(page, {
+      categories: [
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+        'disabled-by-default-devtools.timeline.stack',
+      ],
+    });
+    // The box is at its end, so the wheel scrolls the page.
+    await page.mouse.wheel(0, rowHeight * 2);
+    // The pointer moves too, so moves and scrolls share frames.
+    for (let step = 1; step <= 16; step += 1) {
+      await page.mouse.move(at.x, at.y - rowHeight * 1.5 - step);
+      await page.waitForTimeout(16);
+    }
+    await page.waitForTimeout(400);
+    const trace = JSON.parse((await browser.stopTracing()).toString()) as {
+      traceEvents: {
+        name: string;
+        ph: string;
+        pid: number;
+        tid: number;
+        args?: {
+          name?: string;
+          beginData?: {stackTrace?: {functionName?: string}[]};
+        };
+      }[];
+    };
+    const counts = await page.evaluate(
+      () =>
+        (window as unknown as {boxCounts: {reads: number; frames: number}})
+          .boxCounts,
+    );
+    const scrollY = await page.evaluate(() => window.scrollY);
+    await page.mouse.up();
+    const mainThreads = new Set(
+      trace.traceEvents
+        .filter(e => e.ph === 'M' && e.name === 'thread_name')
+        .filter(e => e.args?.name === 'CrRendererMain')
+        .map(e => `${e.pid}:${e.tid}`),
+    );
+    // A style or layout pass with a script stack ran inside script: a read
+    // after a write forced it, instead of the frame's own pass.
+    const forced = trace.traceEvents.filter(
+      e =>
+        (e.name === 'Layout' || e.name === 'UpdateLayoutTree') &&
+        mainThreads.has(`${e.pid}:${e.tid}`) &&
+        (e.args?.beginData?.stackTrace ?? []).length > 0,
+    );
+    expect(
+      forced.map(
+        e =>
+          `${e.name} in ${e.args?.beginData?.stackTrace?.[0]?.functionName ?? '?'}`,
+      ),
+    ).toEqual([]);
+    expect(scrollY).toBeGreaterThan(rowHeight);
     expect(counts.frames).toBeGreaterThan(0);
     expect(counts.reads).toBeGreaterThan(0);
     expect(counts.reads).toBeLessThanOrEqual(counts.frames);
@@ -523,6 +645,146 @@ test('a row held near the bottom of a box the list scrolls in scrolls that box, 
     await story.close();
   }
 });
+
+for (const outer of [
+  'the page',
+  'the box around it',
+  'the page under a fixed box',
+  'the page under a stuck sticky box',
+  'the page under a sticky box before it sticks',
+] as const) {
+  test(`a wheel at the end of a box the list scrolls in scrolls ${outer} during a drag, and the drop lands under the pointer`, async ({
+    browser,
+  }) => {
+    const story = await openFinePointerStory(browser, LONG_STORY);
+    try {
+      const {page} = story;
+      const wrapped = outer === 'the box around it';
+      const fixed = outer === 'the page under a fixed box';
+      const sticky = outer.includes('sticky');
+      const spaced = outer.endsWith('before it sticks');
+      // The list scrolls in a 400 px box, scrolled to its end. What is around
+      // it can scroll too: the page, or a box that is the box's direct parent.
+      // A fixed box, or a stuck sticky one, stays put while the page scrolls
+      // under it. A sticky box below its sticking point moves with the page.
+      await page.evaluate(
+        ([inBox, isFixed, isSticky, isSpaced]) => {
+          const root = document.querySelector<HTMLElement>('#storybook-root');
+          if (root == null) {
+            return;
+          }
+          root.style.blockSize = '400px';
+          root.style.overflowY = 'auto';
+          if (isFixed) {
+            root.style.position = 'fixed';
+            root.style.insetBlockStart = '0';
+            root.style.insetInlineStart = '0';
+            root.style.inlineSize = '800px';
+          }
+          if (isSticky) {
+            root.style.position = 'sticky';
+            root.style.insetBlockStart = '0';
+          }
+          if (isSpaced) {
+            root.style.marginBlockStart = '300px';
+          }
+          if (inBox) {
+            const around = document.createElement('div');
+            around.id = 'reorder-around';
+            around.style.blockSize = '600px';
+            around.style.overflowY = 'auto';
+            const room = document.createElement('div');
+            room.style.blockSize = '2000px';
+            root.before(around);
+            around.append(root, room);
+          } else {
+            // Room inside the body, so a sticky box has room to stick.
+            const room = document.createElement('div');
+            room.style.blockSize = '2000px';
+            root.after(room);
+          }
+          root.scrollTop = root.scrollHeight;
+        },
+        [wrapped, fixed, sticky, spaced] as const,
+      );
+      const order = await labels(page);
+      const target = order[order.length - 4];
+      const {at, rowHeight} = await handleOf(page, target);
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await page.mouse.move(at.x, at.y - rowHeight * 1.5, {steps: 8});
+      await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(
+        1,
+      );
+      // Two rows: what is around the box moves it up, and the pointer stays
+      // over it.
+      await page.mouse.wheel(0, rowHeight * 2);
+      // Rendered frames, not time: the wheel's scroll would start within them.
+      await page.evaluate(
+        async () =>
+          new Promise<void>(resolve => {
+            let frames = 0;
+            const tick = () => {
+              frames += 1;
+              if (frames >= 30) {
+                resolve();
+              } else {
+                requestAnimationFrame(tick);
+              }
+            };
+            requestAnimationFrame(tick);
+          }),
+      );
+      // The box is at its end, so the wheel scrolls what is around it, as
+      // browsers do.
+      expect(
+        await page.evaluate(
+          inBox =>
+            inBox
+              ? (document.getElementById('reorder-around')?.scrollTop ?? 0)
+              : window.scrollY,
+          wrapped,
+        ),
+      ).toBeGreaterThan(rowHeight);
+      const pointerY = at.y - rowHeight * 1.5;
+      // The pointer is still over the box.
+      const box = await page.locator('#storybook-root').boundingBox();
+      if (box == null) {
+        throw new Error('no box');
+      }
+      expect(box.y + box.height).toBeGreaterThan(pointerY);
+      // The preview stays under the pointer as the box moves.
+      const preview = await page
+        .locator('[data-astryx-reorder-preview]')
+        .boundingBox();
+      if (preview == null) {
+        throw new Error('no preview');
+      }
+      expect(preview.y).toBeLessThanOrEqual(pointerY);
+      expect(preview.y + preview.height).toBeGreaterThanOrEqual(pointerY);
+      await page.mouse.up();
+      // The row lands under the pointer.
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(
+              ({label, y}) => {
+                const row = Array.from(
+                  document.querySelectorAll('#storybook-root ul > li'),
+                ).find(element => element.textContent?.trim() === label);
+                const box = row?.getBoundingClientRect();
+                return box != null && box.top <= y && y <= box.bottom;
+              },
+              {label: target, y: pointerY},
+            ),
+          {message: 'the dropped row lands under the pointer', timeout: 600},
+        )
+        .toBe(true);
+    } finally {
+      await story.close();
+    }
+  });
+}
 
 test('a checked radio in the dragged row stays checked through the drag and a drop in place', async ({
   browser,

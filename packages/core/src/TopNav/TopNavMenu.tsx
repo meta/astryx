@@ -24,9 +24,9 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -373,7 +373,9 @@ export function TopNavMenu({
   const slot = useTopNavSlot();
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     // The popup's own role="menu" is the exposed semantics; a modal dialog
     // wrapper would announce an unnamed dialog around the menu and make the
     // trigger claim aria-haspopup="dialog" for menu content (see TabMenu).
@@ -463,7 +465,7 @@ export function TopNavMenu({
   // A press that slides across the items acts on the item it lifts on, the
   // highlight following the pointer, as every menu does
   // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: '[role="menuitem"]',
     onDismiss: close,
@@ -521,34 +523,39 @@ export function TopNavMenu({
             drawerExpanded && drawerStyles.itemsExpanded,
           )}>
           <div {...stylex.props(drawerStyles.itemsInner)}>
-            {items.map(item => (
-              <LinkComponent
-                key={getMenuItemKey(item)}
-                href={item.href}
-                {...pressable}
-                onClick={closeDrawerAfter((_e: React.MouseEvent) => {
-                  item.onClick?.();
-                })}
-                {...focusOutlineProps.focusVisible(
-                  navItemStyles.item,
-                  interactionOverlayStyles.backgroundColor,
-                  drawerStyles.item,
-                )}>
-                {isRenderable(item.icon) && (
-                  <span {...stylex.props(drawerStyles.itemIcon)}>
-                    {item.icon}
-                  </span>
-                )}
-                <span {...stylex.props(drawerStyles.itemText)}>
-                  {item.title}
-                  {item.description && (
-                    <span {...stylex.props(drawerStyles.itemDescription)}>
-                      {item.description}
+            {items.map(item => {
+              const Element =
+                item.href == null && item.onClick ? 'button' : LinkComponent;
+              return (
+                <Element
+                  key={getMenuItemKey(item)}
+                  type={Element === 'button' ? 'button' : undefined}
+                  href={item.href}
+                  {...pressable}
+                  onClick={closeDrawerAfter((_e: React.MouseEvent) => {
+                    item.onClick?.();
+                  })}
+                  {...focusOutlineProps.focusVisible(
+                    navItemStyles.item,
+                    interactionOverlayStyles.backgroundColor,
+                    drawerStyles.item,
+                  )}>
+                  {isRenderable(item.icon) && (
+                    <span {...stylex.props(drawerStyles.itemIcon)}>
+                      {item.icon}
                     </span>
                   )}
-                </span>
-              </LinkComponent>
-            ))}
+                  <span {...stylex.props(drawerStyles.itemText)}>
+                    {item.title}
+                    {item.description && (
+                      <span {...stylex.props(drawerStyles.itemDescription)}>
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </Element>
+              );
+            })}
           </div>
         </div>
       </div>

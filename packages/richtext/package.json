@@ -1,7 +1,7 @@
 {
   "name": "@astryxdesign/richtext",
   "displayName": "Rich Text",
-  "version": "0.7.12",
+  "version": "0.7.14",
   "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
   "author": "Meta Open Source",
   "license": "MIT",
@@ -65,7 +65,6 @@
     }
   },
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
     "build:esm": "babel src --out-dir dist --extensions \".ts,.tsx\" --out-file-extension \".js\" --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.cjs",
@@ -79,7 +78,7 @@
   },
   "peerDependencies": {
     "@stylexjs/stylex": ">=0.10.0",
-    "@astryxdesign/core": "0.7.12",
+    "@astryxdesign/core": "0.7.14",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "lexical": "^0.52.0",

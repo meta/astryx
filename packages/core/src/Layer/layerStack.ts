@@ -82,6 +82,7 @@
  */
 
 import {isImeKeyEvent} from '../utils/ime';
+import {sharedState} from '../utils/sharedRealm';
 
 /**
  * What a layer does with an Escape press that reaches it.
@@ -155,27 +156,36 @@ interface DocumentEntry extends LayerStackEntry {
   ownerDocument: Document | null;
 }
 
-const entries: DocumentEntry[] = [];
-// Registration order per layer identity. `useLayerDismissal` keeps one token
-// through effect re-registration while an active layer changes depth or behavior
-// — a Dialog whose `purpose` flips while open, a focus trap that moves — and
-// through StrictMode's setup/cleanup replay. Counting those registrations would
-// hand the layer a fresh, higher seq and promote it above layers opened over it.
-// A genuine inactive -> active cycle receives a new token in the hook, matching
-// the browser top layer's show order.
-let seqByToken = new WeakMap<object, number>();
-let nextSeq = 0;
-// How many registered layers live in each document: the listeners go on a
-// document with its first layer and come off with its last.
-const layerCountByDocument = new Map<Document, number>();
+// Every copy of Core on the page shares this stack. A swizzled layer and a
+// package layer then order and dismiss as one.
+const stack = sharedState('layer/layer-stack/state', 1, () => ({
+  entries: [] as DocumentEntry[],
+  // Registration order per layer identity. `useLayerDismissal` keeps one token
+  // through effect re-registration while an active layer changes depth or behavior
+  // — a Dialog whose `purpose` flips while open, a focus trap that moves — and
+  // through StrictMode's setup/cleanup replay. Counting those registrations would
+  // hand the layer a fresh, higher seq and promote it above layers opened over it.
+  // A genuine inactive -> active cycle receives a new token in the hook, matching
+  // the browser top layer's show order.
+  seqByToken: new WeakMap<object, number>(),
+  nextSeq: 0,
+  // How many registered layers live in each document: the listeners go on a
+  // document with its first layer and come off with its last.
+  layerCountByDocument: new Map<Document, number>(),
+  // The documents in which a text composition is running. Tracked from
+  // composition events because the DOM offers no way to ask.
+  composingDocuments: new Set<Document>(),
+  // How to remove each document's listeners, kept by the copy that added them.
+  stopListeningByDocument: new Map<Document, () => void>(),
+}));
 
 function seqFor(token: object): number {
-  const existing = seqByToken.get(token);
+  const existing = stack.seqByToken.get(token);
   if (existing !== undefined) {
     return existing;
   }
-  const seq = nextSeq++;
-  seqByToken.set(token, seq);
+  const seq = stack.nextSeq++;
+  stack.seqByToken.set(token, seq);
   return seq;
 }
 
@@ -228,10 +238,6 @@ function isPresentEntry(entry: LayerStackEntry): boolean {
   return entry.isPresent?.() ?? true;
 }
 
-// The documents in which a text composition is running. Tracked from
-// composition events because the DOM offers no way to ask.
-const composingDocuments = new Set<Document>();
-
 /**
  * Whether the user is part-way through composing text with an IME.
  *
@@ -254,20 +260,20 @@ const composingDocuments = new Set<Document>();
  * every document that holds a layer.
  */
 export function isTextComposing(): boolean {
-  return composingDocuments.size > 0;
+  return stack.composingDocuments.size > 0;
 }
 
 // The listeners sit on documents, so the current target is the document the
 // composition runs in.
 function handleCompositionStart(event: Event): void {
-  composingDocuments.add(event.currentTarget as Document);
+  stack.composingDocuments.add(event.currentTarget as Document);
 }
 
 // Focus leaving the field ends the composition too. Clearing on blur as well
 // means a compositionend this listener never sees cannot leave the flag stuck
 // on, swallowing every later close request.
 function handleCompositionEnd(event: Event): void {
-  composingDocuments.delete(event.currentTarget as Document);
+  stack.composingDocuments.delete(event.currentTarget as Document);
 }
 
 /**
@@ -276,7 +282,7 @@ function handleCompositionEnd(event: Event): void {
  */
 function topPresentEntry(doc: Document | null): DocumentEntry | null {
   let top: DocumentEntry | null = null;
-  for (const entry of entries) {
+  for (const entry of stack.entries) {
     if (entry.ownerDocument !== doc || !isPresentEntry(entry)) {
       continue;
     }
@@ -294,7 +300,7 @@ function topPresentEntry(doc: Document | null): DocumentEntry | null {
  * top.
  */
 export function isTopmostLayer(token: object): boolean {
-  const entry = entries.find(candidate => candidate.token === token);
+  const entry = stack.entries.find(candidate => candidate.token === token);
   return entry != null && topPresentEntry(entry.ownerDocument) === entry;
 }
 
@@ -378,14 +384,20 @@ function startListening(doc: Document): void {
   doc.addEventListener('compositionstart', handleCompositionStart, true);
   doc.addEventListener('compositionend', handleCompositionEnd, true);
   doc.addEventListener('blur', handleCompositionEnd, true);
+  // The copy that adds the listeners keeps their remover in the shared state,
+  // so the copy that closes the document's last layer removes these ones.
+  stack.stopListeningByDocument.set(doc, () => {
+    doc.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
+    doc.removeEventListener('compositionstart', handleCompositionStart, true);
+    doc.removeEventListener('compositionend', handleCompositionEnd, true);
+    doc.removeEventListener('blur', handleCompositionEnd, true);
+  });
 }
 
 function stopListening(doc: Document): void {
-  doc.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
-  doc.removeEventListener('compositionstart', handleCompositionStart, true);
-  doc.removeEventListener('compositionend', handleCompositionEnd, true);
-  doc.removeEventListener('blur', handleCompositionEnd, true);
-  composingDocuments.delete(doc);
+  stack.stopListeningByDocument.get(doc)?.();
+  stack.stopListeningByDocument.delete(doc);
+  stack.composingDocuments.delete(doc);
 }
 
 /**
@@ -401,42 +413,42 @@ export function registerLayer(entry: Omit<LayerStackEntry, 'seq'>): () => void {
     seq: seqFor(entry.token),
     ownerDocument,
   };
-  entries.push(full);
+  stack.entries.push(full);
   if (ownerDocument != null) {
-    const count = layerCountByDocument.get(ownerDocument) ?? 0;
-    layerCountByDocument.set(ownerDocument, count + 1);
+    const count = stack.layerCountByDocument.get(ownerDocument) ?? 0;
+    stack.layerCountByDocument.set(ownerDocument, count + 1);
     if (count === 0) {
       startListening(ownerDocument);
     }
   }
 
   return () => {
-    const index = entries.indexOf(full);
+    const index = stack.entries.indexOf(full);
     if (index === -1) {
       return;
     }
-    entries.splice(index, 1);
+    stack.entries.splice(index, 1);
     if (ownerDocument == null) {
       return;
     }
-    const count = layerCountByDocument.get(ownerDocument) ?? 1;
+    const count = stack.layerCountByDocument.get(ownerDocument) ?? 1;
     if (count > 1) {
-      layerCountByDocument.set(ownerDocument, count - 1);
+      stack.layerCountByDocument.set(ownerDocument, count - 1);
       return;
     }
-    layerCountByDocument.delete(ownerDocument);
+    stack.layerCountByDocument.delete(ownerDocument);
     stopListening(ownerDocument);
   };
 }
 
 /** Test-only: drop all entries and detach every listener. */
 export function resetLayerStackForTests(): void {
-  entries.length = 0;
-  seqByToken = new WeakMap();
-  nextSeq = 0;
-  for (const doc of layerCountByDocument.keys()) {
+  stack.entries.length = 0;
+  stack.seqByToken = new WeakMap();
+  stack.nextSeq = 0;
+  for (const doc of stack.layerCountByDocument.keys()) {
     stopListening(doc);
   }
-  layerCountByDocument.clear();
-  composingDocuments.clear();
+  stack.layerCountByDocument.clear();
+  stack.composingDocuments.clear();
 }
