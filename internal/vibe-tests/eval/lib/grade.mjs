@@ -45,10 +45,10 @@ export const ALLOWED_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com
 export async function launchBrowser() {
   const {chromium} = await import('playwright-core');
   const executablePath = process.env.VIBE_EVAL_CHROMIUM || undefined;
-  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
-  const args = ['--no-sandbox'];
-  if (proxy) args.push(`--proxy-server=${proxy}`, '--proxy-bypass-list=127.0.0.1;localhost');
-  return chromium.launch({executablePath, args});
+  const server = process.env.HTTPS_PROXY || process.env.https_proxy;
+  // The launch option, not a Chromium flag, so that route.fetch also uses the proxy.
+  const proxy = server ? {server, bypass: '127.0.0.1,localhost'} : undefined;
+  return chromium.launch({executablePath, args: ['--no-sandbox'], proxy});
 }
 
 export function isAllowedRequest(url, origin) {
