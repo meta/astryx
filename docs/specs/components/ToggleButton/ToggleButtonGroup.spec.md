@@ -131,7 +131,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Single, one selected    | That member pressed; activating it requests `null`.           | —                       |
 | Multiple, some selected | Each selected member pressed; activation adds or removes one. | —                       |
 | Member disabled         | That member inert; others selectable.                         | Tooltip present or not. |
-| Group disabled          | Every member inert (FR7 gap for members without a tooltip).   | —                       |
+| Group disabled          | Every member focusable and inert.                             | —                       |
 
 ### Transformation and precedence order
 
@@ -169,8 +169,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   name; members keep their own names and `aria-pressed`.
 - **AR2 — Keyboard.** Tab moves through members in order (FR8); each member
   activates with Enter and Space as a Button does.
-- **AR3 — Disabled.** Members expose disabled per `component:Button` AR5 (FR7
-  gap); the group root carries no disabled state.
+- **AR3 — Disabled.** Members expose disabled per `component:Button` AR5; the
+  group root carries no disabled state.
 
 ## Design relationships
 
@@ -189,7 +189,7 @@ No design record governs ToggleButtonGroup. Its root carries the
   ToggleButtonGroup adopts them.
 - `component:ToggleButton` defers its pressed state and requests to the group
   for valued members (`component:ToggleButton` FR6).
-- `spec:AST-085` FR7 applies to group disablement; the gap is FR7 here.
+- `spec:AST-085` FR7 applies to group disablement.
 
 ## Verification map
 

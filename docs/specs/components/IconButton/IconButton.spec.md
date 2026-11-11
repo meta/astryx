@@ -30,15 +30,15 @@ system_specs: [spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | None changes. IconButton takes Button's props without `isIconOnly`, `children`, and `endContent`, and requires `icon`.                                                                                    |
-| Behavior                | IconButton always renders Button's icon-only mode: a button, square by default, named by `label` through `aria-label`, with no visible text. Every other behavior is Button's.                            |
-| End-user impact         | People see a compact, square-by-default action with the same feedback as any Button. Screen-reader users hear `label`. Sighted users get a visible hint only when the caller adds one.                    |
-| Builder impact          | None.                                                                                                                                                                                                     |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Button's disabled-focusability, reduced-motion, and self-colored-content gaps apply unchanged; all three are listed under Current-state impact. |
-| Review checks           | Reject an IconButton that renders visible label text or end content, is not square with the default aspect and no `width`, loses its `aria-label`, or behaves differently from Button's icon-only mode.   |
-| Governing rules         | `family:buttons` FR1, FR7, AV2, AV6; `component:Button`; `spec:AST-085` FR1, FR4; `design:reduced-motion` DR1, DR3; `architecture:component-size-cascade`; `architecture:public-component-api`.           |
+| Area                    | Contract                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | None changes. IconButton takes Button's props without `isIconOnly`, `children`, and `endContent`, and requires `icon`.                                                                                  |
+| Behavior                | IconButton always renders Button's icon-only mode: a button, square by default, named by `label` through `aria-label`, with no visible text. Every other behavior is Button's.                          |
+| End-user impact         | People see a compact, square-by-default action with the same feedback as any Button. Screen-reader users hear `label`. Sighted users get a visible hint only when the caller adds one.                  |
+| Builder impact          | None.                                                                                                                                                                                                   |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Button's link-mode focus, reduced-motion, and self-colored-content gaps apply unchanged; all three are listed under Current-state impact.     |
+| Review checks           | Reject an IconButton that renders visible label text or end content, is not square with the default aspect and no `width`, loses its `aria-label`, or behaves differently from Button's icon-only mode. |
+| Governing rules         | `family:buttons` FR1, FR7, AV2, AV6; `component:Button`; `spec:AST-085` FR1, FR4; `design:reduced-motion` DR1, DR3; `architecture:component-size-cascade`; `architecture:public-component-api`.         |
 
 This table is a review projection; the body below is authoritative.
 
