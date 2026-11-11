@@ -3,6 +3,7 @@
 ---
 
 [experimental] `astryx experimental theme`: fixes from a full review.
+
 - `preview app --theme` copies the whole theme folder, generated colors included, byte for byte, so the new app type-checks.
 - `preview app <dir>` writes only into a new or empty folder (its `--overwrite` option is gone): a folder that is not empty is refused, with a free folder name to use.
 - Translucent text and backgrounds are measured as drawn: each is laid over what is under it before contrast is checked.
