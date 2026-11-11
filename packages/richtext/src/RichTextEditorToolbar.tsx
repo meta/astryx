@@ -112,9 +112,6 @@ import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 type BlockType =
   'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'bullet' | 'number';
 
-// A vertical Divider's default 100% height needs a definite parent height.
-// Toolbar slots are sized by their controls instead, so let flexbox stretch
-// these group separators across the slot's resolved height.
 // The link popover's anchor: a box around the Link button that takes no
 // space of its own.
 const linkAnchorStyles = stylex.create({
@@ -124,6 +121,9 @@ const linkAnchorStyles = stylex.create({
   },
 });
 
+// A vertical Divider's default 100% height needs a definite parent height.
+// Toolbar slots are sized by their controls instead, so let flexbox stretch
+// these group separators across the slot's resolved height.
 const toolbarDividerStyles = stylex.create({
   vertical: {
     alignSelf: 'stretch',

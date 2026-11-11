@@ -364,8 +364,8 @@ export function ToolbarLinkPopover({
       isOpen={link.isOpen}
       onOpenChange={link.onOpenChange}
       isModal={false}
-      // The form focuses its field, and Cancel is its close control.
-      hasAutoFocus={false}
+      // Popover's focus entry focuses the URL field, the form's first
+      // control. Cancel is its close control.
       hasCloseButton={false}
       // Above the toolbar, so the popover does not cover the editor's
       // first lines, where the linked words often are. It flips below

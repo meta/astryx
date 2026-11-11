@@ -38,8 +38,8 @@ export const doc = {
       cli: 'astryx experimental theme editor set brand corners pill',
     },
     {
-      label: 'Build it',
-      cli: 'astryx experimental theme compile',
+      label: 'See the theme and its settings',
+      cli: 'astryx experimental theme editor show brand',
     },
   ],
   exitCodes: [

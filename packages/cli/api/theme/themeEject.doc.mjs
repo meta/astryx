@@ -56,7 +56,7 @@ export const doc = {
     {
       type: 'theme.eject',
       description:
-        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, and files. The written local descriptor always uses maintained: false.',
+        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, files, missingPackages (packages the fork imports that the app does not declare), and installCommand (installs them; null when none are missing or the package manager is undetermined). The written local descriptor always uses maintained: false.',
     },
   ],
   throws: [
@@ -73,7 +73,7 @@ export const doc = {
     {code: 'ERR_NO_SOURCE', when: 'a theme file to eject is missing'},
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a destination exists and overwrite is not set',
+      when: 'a destination exists and overwrite is not set, or the target folder holds another theme or a theme the theme editor made',
     },
     {code: 'ERR_WRITE_FAILED', when: 'writing files fails'},
   ],

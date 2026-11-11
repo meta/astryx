@@ -12,7 +12,7 @@
  *   adding and editing a link look and work the same in both.
  */
 
-import {useEffect, useRef} from 'react';
+import {useRef} from 'react';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {HStack, StackItem} from '@astryxdesign/core/Layout';
@@ -75,12 +75,6 @@ export function LinkForm({
 }: LinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const apply = () => {
     if (!onApply()) {
       inputRef.current?.focus();

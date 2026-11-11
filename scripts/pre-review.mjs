@@ -54,7 +54,7 @@ export const CHECKLIST_LINK =
   'docs/contributing/pull-requests.md#pre-review-checklist';
 
 export const CHECKS = {
-  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts',
+  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts; a row no record decides goes to an owner, and a new internal module or hook another component can import that no record defines gets REQUEST_CHANGES for an owner API decision',
   b: 'Behavior: each observable behavior change cites a current record and clause, or the description says "No behavior change"',
   c: 'Behavior props: a prop that selects a behavior follows the naming and one-prop rules',
   d: 'Public boundary: no internal or private context in source, tests, fixtures, commits, or pull request text',
