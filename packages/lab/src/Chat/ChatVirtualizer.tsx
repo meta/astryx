@@ -1249,19 +1249,20 @@ export function ChatVirtualizer<T>(
     // "moved down" — the user's own upward step erased by the re-pin.
     const lastWrite = progTarget.current;
     // A finger owns the position even while the viewport changes size.
-    // The browser's scroll write for a viewport change either lands before
-    // the viewport's pass, at a height that pass has not read, or once soon
-    // after it, while a restore is armed. Any other scroll is the reader's.
+    // The browser writes its scroll for a viewport change before that
+    // change's pass, at a height the pass has not read, or once soon after it.
+    // The list's own write is neither. Any other scroll is the reader's.
+    const isOwnEcho =
+      lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1;
     const isViewportMove =
       isPageViewport.current &&
       !isFingerScroll() &&
+      !isOwnEcho &&
       ((passViewportHeight.current !== null &&
         vp.clientHeight !== passViewportHeight.current) ||
         (isRestoreArmed.current &&
           performance.now() - viewportChangedAt.current < VIEWPORT_SETTLE_MS));
-    const isEcho =
-      isViewportMove ||
-      (lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1);
+    const isEcho = isViewportMove || isOwnEcho;
     if (isViewportMove) {
       userScrolledRef.current = false;
       if (isRestoreArmed.current && restoreFrame.current === null) {
@@ -1401,11 +1402,6 @@ export function ChatVirtualizer<T>(
     const scrollTarget = scrollEventTarget(el);
     scrollTarget.addEventListener('scroll', scrollHandler, {passive: true});
     el.addEventListener('wheel', onWheel, {passive: true});
-    const inputTarget = scrollsPage(el) ? el.ownerDocument : el;
-    inputTarget.addEventListener('keydown', endViewportMove, {passive: true});
-    inputTarget.addEventListener('pointerdown', endViewportMove, {
-      passive: true,
-    });
     // The page's own scroller's box does not change size with the viewport,
     // and an iOS toolbar change resizes only the viewport. The viewport probe
     // reports both in the same ResizeObserver batch as the scroller and its
@@ -1416,6 +1412,18 @@ export function ChatVirtualizer<T>(
       : null;
     if (viewportProbe !== null) {
       observeSize(viewportProbe);
+    }
+    // Capture phase: a key whose handler stops propagation still scrolls.
+    const doc = el.ownerDocument;
+    if (viewportProbe !== null) {
+      doc.addEventListener('keydown', endViewportMove, {
+        capture: true,
+        passive: true,
+      });
+      doc.addEventListener('pointerdown', endViewportMove, {
+        capture: true,
+        passive: true,
+      });
     }
     isPageViewport.current = viewportProbe !== null;
     const view = viewportProbe !== null ? el.ownerDocument.defaultView : null;
@@ -1434,8 +1442,8 @@ export function ChatVirtualizer<T>(
       setScrollAnchoringOff(el, false);
       scrollTarget.removeEventListener('scroll', scrollHandler);
       el.removeEventListener('wheel', onWheel);
-      inputTarget.removeEventListener('keydown', endViewportMove);
-      inputTarget.removeEventListener('pointerdown', endViewportMove);
+      doc.removeEventListener('keydown', endViewportMove, {capture: true});
+      doc.removeEventListener('pointerdown', endViewportMove, {capture: true});
       if (viewportProbe !== null) {
         unobserveSize(viewportProbe);
         viewportProbe.remove();
