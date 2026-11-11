@@ -50,7 +50,6 @@ roles through `resolveMotion`.
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
-| `reducedMotionPreference.ts`                     | The one Reduce Motion predicate: the setting, or a theme that reduces motion. The animator, `reducedMotion.ts` and glue read it.                                     |
 | `opacityFloor.ts`                                | The lowest opacity a compositor entrance fades in from: Chromium skips drawing a layer at exactly 0 as its animation starts.                                         |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 

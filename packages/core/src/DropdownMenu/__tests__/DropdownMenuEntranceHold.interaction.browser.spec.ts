@@ -143,7 +143,7 @@ const runningEntrances = async (layer: Locator) =>
 
 /**
  * Waits, a frame at a time, until the menu's entrance runs. A finger's grow
- * starts a frame after the open, or once its code arrives.
+ * starts a frame after the open.
  */
 async function untilEntering(page: Page, layer: Locator) {
   for (let frame = 0; frame < 120; frame++) {

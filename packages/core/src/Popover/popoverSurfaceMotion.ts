@@ -9,9 +9,12 @@
  *   the layer runtime's exit copy and input hold
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and
- *   dismiss.
- * @position Internal to Popover. Under a finger the popover grows out of its
- *   source and shrinks back into it, as a UIKit popover does.
+ *   dismiss, and `createRectMorphSurfaceMotion`, the same grow played on the
+ *   shared rect morph. DropdownMenu passes it to usePopoverSurfaceMotion.
+ *   Popover never calls it, so a Popover page drops it in the bundle.
+ * @position Internal to Popover and DropdownMenu. Under a finger the popover
+ *   grows out of its source and shrinks back into it, as a UIKit popover
+ *   does.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/popoverSurfaceFrame.ts
@@ -29,8 +32,20 @@ import {
 import {holdInput} from '../Layer/inputHold';
 import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {easedProgress, mapProgress, mapRange} from '../motion/progress';
-import {readThemeTiming, type ThemeTimingTokens} from '../motion/themeTiming';
+import {
+  createRectMorph,
+  edgeGrowPath,
+  type MorphPath,
+  type MorphRect,
+  type RectMorphMotion,
+} from '../motion/rectMorph';
+import {
+  readThemeTiming,
+  readThemeTokens,
+  type ThemeTimingTokens,
+} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
+import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   frameOf,
   popoverCollapsedState,
@@ -39,6 +54,7 @@ import {
   PRESENTED,
   type PopoverCollapsedState,
   type PopoverSurfaceGeometry,
+  type PopoverSurfaceRect,
   type SurfaceState,
 } from './popoverSurfaceFrame';
 
@@ -411,6 +427,140 @@ export function createPopoverSurfaceMotion(
     dispose() {
       reset();
       animator.dispose();
+    },
+  };
+}
+
+/** A timing token pair as the rect morph's timing. */
+function timingOf(
+  element: Element,
+  tokens: ThemeTimingTokens,
+): RectMorphMotion {
+  const {ms, points} = readThemeTokens(element, tokens);
+  return {duration: ms ?? 0, easing: points ?? [0, 0, 1, 1]};
+}
+
+function rectOf(box: PopoverSurfaceRect): MorphRect {
+  return {x: box.left, y: box.top, width: box.width, height: box.height};
+}
+
+/**
+ * The popover's grow path for a surface over its source. It fades in from
+ * the floor, as the popover does, so Chromium draws its first frame.
+ */
+function pathOf({surface, source}: PopoverSurfaceGeometry): MorphPath {
+  const collapsed = popoverCollapsedState({surface, source});
+  const path = edgeGrowPath({
+    box: rectOf(surface),
+    origin: {x: collapsed.originX, y: collapsed.originY},
+    axis: collapsed.axis,
+    collapsedScale: collapsed.scale,
+    collapsedLength: collapsed.length,
+  });
+  return {
+    ...path,
+    opacityAt: p => Math.max(ENTRANCE_OPACITY_FLOOR, path.opacityAt?.(p) ?? 1),
+  };
+}
+
+/**
+ * The touch presentation's grow and shrink, played on the shared rect morph
+ * on the popover's path (`edgeGrowPath`), with the theme's entrance and exit
+ * timing. Under a coarse primary pointer the layer runtime's input hold takes
+ * every touch while it grows.
+ */
+export function createRectMorphSurfaceMotion(
+  surface: HTMLElement,
+): PopoverSurfaceMotion {
+  const morph = createRectMorph(surface);
+  const view = surface.ownerDocument.defaultView;
+  let path: MorphPath | null = null;
+  let pendingFrame: number | null = null;
+  let releaseHold: (() => void) | null = null;
+
+  const endHold = () => {
+    releaseHold?.();
+    releaseHold = null;
+  };
+  const cancelPending = () => {
+    if (pendingFrame != null) {
+      view?.cancelAnimationFrame(pendingFrame);
+      pendingFrame = null;
+    }
+  };
+  // The layer's CSS entrance belongs to the pointer presentation.
+  const holdEntrance = () => {
+    surface.style.setProperty('animation-name', 'none');
+  };
+
+  const present = (next: MorphPath) => {
+    path = next;
+    holdEntrance();
+    const handle = morph.present(
+      next,
+      timingOf(surface, POPOVER_ENTRANCE_TOKENS),
+    );
+    endHold();
+    // Under a fine primary pointer, as on a touchscreen laptop, the page stays
+    // live while the menu grows.
+    releaseHold = isCoarsePointer(view)
+      ? holdInput(surface, {until: handle, scope: 'viewport'})
+      : null;
+    void handle.finished.then(() => {
+      endHold();
+    });
+  };
+
+  const reset = () => {
+    cancelPending();
+    endHold();
+    path = null;
+    morph.reset();
+    surface.style.removeProperty('animation-name');
+  };
+
+  return {
+    enter(measure) {
+      cancelPending();
+      if (path != null && morph.presentedRect() != null) {
+        // Shown again while it shrinks: turn back from the rect on screen.
+        present(path);
+        return;
+      }
+      holdEntrance();
+      if (view == null || typeof view.requestAnimationFrame !== 'function') {
+        present(pathOf(measure()));
+        return;
+      }
+      pendingFrame = view.requestAnimationFrame(() => {
+        pendingFrame = null;
+        present(pathOf(measure()));
+      });
+    },
+    exit() {
+      endHold();
+      if (pendingFrame != null) {
+        // Closed before the frame that would have grown it: nothing to shrink.
+        reset();
+        return;
+      }
+      if (path == null) {
+        return;
+      }
+      const copy = placePopoverExitCopy(surface);
+      if (copy == null) {
+        reset();
+        return;
+      }
+      morph.dismiss(path, timingOf(surface, POPOVER_EXIT_TOKENS), {
+        target: copy,
+      });
+      path = null;
+    },
+    reset,
+    dispose() {
+      reset();
+      morph.dispose();
     },
   };
 }

@@ -644,11 +644,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   end, or the gesture ends.
 - **FR31 — Menus and popovers grow from their trigger and shrink back.**
   Under a finger, on every touch device, an anchored menu or a Popover MUST
-  open by growing out of its trigger and close by shrinking back into it. It
-  MUST grow once the grow's code is loaded; until then the open fades and
-  closes with no shrink. Only an open before that code first loads in a page
-  session can fade: the first open, or an open after a failed load. The grow
-  plays on the theme's entrance duration and easing tokens (FR45); the
+  open by growing out of its trigger and close by shrinking back into it. The
+  grow plays on the theme's entrance duration and easing tokens (FR45); the
   shrink plays on the theme's exit duration and easing (FR7). The shrink plays in full after the surface has
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet

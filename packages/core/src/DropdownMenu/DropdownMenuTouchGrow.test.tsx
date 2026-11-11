@@ -2,28 +2,23 @@
 
 /**
  * @file DropdownMenuTouchGrow.test.tsx
- * @input DropdownMenu, with the grow's code replaced by a recorder
+ * @input DropdownMenu, with the grow replaced by a recorder
  * @output Which opens grow the menu out of its trigger. A finger's or a
  *   pen's open grows it, a tap's open at its lift included. A mouse's open,
  *   the keyboard's and a menu pinned to the pointer presentation do not.
  * @position Unit coverage of DropdownMenu's touch grow decision
- *   (useMenuSurfaceMotion.ts). The browser spec covers the frames.
+ *   (Popover/usePopoverSurfaceMotion.ts with `rectMorph`). The browser spec
+ *   covers the frames.
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type * as InputHold from '../Layer/inputHold';
-import type * as ReducedMotionPreference from '../motion/reducedMotionPreference';
-import type * as ModuleLoader from '../utils/moduleLoader';
+import type * as ReducedMotion from '../motion/reducedMotion';
+import type * as PopoverSurfaceMotion from '../Popover/popoverSurfaceMotion';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
-import * as menuSurfaceMotion from './menuSurfaceMotion';
-import {
-  MENU_GROW_LOAD_WAIT_MS,
-  resetMenuSurfaceMotionForTest,
-  setMenuSurfaceMotionImportForTest,
-} from './useMenuSurfaceMotion';
 import {reducedMotionMarkProps} from '../privateAttributes/reducedMotion.stylex';
 import {TOUCH_QUERY} from '../utils/touchQueries';
 
@@ -33,8 +28,9 @@ const motion = vi.hoisted(() => ({
   reset: vi.fn(),
   dispose: vi.fn(),
 }));
-vi.mock('./menuSurfaceMotion', () => ({
-  createMenuSurfaceMotion: vi.fn(() => motion),
+vi.mock('../Popover/popoverSurfaceMotion', async importOriginal => ({
+  ...(await importOriginal<typeof PopoverSurfaceMotion>()),
+  createRectMorphSurfaceMotion: vi.fn(() => motion),
 }));
 const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
@@ -59,36 +55,19 @@ vi.mock('../Layer/inputHold', async importOriginal => ({
     return end;
   },
 }));
-// The imports that load through the shared module loader, by import.
-const sharedLoads = vi.hoisted(() => new Map<unknown, number>());
-vi.mock('../utils/moduleLoader', async importOriginal => {
-  const actual = await importOriginal<typeof ModuleLoader>();
-  return {
-    ...actual,
-    createModuleLoader: <T,>(importModule: () => Promise<T>) => {
-      const loader = actual.createModuleLoader(importModule);
-      return {
-        ...loader,
-        load: async () => {
-          sharedLoads.set(
-            importModule,
-            (sharedLoads.get(importModule) ?? 0) + 1,
-          );
-          return loader.load();
-        },
-      };
-    },
-  };
-});
-// The one Reduce Motion predicate, which a case can turn on by itself, as a
-// new theme setting would.
+// The one Reduce Motion policy, which a case can turn on by itself, as a new
+// theme setting would.
 const preference = vi.hoisted(() => ({reduces: false}));
-vi.mock('../motion/reducedMotionPreference', async importOriginal => {
-  const actual = await importOriginal<typeof ReducedMotionPreference>();
+vi.mock('../motion/reducedMotion', async importOriginal => {
+  const actual = await importOriginal<typeof ReducedMotion>();
   return {
     ...actual,
-    prefersReducedMotion: (element?: Element | null) =>
-      preference.reduces || actual.prefersReducedMotion(element),
+    reducedMotionFade: (
+      ...args: Parameters<typeof actual.reducedMotionFade>
+    ) =>
+      preference.reduces
+        ? {duration: 200, easing: 'linear'}
+        : actual.reducedMotionFade(...args),
   };
 });
 
@@ -126,8 +105,8 @@ const pen = {
 };
 const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
 
-// The grow's code loads on demand: let that load settle.
-async function settleLoad() {
+// Lets the open's effects and promises settle.
+async function settle() {
   await act(async () => {
     for (let index = 0; index < 5; index++) {
       await Promise.resolve();
@@ -162,14 +141,13 @@ function stubFrames(): () => Promise<void> {
     for (const callback of frames.splice(0)) {
       callback(0);
     }
-    await settleLoad();
+    await settle();
   };
 }
 
 // jsdom has no popover API: show and hide fire the toggle the layer reads.
 beforeEach(() => {
   __resetMenuPressForTest();
-  resetMenuSurfaceMotionForTest();
   vi.clearAllMocks();
   preference.reduces = false;
   inputHolds.up = 0;
@@ -232,7 +210,7 @@ describe('DropdownMenu touch grow', () => {
     fireEvent.pointerUp(trigger, touch);
     fireEvent.click(trigger, {detail: 1});
     vi.useRealTimers();
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).toHaveBeenCalledTimes(1);
   });
@@ -241,19 +219,29 @@ describe('DropdownMenu touch grow', () => {
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     const trigger = screen.getByRole('button', {name: 'Actions'});
     fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
+    await settle();
     expect(motion.enter).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
       key: 'Escape',
     });
-    await settleLoad();
+    await settle();
     expect(motion.exit).toHaveBeenCalledTimes(1);
+  });
+
+  it("a finger's first open on a page grows at once, with nothing to wait for", () => {
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+    const surface = screen
+      .getByRole('menu', {hidden: true})
+      .closest<HTMLElement>('[popover] > *');
+    expect(surface?.style.getPropertyValue('opacity')).toBe('');
   });
 
   it("a pen's press grows it", async () => {
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), pen);
-    await settleLoad();
+    await settle();
     expect(motion.enter).toHaveBeenCalledTimes(1);
   });
 
@@ -263,7 +251,7 @@ describe('DropdownMenu touch grow', () => {
     fireEvent.pointerDown(trigger, mouse);
     fireEvent.pointerUp(trigger, mouse);
     fireEvent.click(trigger, {detail: 1});
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
@@ -274,14 +262,14 @@ describe('DropdownMenu touch grow', () => {
     // A finger opens and closes it first, so the trigger's last press was a
     // finger's.
     fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
+    await settle();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
       key: 'Escape',
     });
-    await settleLoad();
+    await settle();
     motion.enter.mockClear();
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
@@ -302,7 +290,7 @@ describe('DropdownMenu touch grow', () => {
     );
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
@@ -314,16 +302,16 @@ describe('DropdownMenu touch grow', () => {
       </div>,
     );
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
-  it("reads Reduce Motion from the one predicate the animator reads: when it says reduce, a finger's open keeps the layer's own entrance", async () => {
+  it("reads Reduce Motion from reducedMotionFade, the one policy: when it fades, a finger's open keeps the layer's own entrance", async () => {
     preference.reduces = true;
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
@@ -340,194 +328,23 @@ describe('DropdownMenu touch grow', () => {
     fireEvent.pointerDown(trigger, touch);
     fireEvent.pointerUp(trigger, touch);
     fireEvent.click(trigger, {detail: 1});
-    await settleLoad();
+    await settle();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
-  it("a failed load shows the menu with the layer's own entrance, and the next open loads", async () => {
-    let loads = 0;
-    setMenuSurfaceMotionImportForTest(async () => {
-      loads++;
-      if (loads === 1) {
-        throw new Error('offline');
-      }
-      return menuSurfaceMotion;
-    });
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    const trigger = screen.getByRole('button', {name: 'Actions'});
-    fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
-    const surface = screen
-      .getByRole('menu', {hidden: true})
-      .closest<HTMLElement>('[popover] > *');
-    expect(surface?.style.getPropertyValue('opacity')).toBe('');
-    expect(surface?.style.getPropertyValue('animation-name')).toBe('');
-    expect(motion.enter).not.toHaveBeenCalled();
-    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
-      key: 'Escape',
-    });
-    await settleLoad();
-    fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
-    expect(loads).toBe(2);
-    expect(motion.enter).toHaveBeenCalledTimes(1);
-  });
-
-  it("loads the grow's code through the shared module loader", async () => {
-    const importMotion = async () => menuSurfaceMotion;
-    setMenuSurfaceMotionImportForTest(importMotion);
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    await settleLoad();
-    expect(sharedLoads.get(importMotion)).toBeGreaterThan(0);
-    expect(motion.enter).toHaveBeenCalledTimes(1);
-  });
-
-  it("a menu that mounts while the grow's code loads shares that load at the page's first touch", async () => {
-    stubCoarsePointer();
-    let loads = 0;
-    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
-    setMenuSurfaceMotionImportForTest(async () => {
-      loads++;
-      return new Promise(resolve => {
-        finish = resolve;
-      });
-    });
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    // The page's first touch starts the load.
-    fireEvent.touchStart(document.body);
-    await settleLoad();
-    expect(loads).toBe(1);
-    // A second menu mounts while that load is in flight, and a touch follows.
-    render(<DropdownMenu button={{label: 'More'}} items={ITEMS} />);
-    fireEvent.touchStart(document.body);
-    await settleLoad();
-    expect(loads).toBe(1);
-    finish(menuSurfaceMotion);
-    await settleLoad();
-    expect(loads).toBe(1);
-  });
-
-  it("warns once in development when the grow's code fails to load, and the next open asks again", async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    let loads = 0;
-    setMenuSurfaceMotionImportForTest(async () => {
-      loads++;
-      throw new Error('offline');
-    });
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    const trigger = screen.getByRole('button', {name: 'Actions'});
-    fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
-    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
-      key: 'Escape',
-    });
-    await settleLoad();
-    fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
-    expect(loads).toBe(2);
-    const warnings = warn.mock.calls.filter(([message]) =>
-      String(message).startsWith('DropdownMenu:'),
-    );
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("an open that waits longer than an entrance shows the menu with the layer's own entrance, and a late load grows nothing", async () => {
-    vi.useFakeTimers();
-    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
-    setMenuSurfaceMotionImportForTest(
-      async () =>
-        new Promise(resolve => {
-          finish = resolve;
-        }),
-    );
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    const surface = screen
-      .getByRole('menu', {hidden: true})
-      .closest<HTMLElement>('[popover] > *');
-    expect(surface?.style.getPropertyValue('opacity')).toBe('0');
-    // The finger that opened it reaches no row while it is invisible.
-    expect(surface?.style.getPropertyValue('pointer-events')).toBe('none');
-    const holdsBefore = entranceHold.mock.calls.length;
-    act(() => {
-      vi.advanceTimersByTime(MENU_GROW_LOAD_WAIT_MS);
-    });
-    expect(surface?.style.getPropertyValue('opacity')).toBe('');
-    expect(surface?.style.getPropertyValue('animation-name')).toBe('');
-    expect(surface?.style.getPropertyValue('pointer-events')).toBe('');
-    // The restored entrance takes input as the layer's own entrance does.
-    expect(entranceHold.mock.calls.length).toBe(holdsBefore + 1);
-    vi.useRealTimers();
-    finish(menuSurfaceMotion);
-    await settleLoad();
-    expect(motion.enter).not.toHaveBeenCalled();
-  });
-
-  it('an open after the code has loaded always grows, also after a first open that waited past an entrance', async () => {
-    vi.useFakeTimers();
-    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
-    setMenuSurfaceMotionImportForTest(
-      async () =>
-        new Promise(resolve => {
-          finish = resolve;
-        }),
-    );
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    const trigger = screen.getByRole('button', {name: 'Actions'});
-    fireEvent.pointerDown(trigger, touch);
-    act(() => {
-      vi.advanceTimersByTime(MENU_GROW_LOAD_WAIT_MS);
-    });
-    vi.useRealTimers();
-    finish(menuSurfaceMotion);
-    await settleLoad();
-    expect(motion.enter).not.toHaveBeenCalled();
-    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
-      key: 'Escape',
-    });
-    await settleLoad();
-    fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
-    expect(motion.enter).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps taps off the page from the code's arrival until the grow's first frame", async () => {
-    stubCoarsePointer();
-    const runFrames = stubFrames();
-    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
-    setMenuSurfaceMotionImportForTest(
-      async () =>
-        new Promise(resolve => {
-          finish = resolve;
-        }),
-    );
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    // The open waits for the code with taps held.
-    expect(inputHolds.up).toBe(1);
-    finish(menuSurfaceMotion);
-    await settleLoad();
-    expect(motion.enter).toHaveBeenCalledTimes(1);
-    // The grow takes its own hold at its first frame; until then, one holds.
-    expect(inputHolds.up).toBe(1);
-    await runFrames();
-    expect(inputHolds.up).toBe(0);
-  });
-
-  it("keeps taps off the page from a finger's open until the grow's first frame, once the code has loaded", async () => {
+  it("keeps taps off the page from a finger's open until the grow's first frame", async () => {
     stubCoarsePointer();
     const runFrames = stubFrames();
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     const trigger = screen.getByRole('button', {name: 'Actions'});
     fireEvent.pointerDown(trigger, touch);
-    await settleLoad();
+    await settle();
     await runFrames();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
       key: 'Escape',
     });
-    await settleLoad();
+    await settle();
     await runFrames();
     expect(inputHolds.up).toBe(0);
     fireEvent.pointerDown(trigger, touch);
@@ -535,60 +352,5 @@ describe('DropdownMenu touch grow', () => {
     expect(inputHolds.up).toBe(1);
     await runFrames();
     expect(inputHolds.up).toBe(0);
-  });
-
-  it('a close while the open waits ends the wait, and a late load grows nothing', async () => {
-    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
-    setMenuSurfaceMotionImportForTest(
-      async () =>
-        new Promise(resolve => {
-          finish = resolve;
-        }),
-    );
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
-    const surface = screen
-      .getByRole('menu', {hidden: true})
-      .closest<HTMLElement>('[popover] > *');
-    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
-      key: 'Escape',
-    });
-    expect(surface?.style.getPropertyValue('opacity')).toBe('');
-    finish(menuSurfaceMotion);
-    await settleLoad();
-    expect(motion.enter).not.toHaveBeenCalled();
-    expect(motion.exit).not.toHaveBeenCalled();
-  });
-
-  it("the page's first touch loads the grow's code only where the primary pointer is coarse", async () => {
-    let loads = 0;
-    setMenuSurfaceMotionImportForTest(async () => {
-      loads++;
-      return menuSurfaceMotion;
-    });
-    const {unmount} = render(
-      <DropdownMenu button={{label: 'Actions'}} items={ITEMS} />,
-    );
-    fireEvent.touchStart(document.body);
-    await settleLoad();
-    expect(loads).toBe(0);
-    unmount();
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockImplementation((query: string) => ({
-        matches: query === TOUCH_QUERY,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    );
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.touchStart(document.body);
-    await settleLoad();
-    expect(loads).toBe(1);
   });
 });

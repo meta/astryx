@@ -51,8 +51,7 @@ async function mount(page: Page, story: string) {
  * Waits until the open menu has finished entering. Under a finger, input that
  * lands during the entrance is held, as UIMenu takes none until it is shown.
  * The entrance runs on the surface, the layer's child. A finger's grow starts
- * a frame after the open, or once its code arrives, and the surface stays
- * clear until then. So the menu is in after three frames in a row with
+ * a frame after the open, and the surface stays clear until then. So the menu is in after three frames in a row with
  * neither.
  */
 async function presented(page: Page) {

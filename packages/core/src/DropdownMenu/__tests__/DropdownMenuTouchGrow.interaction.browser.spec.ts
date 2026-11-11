@@ -12,8 +12,8 @@
  *   a held finger. The grow follows Popover's path and timing, frame by
  *   frame. A mouse keeps the layer's own entrance. On a phone the menu opens
  *   beside its trigger.
- * @position Evidence for DropdownMenu's touch grow (useMenuSurfaceMotion.ts,
- *   menuSurfaceMotion.ts); which opens grow is unit-tested in
+ * @position Evidence for DropdownMenu's touch grow (Popover's surface motion
+ *   on the rect morph); which opens grow is unit-tested in
  *   DropdownMenuTouchGrow.test.tsx
  */
 
