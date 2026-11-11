@@ -15,6 +15,7 @@ import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Card} from '@astryxdesign/core/Card';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createReorderable} from '@astryxdesign/core';
 import {Section} from '@astryxdesign/core/Section';
 import {Table} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
@@ -162,6 +163,55 @@ export const BleedListInDialog: Story = {
   render: () => (
     <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
       <BleedList />
+    </Dialog>
+  ),
+};
+
+/**
+ * A Dialog with no padding: the bleeding list has a header, so the header
+ * sits above the first row, and only the last row takes the dialog corners.
+ */
+export const BleedListWithHeaderInDialog: Story = {
+  render: () => (
+    <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+      <List edge="bleed" hasDividers header={<Text>Folders</Text>}>
+        {rows.map(label => (
+          <ListItem key={label} label={label} onClick={() => {}} />
+        ))}
+      </List>
+    </Dialog>
+  ),
+};
+
+function ReorderableBleedList() {
+  const [order, setOrder] = useState(rows);
+  return (
+    <List
+      edge="bleed"
+      hasDividers
+      reorderable={createReorderable({
+        onReorder: ({key, to}) =>
+          setOrder(current => {
+            const next = current.filter(label => label !== key);
+            next.splice(to, 0, key as string);
+            return next;
+          }),
+      })}>
+      {order.map(label => (
+        <ListItem key={label} itemKey={label} label={label} />
+      ))}
+    </List>
+  );
+}
+
+/**
+ * A Dialog with no padding: the bleeding list is reorderable, and its first
+ * and last rows touch the dialog's corners.
+ */
+export const ReorderableBleedListInDialog: Story = {
+  render: () => (
+    <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+      <ReorderableBleedList />
     </Dialog>
   ),
 };
