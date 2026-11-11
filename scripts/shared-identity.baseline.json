@@ -163,19 +163,19 @@
     },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
       "status": "allowed",
-      "reason": "Set and read inside one markGlidingRows call, which only the row-expansion plugin makes."
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:inlineTopOf": {
       "status": "allowed",
-      "reason": "Set and read inside one markGlidingRows call, which only the row-expansion plugin makes."
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:markedBy": {
       "status": "allowed",
-      "reason": "Set and read inside one markGlidingRows call, which only the row-expansion plugin makes."
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:sourcesOf": {
       "status": "allowed",
-      "reason": "Set and read inside one markGlidingRows call, which only the row-expansion plugin makes."
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx:GROUP_HEADER": {
       "status": "open",
@@ -231,7 +231,7 @@
     },
     "packages/core/src/gestures/fingerScroll.ts:watches": {
       "status": "allowed",
-      "reason": "Keyed by an element its own control owns; no other copy reads it."
+      "reason": "Keyed by the shared gesture host; each copy's useFingerScroll watches and asks through its own copy, so a second watch adds listeners and changes no answer."
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -394,8 +394,8 @@
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
     "packages/core/src/utils/boxHold.ts:waits": {
-      "status": "allowed",
-      "reason": "Keyed by an element its own control owns; no other copy reads it."
+      "status": "open",
+      "group": "triage"
     },
     "packages/core/src/utils/calendarDateParser.ts:displayOptionCache": {
       "status": "allowed",
