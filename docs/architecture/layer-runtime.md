@@ -837,6 +837,9 @@ it on the surface inside the layer and run no layout while it plays.
   on.
 - `Layer/presentationHold.ts` owns the presentation hold: a layer's chosen
   presentation, held from the open until its close settles (INV14).
+- `Layer/inputHold.ts` owns the input hold that a touch presentation places
+  while it enters or leaves (`spec:AST-094` FR35); a dismissal hold leaves a
+  nested layer, its path, and a child live region live.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing. The stack, the modal outlet registry, the gesture
