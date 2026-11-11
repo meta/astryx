@@ -35,6 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {scrollingAncestor} from '../utils/scrollingAncestor';
 import type {OutlineItem} from './types';
 
 /**
@@ -56,30 +57,6 @@ const SCROLL_KEYS = new Set([
   ' ',
   'Spacebar',
 ]);
-
-function getScrollableAncestor(
-  element: HTMLElement | null,
-): HTMLElement | null {
-  let current = element?.parentElement ?? null;
-
-  while (current != null) {
-    const computedStyle = window.getComputedStyle(current);
-    const overflowY = computedStyle.overflowY;
-    const isScrollable =
-      (overflowY === 'auto' ||
-        overflowY === 'scroll' ||
-        overflowY === 'overlay') &&
-      current.scrollHeight > current.clientHeight;
-
-    if (isScrollable) {
-      return current;
-    }
-
-    current = current.parentElement;
-  }
-
-  return null;
-}
 
 /** The element's own `scroll-margin-top` in px (0 when unset). */
 function getScrollMarginTop(element: HTMLElement): number {
@@ -271,7 +248,8 @@ export function useScrollSpy({
    */
   const getScrollRoot = useCallback((): HTMLElement | null => {
     return (
-      scrollContainerRef?.current ?? getScrollableAncestor(rootRef.current)
+      scrollContainerRef?.current ??
+      (rootRef.current == null ? null : scrollingAncestor(rootRef.current))
     );
   }, [rootRef, scrollContainerRef]);
 

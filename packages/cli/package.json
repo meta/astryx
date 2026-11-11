@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.10",
+  "version": "0.7.14",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
@@ -107,7 +107,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "astryx": "node clients/cli/bin/astryx.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "cd ../.. && vitest run packages/cli",
@@ -120,7 +119,8 @@
     "sync:api-types": "node scripts/sync-api-types.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
-    "prepack": "pnpm sync:api-types"
+    "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean && node scripts/generate-self-audit.mjs --clean && node scripts/generate-manifest.mjs --clean",
+    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs && node scripts/generate-stored-docs.mjs && node scripts/generate-command-list.mjs && node scripts/generate-self-audit.mjs && node scripts/generate-manifest.mjs"
   },
   "dependencies": {
     "@babel/core": "7.29.7",
@@ -130,14 +130,15 @@
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
-    "ignore": "^7.0.5",
+    "ignore": "^7.0.14",
     "jiti": "^2.7.0",
-    "jscodeshift": "^17.3.0",
+    "jscodeshift": "^17.4.0",
+    "linkedom": "^0.18.15",
     "node-diff3": "3.2.1",
     "postcss": "^8.5.23",
     "postcss-selector-parser": "^7.1.6",
     "recast": "0.23.21",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
     "@astryxdesign/core": "*"
@@ -155,7 +156,7 @@
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "lucide-react": "^1.18.0",
-    "recharts": "^3.9.2"
+    "lucide-react": "^1.66.0",
+    "recharts": "^3.10.1"
   }
 }

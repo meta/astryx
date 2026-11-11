@@ -7,7 +7,12 @@
 
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {ejectThemeFiles, findTheme, listAvailableThemes} from '../_adapter.mjs';
+import {
+  ejectThemeFiles,
+  findTheme,
+  forkNeeds,
+  listAvailableThemes,
+} from '../_adapter.mjs';
 
 /**
  * Copy a bundled or installed theme's complete source inventory into the
@@ -49,6 +54,11 @@ export async function themeEject(slug, options = {}) {
     targetPath,
     overwrite,
   });
+  const {missingPackages, installCommand} = forkNeeds(
+    outputDir,
+    match.files,
+    cwd,
+  );
   return {
     type: 'theme.eject',
     data: {
@@ -60,6 +70,8 @@ export async function themeEject(slug, options = {}) {
       entry: match.entry,
       exportName: match.exportName,
       files: match.files,
+      missingPackages,
+      installCommand,
     },
   };
 }

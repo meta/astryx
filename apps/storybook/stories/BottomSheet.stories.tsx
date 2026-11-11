@@ -130,7 +130,8 @@ export const TextOnlyFitting: Story = {
  * Content placed directly in a sheet. The sheet pads it like Dialog, by
  * default or at the `padding` step given here, and a full-bleed Divider
  * reaches the sheet's edges because the content box publishes its inset.
- * `padding={0}` restores the unpadded content box.
+ * `padding={0}` removes the padding; the content still starts below the grab
+ * bar's band.
  */
 export const ContainerPadding: Story = {
   args: {
@@ -1038,7 +1039,8 @@ export const ExitFocusControlRemoved: Story = {
 
 /**
  * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
- * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ * control is disabled. Focus stays on Done and returns to "Open sheet" when
+ * the sheet closes (FR9).
  */
 export const ExitFocusControlDisabled: Story = {
   tags: ['!autodocs'],

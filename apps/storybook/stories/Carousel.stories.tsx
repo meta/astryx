@@ -501,10 +501,12 @@ function PagingCarousel({
   layout,
   count,
   mode,
+  hasLoop = false,
 }: {
   layout: '1-up' | '3-up';
   count: number;
   mode: PagingMode;
+  hasLoop?: boolean;
 }) {
   // One value: Carousel keeps the value it first attached, and a new `pages`
   // applies from the next flick.
@@ -514,6 +516,7 @@ function PagingCarousel({
     <div {...stylex.props(styles.pagingFrame)}>
       <Carousel
         gap={layout === '1-up' ? 0 : 2}
+        hasLoop={hasLoop}
         hasSnap={hasSnap}
         aria-label="Numbered items">
         {Array.from({length: count}, (_, i) => (
@@ -541,7 +544,7 @@ const pagingArgTypes = {
   },
 };
 
-type PagingStory = StoryObj<{mode: PagingMode}>;
+type PagingStory = StoryObj<{mode: PagingMode; hasLoop?: boolean}>;
 
 export const SnapPagingOneUp: PagingStory = {
   name: 'Snap Paging: One Item per View',
@@ -554,7 +557,9 @@ export const SnapPagingThreeUp: PagingStory = {
   name: 'Snap Paging: Three Items per View',
   argTypes: pagingArgTypes,
   args: {mode: 'paging'},
-  render: ({mode}) => <PagingCarousel layout="3-up" count={9} mode={mode} />,
+  render: ({mode, hasLoop}) => (
+    <PagingCarousel layout="3-up" count={9} mode={mode} hasLoop={hasLoop} />
+  ),
 };
 
 export const SnapPagingPartialLastPage: PagingStory = {

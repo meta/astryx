@@ -4,8 +4,8 @@
 
 /**
  * @file TimestampHoverCard.tsx
- * @input Uses React, HoverCard, IconButton, the theme's `timestamp-copy` icon
- *   slot, formatted lines
+ * @input Uses React, useHoverCard, a stable time ref, IconButton, the theme's
+ *   `timestamp-copy` icon slot, formatted lines
  * @output Default-exports the lazily-loaded copyable hover card for Timestamp
  * @position Split out of Timestamp so the overlay (HoverCard) and the copy
  *   affordance's Icon/IconButton load only when a card is actually shown — the
@@ -21,15 +21,16 @@
  *   is visually hidden. A card with no labels drops the label column.
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Timestamp/Timestamp.tsx (the lazy() + Suspense wrapper)
+ * - /packages/core/src/Timestamp/Timestamp.tsx (the persistent trigger and lazy attachment)
  * - /packages/core/src/Timestamp/Timestamp.doc.mjs (theming.targets)
  * - /packages/core/src/Timestamp/Timestamp.test.tsx
  */
 
-import type {ReactNode} from 'react';
-import {useCallback} from 'react';
+import type {ReactNode, RefObject} from 'react';
+import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {HoverCard} from '../HoverCard/HoverCard';
+import {useHoverCard} from '../HoverCard/useHoverCard';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboard} from '../hooks/useClipboard';
@@ -226,8 +227,13 @@ export interface TimestampHoverCardProps {
   lines: ReadonlyArray<TimestampTooltipLine>;
   /** Accessible name for the card. */
   label: string;
-  /** The anchor the card is attached to (the `<time>` element). */
-  children: ReactNode;
+  /** Persistent anchor, rendered outside the lazy boundary. */
+  triggerRef: RefObject<HTMLTimeElement | null>;
+  /**
+   * Reports the open card's id when it shows, and null when it hides, so the
+   * time can name it through `aria-controls`.
+   */
+  onCardOpenChange: (cardId: string | null) => void;
 }
 
 function gridTemplateFor(
@@ -258,8 +264,51 @@ function gridTemplateFor(
 export default function TimestampHoverCard({
   lines,
   label,
-  children,
+  triggerRef,
+  onCardOpenChange,
 }: TimestampHoverCardProps): ReactNode {
+  const cardIdRef = useRef<string | null>(null);
+  const handleShow = useCallback(() => {
+    onCardOpenChange(cardIdRef.current);
+  }, [onCardOpenChange]);
+  const handleHide = useCallback(() => {
+    onCardOpenChange(null);
+  }, [onCardOpenChange]);
+  const {positionRef, interactionRef, id, show, renderHoverCard} = useHoverCard(
+    {
+      placement: 'above',
+      focusTrigger: 'always',
+      label,
+      onShow: handleShow,
+      onHide: handleHide,
+    },
+  );
+
+  const didAttachRef = useRef(false);
+  // Syncs the hover card's anchor and listeners with the <time> that
+  // Timestamp renders outside this lazy module.
+  useIsomorphicLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+    cardIdRef.current = id;
+    positionRef(trigger);
+    interactionRef(trigger);
+    // Focus can reach the time before this module loads. Open the card only
+    // if the time still has focus.
+    if (!didAttachRef.current) {
+      didAttachRef.current = true;
+      if (trigger.ownerDocument.activeElement === trigger) {
+        show();
+      }
+    }
+    return () => {
+      positionRef(null);
+      interactionRef(null);
+    };
+  }, [triggerRef, positionRef, interactionRef, show, id]);
+
   // A label column is only reserved when some row is labelled; otherwise the
   // value sits flush at the card's leading edge. An action column is only
   // reserved when some row is copyable (option B), so a fully read-only card
@@ -287,16 +336,7 @@ export default function TimestampHoverCard({
     </dl>
   );
 
-  return (
-    <HoverCard
-      content={cardContent}
-      placement="above"
-      focusTrigger="always"
-      hasHoverIndication
-      label={label}>
-      {children}
-    </HoverCard>
-  );
+  return renderHoverCard(cardContent);
 }
 
 TimestampHoverCard.displayName = 'TimestampHoverCard';

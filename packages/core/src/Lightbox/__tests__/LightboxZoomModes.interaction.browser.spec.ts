@@ -20,12 +20,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
+  armHold,
   curveOf,
   drag,
   flick,
   frames,
   freezePageOn,
-  holdAnimations,
   installPageFreeze,
   installTimerGate,
   openStory,
@@ -35,11 +36,12 @@ import {
   thawPage,
   timeline,
   touchDriver,
-  waitForAnimation,
+  type TouchScript,
   waitForRest,
   withStorybook,
-  type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
+import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
 
@@ -146,6 +148,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 test('with a fine pointer (a desktop) the stage fills the viewer, as under a coarse pointer: its gestures take the whole viewer', async ({
   browser,
 }) => {
@@ -216,11 +224,16 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
   if (rect == null) {
     throw new Error('no photo');
   }
+  // Armed before the taps, so the fade is held as it starts. A hold sent
+  // after them can come after a 200 ms fade ends on a loaded runner.
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+    DOUBLE_TAP,
   );
-  await waitForAnimation(img);
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(img, timeline(duration));
   await releaseAnimations(page);
@@ -363,15 +376,31 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
+  // The freeze has to be in the page before the story loads, and it needs
+  // the timer gate too.
+  await installPageFreeze(page);
   const {img} = await openPhone(page);
+  await installTimerGate(page);
   const dialog = page.getByRole('dialog', {name: 'Forest path'});
   const opacity = async () =>
     img.evaluate(el => parseFloat(getComputedStyle(el).opacity));
   await dialog.getByRole('button', {name: 'Zoom'}).focus();
-  // The second key lands mid-dip of the first one's cross-fade.
+  // The scene freezes in the first key's own task, before the page handles
+  // it. So the cross-fade the key starts is held at its start, however late
+  // this process reacts and however few frames a loaded runner draws.
+  await freezePageOn(page, 'keydown');
   await page.keyboard.press('+');
-  await expect.poll(opacity, {timeout: 2000}).toBeLessThan(0.9);
+  // Moved on by its own clock, the frozen scene stands in the dip.
+  await advanceFrozenPage(page, MID_DIP_MS);
+  const dip = await opacity();
+  if (!(dip < 0.9)) {
+    throw new Error(
+      `The first key started no cross-fade: ${MID_DIP_MS} ms on, the photo stands at opacity ${dip}`,
+    );
+  }
+  // The second key lands mid-dip.
   await page.keyboard.press('-');
+  await thawPage(page);
   await waitForRest(img);
   expect(await opacity()).toBeCloseTo(1, 3);
   await page.keyboard.press('Escape');
@@ -382,6 +411,12 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   await frames(page, 2);
   expect(await opacity()).toBeCloseTo(1, 3);
 });
+
+/**
+ * Where the Reduce Motion plus-then-minus case stops the first key's
+ * cross-fade, ms: halfway through its fade out, which lasts 100 ms.
+ */
+const MID_DIP_MS = 50;
 
 test('with zoom off, a tap on the dark area around the photo closes the viewer on a touch screen', async ({
   page,
@@ -477,6 +512,9 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
   // The fade then starts held, however late this process reacts. A hold sent
   // after the lift can come after a 200 ms fade ends on a loaded runner.
   await freezePageOn(page, 'touchend');
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     pinch({
       center: centre,
@@ -493,7 +531,7 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
       },
     },
   );
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   expect(held.length).toBeGreaterThan(0);
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const opacity = curveOf(
@@ -541,17 +579,11 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
-  let lifted = Number.NaN;
-  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}), {
-    onEvent: async step => {
-      if (step.type === 'touchEnd') {
-        lifted = (await read()).x;
-      }
-    },
-  });
+  const liftOffset = await recordLiftOffset(img);
+  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}));
   const opacities = await img.evaluate(
     async el =>
       new Promise<number[]>(resolve => {
@@ -570,7 +602,7 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
   );
   await waitForRest(img);
   // It coasted on past where the finger lifted.
-  expect((await read()).x).toBeLessThan(lifted - 20);
+  expect((await read()).x).toBeLessThan((await liftOffset()) - 20);
   // No cross-fade.
   expect(Math.min(...opacities)).toBe(1);
   // It rests with no gap at the stage's edges.
@@ -591,7 +623,7 @@ test('under Reduce Motion a zoomed photo pulled past its edge settles back to it
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   // One slow drag right across the stage: the photo, centred and zoomed,
