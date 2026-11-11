@@ -48,7 +48,28 @@ import {tryLock} from '../../foundation/release/cache.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {LIKE} from './_tables.mjs';
 
-export {themeEditHow, parsePoints} from './_how.mjs';
+export {parsePoints} from './_how.mjs';
+import {themeEditHow as howAt} from './_how.mjs';
+
+/**
+ * `how`, run at the project root like the other editor commands, so a
+ * subfolder finds the app's themes. A picture named from the subfolder
+ * keeps pointing where it was named.
+ * @param {string} subject
+ * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse>}
+ */
+export async function themeEditHow(subject, options = {}) {
+  const from = options.cwd ?? process.cwd();
+  const o = atRoot(options);
+  const picture =
+    typeof subject === 'string' &&
+    !path.isAbsolute(subject) &&
+    path.resolve(from) !== o.cwd &&
+    fs.existsSync(path.resolve(from, subject)) &&
+    fs.statSync(path.resolve(from, subject)).isFile();
+  return howAt(picture ? path.resolve(from, subject) : subject, o);
+}
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];

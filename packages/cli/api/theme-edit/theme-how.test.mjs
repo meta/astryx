@@ -1089,8 +1089,9 @@ const QUESTIONS_2 = [
   [
     'gray text color #555',
     {
-      top: /^set q --color-text-primary '#555'$/,
-      adds: /--color-text-primary=#555/,
+      // #555 on the dark page would not be readable: light mode only.
+      top: /^set q --color-text-primary '#555' --mode light$/,
+      adds: /--color-text-primary\.0=#555/,
     },
   ],
   ['accent #12345', {top: null, text: /"#12345" is not a color/}],
@@ -1840,6 +1841,321 @@ describe('how answers pass-3 questions', () => {
       fs.rmSync(dir, {recursive: true, force: true});
       fs.cpSync(keep, dir, {recursive: true});
       const {data} = await themeEditHow(question, {cwd, theme: 'p3'});
+      const top = data.results.find((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+      );
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const before = css();
+      for (const c of commands) {
+        const [, theme, thing, ...rest] = words(bare(c));
+        const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+        /** @type {Record<string, string>} */
+        const flags = {};
+        for (let i = fi < 0 ? rest.length : fi; i < rest.length; i += 2)
+          flags[rest[i].slice(2)] = rest[i + 1];
+        await themeEditSet(
+          theme,
+          thing,
+          (fi < 0 ? rest : rest.slice(0, fi)).join(' '),
+          {cwd, ...flags},
+        );
+      }
+      for (const w of want) {
+        expect(before, question).not.toMatch(w);
+        expect(css(), question).toMatch(w);
+      }
+    }
+    fs.rmSync(keep, {recursive: true, force: true});
+  }, 300_000);
+});
+
+/**
+ * Final-pass questions: polarity, two-word names, list markers, parts the
+ * questions name, per-mode values and guards.
+ * @type {Array<[string, {top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_F = [
+  // "flat" and the other polarity misses
+  [
+    'flat cards',
+    {
+      top: /^set q box-shadow none --on card$/,
+      adds: /card\.base\.boxShadow=none/,
+    },
+  ],
+  [
+    '• pill buttons\n• flat cards',
+    {
+      top: /^set q corners pill --on button && set q box-shadow none --on card$/,
+    },
+  ],
+  ['the corners are not round enough', {top: /^set q corners more$/}],
+  ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
+  [
+    'nothing should be rounded except avatars',
+    {top: /^set q corners square && set q border-radius 9999px --on avatar$/},
+  ],
+  [
+    'the shadows are too strong',
+    {top: /^set q --shadow-low '0 1px 2px rgb\(0 0 0 \/ 0\.05\)'/},
+  ],
+  [
+    'card shadows too strong',
+    {top: /^set q box-shadow 'var\(--shadow-low\)' --on card$/},
+  ],
+  ['not so much padding on cards', {top: /^set q spacing less --on card$/}],
+  // "border radius" in two words is the radius
+  [
+    'Use 0.75rem border radius everywhere',
+    {top: /^set q corners 12px$/, adds: /--radius-element=12px/},
+  ],
+  ['8px border radius on cards', {top: /^set q border-radius 8px --on card$/}],
+  // font names of several words
+  ['DM Sans font', {top: /^set q font dm-sans$/}],
+  ['font IBM Plex Sans', {top: /^set q font ibm-plex-sans$/}],
+  ['use IBM Plex Sans', {top: /^set q font ibm-plex-sans$/}],
+  ['font Geist Mono', {top: /^set q font geist-mono$/}],
+  ['JetBrains Mono for code', {top: /^set q font jetbrains-mono --on code$/}],
+  ['font Roboto Mono', {top: /^set q font 'Roboto Mono'$/}],
+  ['Source Sans 3 font', {top: /^set q font 'Source Sans 3'$/}],
+  [
+    'boutons sans-serif font',
+    {top: /^set q font-family system-ui --on button$/},
+  ],
+  [
+    'IBM Carbon: square corners, IBM Plex Sans, accent #0f62fe',
+    {
+      top: /^set q corners square && set q font ibm-plex-sans && set q accent '#0f62fe'$/,
+    },
+  ],
+  // meanings
+  [
+    'the borders are too dark',
+    {
+      top: /^set q --color-border '#[0-9a-f]+' --mode light && set q --color-border '#[0-9a-f]+' --mode dark$/,
+    },
+  ],
+  [
+    'page should be off-white',
+    {top: /^set q --color-background-body '#fafafa'$/},
+  ],
+  ['headings are way too big', {top: /^set q type compact$/}],
+  [
+    'dark mode text should be #e5e5e5 not pure white',
+    {top: /^set q --color-text-primary '#e5e5e5' --mode dark$/},
+  ],
+  // list markers and key=value
+  [
+    '1) square corners 2) no shadows 3) accent #111111',
+    {
+      top: /^set q corners square && set q --shadow-low none && set q --shadow-med none && set q --shadow-high none && set q accent '#111111'$/,
+    },
+  ],
+  [
+    'Feedback round 2:\n- rounder buttons',
+    {top: /^set q corners more --on button$/},
+  ],
+  [
+    'primary=#7c3aed radius=10 font=Geist',
+    {top: /^set q accent '#7c3aed' && set q corners 10px && set q font geist$/},
+  ],
+  [
+    'Notes:\n * headings bolder\n * body text 16px',
+    {top: /^set q headings bold && set q text-size 16$/},
+  ],
+  // links read the accent text token
+  [
+    'Make the link color #2563eb',
+    {
+      top: /^set q --color-text-accent '#2563eb'$/,
+      adds: /--color-text-accent=#2563eb/,
+    },
+  ],
+  [
+    'hovered links #1d4ed8',
+    {top: /^set q --color-text-accent '#1d4ed8'$/, text: /in every state/},
+  ],
+  // parts
+  [
+    'Remove the border from Table cells',
+    {top: /^set q border none --on table-cell$/},
+  ],
+  [
+    'the menu items have 6px radius',
+    {top: /^set q border-radius 6px --on dropdown-menu-item$/},
+  ],
+  [
+    'radio buttons accent color when checked',
+    {
+      top: /^set q background 'var\(--color-accent\)' --on radio-indicator --state checked$/,
+    },
+  ],
+  [
+    'success badge green #dcfce7 with #166534 text',
+    {
+      top: /^set q background '#dcfce7' --on badge --when variant:success && set q color '#166534' --on badge --when variant:success$/,
+    },
+  ],
+  [
+    'Disable shadows on Card and Dialog',
+    {
+      top: /^set q box-shadow none --on card && set q box-shadow none --on dialog$/,
+    },
+  ],
+  [
+    'match the header color to the sidebar (#1e293b)',
+    {top: /^set q background '#1e293b' --on app-shell-header$/},
+  ],
+  [
+    'Notion look: serif headings, no shadows',
+    {
+      top: /^set q font serif --on heading && set q --shadow-low none && set q --shadow-med none && set q --shadow-high none$/,
+    },
+  ],
+  [
+    'textarea min height 120px',
+    {top: /^set q min-height 120px --on text-area$/},
+  ],
+  ['select dropdown 40px tall', {top: /^set q min-height 40px --on selector$/}],
+  [
+    'skeleton loaders lighter',
+    {
+      top: /--on skeleton --mode light && set q background '#[0-9a-f]+' --on skeleton --mode dark$/,
+    },
+  ],
+  [
+    'make the tooltip text bigger',
+    {top: /^set q font-size [\d.]+rem --on tooltip$/},
+  ],
+  // values
+  [
+    'card radius 50%',
+    {
+      top: /^set q border-radius '50%' --on card$/,
+      adds: /card\.base\.borderRadius=50%/,
+    },
+  ],
+  ['button padding 8', {top: /^set q padding 8px --on button$/}],
+  [
+    'in light mode the accent is #2563eb, in dark mode #60a5fa',
+    {
+      top: /^set q --color-accent '#2563eb' --mode light && set q --color-accent '#60a5fa' --mode dark$/,
+    },
+  ],
+  [
+    'Duolingo vibes: green #58cc02, very rounded, bold',
+    {
+      top: /^set q accent '#58cc02' && set q corners round && set q --text-body-weight 700$/,
+    },
+  ],
+  ['I hate the purple, make it orange', {top: /^set q accent '#f97316'$/}],
+  // the page never takes the text color; a text color stays readable
+  [
+    'I want the theme to feel calm and professional, similar to the tools our customers already use, with nothing too flashy, good contrast for accessibility, and readable type at small sizes; the brand color is a deep teal #0f766e and we never use pure black text, we prefer #1f2937 for body copy.',
+    {
+      top: /^set q accent '#0f766e' && set q --color-text-primary '#1f2937' --mode light$/,
+    },
+  ],
+  [
+    'body text #333333',
+    {
+      top: /^set q --color-text-primary '#333333' --mode light$/,
+      text: /would not be readable/,
+    },
+  ],
+  // swaps keep working
+  [
+    'make buttons pill shaped and the header dark',
+    {
+      top: /^set q corners pill --on button && set q background '#[0-9a-f]+' --on app-shell-header$/,
+    },
+  ],
+  [
+    'the dialogs look too flat, can we add some shadow',
+    {top: /^set q box-shadow 'var\(--shadow-med\)' --on dialog$/},
+  ],
+];
+
+describe('how answers final-pass questions', () => {
+  for (const [question, want] of QUESTIONS_F)
+    it(question.replace(/\n/g, ' / ').slice(0, 90), async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.kind).toBe('question');
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results;
+      const all = results.map(r => r.text).join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('"what does <dial> <value> do" gets the dial lookup, not a change', async () => {
+    const {data} = await themeEditHow('what does spacing more do', {
+      cwd,
+      theme: 'q',
+    });
+    expect(['setting', 'aspect']).toContain(data.kind);
+    expect(JSON.stringify(data)).toMatch(/spacing/);
+  });
+
+  it('finds the app themes from a subfolder', async () => {
+    const sub = path.join(cwd, 'src', 'deep');
+    fs.mkdirSync(sub, {recursive: true});
+    const pkg = path.join(cwd, 'package.json');
+    const made = !fs.existsSync(pkg);
+    if (made)
+      fs.writeFileSync(
+        pkg,
+        JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
+      );
+    try {
+      const {data} = await themeEditHow('rounder buttons', {
+        cwd: sub,
+        theme: 'q',
+      });
+      expect(data.theme).toBe('q');
+      expect(data.results[0].commands.map(bare)[0]).toBe(
+        'set q corners more --on button',
+      );
+    } finally {
+      if (made) fs.rmSync(pkg);
+      fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
+    }
+  });
+
+  it('runs final-pass answers through set and checks the built CSS', async () => {
+    await themeEditNew('pf', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'themes', 'pf');
+    const keep = path.join(cwd, 'pf-pristine');
+    fs.cpSync(dir, keep, {recursive: true});
+    const css = () => fs.readFileSync(path.join(dir, 'pf.css'), 'utf8');
+    for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
+      ['flat cards', [/card[^{]*\{[^}]*box-shadow:\s*none/]],
+      ['Use 0.75rem border radius everywhere', [/--radius-element:\s*12px/]],
+      ['Make the link color #2563eb', [/--color-text-accent:[^;]*#2563eb/i]],
+      [
+        'in light mode the accent is #2563eb, in dark mode #60a5fa',
+        [/--color-accent:\s*light-dark\(#2563eb,\s*#60a5fa\)/i],
+      ],
+      [
+        'success badge green #dcfce7 with #166534 text',
+        [/badge[^{]*success[^{]*\{[^}]*background(-color)?:\s*#dcfce7/i],
+      ],
+      ['the borders are too dark', [/--color-border:\s*light-dark\(/]],
+      ['card radius 50%', [/card[^{]*\{[^}]*border-radius:\s*50%/]],
+    ])) {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(keep, dir, {recursive: true});
+      const {data} = await themeEditHow(question, {cwd, theme: 'pf'});
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );

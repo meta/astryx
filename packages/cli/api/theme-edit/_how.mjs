@@ -367,6 +367,13 @@ async function answer(subject, options, cwd) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
     if (tok && Object.hasOwn(ctx.project.core.tokenDefaults, tok))
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
+    // "what does spacing more do": the dial's own lookup, its values and
+    // what each does.
+    const dial = Object.keys(DIALS).find(d =>
+      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+    );
+    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
+      return {...(await answer(dial, options, cwd)), subject: t};
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
