@@ -13,6 +13,7 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import type * as InputHold from '../Layer/inputHold';
 import type * as ReducedMotionPreference from '../motion/reducedMotionPreference';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
@@ -37,6 +38,25 @@ vi.mock('./menuSurfaceMotion', () => ({
 const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
   holdEntranceInput: entranceHold,
+}));
+// Counts the input holds that are up. jsdom hit-tests nothing, so no shield
+// is drawn.
+const inputHolds = vi.hoisted(() => ({up: 0}));
+vi.mock('../Layer/inputHold', async importOriginal => ({
+  ...(await importOriginal<typeof InputHold>()),
+  holdInput: (_layer: Element, {until}: InputHold.InputHoldOptions) => {
+    inputHolds.up += 1;
+    let isUp = true;
+    const end = () => {
+      if (isUp) {
+        isUp = false;
+        inputHolds.up -= 1;
+      }
+    };
+    const settles = 'finished' in until ? until.finished : until;
+    void Promise.resolve(settles).then(end, end);
+    return end;
+  },
 }));
 // The one Reduce Motion predicate, which a case can turn on by itself, as a
 // new theme setting would.
@@ -93,12 +113,44 @@ async function settleLoad() {
   });
 }
 
+// A touch screen: the primary pointer is coarse.
+function stubCoarsePointer() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === TOUCH_QUERY,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+// The page's frames, run by hand: returns what runs the frames asked for.
+function stubFrames(): () => Promise<void> {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+    frames.push(callback),
+  );
+  return async () => {
+    for (const callback of frames.splice(0)) {
+      callback(0);
+    }
+    await settleLoad();
+  };
+}
+
 // jsdom has no popover API: show and hide fire the toggle the layer reads.
 beforeEach(() => {
   __resetMenuPressForTest();
   resetMenuSurfaceMotionForTest();
   vi.clearAllMocks();
   preference.reduces = false;
+  inputHolds.up = 0;
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockImplementation((query: string) => ({
@@ -330,6 +382,78 @@ describe('DropdownMenu touch grow', () => {
     finish(menuSurfaceMotion);
     await settleLoad();
     expect(motion.enter).not.toHaveBeenCalled();
+  });
+
+  it('an open after the code has loaded always grows, also after a first open that waited past an entrance', async () => {
+    vi.useFakeTimers();
+    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
+    setMenuSurfaceMotionImportForTest(
+      async () =>
+        new Promise(resolve => {
+          finish = resolve;
+        }),
+    );
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    act(() => {
+      vi.advanceTimersByTime(MENU_GROW_LOAD_WAIT_MS);
+    });
+    vi.useRealTimers();
+    finish(menuSurfaceMotion);
+    await settleLoad();
+    expect(motion.enter).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Escape',
+    });
+    await settleLoad();
+    fireEvent.pointerDown(trigger, touch);
+    await settleLoad();
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps taps off the page from the code's arrival until the grow's first frame", async () => {
+    stubCoarsePointer();
+    const runFrames = stubFrames();
+    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
+    setMenuSurfaceMotionImportForTest(
+      async () =>
+        new Promise(resolve => {
+          finish = resolve;
+        }),
+    );
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    // The open waits for the code with taps held.
+    expect(inputHolds.up).toBe(1);
+    finish(menuSurfaceMotion);
+    await settleLoad();
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+    // The grow takes its own hold at its first frame; until then, one holds.
+    expect(inputHolds.up).toBe(1);
+    await runFrames();
+    expect(inputHolds.up).toBe(0);
+  });
+
+  it("keeps taps off the page from a finger's open until the grow's first frame, once the code has loaded", async () => {
+    stubCoarsePointer();
+    const runFrames = stubFrames();
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    await settleLoad();
+    await runFrames();
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Escape',
+    });
+    await settleLoad();
+    await runFrames();
+    expect(inputHolds.up).toBe(0);
+    fireEvent.pointerDown(trigger, touch);
+    expect(motion.enter).toHaveBeenCalledTimes(2);
+    expect(inputHolds.up).toBe(1);
+    await runFrames();
+    expect(inputHolds.up).toBe(0);
   });
 
   it('a close while the open waits ends the wait, and a late load grows nothing', async () => {

@@ -143,6 +143,27 @@ export interface MenuSurfaceMotionCalls {
   closeStart: () => void;
 }
 
+/**
+ * Holds input under a coarse primary pointer from now until the grow's first
+ * frame, where the grow takes its own hold. Frame callbacks run in the order
+ * they were asked for, so call this after the grow's `enter`. Returns the
+ * early release.
+ */
+function holdUntilGrowFrame(surface: HTMLElement): () => void {
+  const view = surface.ownerDocument.defaultView;
+  if (!isCoarsePointer(view)) {
+    return () => {};
+  }
+  const growFrame = new Promise<void>(resolve => {
+    if (typeof view?.requestAnimationFrame === 'function') {
+      view.requestAnimationFrame(() => resolve());
+    } else {
+      resolve();
+    }
+  });
+  return holdInput(surface, {until: growFrame, scope: 'viewport'});
+}
+
 export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
   const motionRef = useRef<{
     element: HTMLElement;
@@ -156,14 +177,26 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
     surface: HTMLElement;
     end: () => void;
   } | null>(null);
+  // The hold that keeps taps off the page until the grow's first frame.
+  const growFrameHoldRef = useRef<(() => void) | null>(null);
+  const endGrowFrameHold = useCallback(() => {
+    growFrameHoldRef.current?.();
+    growFrameHoldRef.current = null;
+  }, []);
 
   const release = useCallback(() => {
     motionRef.current?.motion.dispose();
     motionRef.current = null;
   }, []);
-  // Effect: releases the motion's compositor animations, and any exit copy
-  // still on screen, at unmount.
-  useEffect(() => release, [release]);
+  // Effect: releases the motion's compositor animations, any exit copy still
+  // on screen and the hold until the grow's first frame, at unmount.
+  useEffect(
+    () => () => {
+      release();
+      endGrowFrameHold();
+    },
+    [endGrowFrameHold, release],
+  );
   // Effect: the page's first touch loads the grow's code.
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -207,6 +240,7 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
       touchHold.take(grows);
       waitingRef.current?.end();
       waitingRef.current = null;
+      endGrowFrameHold();
       if (!grows || surface == null || source == null) {
         release();
         return;
@@ -214,6 +248,9 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
       const measure = () => ({surface: boxOf(surface), source: boxOf(source)});
       if (motionCode.loaded != null) {
         motionFor(motionCode.loaded, surface).enter(measure);
+        // Taps stay off the page until the menu shows, at the grow's first
+        // frame.
+        growFrameHoldRef.current = holdUntilGrowFrame(surface);
         return;
       }
       // The grow's code is still loading: keep the surface clear until it
@@ -260,15 +297,19 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
           return;
         }
         waitingRef.current = null;
-        waiting.end();
         surface.style.removeProperty('opacity');
         motionFor(module, surface).enter(measure);
+        // The wait's hold hands over to one that lasts until the grow's first
+        // frame, so no tap reaches the page in between.
+        growFrameHoldRef.current = holdUntilGrowFrame(surface);
+        waiting.end();
       }, giveUp);
     },
-    [motionFor, release, touchHold],
+    [endGrowFrameHold, motionFor, release, touchHold],
   );
 
   const closeStart = useCallback(() => {
+    endGrowFrameHold();
     // A close before the code arrived has nothing on screen to shrink, and
     // its wait and hold end.
     const waiting = waitingRef.current;
@@ -282,7 +323,7 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
       motionRef.current?.motion.exit();
     }
     touchHold.release();
-  }, [touchHold]);
+  }, [endGrowFrameHold, touchHold]);
 
   return useMemo(
     () => ({preload, present, closeStart}),
