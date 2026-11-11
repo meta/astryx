@@ -100,17 +100,16 @@ beforeAll(() => {
 }, 120_000);
 
 afterAll(() => {
-  // Best effort: a run's background release check can still be writing into a
-  // temp folder's release cache, and a temp folder left behind is harmless.
-  for (const dir of [work, project]) {
-    if (!dir) continue;
-    try {
-      fs.rmSync(dir, {recursive: true, force: true});
-    } catch {
-      // Left for the system to clear.
-    }
-  }
-});
+  // A run's background release check can still be filling a temp folder's
+  // release cache, and removing thousands of files on a loaded runner can
+  // outlast the hook: a detached `rm` clears the folders after the suite, and
+  // a folder it leaves behind in the temp folder is harmless.
+  const dirs = [work, project].filter(Boolean);
+  if (dirs.length === 0) return;
+  const rm = spawn('rm', ['-rf', ...dirs], {detached: true, stdio: 'ignore'});
+  rm.on('error', () => {});
+  rm.unref();
+}, 120_000);
 
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
