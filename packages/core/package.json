@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.12",
+  "version": "0.7.14",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -874,10 +874,20 @@
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
     },
+    "./internal/page-scroller": {
+      "source": "./src/internal/page-scroller.ts",
+      "types": "./dist/internal/page-scroller.d.ts",
+      "default": "./dist/internal/page-scroller.js"
+    },
     "./internal/line-clamp": {
       "source": "./src/internal/line-clamp.ts",
       "types": "./dist/internal/line-clamp.d.ts",
       "default": "./dist/internal/line-clamp.js"
+    },
+    "./internal/virtualization": {
+      "source": "./src/internal/virtualization.ts",
+      "types": "./dist/internal/virtualization.d.ts",
+      "default": "./dist/internal/virtualization.js"
     }
   },
   "files": [
@@ -905,7 +915,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",

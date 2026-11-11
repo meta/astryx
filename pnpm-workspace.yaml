@@ -42,9 +42,9 @@ minimumReleaseAgeExclude:
 # not workspace pins.
 catalog:
   vite: ^8.1.3
-  '@stylexjs/stylex': ^0.19.0
-  '@stylexjs/babel-plugin': ^0.19.0
-  '@stylexjs/postcss-plugin': ^0.19.0
+  '@stylexjs/stylex': ^0.19.1
+  '@stylexjs/babel-plugin': ^0.19.1
+  '@stylexjs/postcss-plugin': ^0.19.1
   # Keep all four on the same Babel major. Dependabot raised cli (#4067) and
   # preset-react (#3839) to 8.x on their own while core and preset-typescript
   # stayed on 7.x, and 8.x peers on `@babel/core: ^8.0.0` — a combination no
@@ -53,10 +53,10 @@ catalog:
   '@babel/core': ^7.29.7
   '@babel/preset-react': ^7.29.7
   '@babel/preset-typescript': ^7.29.7
-  '@testing-library/react': ^16.3.2
+  '@testing-library/react': ^16.3.3
   '@testing-library/jest-dom': ^6.6.0
-  prettier: ^3.9.3
-  esbuild: ^0.28.1
+  prettier: ^3.9.10
+  esbuild: ^0.28.2
 
 # Moved from package.json's "pnpm" field: pnpm 11 no longer reads
 # pnpm.overrides / pnpm.onlyBuiltDependencies from package.json.
@@ -78,7 +78,7 @@ overrides:
   # next@15 pins postcss 8.4.31. Drop when Next raises its postcss dep.
   postcss: ^8.5.23
   # monaco-editor@0.55 pins dompurify 3.2.7. Drop when it catches up.
-  dompurify: ^3.4.13
+  dompurify: ^3.4.17
   # tsup@8.5 resolves esbuild 0.27.7. Drop when tsup raises its range.
   esbuild: '>=0.28.1'
   # read-yaml-file 1.x is stuck on js-yaml 3.x (`safeLoad`, no CVE-2026-53550

@@ -707,7 +707,6 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Backspace next to a token: the token hook owns it.
       if (handleTokenKeyDown(e)) {
         return;
       }

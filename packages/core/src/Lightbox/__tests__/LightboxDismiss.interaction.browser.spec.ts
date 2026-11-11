@@ -20,7 +20,6 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
-  type ActiveAnimation,
   armHold,
   blockMainThread,
   type BusyRun,
@@ -30,7 +29,7 @@ import {
   curveOf,
   drag,
   frames,
-  holdAnimations,
+  type HeldAnimation,
   openStory,
   pooledBusyProof,
   releaseAnimations,
@@ -264,11 +263,14 @@ test("a release moving down sends the photo on the dismissal's spring and closes
   page,
 }, testInfo) => {
   const v = await openViewer(page);
-  await v.driver.play(pullDown(v.centre, 110));
-  const [exit] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The viewer closes at the exit's end. A hold sent after the lift can
+  // arrive after that on a busy machine. So the page holds the exit itself as
+  // it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'translate'},
   });
+  await v.driver.play(pullDown(v.centre, 110));
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -298,7 +300,7 @@ test("a release moving down sends the photo on the dismissal's spring and closes
     'curves/lightbox-dismiss-exit',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {exit, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -330,24 +332,33 @@ const DISMISS_TEMPO = 2;
 /**
  * Dismisses the photo with a slow drag held still before the lift. Returns
  * how long the exit's curves run: the photo's move, on the position spring,
- * and a control's fade, on the size spring.
+ * and a control's fade, on the size spring. The viewer closes at the exit's
+ * end, and a read after the lift can come later than that on a busy machine.
+ * So the page holds both curves itself as they start.
  */
 async function dismissCurves(
   page: Page,
   v: Viewer,
 ): Promise<{move: number; fade: number}> {
-  const since = await page.evaluate(() => performance.now());
+  const chrome = v.dialog.locator('[data-lightbox-chrome]').first();
+  const moves = await armHold(page, v.photo, {
+    judges: {target: v.photo, property: 'translate'},
+  });
+  const fades = await armHold(page, chrome, {
+    judges: {target: chrome, property: 'opacity'},
+  });
   await v.driver.play(pullDown(v.centre, 110));
-  const latest = (runs: ReadonlyArray<ActiveAnimation>) =>
-    runs.reduce((a, b) => (b.from > a.from ? b : a));
-  const move = latest(await waitForAnimation(v.photo, {since}));
-  const fade = latest(
-    await waitForAnimation(v.dialog.locator('[data-lightbox-chrome]').first(), {
-      since,
-    }),
-  );
+  const length = (runs: ReadonlyArray<HeldAnimation>, property: string) =>
+    Math.max(
+      ...runs
+        .filter(run => run.keyframes.some(frame => property in frame))
+        .map(run => run.curveEndMs),
+    );
+  const move = length(await moves.held(), 'translate');
+  const fade = length(await fades.held(), 'opacity');
+  await releaseAnimations(page);
   await expect(v.dialog).toBeHidden();
-  return {move: move.to - move.from, fade: fade.to - fade.from};
+  return {move, fade};
 }
 
 test('a pull flicked back up springs back on springs.settle', async ({
@@ -365,11 +376,13 @@ test('a pull flicked back up springs back on springs.settle', async ({
           t: f.t + 420,
         })),
     );
-  await v.driver.play(script);
-  const [ret] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The return runs half a second. A hold sent after the lift can arrive
+  // after it ends on a busy machine. So the page holds it itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'scale'},
   });
+  await v.driver.play(script);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -387,7 +400,7 @@ test('a pull flicked back up springs back on springs.settle', async ({
     'curves/lightbox-dismiss-cancel',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {ret, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -647,12 +660,24 @@ test(
       ),
       {
         name: 'lightbox-drag-to-dismiss',
+        // The viewer closes at the exit's end, and on a busy machine that can
+        // come before the frame after the lift. So the photo is read without
+        // a wait for it, and a closed viewer reads as closed.
         measure: async () => {
-          const s = await v.photoState();
-          return {
-            scale: +s.scale.toFixed(3),
-            backdrop: +(await v.backdropAlpha()).toFixed(2),
-          };
+          const [scale] = await v.photo.evaluateAll(photos =>
+            photos.map(el => {
+              const value = getComputedStyle(el).scale;
+              return value === 'none' ? 1 : parseFloat(value);
+            }),
+          );
+          const [backdrop] = await v.dialog.evaluateAll(dialogs =>
+            dialogs.map(el =>
+              parseFloat(getComputedStyle(el, '::backdrop').opacity),
+            ),
+          );
+          return scale == null || backdrop == null
+            ? {closed: true}
+            : {scale: +scale.toFixed(3), backdrop: +backdrop.toFixed(2)};
         },
         columns: 4,
         cellScale: 0.35,

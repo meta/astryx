@@ -364,6 +364,12 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     willChange: 'transform, opacity',
+    // The dialog writes its scrim's opacity on itself for each move of a drag,
+    // and only its backdrop reads it. A custom property inherits, so each
+    // write would restyle every element in the sheet. The panel ends the
+    // inheritance, so the restyle stops here.
+    '--_sheet-scrim-opacity': 'initial',
+    '--_sheet-scrim-duration': 'initial',
   },
   // A sheet present on page load opens where it rests (spec:AST-013 FR13):
   // the collapse reduced motion uses, so the transition still ends.
@@ -1187,9 +1193,12 @@ export function BottomSheetPanel({
     if (element != null) {
       // A drag's close holds the sheet where the finger left it, so the exit
       // starts from there. A step back to rest first would turn the sheet
-      // the wrong way.
+      // the wrong way. A reduced-motion close fades the sheet out there. A
+      // hidden sheet keeps no drag offset, so it opens again from rest.
       const holdsDragClose =
-        dragExit != null && (!isClosing || playedDragExit != null);
+        isPresented &&
+        dragExit != null &&
+        (!isClosing || playedDragExit != null || isCrossFade);
       if (consumerTransform == null && !holdsDragClose) {
         element.style.transform = sheetTransform ?? '';
       }

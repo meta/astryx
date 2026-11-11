@@ -1,0 +1,146 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# The CLI on its declared minimum Node. Once a day, and when started by hand,
+# on main only: runs the CLI's tests and the global-mode smoke on the lowest
+# version packages/cli's `engines.node` allows (not .nvmrc, which names the
+# version the rest of CI uses). A failure opens, or comments on, one issue; a
+# later passing run closes it (.github/scripts/cli-minimum-node.mjs). It never
+# runs on pull requests.
+name: CLI on minimum Node
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cli-minimum-node
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      node: ${{ steps.minimum.outputs.node }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/cli-minimum-node.mjs
+            packages/cli/package.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Read the CLI's minimum Node
+        id: minimum
+        run: |
+          node=$(node .github/scripts/cli-minimum-node.mjs minimum --package packages/cli/package.json)
+          echo "The CLI declares Node $node as its minimum."
+          echo "node=$node" >> "$GITHUB_OUTPUT"
+
+  cli-tests:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Installs with .nvmrc's Node, then switches to the minimum for the run.
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.version.outputs.node }}
+          package-manager-cache: false
+      - name: Run the CLI's tests on Node ${{ needs.version.outputs.node }}
+        run: |
+          node --version
+          pnpm -F @astryxdesign/cli test
+
+  pack:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Pack CLI and Core
+        run: |
+          mkdir -p "$RUNNER_TEMP/packs"
+          pnpm -F @astryxdesign/build build
+          pnpm -F @astryxdesign/core pack --pack-destination "$RUNNER_TEMP/packs"
+          pnpm -F @astryxdesign/cli pack --pack-destination "$RUNNER_TEMP/packs"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: minimum-node-packs
+          path: ${{ runner.temp }}/packs/*.tgz
+          if-no-files-found: error
+
+  smoke:
+    needs: [version, pack]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts/cli-global-mode-smoke.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.version.outputs.node }}
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: minimum-node-packs
+          path: packs
+      - name: Global-mode smoke on Node ${{ needs.version.outputs.node }}
+        run: |
+          node --version
+          node .github/scripts/cli-global-mode-smoke.mjs --packs packs --out results.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: minimum-node-smoke-results
+          path: results.json
+
+  report:
+    needs: [version, cli-tests, pack, smoke]
+    # Runs after every outcome but a cancel, so a failure is always reported.
+    if: always() && !cancelled() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts/cli-minimum-node.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Open, update or close the minimum-Node issue
+        uses: actions/github-script@v9
+        env:
+          OK: ${{ needs.version.result == 'success' && needs.cli-tests.result == 'success' && needs.pack.result == 'success' && needs.smoke.result == 'success' }}
+          NODE_VERSION: ${{ needs.version.outputs.node || 'unknown' }}
+        with:
+          script: |
+            const {reportIssue} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const done = await reportIssue({github, context, ok: process.env.OK === 'true', version: process.env.NODE_VERSION, runUrl});
+            core.info(`minimum-Node issue: ${done}`);
+            if (process.env.OK !== 'true') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
