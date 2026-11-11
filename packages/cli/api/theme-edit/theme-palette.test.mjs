@@ -28,7 +28,7 @@ import {
   paletteMapping,
   paletteNotes,
 } from './_palette.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {compositeOver, hex as hexOf, parseColor, ratio} from './_color.mjs';
 import {
   generateTonalPalette,
   normalizeGenerationRequest,
@@ -923,9 +923,9 @@ describe('every color decision is generator config', () => {
     const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
       paletteMapping(dir, 'x', data, gothic, tokenDefaults)
     );
-    // On dark light-mode surfaces with the official pale tint (85), accent
-    // text cannot read on both: the pick is the shade that reads best on
-    // all of them, found on either side, and the note says so truthfully.
+    // On a dark light-mode page the light side takes the dark-page shades
+    // (the tint at 30, not 85), so accent text reads on the page and the
+    // tint; it is found on either side of its start.
     const ramp = /** @type {any} */ (
       generateTonalPalette(paletteConfig(dir, 'x', data, gothic)).palette.accent
     ).light;
@@ -938,15 +938,12 @@ describe('every color decision is generator config', () => {
       );
     const best = Math.max(...Object.values(ramp).map(c => onAll(String(c))));
     const chosen = onAll(pal.tokens['--color-text-accent'].light.color);
-    expect(chosen).toBeCloseTo(best, 2);
-    if (chosen < 4.5)
-      expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
-        '--color-text-accent reads at only',
-      );
-    else
-      expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
-        'the most contrasting one',
-      );
+    expect(pal.tokens['--color-accent-muted'].light.stop).toBe(30);
+    expect(best).toBeGreaterThanOrEqual(4.5);
+    expect(chosen).toBeGreaterThanOrEqual(4.5);
+    expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
+      'the most contrasting one',
+    );
     // The tint stays at the official stop for every accent.
     const withText = {
       light: {...base.light, '--color-text-secondary': '#474747'},
@@ -975,9 +972,22 @@ describe('every color decision is generator config', () => {
     const lime = map([{thing: 'accent', value: '#ccff00'}]).tokens;
     expect(lime['--color-accent'].light.stop).toBe(85);
     expect(lime['--color-accent-muted'].light.stop).toBe(90);
-    // Without a neutral color there is no lift: the base theme's own text
-    // on those parts applies.
-    expect(map([{thing: 'accent', value: '#00704a'}]).lift).toBeNull();
+    // Without a neutral color the lift comes from grays grown from the
+    // base theme's own secondary text, so every accent gets one.
+    for (const seed of ['#00704a', '#7c3aed']) {
+      const pal = map([{thing: 'accent', value: seed}]);
+      const tint = /** @type {any} */ (pal.lift)['--color-accent-muted'];
+      for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        expect(tint[mode].family, seed).toBe('literal');
+        expect(
+          contrast(
+            tint[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
     // With one, secondary text on the tinted parts is lifted until it reads
     // at 4.5:1 on the tint and under a hover, as the official theme lifts
     // it: Neutral's own gray lands on its dark 80.
@@ -986,7 +996,7 @@ describe('every color decision is generator config', () => {
         {thing: 'neutral', value: '#808080'},
         {thing: 'accent', value: seed},
       ]);
-      const lift = /** @type {any} */ (pal.lift);
+      const lift = /** @type {any} */ (pal.lift)['--color-accent-muted'];
       for (const mode of /** @type {const} */ (['light', 'dark']))
         expect(
           contrast(
@@ -999,14 +1009,55 @@ describe('every color decision is generator config', () => {
         pal.tokens['--color-text-secondary'].light.stop,
       );
     }
-    expect(
-      /** @type {any} */ (
-        map([
-          {thing: 'neutral', value: '#808080'},
-          {thing: 'accent', value: '#808080'},
-        ]).lift
-      ).dark.stop,
-    ).toBe(80);
+    const gray = /** @type {any} */ (
+      map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: '#808080'},
+      ]).lift
+    );
+    expect(gray['--color-accent-muted'].dark.stop).toBe(80);
+    // Segmented-control labels sit on the neutral track, not the tint:
+    // their lift is picked against the track (here the base has no track
+    // color, so only the tint is lifted).
+    expect(Object.keys(gray)).toEqual(['--color-accent-muted']);
+    const track = {
+      light: {...withText.light, '--color-neutral': '#0000000f'},
+      dark: {...withText.dark, '--color-neutral': '#ffffff1a'},
+    };
+    const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-track-'));
+    dirs.push(d2);
+    const onTrack = /** @type {any} */ (
+      paletteMapping(
+        d2,
+        'x',
+        {
+          ...data,
+          settings: [
+            {thing: 'neutral', value: '#64748b', source: 'dial'},
+            {thing: 'accent', value: '#2563eb', source: 'dial'},
+          ],
+        },
+        track,
+        tokenDefaults,
+      )
+    );
+    for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      const seen = hexOf(
+        compositeOver(
+          /** @type {[number, number, number]} */ (
+            parseColor(track[mode]['--color-neutral'].slice(0, 7))
+          ),
+          mode === 'light' ? 0x0f / 255 : 0x1a / 255,
+          /** @type {[number, number, number]} */ (
+            parseColor(onTrack.tokens['--color-background-surface'][mode].color)
+          ),
+        ),
+      );
+      expect(
+        contrast(onTrack.lift['--color-neutral'][mode].color, seen),
+        mode,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('refuses a layout without black and white, with non-numbers, or with a wide gap', () => {
@@ -1452,6 +1503,64 @@ describe('color settings, refused well', () => {
     );
     await themeEditUndo('p', {cwd, thing: '--color-accent'});
     await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+});
+
+describe('lifted text and see-through colors', () => {
+  it('lifts every accent, lets an exact secondary text win per mode and on a part, and measures see-through colors as they show', async () => {
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    // Without a neutral color the five parts still get a lift, written as
+    // colors into the blocks the base lifts them in.
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
+    );
+    await themeEditSet('p', 'neutral', '#64748b', {cwd});
+    // An exact secondary text for light only replaces the lift in light,
+    // and keeps it in dark.
+    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+      cwd,
+      mode: 'light',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#5a5a5a, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
+    );
+    // On the part, it covers numbered citations too.
+    await themeEditSet('p', '--color-text-secondary', '#123456', {
+      cwd,
+      on: 'citation',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#123456, #123456\)"/,
+    );
+    // A see-through hover is measured as it shows.
+    const r = await themeEditSet('p', '--color-overlay-hover', '#ffffff33', {
+      cwd,
+    });
+    expect(r.data.notes.join(' ')).toMatch(/under a hover/);
+    // A see-through exact fill is described as it is, and measured as it
+    // shows over the surface.
+    const fill = await themeEditSet('p', '--color-accent', '#2563eb80', {cwd});
+    expect(fill.data.notes.join(' ')).toContain(
+      'your exact setting (#2563eb80',
+    );
+    expect(fill.data.notes.join(' ')).toContain('as it shows: #');
+    for (const [thing, opts] of /** @type {const} */ ([
+      ['--color-accent', {}],
+      ['--color-overlay-hover', {}],
+      ['--color-text-secondary', {on: 'citation'}],
+      ['--color-text-secondary', {mode: 'light'}],
+      ['neutral', {}],
+      ['accent', {}],
+    ]))
+      await themeEditUndo('p', {cwd, thing, ...opts});
+  });
+
+  it('quotes a family that is not a plain CSS name, and reads a font package as its preset', async () => {
+    await themeEditSet('p', 'font', '3Dumb', {cwd});
+    expect(read('p.settings.ts')).toContain('"family": "\\"3Dumb\\""');
+    const pkg = await themeEditSet('p', 'font', '@fontsource/inter', {cwd});
+    expect(pkg.data.setting.value).toBe('inter');
+    await themeEditUndo('p', {cwd, thing: 'font'});
   });
 });
 

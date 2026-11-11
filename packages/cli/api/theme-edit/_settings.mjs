@@ -88,6 +88,9 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
  */
 
+/** What lifted secondary text sits on: the contrast check measures it there. */
+const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
+
 /** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>}}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
@@ -630,7 +633,6 @@ export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
  * @returns {{family: string, fallbacks: string, pkg: string | null}}
  */
 export function fontOf(value) {
-  // Core quotes the family itself, so it is stored without quotes.
   const unquote = (/** @type {string} */ x) => x.replace(/^["']|["']$/g, '');
   if (FONTS[value])
     return {
@@ -651,27 +653,40 @@ export function fontOf(value) {
   const without = (family, list) =>
     list
       .filter(x => unquote(x).toLowerCase() !== family.toLowerCase())
+      .map(x => cssFamily(unquote(x), true))
       .join(', ');
-  if (v.includes(',')) {
-    const parts = v
-      .split(',')
-      .map(x => x.trim())
-      .filter(Boolean);
-    const family = unquote(parts[0]);
-    return {
-      family,
-      fallbacks:
-        parts.length > 1
-          ? without(family, parts.slice(1))
-          : without(family, ['system-ui', 'sans-serif']),
-      pkg: pkgOf(parts[0]),
-    };
-  }
+  const parts = v
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean);
+  const family = unquote(parts[0] ?? v);
   return {
-    family: unquote(v),
-    fallbacks: without(unquote(v), ['system-ui', 'sans-serif']),
-    pkg: pkgOf(v),
+    family: cssFamily(family),
+    fallbacks:
+      parts.length > 1
+        ? without(family, parts.slice(1))
+        : without(family, ['system-ui', 'sans-serif']),
+    pkg: pkgOf(family),
   };
+}
+
+/**
+ * A font family name as CSS reads it. A name that is a sequence of CSS
+ * identifiers stays bare; any other is quoted, or the browser drops the
+ * whole font (`3Dumb`, `My/Font`, `a.b`). Core quotes a family that has
+ * a space itself, so such a name is quoted here only as a fallback
+ * (`spaced`), where Core writes the list as given.
+ * @param {string} name without quotes
+ * @param {boolean} [spaced]
+ */
+export function cssFamily(name, spaced = false) {
+  const words = name.trim().split(/\s+/);
+  const ident = (/** @type {string} */ w) =>
+    /^-?(?:[A-Za-z_]|[\u0080-\uffff])(?:[\w-]|[\u0080-\uffff])*$/.test(w) &&
+    !w.startsWith('--');
+  if (words.every(ident)) return name.trim();
+  if (words.length > 1 && !spaced && !/["\\]/.test(name)) return name.trim();
+  return `"${name.trim().replace(/["\\]/g, '\\$&')}"`;
 }
 
 /**
@@ -795,26 +810,29 @@ export function compileTheme(ctx, data, base) {
   const pal = paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS);
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
-  // Secondary text lifted on the parts that sit on the accent tint, as the
-  // official neutral theme lifts it; a part setting of it wins.
-  for (const [target, key] of pal?.lift ? LIFT_PARTS : []) {
-    const lift =
-      /** @type {Partial<Record<'light' | 'dark', {color: string}>>} */ (
-        pal?.lift
-      );
-    if (!ctx.project.target.has(target)) continue;
-    if (
-      data.settings.some(
-        x =>
-          x.source === 'token' &&
-          x.thing === '--color-text-secondary' &&
-          x.on &&
-          partsOf(ctx, x).includes(target),
+  // Secondary text lifted on the parts the official neutral theme lifts it
+  // on, each for what it sits on. It is written into the very block the
+  // base theme lifts it in, so it replaces the base's lift. A setting of it
+  // on the part (no --when or --state) wins there, per mode, so a numbered
+  // citation shows what `--on citation` set.
+  for (const [target, key, ground] of pal?.lift ? LIFT_PARTS : []) {
+    const lift = pal?.lift?.[ground];
+    if (!lift || !ctx.project.target.has(target)) continue;
+    /** @type {Partial<Record<'light' | 'dark', {color: string}>>} */
+    const value = {...lift};
+    for (const x of data.settings)
+      if (
+        x.source === 'token' &&
+        x.thing === '--color-text-secondary' &&
+        x.on &&
+        !x.when &&
+        !x.state &&
+        partsOf(ctx, x).includes(target)
       )
-    )
-      continue;
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!x.mode || x.mode === m) value[m] = {color: x.value};
     ((theme.components[target] ??= {})[key] ??= {})['--color-text-secondary'] =
-      liftValue(lift, modeOnly);
+      liftValue(value, modeOnly);
   }
   // `headings` owns heading weight and tracking whatever the order: `type`
   // sets them only where no `headings` setting does.
@@ -1206,13 +1224,19 @@ function settingsSource(slug, data, theme, pal) {
   }
   // A lifted part reads the neutral color's stops too.
   if (pal?.lift && out.components) {
-    const lift = pal.lift;
-    const literal = liftValue(lift, only);
-    const refs = only
-      ? refOf('neutral', only, /** @type {any} */ (lift[only]))
-      : `light-dark(${refOf('neutral', 'light', /** @type {any} */ (lift.light))}, ${refOf('neutral', 'dark', /** @type {any} */ (lift.dark))})`;
     out.components = {...out.components};
-    for (const [target, key] of LIFT_PARTS) {
+    for (const [target, key, ground] of LIFT_PARTS) {
+      const lift = pal.lift[ground];
+      if (!lift) continue;
+      const literal = liftValue(lift, only);
+      /** A shade of the neutral palette as a reference; a color as it is. @param {'light' | 'dark'} m */
+      const one = m => {
+        const r = /** @type {any} */ (lift[m]);
+        return r.family === 'literal' ? r.color : refOf('neutral', m, r);
+      };
+      const refs = only
+        ? one(only)
+        : `light-dark(${one('light')}, ${one('dark')})`;
       const block = out.components[target]?.[key];
       if (block?.['--color-text-secondary'] !== literal) continue;
       out.components[target] = {
@@ -1536,13 +1560,14 @@ export async function contrastProblems(ctx, data, res) {
     return hit?.value ?? null;
   };
   /**
-   * Text on the accent tint as the part sets it for itself: the official
-   * themes lift secondary text there, and so does a generated theme.
+   * Text on a lifted background (the accent tint, the neutral track) as
+   * the part sets it for itself: the official themes lift secondary text
+   * there, and so does a generated theme.
    * @param {TextPair} p @param {string} m
    */
   const onTint = (p, m) => {
     const tok = p.fg.tokens[0];
-    if (!tok || p.bg.tokens[0] !== '--color-accent-muted') return null;
+    if (!tok || !LIFT_GROUND_TOKENS.has(String(p.bg.tokens[0]))) return null;
     const own = /** @type {any} */ (res).parts?.[p.fg.target ?? p.text]?.[tok];
     if (typeof own !== 'string') return null;
     const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(own.trim());

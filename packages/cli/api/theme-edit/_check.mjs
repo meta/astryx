@@ -1068,6 +1068,12 @@ export function checkSetting(
       // could end the CSS declaration or the preview's style block. A
       // preset typed in another case or spacing is the preset.
       s.value = v.trim();
+      // A font package names its preset: @fontsource/inter is inter.
+      const fromPackage = /^@fontsource(?:-variable)?\/([a-z0-9-]+)$/i.exec(
+        s.value,
+      )?.[1];
+      if (fromPackage && OPEN_FONTS[fromPackage.toLowerCase()])
+        s.value = fromPackage.toLowerCase();
       const key = s.value.toLowerCase().replace(/[\s_-]+/g, '');
       const preset = [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].find(
         k => k.toLowerCase().replace(/[\s_-]+/g, '') === key,
