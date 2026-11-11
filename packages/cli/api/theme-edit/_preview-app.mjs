@@ -23,6 +23,7 @@ import {baseResolved, openProject} from './_project.mjs';
 import {
   loadTheme,
   nearest,
+  q,
   refuse,
   shown,
   themeFiles,
@@ -38,9 +39,9 @@ import {
 } from './_preview.mjs';
 import {paletteFiles, paletteMapping} from './_palette.mjs';
 import {build} from '../build/build.mjs';
+import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
-import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -111,13 +112,6 @@ const CLI_PACKAGE = path.resolve(
   '../..',
 );
 const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
-/** Starter files a folder may already have: they are the app's own, so never replaced. */
-const STARTER_KEEP = new Set(['package.json', '.gitignore']);
-/** What the starter's own package.json depends on. */
-const STARTER_DEPENDENCIES = Object.keys(
-  JSON.parse(fs.readFileSync(path.join(STARTER, 'package.json'), 'utf8'))
-    .dependencies,
-);
 
 /**
  * `file` when it is inside `root`, also through links; else a refusal.
@@ -142,17 +136,15 @@ function confined(file, root, what) {
 /**
  * The files a new starter app (Next.js app router, Core and the neutral
  * theme) writes into `where`, with `extra` files beside them, checked before
- * anything is written: every file stays inside the folder, also through
- * links; with `overwrite`, a protected file there is refused and the app's
- * own package.json and .gitignore are kept.
+ * anything is written: the folder is new or empty, and every file stays
+ * inside it, also through links.
  * @param {string} cwd
  * @param {string} where
- * @param {boolean} overwrite
- * @param {(root: string) => Array<{rel: string, text: string}>} extra files relative to the app folder
+ * @param {(root: string) => Array<{rel: string, text: string | Buffer}>} extra files relative to the app folder
  * @param {Record<string, string>} dependencies added to the starter's package.json
- * @returns {{root: string, writes: Array<{file: string, text: string}>, kept: string[]}}
+ * @returns {{root: string, writes: Array<{file: string, text: string | Buffer}>}}
  */
-function planStarterApp(cwd, where, overwrite, extra, dependencies) {
+function planStarterApp(cwd, where, extra, dependencies) {
   /** @type {string} */
   let root;
   try {
@@ -168,15 +160,21 @@ function planStarterApp(cwd, where, overwrite, extra, dependencies) {
       );
     throw e;
   }
-  if (fs.existsSync(root) && fs.readdirSync(root).length && !overwrite)
+  if (fs.existsSync(root) && fs.readdirSync(root).length) {
+    const name = shown(cwd, root) || '.';
+    const base = path.basename(root) || 'theme-preview';
+    let free = `${base}-preview`;
+    for (let n = 2; fs.existsSync(path.join(path.dirname(root), free)); n++)
+      free = `${base}-preview-${n}`;
+    const next = shown(cwd, path.join(path.dirname(root), free));
     refuse(
       E.ERR_FILE_EXISTS,
-      `${shown(cwd, root) || '.'} exists and is not empty; a starter app goes into a new or empty folder (--overwrite replaces its files).`,
+      `${name} exists and is not empty; a starter app goes only into a new or empty folder.`,
+      {run: [`${PREVIEW} app ${q(next)}`]},
     );
-  /** @type {Array<{file: string, text: string}>} */
+  }
+  /** @type {Array<{file: string, text: string | Buffer}>} */
   const writes = [];
-  /** @type {string[]} */
-  const kept = [];
   /** @param {string} from */
   const walk = from => {
     for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
@@ -190,10 +188,6 @@ function planStarterApp(cwd, where, overwrite, extra, dependencies) {
           root,
           'a starter app file',
         );
-        if (STARTER_KEEP.has(name) && fs.existsSync(file)) {
-          kept.push(shown(cwd, file));
-          continue;
-        }
         const text = fs.readFileSync(src, 'utf8');
         writes.push({
           file,
@@ -211,29 +205,7 @@ function planStarterApp(cwd, where, overwrite, extra, dependencies) {
       file: confined(path.join(root, x.rel), root, 'an app file'),
       text: x.text,
     });
-  const existing = writes.map(w => w.file).filter(f => fs.existsSync(f));
-  if (existing.length) {
-    /** @type {ReturnType<typeof createFileProtectionResolver>} */
-    let resolver;
-    try {
-      resolver = createFileProtectionResolver(cwd);
-    } catch (e) {
-      refuse(
-        E.ERR_FILE_EXISTS,
-        `Could not read this project's file protection (${e instanceof Error ? e.message : String(e)}), so no existing file is replaced; nothing was written.`,
-      );
-    }
-    const blocked = existing.flatMap(f => {
-      const protection = resolver.classify(f)[0];
-      return protection ? [`${shown(cwd, f)} (${protection.declaration})`] : [];
-    });
-    if (blocked.length)
-      refuse(
-        E.ERR_FILE_EXISTS,
-        `${blocked.join(', ')} ${blocked.length === 1 ? 'is' : 'are'} protected, so never replaced, even with --overwrite; nothing was written. Choose another app folder.`,
-      );
-  }
-  return {root, writes, kept: kept.sort()};
+  return {root, writes};
 }
 
 /**
@@ -257,7 +229,7 @@ function starterPackageJson(text, dependencies) {
 /**
  * Write a planned starter app. No install runs here.
  * @param {string} cwd
- * @param {{writes: Array<{file: string, text: string}>}} plan
+ * @param {{writes: Array<{file: string, text: string | Buffer}>}} plan
  * @returns {string[]} the files written
  */
 function writeStarterApp(cwd, plan) {
@@ -331,7 +303,7 @@ function editedThemes(cwd) {
  * @param {string} cwd
  * @param {string} dir
  * @param {PreviewData} data
- * @returns {Promise<{name: string, module: string, css: string[]} | null>}
+ * @returns {Promise<{name: string, module: string, css: string[], mode: 'system' | 'light' | 'dark'} | null>}
  */
 async function routeTheme(cwd, dir, data) {
   if (!data.theme) return null;
@@ -340,7 +312,7 @@ async function routeTheme(cwd, dir, data) {
   if (!fs.existsSync(themeFiles(cwd, data.theme).js))
     await buildTheme(ctx, data.theme, t);
   const ti = themeImports(ctx, data.theme, t, dir);
-  return {name: data.theme, module: ti.module, css: ti.css};
+  return {name: data.theme, module: ti.module, css: ti.css, mode: ti.mode};
 }
 
 /** The Colors page: its id and file, relative to the route folder. */
@@ -381,8 +353,11 @@ async function colorsPage(cwd, dir, slug) {
     const byMode = (uses[v.family] ??= {light: {}, dark: {}});
     for (const m of /** @type {const} */ (['light', 'dark'])) {
       const r = v[m];
-      (byMode[m][r.stop] ??= []).push(
-        r.alpha ? `${token} (opacity ${r.alpha})` : token,
+      // A dark fill that keeps the exact color uses the light ramp's shade:
+      // it is marked there, for dark mode.
+      const ramp = r.from ?? m;
+      (byMode[ramp][r.stop] ??= []).push(
+        `${token}${r.alpha ? ` (opacity ${r.alpha})` : ''}${ramp !== m ? ` (${m} mode too)` : ''}`,
       );
     }
   }
@@ -532,6 +507,11 @@ function recordPreview(cwd, slug, dir, keep = true) {
 function openLine(cwd, at) {
   if (at.app)
     return `open /${path.relative(at.app, at.dir).split(path.sep).join('/')} in the running app`;
+  const routes = ['app', path.join('src', 'app')].filter(r =>
+    fs.existsSync(path.join(cwd, r)),
+  );
+  if (routes.length)
+    return `the preview is in ${shown(cwd, at.dir)}/, outside the app's routes folder (${routes[0]}/), so the app does not serve it: put it there with --path ${routes[0]}/${path.basename(at.dir)}`;
   return `no app routes folder (app/ or src/app/) was found, so the preview is in ${shown(cwd, at.dir)}/; a starter app around it is not set up yet: serve page.tsx from a route of your app, or move it there with --path`;
 }
 
@@ -555,69 +535,199 @@ function skipReason(s) {
 }
 
 /**
- * The page templates the build ranking picks for a description, best first,
- * each with why. App frames (the Shell templates) are left out: the preview
- * is an app shell already, and `--template` can still name one. When the
- * ranking says no page is really this one, it refuses with the closest
- * pages to name instead, and nothing is written.
+ * The page templates for a description, best first, each with why: the
+ * build ranking's picks, then the template search's, so a page the app
+ * cannot show has a next match. App frames (the Shell templates) are left
+ * out: the preview is an app shell already, and `--template` can still name
+ * one. The closest page is added even when it is not exactly the page asked
+ * for, with a note; only a description no page relates to is refused, with
+ * the closest pages to name instead, and nothing is written.
  * @param {string} words
  * @param {string} cwd
- * @param {string[]} notes skipped frames are noted here
+ * @param {string[]} notes notes for the result
+ * @param {string} flags the caller's other flags, for the suggestions
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes) {
+async function rankedPages(words, cwd, notes, flags) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
     );
   const start = kit.data.start;
-  const all = start ? [start, ...start.alternatives] : [];
-  const listed = /** @type {Array<{id: string, category?: string}>} */ (
-    (await template(undefined, {list: true, type: 'page', cwd})).data
-  );
+  const listed = await pageTemplates(cwd);
   const frames = new Set(
     listed.filter(t => /^Shell\b/.test(t.category ?? '')).map(t => t.id),
   );
-  const pages = all.filter(p => !frames.has(p.name));
-  const skippedFrames = all.filter(p => frames.has(p.name)).map(p => p.name);
-  if (!pages.length)
-    refuse(
-      E.ERR_NOT_FOUND,
-      `No page template to show for "${words}": ${all.length ? `the ranking found only app frames (${skippedFrames.join(', ')}), and the preview is a frame already` : 'this project has none'}. Nothing was written.`,
-      {
-        run: skippedFrames
-          .slice(0, 3)
-          .map(n => `${PREVIEW} add --template ${n}`),
-      },
-    );
-  // The ranking's own verdict: a closest page that is not this one, or a
-  // frame it fell back to because no page matched, adds nothing unrelated.
-  const unmatched =
-    start &&
-    ((start.basis === 'closest' && !frames.has(start.name)) ||
-      (start.basis === 'fallback' &&
+  const found = /** @type {any} */ (
+    await search(words, {cwd, type: 'template', limit: 20})
+  ).data.results.filter((/** @type {any} */ r) => r.kind === 'page');
+  /** @type {Map<string, string>} */
+  const matchedWords = new Map(
+    found.map((/** @type {any} */ r) => [
+      r.name,
+      String(r.reason ?? '').replace(/^matches \d+\/\d+ terms: /, ''),
+    ]),
+  );
+  const names = [
+    ...(start ? [start.name, ...start.alternatives.map(a => a.name)] : []),
+    ...found.map((/** @type {any} */ r) => r.name),
+  ].filter((n, i, a) => a.indexOf(n) === i);
+  const skippedFrames = names.filter(n => frames.has(n));
+  const pages = names.filter(n => !frames.has(n));
+  /** @param {string} name */
+  const label = name => listed.find(t => t.id === name)?.name ?? name;
+  const suggest = (/** @type {string[]} */ list) =>
+    list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
+  // No page relates when the ranking fell back to a frame with no direct
+  // match, and no page the search found matches three words of the request
+  // or two fifths of them.
+  const termsMatched = (/** @type {any} */ r) => {
+    const m = /^matches (\d+)\/(\d+)/.exec(String(r.reason ?? ''));
+    if (!m) return 0;
+    const [hit, of] = [Number(m[1]), Number(m[2])];
+    return hit >= 3 || hit / of >= 0.4 ? hit : 0;
+  };
+  // A page the description names in a phrase (a blog post, an issue
+  // tracker) always relates.
+  const named = APP_PAGES.some(([re]) => re.test(words.toLowerCase()));
+  const unrelated =
+    !named &&
+    (!pages.length ||
+      (start &&
+        start.basis === 'fallback' &&
         frames.has(start.name) &&
-        !kit.data.directMatch));
-  if (unmatched)
+        !kit.data.directMatch &&
+        !found.some(
+          (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
+        )));
+  if (unrelated)
     refuse(
       E.ERR_NOT_FOUND,
-      `No page template really matches "${words}"${start.basis === 'closest' ? `: the closest is ${start.name}, and none is exactly this page` : ''}. Nothing was written. Name one of the closest pages to add it anyway.`,
-      {run: pages.slice(0, 3).map(p => `${PREVIEW} add --template ${p.name}`)},
+      `No page template relates to "${words}". Name a page to add it anyway.`,
+      {run: suggest(pages.length ? pages : skippedFrames)},
     );
   if (skippedFrames.length)
     notes.push(
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
     );
-  return pages.map((p, i) => ({
-    name: p.name,
-    displayName: p.displayName,
-    why:
-      i === 0 && p === start
-        ? (start.reason ?? 'the best match')
-        : i === 0
-          ? 'the best match after leaving out app frames'
-          : 'the next best match',
-  }));
+  const closest = start && start.basis === 'closest';
+  const text = words.toLowerCase();
+  // An app the description names (an app screenshot, an issue tracker, a
+  // board) shows its theme better than a hero, so a page for it goes first.
+  const exists = (/** @type {string} */ id) =>
+    listed.some(t => t.id === id) && !frames.has(id);
+  const app = APP_PAGES.find(([re, ids]) => re.test(text) && ids.some(exists));
+  // A hero described as left-aligned or split takes the side layout.
+  const side =
+    /\bleft[- ]aligned\b|\bsplit\b|\bside[- ]by[- ]side\b|\basymmetric/.test(
+      text,
+    ) &&
+    pages[0] !== 'side-gallery' &&
+    /hero|landing/.test(text);
+  /** @type {Map<string, string>} */
+  const reasons = new Map();
+  if (app) {
+    // The ranked page stays first when it already serves the app named;
+    // the app's pages come next, in order, so the next one is taken when
+    // one cannot be shown here.
+    const named = /** @type {RegExpExecArray} */ (app[0].exec(text))[0];
+    const keep = app[1].includes(pages[0]) ? pages[0] : null;
+    const ids = app[1].filter(id => exists(id) && id !== keep);
+    for (const id of [...ids].reverse()) {
+      if (pages.includes(id)) pages.splice(pages.indexOf(id), 1);
+      pages.splice(keep ? 1 : 0, 0, id);
+    }
+    if (keep)
+      reasons.set(
+        keep,
+        `the description names ${named}, and this page is that app`,
+      );
+    ids.forEach((id, k) =>
+      reasons.set(
+        id,
+        k === 0 && !keep
+          ? `the description names ${named}, and this page is made for that`
+          : `the next page for ${named}`,
+      ),
+    );
+  } else if (side && listed.some(t => t.id === 'side-gallery')) {
+    if (pages.includes('side-gallery'))
+      pages.splice(pages.indexOf('side-gallery'), 1);
+    pages.unshift('side-gallery');
+    reasons.set(
+      'side-gallery',
+      'the description asks for a left-aligned or split hero, and this hero puts the copy beside the picture',
+    );
+  }
+  if (/\btop[- ]?nav|\bnav ?bar|\bnavigation bar|\bheader nav/.test(text))
+    notes.push(
+      'no page has a top nav of its own: the preview frame has one, and your app keeps its own',
+    );
+  return pages.map((name, i) => {
+    const words = matchedWords.get(name);
+    const doc = listed.find(t => t.id === name)?.description ?? '';
+    const shape = doc.split(/(?<=\.)\s/)[0];
+    const reason = reasons.get(name);
+    return {
+      name,
+      displayName: label(name),
+      why: reason
+        ? `${reason}${words ? `; it covers ${words}` : ''}. ${shape}`
+        : i === 0 && closest
+          ? `the closest page, not exactly the one described${words ? `: it covers ${words}` : ''}; the rest of the description is not on it. ${shape}`
+          : `${i === 0 ? 'the best match' : 'the next match'}${words ? `: it covers ${words}` : ''}. ${shape}`,
+    };
+  });
+}
+
+/**
+ * App pages for the apps a description names, best first. Each is matched
+ * by a phrase, never one loose word, so "buy tickets" is not an issue
+ * tracker and "an AI tool" is not a chat. A detail view comes before its
+ * list.
+ * @type {Array<[RegExp, string[]]>}
+ */
+const APP_PAGES = [
+  [
+    /\b(issue|ticket|bug|task|work[- ]item) (detail|details|view|page)\b/,
+    ['work-item-detail', 'detail-page'],
+  ],
+  [
+    /\b(issue[- ]?tracker|bug[- ]tracker|issue (list|table|queue|board)|ticket(ing)? (system|queue|tracker)|backlog)\b/,
+    ['table-grouped', 'table'],
+  ],
+  [/\b(kanban|task board|project board)\b/, ['kanban-board']],
+  [/\b(analytics )?dashboard\b|\banalytics (app|page|view)\b/, ['dashboard']],
+  [
+    /\b(email|mail) (inbox|client|app)\b|\binbox (app|view|page)\b/,
+    ['table-inbox'],
+  ],
+  [
+    /\b(chat (app|interface|ui|window|screen|view)|chatbot|ai (chat|assistant) (app|interface|ui))\b/,
+    ['ai-chat'],
+  ],
+  [/\b(settings|preferences) (page|screen|panel|view)\b/, ['settings']],
+  [/\b(docs|documentation) (site|page|portal)\b/, ['documentation']],
+  [/\b(data ?table|spreadsheet|data grid)\b/, ['table']],
+  [
+    /\b(blog( post)?|article|news (story|article|page)|essay|long[- ]read)\b/,
+    ['documentation-design', 'course-detail'],
+  ],
+  [
+    /\b(app|product) (screenshot|window|preview|ui)\b/,
+    ['table-grouped', 'dashboard', 'table'],
+  ],
+];
+
+/**
+ * The page templates this project has, with their display names.
+ * @param {string} cwd
+ * @returns {Promise<Array<{id: string, name: string, category?: string, description?: string}>>}
+ */
+async function pageTemplates(cwd) {
+  return /** @type {any} */ (
+    (await template(undefined, {list: true, type: 'page', cwd})).data
+  );
 }
 
 /**
@@ -706,15 +816,26 @@ export async function themeEditPreviewAdd(description, options = {}) {
     /** @type {Array<{name: string, displayName: string, why: string}>} */
     let picks;
     const explicit = options.template != null;
-    if (explicit)
+    if (explicit) {
+      const name = /** @type {string} */ (options.template);
       picks = [
         {
-          name: /** @type {string} */ (options.template),
-          displayName: /** @type {string} */ (options.template),
+          name,
+          displayName:
+            (await pageTemplates(cwd)).find(t => t.id === name)?.name ?? name,
           why: 'named with --template',
         },
       ];
-    else picks = await rankedPages(words, cwd, notes);
+    } else
+      picks = await rankedPages(
+        words,
+        cwd,
+        notes,
+        [
+          ...(options.theme != null ? [` --theme ${q(options.theme)}`] : []),
+          ...(options.path != null ? [` --path ${q(options.path)}`] : []),
+        ].join(''),
+      );
     for (const pick of picks) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -762,6 +883,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
 
   /** @type {string[]} */
   const added = [];
+  /** Pages that were there already and are written again. @type {string[]} */
+  const refreshed = [];
   for (const page of add) {
     const file = `pages/${page.id}`;
     if (page.template != null) {
@@ -781,9 +904,13 @@ export async function themeEditPreviewAdd(description, options = {}) {
         `${file}.tsx`,
         /** @type {string} */ (page.source),
       );
-    if (!data.pages.some(x => x.id === page.id)) {
+    const had = data.pages.find(x => x.id === page.id);
+    if (!had) {
       data.pages.push({id: page.id, label: page.label, file});
       added.push(page.id);
+    } else {
+      had.label = page.label;
+      refreshed.push(page.id);
     }
   }
   await writeRoute(cwd, at.dir, data, theme);
@@ -794,6 +921,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
       folder: shown(cwd, at.dir),
       theme: data.theme,
       added,
+      refreshed,
       matched,
       skipped,
       notes,
@@ -816,7 +944,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
  */
 export async function themeEditPreviewApp(dir, options = {}) {
-  const {cwd = process.cwd(), overwrite = false} = options;
+  const {cwd = process.cwd()} = options;
   if (typeof dir !== 'string' || !dir.trim())
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -830,13 +958,13 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const project = await openProject(cwd).catch(() => openProject(CLI_PACKAGE));
   /** @type {Record<string, string>} */
   const dependencies = {};
-  /** @type {Array<{rel: string, text: string}>} */
+  /** @type {Array<{rel: string, text: string | Buffer}>} */
   const themeCopy = [];
   /** @type {{name: string, module: string, css: string[]} | null} */
   let routeTheme = null;
   const routeDir = path.join('src', 'app', 'theme-preview');
   // The folder checks come before the theme build, so a refusal writes nothing.
-  planStarterApp(cwd, dir, overwrite, () => [], {});
+  planStarterApp(cwd, dir, () => [], {});
   if (slug != null && theme) {
     const from = themeFiles(cwd, slug);
     if (!fs.existsSync(from.js) || !fs.existsSync(from.css))
@@ -854,12 +982,23 @@ export async function themeEditPreviewApp(dir, options = {}) {
         from.sheetPng,
       ].map(f => path.basename(f)),
     );
-    for (const entry of fs.readdirSync(from.dir, {withFileTypes: true}))
-      if (entry.isFile() && !skip.has(entry.name))
-        themeCopy.push({
-          rel: path.join(to.dir, entry.name),
-          text: fs.readFileSync(path.join(from.dir, entry.name), 'utf8'),
-        });
+    // The whole folder, tokens/ included, as bytes: a font or a picture
+    // there must arrive as it is.
+    /** @param {string} rel */
+    const copyDir = rel => {
+      for (const entry of fs.readdirSync(path.join(from.dir, rel), {
+        withFileTypes: true,
+      })) {
+        const sub = path.join(rel, entry.name);
+        if (entry.isDirectory()) copyDir(sub);
+        else if (entry.isFile() && !(rel === '' && skip.has(entry.name)))
+          themeCopy.push({
+            rel: path.join(to.dir, sub),
+            text: fs.readFileSync(path.join(from.dir, sub)),
+          });
+      }
+    };
+    copyDir('');
     if (theme.like && theme.like !== 'neutral')
       dependencies[`@astryxdesign/theme-${theme.like}`] = cliVersion();
     /** @param {string} rel */
@@ -880,7 +1019,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
   }
   /** @type {PreviewData} */
   const data = {version: 1, theme: slug, pages: [], files: []};
-  /** @type {Array<{rel: string, text: string}>} */
+  /** @type {Array<{rel: string, text: string | Buffer}>} */
   const preview = [];
   for (const [id, label, source] of /** @type {const} */ ([
     ['overview', 'Overview', overviewPageSource(project, {theme: slug})],
@@ -902,7 +1041,6 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const plan = planStarterApp(
     cwd,
     dir,
-    overwrite,
     () => [
       ...themeCopy,
       ...preview.map(x => ({rel: path.join(routeDir, x.rel), text: x.text})),
@@ -913,10 +1051,6 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const folder = shown(cwd, plan.root) || '.';
   /** @type {string[]} */
   const notes = [];
-  if (plan.kept.length)
-    notes.push(
-      `kept the app's own ${plan.kept.join(', ')}: the starter needs ${[...STARTER_DEPENDENCIES, ...Object.keys(dependencies)].join(', ')} in package.json`,
-    );
   return {
     type: 'themeEdit.previewApp',
     data: {

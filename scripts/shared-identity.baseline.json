@@ -109,18 +109,6 @@
       "status": "allowed",
       "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
     },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformHasRenderer": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformPluginName": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformSourceUnchanged": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
     "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformTrusted": {
       "status": "allowed",
       "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
@@ -145,10 +133,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Markdown/plugins/semanticFence.ts:markdownFenceProposal": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
     "packages/core/src/Markdown/plugins/textTransform.ts:adoptedReplacements": {
       "status": "open",
       "group": "triage"
@@ -172,26 +156,6 @@
     "packages/core/src/PowerSearch/formatTokenValue.ts:tokenNumeralLocales": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/Resizable/createResizable.ts:internals": {
-      "status": "open",
-      "group": "F9 Resizable"
-    },
-    "packages/core/src/Resizable/resizablePane.ts:lent": {
-      "status": "open",
-      "group": "F9 Resizable"
-    },
-    "packages/core/src/Resizable/resizablePane.ts:propsRegions": {
-      "status": "open",
-      "group": "F9 Resizable"
-    },
-    "packages/core/src/Resizable/resizablePane.ts:resizeHandles": {
-      "status": "open",
-      "group": "F9 Resizable"
-    },
-    "packages/core/src/Resizable/resizablePane.ts:watchers": {
-      "status": "open",
-      "group": "F9 Resizable"
     },
     "packages/core/src/Resizable/useResizable.ts:collapseControls": {
       "status": "open",
@@ -272,14 +236,6 @@
     "packages/core/src/Timestamp/tooltipEntries.ts:warnedTimezoneIDs": {
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
-    },
-    "packages/core/src/Toast/useToast.tsx:fallbackContext": {
-      "status": "open",
-      "group": "F2 Toast host"
-    },
-    "packages/core/src/Toast/useToast.tsx:fallbackRoot": {
-      "status": "open",
-      "group": "F2 Toast host"
     },
     "packages/core/src/TreeList/TreeList.tsx:clipGenerations": {
       "status": "open",

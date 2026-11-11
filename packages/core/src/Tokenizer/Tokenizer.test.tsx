@@ -25,6 +25,8 @@ import userEvent from '@testing-library/user-event';
 import {Tokenizer, type TokenizerHandle} from './Tokenizer';
 import {Typeahead} from '../Typeahead/Typeahead';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
+import {InputGroup} from '../InputGroup/InputGroup';
+import {InputGroupText} from '../InputGroup/InputGroupText';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
@@ -60,6 +62,16 @@ const TOKEN_MESSAGES = {
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
+}
+
+// A grouped row's token strip is a viewport of the shared scroll capability
+// (AST-025), which marks the element with the axis it scrolls on.
+function getTokenStrip(row: HTMLElement): HTMLElement {
+  const strip = row.querySelector<HTMLElement>('[data-scroll-axis="inline"]');
+  if (strip == null) {
+    throw new Error('The grouped row has no scrolling token strip');
+  }
+  return strip;
 }
 
 // Store original matches to restore later
@@ -2507,6 +2519,481 @@ describe('Tokenizer', () => {
       expect(form.checkValidity()).toBe(true);
     });
   });
+
+  describe('InputGroup', () => {
+    it('uses group ARIA and skips standalone Field chrome when grouped', () => {
+      render(
+        <InputGroup
+          label="Recipients"
+          description="Who receives the digest"
+          status={{type: 'error', message: 'Pick at least one person'}}>
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+
+      // The group owns the only Field chrome — the Tokenizer must not render a
+      // second Field wrapper or a duplicate label inside the group.
+      expect(document.querySelectorAll('.astryx-field')).toHaveLength(1);
+      expect(document.querySelectorAll('.astryx-field-label')).toHaveLength(1);
+      expect(screen.getByText('People')).not.toHaveClass('astryx-field-label');
+
+      const labelledByIDs =
+        input.getAttribute('aria-labelledby')?.split(' ') ?? [];
+      expect(labelledByIDs).toHaveLength(2);
+      expect(labelledByIDs[0]).toBe(group.getAttribute('aria-labelledby'));
+      expect(document.getElementById(labelledByIDs[1])).toHaveTextContent(
+        'People',
+      );
+      expect(input).not.toHaveAttribute('aria-label');
+      expect(input).toHaveAttribute(
+        'aria-describedby',
+        group.getAttribute('aria-describedby'),
+      );
+      expect(screen.getByText('Pick at least one person')).toBeInTheDocument();
+    });
+
+    it('composes the group described-by with the disabled reason instead of clobbering it', () => {
+      render(
+        <InputGroup label="Recipients" description="Who receives the digest">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+            isDisabled
+            disabledMessage="You need edit access to change recipients"
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const describedByIDs =
+        input.getAttribute('aria-describedby')?.split(' ') ?? [];
+
+      // Both the group's description and the input-local disabled reason are
+      // present — neither one replaces the other.
+      expect(describedByIDs).toContain(group.getAttribute('aria-describedby'));
+      expect(describedByIDs).toContain(tooltip.id);
+      expect(describedByIDs).toHaveLength(2);
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('keeps token removal working inside a group', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={onChange}
+          />
+        </InputGroup>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /remove alice/i}));
+      expect(onChange).toHaveBeenCalledWith([], {
+        item: users[0],
+        type: 'remove',
+      });
+    });
+
+    it('takes the group size over an explicit mismatched size', () => {
+      render(
+        <InputGroup label="Recipients" size="sm">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            size="lg"
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      // The group row has a fixed `sm` height; an `lg` control or token would
+      // escape it, so the group's size governs the whole grouped Tokenizer.
+      expect(screen.getByRole('group', {name: 'People'})).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+      expect(document.querySelector('.astryx-token')).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+    });
+
+    it('keeps an explicit size outside a group', () => {
+      render(
+        <Tokenizer
+          label="People"
+          size="lg"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+        />,
+      );
+
+      expect(screen.getByRole('group', {name: 'People'})).toHaveAttribute(
+        'data-size',
+        'lg',
+      );
+      expect(document.querySelector('.astryx-token')).toHaveAttribute(
+        'data-size',
+        'lg',
+      );
+    });
+
+    it.each(['none', 'unfocusedLayer'] as const)(
+      'drops local description and status in favor of the group (tokenOverflowBehavior=%s)',
+      tokenOverflowBehavior => {
+        const renderGrouped = (local: {
+          description?: string;
+          status?: {type: 'warning'; message: string};
+        }) =>
+          render(
+            <InputGroup
+              label="Recipients"
+              description="Who receives the digest"
+              status={{type: 'error', message: 'Pick at least one person'}}>
+              <InputGroupText>To</InputGroupText>
+              <Tokenizer
+                label="People"
+                isLabelHidden
+                searchSource={userSource}
+                value={[users[0]]}
+                onChange={() => {}}
+                tokenOverflowBehavior={tokenOverflowBehavior}
+                {...local}
+              />
+            </InputGroup>,
+          );
+        const tokenizerClasses = () =>
+          Array.from(
+            document.querySelectorAll('.astryx-tokenizer'),
+            el => el.className,
+          );
+
+        const {unmount} = renderGrouped({});
+        const classesWithoutLocal = tokenizerClasses();
+        unmount();
+
+        renderGrouped({
+          description: 'Local help',
+          status: {type: 'warning', message: 'Local warning'},
+        });
+
+        const group = screen.getByRole('group', {name: 'Recipients'});
+        const input = screen.getByRole('combobox', {
+          name: 'Recipients People',
+          hidden: true,
+        });
+        const describedByIDs =
+          input.getAttribute('aria-describedby')?.split(' ') ?? [];
+
+        // No Field renders the local text inside a group, so referencing it
+        // would leave dangling IDs — the group's text is the description.
+        expect(input).toHaveAttribute(
+          'aria-describedby',
+          group.getAttribute('aria-describedby'),
+        );
+        for (const id of describedByIDs) {
+          expect(document.getElementById(id)).not.toBeNull();
+        }
+        expect(screen.queryByText('Local help')).not.toBeInTheDocument();
+        expect(screen.queryByText('Local warning')).not.toBeInTheDocument();
+
+        // The local warning must not paint beside the group's error: every
+        // tokenizer surface (row, layer placeholder, layer content) renders
+        // exactly as it does without a local status.
+        for (const el of document.querySelectorAll('.astryx-tokenizer')) {
+          expect(el).not.toHaveAttribute('data-status');
+        }
+        expect(tokenizerClasses()).toEqual(classesWithoutLocal);
+      },
+    );
+
+    it('keeps the disabled reason while dropping local metadata in a group', () => {
+      render(
+        <InputGroup
+          label="Recipients"
+          description="Who receives the digest"
+          status={{type: 'error', message: 'Pick at least one person'}}>
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            description="Local help"
+            status={{type: 'warning', message: 'Local warning'}}
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+            isDisabled
+            disabledMessage="You need edit access to change recipients"
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
+        ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),
+        tooltip.id,
+      ]);
+    });
+
+    it('joins a caller aria-labelledby with the group naming in a group', () => {
+      render(
+        <>
+          <span id="digest-heading">Weekly digest</span>
+          <InputGroup label="Recipients">
+            <InputGroupText>To</InputGroupText>
+            <Tokenizer
+              label="People"
+              isLabelHidden
+              aria-labelledby="digest-heading"
+              searchSource={userSource}
+              value={[]}
+              onChange={() => {}}
+            />
+          </InputGroup>
+        </>,
+      );
+
+      expect(
+        screen.getByRole('combobox', {name: 'Recipients People Weekly digest'}),
+      ).toBeInTheDocument();
+    });
+
+    it('does not mark the input invalid from a local status the group drops', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            status={{type: 'error', message: 'Local error'}}
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      expect(input).not.toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByText('Local error')).not.toBeInTheDocument();
+    });
+
+    it('forwards the ref and DOM props to the combobox input in a group', () => {
+      const ref = vi.fn();
+      const renderGrouped = () => (
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            ref={ref}
+            data-testid="people"
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={() => {}}
+          />
+        </InputGroup>
+      );
+      const {rerender} = render(renderGrouped());
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+
+      // Grouped or not, base props reach the primary semantic control — never
+      // the grouped row (family:input-fields FR10).
+      expect(ref).toHaveBeenLastCalledWith(input);
+      expect(screen.getByTestId('people')).toBe(input);
+
+      // A ref merged during render is a new callback every render, so React
+      // detaches and re-attaches it on each update.
+      ref.mockClear();
+      rerender(renderGrouped());
+      expect(ref).not.toHaveBeenCalled();
+    });
+
+    it('keeps end controls outside the scrolling token row in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            hasClear
+            endContent={<span>2 selected</span>}
+          />
+        </InputGroup>,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const clearButton = screen.getByRole('button', {name: 'Clear all'});
+      const track = getTokenStrip(row);
+
+      // Tokens and the input share one track inside the row: the part that
+      // scrolls. jsdom has no layout, so the rendered half of this contract is
+      // the play function of the WithTokenizerOverflowEndControls story.
+      expect(track.parentElement).toBe(row);
+      expect(track).toContainElement(input);
+      const tokens = row.querySelectorAll<HTMLElement>('.astryx-token');
+      expect(tokens).toHaveLength(2);
+      for (const token of tokens) {
+        expect(track).toContainElement(token);
+      }
+
+      // The end controls are the track's siblings, so they can neither scroll
+      // with the tokens nor sit over them.
+      expect(row).toContainElement(clearButton);
+      expect(track).not.toContainElement(clearButton);
+      expect(track).not.toContainElement(screen.getByText('2 selected'));
+    });
+
+    it('leaves the keyboard path to the remove buttons when enabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      // Every token keeps a native remove button in the Tab order: entering the
+      // field lands on its input, and Shift+Tab walks back through the tokens,
+      // scrolling each into view. So the strip adds no stop of its own
+      // (AST-025 FR12: an existing focusable path reaches all the overflow).
+      const row = screen.getByRole('group', {name: 'People'});
+      const strip = getTokenStrip(row);
+      expect(strip).not.toHaveAttribute('role');
+      expect(strip).not.toHaveAttribute('aria-label');
+      expect(strip).not.toHaveAttribute('tabindex');
+      for (const label of ['Remove Alice', 'Remove Bob']) {
+        expect(strip).toContainElement(
+          screen.getByRole('button', {name: label}),
+        );
+      }
+    });
+
+    it('reveals the whole token when keyboard focus reaches its remove button in a group', async () => {
+      // jsdom has no scrollIntoView; record the calls instead.
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      try {
+        const user = userEvent.setup();
+        render(
+          <InputGroup label="Recipients">
+            <InputGroupText>To</InputGroupText>
+            <Tokenizer
+              label="People"
+              isLabelHidden
+              searchSource={userSource}
+              value={[users[0], users[1]]}
+              onChange={() => {}}
+            />
+          </InputGroup>,
+        );
+        act(() => {
+          screen.getByRole('combobox', {name: 'Recipients People'}).focus();
+        });
+        // The keyboard path to a token: back from the input.
+        await user.tab({shift: true});
+        const removeBob = screen.getByRole('button', {name: 'Remove Bob'});
+        expect(removeBob).toHaveFocus();
+
+        // Browsers scroll a focused control into view only as far as the
+        // control, which can leave the token's label cut off or under a fade.
+        // The scroll padding the token is revealed against is the fade width.
+        expect(scrollIntoView).toHaveBeenLastCalledWith({
+          block: 'nearest',
+          inline: 'nearest',
+        });
+        expect(scrollIntoView.mock.contexts.at(-1)).toBe(
+          removeBob.closest('.astryx-token'),
+        );
+      } finally {
+        delete (Element.prototype as Partial<Element>).scrollIntoView;
+      }
+    });
+
+    it('names the strip as the keyboard path when disabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            isDisabled
+          />
+        </InputGroup>,
+      );
+
+      // A disabled field has no remove buttons and no focusable input, so the
+      // strip itself is how a keyboard reaches tokens scrolled out of view.
+      expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(
+        0,
+      );
+      // The strip carries the Tokenizer's own name, as the field does.
+      const [field] = screen.getAllByRole('group', {name: 'People'});
+      const strip = getTokenStrip(field);
+      expect(strip).toHaveAttribute('role', 'group');
+      expect(strip).toHaveAccessibleName('People');
+      // It joins the Tab order only while it overflows. jsdom has no layout, so
+      // that half is browser evidence: TokenizerGroupScroll.a11y.browser.spec.ts.
+      expect(strip).not.toHaveAttribute('tabindex');
+    });
+
+    it('keeps tokens and the input as direct children of the field outside a group', () => {
+      render(
+        <Tokenizer
+          label="People"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      expect(screen.getByRole('combobox').parentElement).toBe(row);
+      expect(document.querySelector('.astryx-token')?.parentElement).toBe(row);
+    });
+  });
 });
 
 describe('Tokenizer search cancellation', () => {
@@ -3365,6 +3852,149 @@ describe('Tokenizer consumer key handler order', () => {
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
     expect(currentTarget).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('Tokenizer pending search after a dismissal', () => {
+  it('keeps a dismissed menu closed when its search answers late, and shows that answer on reopen', async () => {
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const search = vi.fn(
+      async (query: string) =>
+        new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+    );
+    // No cancel: the late answer still arrives, as it does for a source that
+    // cannot abort its request.
+    const source: SearchSource = {search, bootstrap: () => []};
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await waitFor(() => expect(answers.has('a')).toBe(true));
+    await act(async () => answers.get('a')?.([users[0]]));
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.change(input, {target: {value: 'b'}});
+    await waitFor(() => expect(answers.has('b')).toBe(true));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await act(async () => answers.get('b')?.([users[1]]));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(search.mock.calls.filter(([q]) => q === 'b')).toHaveLength(1);
+  });
+
+  it('searches the typed text when a press on a token dismissed it inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const answers = new Map<string, (items: SearchableItem[]) => void>();
+      const search = vi.fn(
+        async (query: string) =>
+          new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+      );
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={{search, bootstrap: () => []}}
+          value={[users[0]]}
+          onChange={vi.fn()}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'b'}});
+      // A press on the token's text takes focus from the input with no target
+      // in the field, then focus returns to the input.
+      fireEvent.pointerDown(screen.getByText(users[0].label));
+      act(() => input.blur());
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(search).not.toHaveBeenCalled();
+
+      act(() => input.focus());
+      expect(search).toHaveBeenLastCalledWith('b', expect.anything());
+      await waitFor(() => expect(answers.has('b')).toBe(true));
+      await act(async () => answers.get('b')?.([users[1]]));
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText(users[1].label)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry after a query drops below minQueryLength inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const search = vi.fn(() => []);
+      render(
+        <Tokenizer
+          label="Labels"
+          searchSource={{search, bootstrap: () => []}}
+          value={[]}
+          onChange={vi.fn()}
+          hasCreate
+          minQueryLength={3}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'QAX'}});
+      fireEvent.change(input, {target: {value: 'QA'}});
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry for a query below minQueryLength with ArrowDown after Escape', async () => {
+    const search = vi.fn(() => []);
+    render(
+      <Tokenizer
+        label="Labels"
+        searchSource={{search, bootstrap: () => []}}
+        value={[]}
+        onChange={vi.fn()}
+        hasCreate
+        minQueryLength={3}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'QA'}});
+    });
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(search).not.toHaveBeenCalled();
   });
 });
 
