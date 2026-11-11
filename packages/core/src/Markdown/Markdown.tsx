@@ -914,8 +914,8 @@ function useStableMarkdownSyntaxEntries(
   plugins: PreparedMarkdownPlugins | undefined,
 ): ReadonlyArray<MarkdownPluginEntry> | undefined {
   const identity = plugins?.syntaxIdentity ?? '';
-  // Written during render on purpose: an entry is used only while its
-  // identity matches, so an entry a discarded render left is replaced.
+  // This cache changes during render on purpose. The hook uses an entry only
+  // while its identity matches, so it replaces an entry a discarded render left.
   const syntaxEntriesRef = useRef<
     | {
         identity: string;
@@ -2320,9 +2320,9 @@ export function Markdown<
   // When not streaming, the hook returns children unchanged (no-op).
   const smoothedText = useStreamingText(children, isStreaming);
 
-  // Written during render on purpose, like the option flags below: the parser
-  // reuses its settled blocks only while the input still starts with their
-  // text. So a state a discarded render left never reaches the output
+  // This cache changes during render on purpose, as the option flags below do.
+  // The parser reuses settled blocks only while the input starts with their
+  // text. So the output never shows text that only a discarded render had
   // (Markdown.test.tsx: "a streamed render that React discards").
   const incrementalStateRef = useRef<IncrementalState<boolean>>(
     createIncrementalState<boolean>(),
