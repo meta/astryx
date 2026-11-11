@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {
   parsedComponents,
@@ -61,9 +62,8 @@ export function templateComponentsText() {
 }
 
 const isMain =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) ===
-    path.resolve(new URL(import.meta.url).pathname);
+  Boolean(process.argv[1]) &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isMain && process.argv.includes('--clean')) {
   // `postpack`: the checkout goes back to parsing, so a later edit to the
