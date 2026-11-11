@@ -33,7 +33,9 @@ import {
   maskedSettings,
   modesOf,
   nearest,
+  partDefault,
   partsOf,
+  readHistory,
   refuse,
   resolvedTokens,
   shown,
@@ -263,7 +265,14 @@ async function change(sub, slug, thing, value, options) {
         styled: [],
         kept: [],
         lifted: r.lifted,
-        notes: [`your ${data.settings.length} settings are kept`],
+        notes: [
+          ...(r.unchanged
+            ? [`no change: ${s.thing} is already ${s.value}`]
+            : []),
+          ...r.notes,
+          `your ${data.settings.length} settings are kept`,
+          ...otherModeNotes(data),
+        ],
         problems: r.problems,
         warnings: r.warnings,
         ...p,
@@ -298,7 +307,14 @@ async function change(sub, slug, thing, value, options) {
       ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
       : [];
   /** @type {string[]} */
-  const notes = [];
+  const notes = [
+    ...(r.unchanged
+      ? [
+          `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+        ]
+      : []),
+    ...r.notes,
+  ];
   const group = s.on
     ? FAMILIES[s.on]
       ? s.on
@@ -321,9 +337,18 @@ async function change(sub, slug, thing, value, options) {
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
     );
   if (s.thing === 'neutral' && sub === 'set') {
-    const page = base.light['--color-background-body'];
+    // Only the theme's own modes; a dark theme gets no white-page offer.
+    const modes = modesOf(data);
+    const pages = modes
+      .map(m => [m, base[m]['--color-background-body']])
+      .filter(([, v]) => v)
+      .map(([m, v]) => `${v} in ${m}`);
     notes.push(
-      `the page background stays the base theme's${page ? ` (${page} in light${base.dark['--color-background-body'] ? `, ${base.dark['--color-background-body']} in dark` : ''})` : ''}; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${data.mode === 'both' ? ' --mode light' : ''}`,
+      `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
+        modes.includes('light')
+          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${modes.length > 1 ? ' --mode light' : ''}`
+          : `; for another page color: ${P} set ${slug} --color-background-body "<color>"`
+      }`,
     );
   }
   if (s.thing === 'vibrancy') {
@@ -354,7 +379,9 @@ async function change(sub, slug, thing, value, options) {
           ? s
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       // On undo, the setting above is the one removed, named as such.
-      ...(sub === 'undo' && prev ? {removed: prev} : {}),
+      ...(sub === 'undo' && prev
+        ? {removed: prev, now: nowApplies(data, prev)}
+        : {}),
       replaced: sub === 'set' ? prev : null,
       was: null,
       notes,
@@ -479,6 +506,51 @@ export async function themeEditShow(theme, options = {}) {
 }
 
 /**
+ * What applies once `removed` is gone: a whole-theme setting of the same
+ * thing for a part setting, or the base theme's value.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} removed
+ * @returns {string}
+ */
+function nowApplies(data, removed) {
+  const whole =
+    removed.on || removed.when || removed.state || removed.mode
+      ? [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x.thing === removed.thing &&
+              x.source === removed.source &&
+              !x.on &&
+              !x.when &&
+              !x.state &&
+              (!x.mode || x.mode === removed.mode),
+          )
+      : null;
+  return whole ? describe(whole) : "the base theme's value";
+}
+
+/**
+ * Settings saved for a mode a one-mode theme does not have: they stay saved
+ * and apply again when the theme has that mode.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+function otherModeNotes(data) {
+  const modes = modesOf(data);
+  const off = data.settings.filter(
+    s => s.mode && !modes.includes(/** @type {'light' | 'dark'} */ (s.mode)),
+  );
+  if (!off.length) return [];
+  return [
+    `not applied in a ${data.mode} theme, kept for when it has that mode again: ${off
+      .slice(0, 4)
+      .map(describe)
+      .join(', ')}${off.length > 4 ? `, and ${off.length - 4} more` : ''}`,
+  ];
+}
+
+/**
  * Each corners or spacing dial set on a part or group, with what its parts
  * get, beside the whole-theme value: `corners large on containers ->
  * border-radius 12px on card, dialog, ... (whole theme: --radius-container
@@ -500,12 +572,35 @@ function partValues(ctx, data, res, mode) {
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {
         const px = cornerPx(s.value);
-        const token = FAMILIES[s.on ?? '']
-          ? s.on === 'containers'
-            ? '--radius-container'
-            : '--radius-element'
-          : '--radius-element';
-        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${token} ${res[mode][token] ?? 'unset'})`;
+        // The radius token each part's resting corners read, as the whole-
+        // theme value they would have without this setting.
+        // The token each part's resting corners read. A part the census saw
+        // closed (a menu, a popover) has none recorded: a container or menu
+        // reads the container radius, like every Core surface; any other
+        // part's is unknown.
+        /** @type {Map<string, string[]>} */
+        const byToken = new Map();
+        for (const t of parts) {
+          const token =
+            /var\((--[\w-]+)\)/.exec(
+              partDefault(ctx, t, 'borderRadius', undefined) ?? '',
+            )?.[1] ??
+            // Every variant reads it (none is the resting one).
+            ctx.C.partReads(t, 'corners').find(x =>
+              x.props.includes('border-radius'),
+            )?.token ??
+            (['containers', 'menus'].includes(familyOf(t) ?? '')
+              ? '--radius-container'
+              : 'unknown');
+          byToken.set(token, [...(byToken.get(token) ?? []), t]);
+        }
+        const whole = [...byToken]
+          .map(
+            ([token, ts]) =>
+              `${token === 'unknown' ? 'unknown' : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
+          )
+          .join('; ');
+        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${whole})`;
       }
       const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
       return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;
@@ -602,9 +697,16 @@ export async function themeEditUndo(theme, options = {}) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
   }
   const f = themeFiles(cwd, theme);
-  const history = fs.existsSync(f.history)
-    ? JSON.parse(fs.readFileSync(f.history, 'utf8'))
-    : [];
+  const history = readHistory(f.history);
+  if (history == null)
+    refuse(
+      E.ERR_THEME_INVALID,
+      `${theme}.history.json is damaged, so there is no step to go back to.`,
+      {
+        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+        run: [`${P} show ${theme}`],
+      },
+    );
   if (!history.length)
     refuse(
       E.ERR_THEME_NOTHING_TO_UNDO,
@@ -612,7 +714,7 @@ export async function themeEditUndo(theme, options = {}) {
       {run: [`${P} show ${theme}`]},
     );
   const ctx = await context(cwd);
-  const prevText = history.pop();
+  const prevText = /** @type {string} */ (history.pop());
   const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
     JSON.parse(prevText)
   );

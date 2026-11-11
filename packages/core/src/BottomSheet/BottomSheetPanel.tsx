@@ -364,6 +364,12 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     willChange: 'transform, opacity',
+    // The dialog writes its scrim's opacity on itself for each move of a drag,
+    // and only its backdrop reads it. A custom property inherits, so each
+    // write would restyle every element in the sheet. The panel ends the
+    // inheritance, so the restyle stops here.
+    '--_sheet-scrim-opacity': 'initial',
+    '--_sheet-scrim-duration': 'initial',
   },
   // A sheet present on page load opens where it rests (spec:AST-013 FR13):
   // the collapse reduced motion uses, so the transition still ends.

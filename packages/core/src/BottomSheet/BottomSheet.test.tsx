@@ -4927,6 +4927,31 @@ describe('BottomSheet', () => {
     });
   });
 
+  describe('scrim property isolation', () => {
+    // A drag writes the scrim's opacity on the dialog for each move, and only
+    // the dialog's backdrop reads it. An inherited custom property restyles
+    // every element under the one it changes on. jsdom reports the declared
+    // `initial`. A browser computes no value, which the interaction proof
+    // BottomSheetDragRestyle covers.
+    it("declares the dialog's scrim properties `initial` on the sheet panel", () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      dialog.style.setProperty('--_sheet-scrim-opacity', '0.5');
+      dialog.style.setProperty('--_sheet-scrim-duration', '120ms');
+      const computed = window.getComputedStyle(getSheet());
+      expect(computed.getPropertyValue('--_sheet-scrim-opacity')).toBe(
+        'initial',
+      );
+      expect(computed.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        'initial',
+      );
+    });
+  });
+
   describe('container padding isolation', () => {
     it('resets container padding custom properties to 0px on the sheet panel element', () => {
       render(
