@@ -6,7 +6,8 @@
  * @input The Pre Selected Storybook story, in Chromium and WebKit
  * @output Proof that the selected-item overlay measures again when its open
  *   list grows. The selected row stays on the trigger, with no painted frame
- *   off it. A list near the viewport's end stays inside its end gutter.
+ *   off it. A list near the viewport's end ends at its end gutter. An engine
+ *   without CSS anchor positioning still opens the list.
  * @position Browser geometry regression test for Selector FR2
  */
 
@@ -37,9 +38,9 @@ test('the selected row stays on the trigger when an option grows with the list o
   page,
 }) => {
   await page.setViewportSize({width: 1280, height: 720});
+  const problems = collectProblems(page);
   const parts = await openPreSelected(page);
   const listBefore = await parts.listbox.boundingBox();
-  const problems = collectProblems(page);
   const painted = await paintedOffsets(page, 6);
   // A resize is reported before the frame paints, so no painted frame shows
   // the old shift.
@@ -65,6 +66,7 @@ test("a list that grows near the viewport's end stays inside its end gutter", as
   await pinFieldAtBlockEnd(page);
   await trigger.click();
   await expect(page.getByRole('listbox')).toBeVisible();
+  await entranceEnded(page);
   await settledFrames(page);
   const before = await layerBox(page);
   // The clamp binds at the end before the growth.
@@ -85,9 +87,56 @@ test("a list that grows near the viewport's end stays inside its end gutter", as
       before.bottom - before.top + 40,
     );
     expect(now.top).toBeGreaterThanOrEqual(0);
-    expect(now.bottom).toBeLessThanOrEqual(720 - GUTTER_PX + 0.5);
+    // The clamp still binds: the list ends exactly at the end gutter.
+    expect(now.bottom).toBeCloseTo(720 - GUTTER_PX, 0);
   }).toPass({timeout: 5_000});
   await expectUsableRows(page, 720);
+});
+
+test('an engine without CSS anchor positioning still opens the list', async ({
+  page,
+}) => {
+  // Such an engine has the Popover API but no position-area on its computed
+  // style. This page hides the property from script; layout keeps it.
+  await page.addInitScript(() => {
+    const read = window.getComputedStyle.bind(window);
+    window.getComputedStyle = (element, pseudoElement) => {
+      const style = read(element, pseudoElement);
+      return new Proxy(style, {
+        get(target, key): string | number | object | null | undefined {
+          if (key === 'positionArea') {
+            return undefined;
+          }
+          if (key === 'getPropertyValue') {
+            return (property: string) =>
+              property === 'position-area'
+                ? ''
+                : target.getPropertyValue(property);
+          }
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === 'function'
+            ? (value as (...args: never[]) => unknown).bind(target)
+            : (value as string | number | object | null | undefined);
+        },
+      });
+    };
+  });
+  await page.setViewportSize({width: 1280, height: 720});
+  const problems = collectProblems(page);
+  const parts = await openPreSelected(page);
+  const hidden = await page.evaluate(() => {
+    const layer = document
+      .querySelector('[role="listbox"]')
+      ?.closest<HTMLElement>('[popover]');
+    return (
+      layer != null &&
+      Reflect.get(getComputedStyle(layer), 'positionArea') === undefined &&
+      getComputedStyle(layer).getPropertyValue('position-area') === ''
+    );
+  });
+  expect(hidden).toBe(true);
+  await expectAligned(page, parts, 720);
+  expect(problems()).toEqual([]);
 });
 
 /** Pin the Selector's field 8px above the viewport's block end. */
@@ -154,7 +203,25 @@ async function openPreSelected(
     expect(row?.height ?? 0).toBeGreaterThan(0);
     expect(Math.abs(centerY(row) - centerY(triggerBox))).toBeLessThanOrEqual(2);
   }).toPass({timeout: 5_000});
+  await entranceEnded(page);
   return {trigger, listbox, selected};
+}
+
+/**
+ * Wait for the open list's entrance animations to end, so later readings
+ * measure only the change a case makes.
+ */
+async function entranceEnded(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const layer = document
+      .querySelector('[role="listbox"]')
+      ?.closest<HTMLElement>('[popover]');
+    await Promise.all(
+      (layer?.getAnimations({subtree: true}) ?? []).map(async animation =>
+        animation.finished.catch(() => undefined),
+      ),
+    );
+  });
 }
 
 /**

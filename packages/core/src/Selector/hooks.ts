@@ -151,8 +151,11 @@ function measureSelectedItem(
       parseFloat(layerStyle.marginBlockEnd) || 0,
     );
     // The position area's block keyword names the side the browser chose:
-    // its block-start side once a fallback flipped the layer.
-    const [blockArea = ''] = layerStyle.positionArea.split(' ');
+    // its block-start side once a fallback flipped the layer. An engine
+    // without anchor positioning reads an empty string here.
+    const [blockArea = ''] = layerStyle
+      .getPropertyValue('position-area')
+      .split(' ');
     isAboveAnchor = /start$|^top$/.test(blockArea);
   }
   const viewportHeight = window.innerHeight;
@@ -251,19 +254,25 @@ export function useSelectedItemOverlayMargin({
   const [isPositioned, setIsPositioned] = useState(false);
   const [listboxResizes, setListboxResizes] = useState(0);
 
-  // An option that grows or shrinks while the list is open moves the selected
-  // row and changes the list's room, so the list measures again. The resize
-  // report comes before the frame paints, and the commit is synchronous, so
-  // no frame shows the old margin.
+  // The open list measures again when its own box resizes. An option that
+  // grows or shrinks moves the selected row. The report comes before paint.
+  // The commit is synchronous, so no frame shows the old margin.
   useIsomorphicLayoutEffect(() => {
     const listbox = listboxRef.current;
     if (!isOpen || listbox == null) {
       return;
     }
-    return observeResize(listbox, () => {
-      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
-      flushSync(() => setListboxResizes(count => count + 1));
+    // The report at registration falls inside this commit, where the
+    // measuring Effect already runs, so it is skipped.
+    let isRegistering = true;
+    const unobserve = observeResize(listbox, () => {
+      if (!isRegistering) {
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+        flushSync(() => setListboxResizes(count => count + 1));
+      }
     });
+    isRegistering = false;
+    return unobserve;
   }, [isOpen, listboxRef]);
 
   // Syncs the overlay's margin with the open list's layout: its selected
@@ -282,9 +291,9 @@ export function useSelectedItemOverlayMargin({
     if (placement != null) {
       const {offset, anchorBottom, listboxHeight} = placement;
       if (placement.isAboveAnchor) {
-        // A list that grew past the viewport's end flips above its anchor.
-        // The flip swaps the block margins, so this margin moves the list's
-        // end from the anchor's top, and it sets the same clamped top.
+        // The browser flipped the layer above its anchor. The flip swaps the
+        // block margins. So this margin sets the list's end from the anchor's
+        // top, at the same clamped top.
         margin = `${placement.anchorTop - placement.clampedTop - listboxHeight}px`;
       } else {
         // The room below the anchor for the list, in the keyboard inset's
