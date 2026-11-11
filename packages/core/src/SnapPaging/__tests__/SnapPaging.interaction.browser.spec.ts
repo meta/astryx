@@ -1214,13 +1214,19 @@ test.describe('with a finger and a mouse', () => {
       'snap-paging-partial-last-page',
       'paging',
     );
-    for (let i = 0; i < 7; i++) {
-      await swipe(page, scroller, {px: 80, ms: 80});
-      await settled(scroller);
-    }
-    // At the end, a flick settles back onto the same stop. The page narrows
-    // the row by 1 px 60 ms after the lift, so the resize lands mid-settle
-    // whatever the runner's lag.
+    // At the end, a flick settles back onto the same stop. An instant scroll
+    // takes the row there, so the flick is the case's only touch.
+    await scroller.evaluate(el => {
+      el.scrollTo({left: el.scrollWidth - el.clientWidth, behavior: 'instant'});
+    });
+    await expect
+      .poll(async () => offset(scroller), {
+        message: 'the row starts at its end',
+        timeout: 5000,
+      })
+      .toBeCloseTo(await travel(scroller), 0);
+    // The page narrows the row by 1 px 60 ms after the lift, so the resize
+    // lands mid-settle whatever the runner's lag.
     await scroller.evaluate(el => {
       const flags = window as unknown as {heldAtResize?: boolean};
       el.addEventListener(
