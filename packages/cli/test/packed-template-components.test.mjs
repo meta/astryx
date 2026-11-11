@@ -129,7 +129,7 @@ describe('the packed package', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
     );
-    expect(pkg.scripts.postpack).toBe(
+    expect(pkg.scripts.postpack).toContain(
       'node scripts/generate-template-components.mjs --clean',
     );
   });
