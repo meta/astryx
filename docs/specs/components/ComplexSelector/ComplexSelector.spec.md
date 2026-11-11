@@ -269,7 +269,7 @@ not a ComplexSelector-owned painting surface or theme target.
 
   **Decider:** `cixzhang`, `2026-11-10`
 
-  With `renderTrigger`, `disabledMessage` reveals and describes on the caller's control through the props and ref the component hands it (`spec:AST-055`); while the reason shows, it replaces the control's own label tooltip, so a control never shows two tooltips. The owner chose "Wire it for render trigger". Rejected: the prop having no effect with `renderTrigger`, and a development warning for that case.
+  With `renderTrigger`, the disabled reason reveals and describes on the caller's control through the props and ref the component hands it (`spec:AST-055`). Owner direction, Nov 10 2026 (Cindy): "Wire it for render trigger".
 
   Owner direction 2026-11-10: the guardrail that a control never shows two tooltips belongs in the Tooltip system itself, not in each caller; until Tooltip provides it, a caller-rendered trigger drops its own tooltip while disabled.
 

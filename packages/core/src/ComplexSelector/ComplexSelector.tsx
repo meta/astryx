@@ -632,11 +632,8 @@ export function ComplexSelector<Value>({
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
-  // The disabled-reason tooltip anchors to the control box and listens on the
-  // trigger button. A disabled trigger keeps its tab stop, so keyboard focus
-  // reaches it and shows the reason; the isDisabled guards still block
-  // activation. The status info-tip in the same box opens only its own
-  // message.
+  // The tooltip listens on the trigger button, not the control box. So the
+  // status info-tip in the box opens only its own message.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -917,8 +914,7 @@ export function ComplexSelector<Value>({
       <div
         ref={el => {
           popover.triggerRef(el);
-          // The disabled-message tooltip anchors here. Anchor names compose,
-          // so attaching unconditionally is safe.
+          // Anchor names compose, so the tooltip can anchor here in every state.
           disabledMessageTooltip.positionRef(el);
         }}
         {...pressable}

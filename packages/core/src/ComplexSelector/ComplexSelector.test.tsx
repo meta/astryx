@@ -1298,8 +1298,6 @@ describe('ComplexSelector onOpenChange', () => {
   });
 });
 
-// The reason tooltip opens through the same Popover API, so count only the
-// show calls made on the selector popup itself.
 describe('ComplexSelector disabledMessage', () => {
   // `data-testid` reaches the trigger button; the tooltip and the popup
   // anchor on the control box around it.
@@ -1712,8 +1710,8 @@ describe('ComplexSelector disabledMessage', () => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
 
-    // focusout bubbles from the button to the container the tooltip listens
-    // on, so leaving the trigger hides the reason.
+    // The tooltip listens on the trigger button, so leaving it hides the
+    // reason.
     await user.tab();
     expect(trigger).not.toHaveFocus();
     await waitFor(() => {
