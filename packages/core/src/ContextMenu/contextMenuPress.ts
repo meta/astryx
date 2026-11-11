@@ -36,6 +36,13 @@ const LATE_MOVE_GAP_MS = 50;
 const LATE_INPUT_MS = 33;
 
 /**
+ * The menu's timer ran behind a blocked page when it runs this long after its
+ * deadline. In ms: one frame at 60 Hz. A timer has no dispatch delay of its
+ * own, so one frame is enough.
+ */
+const LATE_TIMER_MS = 17;
+
+/**
  * The foundation's own press timer, which this recognizer never lets fire:
  * the hold below commits instead. It is longer than any hold, and under the
  * window timer's 2^31 - 1 ms limit.
@@ -229,20 +236,45 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
    * The finger is still down at the menu's moment: the menu is due. When the
    * page is behind its input, the finger's moves can reach it after that
    * moment, though they came before it. While they still come, the menu
-   * waits for them, so a drift in them still ends the hold.
+   * waits for them, so a drift in them still ends the hold. A timer that ran
+   * late ran behind a blocked page, which may hold such moves too.
    */
   private showMenu(): void {
-    this.stopMoveWait();
-    if (this.holdFrom == null || !isActive(this.state) || this.isMenuDue) {
+    if (!this.isMenuPending()) {
       return;
     }
-    if (this.isBehindInput()) {
-      this.isMenuWaiting = true;
-      // On the arena's clock, like the hold's own deadlines.
-      this.setTimer(this.now() + LATE_MOVE_GAP_MS, () => this.showMenu());
+    const moment = this.holdStart + menuDisplayMs;
+    if (performance.now() - moment > LATE_TIMER_MS || this.hasLateMove()) {
+      this.waitForMoves();
       return;
     }
     this.presentMenu();
+  }
+
+  /** The wait's end: moves that still come late keep the menu waiting. */
+  private endMoveWait(): void {
+    this.stopMoveWait();
+    if (!this.isMenuPending()) {
+      return;
+    }
+    if (this.hasLateMove()) {
+      this.waitForMoves();
+      return;
+    }
+    this.presentMenu();
+  }
+
+  private isMenuPending(): boolean {
+    return this.holdFrom != null && isActive(this.state) && !this.isMenuDue;
+  }
+
+  private waitForMoves(): void {
+    this.isMenuWaiting = true;
+    // On the arena's clock, like the hold's own deadlines. It counts from when
+    // the page runs again. Behind a block, the event clock still reads the
+    // moment, and moves stamped after it are still queued.
+    const from = Math.max(this.now(), performance.now());
+    this.setTimer(from + LATE_MOVE_GAP_MS, () => this.endMoveWait());
   }
 
   private presentMenu(): void {
@@ -252,20 +284,17 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   }
 
   /**
-   * Whether the page may still hold moves from before the menu's moment. A
-   * move from before it reached the page in the last `LATE_MOVE_GAP_MS`, and
-   * that move or the moment's timer ran more than `LATE_INPUT_MS` late.
+   * Whether a move from before the menu's moment reached the page in the last
+   * `LATE_MOVE_GAP_MS`, more than `LATE_INPUT_MS` after its own time.
    */
-  private isBehindInput(): boolean {
+  private hasLateMove(): boolean {
     const move = this.latestMove;
-    const moment = this.holdStart + menuDisplayMs;
     const now = performance.now();
     return (
       move != null &&
-      move.time < moment &&
+      move.time < this.holdStart + menuDisplayMs &&
       now - move.arrivedAt < LATE_MOVE_GAP_MS &&
-      (move.arrivedAt - move.time > LATE_INPUT_MS ||
-        now - moment > LATE_INPUT_MS)
+      move.arrivedAt - move.time > LATE_INPUT_MS
     );
   }
 
