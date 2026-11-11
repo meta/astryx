@@ -3,9 +3,10 @@
 /**
  * @file WheelProofs.stories.tsx
  * @input Uses React and the internal Wheel (packages/core/src/DateInput)
- * @output The Wheel alone, for its browser proofs: a 60-row minute column at
- *   00, its committed minute shown in a read-only field; and the touch column
- *   alone, whatever the primary pointer, for the trackpad proofs
+ * @output The Wheel alone, for its browser proofs. A 60-row minute column at
+ *   00 shows its committed minute in a read-only field. The touch column also
+ *   stands alone, whatever the primary pointer, for the trackpad proofs. It
+ *   also loops, in a 60-row and a 4-row minute column
  * @position A checked-in reproduction path for
  *   packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts.
  *   The proofs test the Wheel itself, so they open a column that stays a plain
@@ -86,6 +87,65 @@ export const TouchMinutes: Story = {
           options={MINUTES}
           value={minute}
           onChange={setMinute}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * The touch column looping, as UIDatePicker's minutes do: past 59 comes 00.
+ * It opens at 55, so a flick runs on through the seam.
+ */
+export const LoopingMinutes: Story = {
+  render: () => {
+    const [minute, setMinute] = useState(55);
+    return (
+      <div style={{display: 'grid', gap: 16, inlineSize: 160}}>
+        <input
+          aria-label="Committed minute"
+          readOnly
+          style={READOUT_STYLE}
+          value={String(minute).padStart(2, '0')}
+        />
+        <PickerWheel
+          label="Minute"
+          options={MINUTES}
+          value={minute}
+          onChange={setMinute}
+          isLooping
+        />
+      </div>
+    );
+  },
+};
+
+const QUARTERS = [0, 15, 30, 45].map(minute => ({
+  value: minute,
+  label: String(minute).padStart(2, '0'),
+}));
+
+/**
+ * A minute column every 15 minutes, looping: its four rows repeat down the
+ * whole column, as UIDatePicker's do.
+ */
+export const LoopingQuarters: Story = {
+  render: () => {
+    const [minute, setMinute] = useState(45);
+    return (
+      <div style={{display: 'grid', gap: 16, inlineSize: 160}}>
+        <input
+          aria-label="Committed minute"
+          readOnly
+          style={READOUT_STYLE}
+          value={String(minute).padStart(2, '0')}
+        />
+        <PickerWheel
+          label="Minute"
+          options={QUARTERS}
+          value={minute}
+          onChange={setMinute}
+          isLooping
         />
       </div>
     );

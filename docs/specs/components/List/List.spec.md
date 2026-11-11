@@ -235,7 +235,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
   handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5).
+  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  through a rows reader, which lists them in order and tells whether an
+  element is one; List's rows are its element children.
 
 ## Verification map
 
