@@ -7,7 +7,7 @@
  * builds, files and messages, not the rendered pages. A render costs
  * seconds; the stand-in writes a small page in the same place and returns
  * what the render returns. A test turns real renders on with
- * {@link realRenders}; `ASTRYX_THEME_SLOW=1` renders for real everywhere.
+ * {@link realRenders}; `THEME_EDIT_SLOW=1` renders for real everywhere.
  *
  * Use, at the top of a test file:
  *   vi.mock('./_preview.mjs', async importOriginal =>
@@ -27,15 +27,15 @@ const STATE = Symbol.for('astryx.test-utils.theme-render-stub');
 /** @returns {{real: boolean}} */
 function state() {
   const g = /** @type {any} */ (globalThis);
-  return (g[STATE] ??= {real: process.env.ASTRYX_THEME_SLOW === '1'});
+  return (g[STATE] ??= {real: process.env.THEME_EDIT_SLOW === '1'});
 }
 
-/** Whether the long sweeps run: `ASTRYX_THEME_SLOW=1`. */
-export const SLOW = process.env.ASTRYX_THEME_SLOW === '1';
+/** Whether the long sweeps run: `THEME_EDIT_SLOW=1`. */
+export const SLOW = process.env.THEME_EDIT_SLOW === '1';
 
 /**
  * Render for real (true) or with the stand-in (false) from now on, until
- * the next call. With `ASTRYX_THEME_SLOW=1`, renders stay real.
+ * the next call. With `THEME_EDIT_SLOW=1`, renders stay real.
  * @param {boolean} on
  */
 export function realRenders(on) {

@@ -2,7 +2,7 @@
 
 /**
  * @file Seeded chaos test for `astryx experimental theme`. One fixed seed
- *   drives 80 random but plausible commands (200 with ASTRYX_THEME_SLOW=1) through the real CLI
+ *   drives 80 random but plausible commands (200 with THEME_EDIT_SLOW=1) through the real CLI
  *   program: valid values, near misses, edge values, undo chains, a damaged
  *   settings file. After every step it checks that an accepted command takes
  *   effect, that a refused command writes nothing and carries a documented
@@ -28,7 +28,7 @@ import {SLOW} from '../../test-utils/theme-render-stub.mjs';
 
 const SEED = 20261110;
 // The first 80 steps of the seeded sequence run by default, as a sample;
-// ASTRYX_THEME_SLOW=1 runs all 200.
+// THEME_EDIT_SLOW=1 runs all 200.
 const STEPS = SLOW ? 200 : 80;
 
 /** @param {number} a */
