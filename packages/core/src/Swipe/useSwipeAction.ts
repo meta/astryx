@@ -40,8 +40,8 @@
  * Either way a drag stays on its side: within one gesture an open row only
  * closes, never passing rest to its other side. Dragged past the confirm point,
  * when the side's outermost entry can fire, a full swipe confirms. On a side
- * with two or more entries, only a drag from the open row, or one that lands
- * on its outermost entry, confirms. The row
+ * with two or more entries, only a drag from the open row confirms, or one
+ * that lands on its outermost entry. The row
  * runs ahead to UIKit's confirmation offset, and the outermost entry covers the
  * space. The panel reads that from a second custom property, the confirm;
  * backing out undoes it. A lift still confirmed slides the row out and fires
@@ -640,7 +640,10 @@ export function useSwipeAction({
     trailing: createSidePanel(),
   }));
   const dragRef = useRef<Drag | null>(null);
-  /** The side whose outermost entry the last touch landed on. */
+  /**
+   * The side whose outermost entry the last press landed on, with the row open
+   * on it.
+   */
   const landedOnRef = useRef<SwipeSide | null>(null);
   /** The shared drag on the root. */
   const snapRef = useRef<SnapDrag | null>(null);
@@ -1019,10 +1022,10 @@ export function useSwipeAction({
     layoutRef.current = layout;
     snapRef.current?.setSnapPoints(stopsOf(layout));
     // With two or more entries, a side confirms a full swipe only from the row
-    // open on that side. A touch that lands on its outermost entry counts too,
-    // since a scroll can start the row's close before that touch moves. A panel
-    // its outermost entry covers confirms too. A drag from a closed row opens it
-    // instead.
+    // open on that side. A press on its outermost entry while it is open counts
+    // too, since a scroll can start the row's close before that press moves. A
+    // panel its outermost entry covers confirms too. A drag from a closed row
+    // opens it instead.
     const current = stateRef.current;
     const isDeliberate =
       (move.input !== 'scroll' && landedOnRef.current === side) ||
@@ -1322,13 +1325,14 @@ export function useSwipeAction({
     snapRef.current = snap;
     const onPointerDown = (event: PointerEvent) => {
       const {target} = event;
-      landedOnRef.current = !(target instanceof Node)
-        ? null
-        : panels.leading.outer?.contains(target) === true
-          ? 'leading'
-          : panels.trailing.outer?.contains(target) === true
-            ? 'trailing'
-            : null;
+      const current = stateRef.current;
+      const {side} = current;
+      landedOnRef.current =
+        isSwipeOpen(current) &&
+        target instanceof Node &&
+        panels[side].outer?.contains(target) === true
+          ? side
+          : null;
     };
     root.addEventListener('pointerdown', onPointerDown, true);
     return () => {

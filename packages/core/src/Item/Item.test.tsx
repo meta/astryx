@@ -2478,6 +2478,39 @@ describe('swipe', () => {
       expect(inner).not.toHaveBeenCalled();
     });
 
+    it('lets a press on the outermost entry confirm only while the row is open: one that lands after a scroll begins the close confirms nothing', async () => {
+      const inner = vi.fn();
+      const outer = vi.fn();
+      const {row} = renderRow({
+        leading: [
+          {id: 'unread', label: 'Unread', onActivate: inner},
+          {id: 'pin', label: 'Pin', onActivate: outer},
+        ],
+      });
+      dragLeading(row, 90);
+      await settled();
+      expect(xOf(row)).toBe(144);
+      const f = finger(screen.getByRole('button', {name: 'Pin'}));
+      // A scroll of the page begins the close. The press lands in the same
+      // task, before the panel turns inert.
+      act(() => {
+        document.dispatchEvent(new Event('scroll'));
+        f.down(10);
+      });
+      f.move(20);
+      f.move(35);
+      f.move(35 + 150);
+      f.move(35 + 300);
+      f.rest();
+      f.up();
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      await settled();
+      expect(outer).not.toHaveBeenCalled();
+      expect(inner).not.toHaveBeenCalled();
+    });
+
     describe('the full swipe', () => {
       const twoEntries = () =>
         renderRow({
