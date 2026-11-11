@@ -252,9 +252,9 @@ describe('a disabled reason is the only tooltip its control shows', () => {
   it("keeps a controlled label tooltip's isOpen under a reason, and shows it once the reason ends", async () => {
     vi.useFakeTimers();
     const LABEL = 'Saved a minute ago';
-    const onOpenChange = vi.fn();
+    const onHide = vi.fn();
     function ControlledLabel() {
-      const label = useTooltip({isOpen: true, onOpenChange});
+      const label = useTooltip({isOpen: true, onHide});
       return (
         <button type="button" ref={label.ref}>
           Status
@@ -274,7 +274,7 @@ describe('a disabled reason is the only tooltip its control shows', () => {
     expect(
       screen.getByRole('button', {name: 'Status'}),
     ).not.toHaveAccessibleDescription(expect.stringContaining(LABEL));
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(onHide).not.toHaveBeenCalled();
 
     rerender(
       <ReasonContainer isOn={false}>
