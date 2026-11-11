@@ -189,9 +189,22 @@ const nextConfig = {
     }
 
     if (previewIconSet) {
+      // A cached module keeps the icons of the set it was built with, so a
+      // build with another set must not reuse it.
+      if (typeof config.cache?.version === 'string') {
+        config.cache.version += `|DOCSITE_ICON_SET=${previewIconSet}`;
+      }
       config.module.rules.push({
         test: templateSources,
         enforce: 'pre',
+        // The sets are installed in the docsite, but template sources live
+        // outside it, so their rewritten imports also resolve from here.
+        resolve: {
+          modules: [
+            ...(config.resolve.modules ?? ['node_modules']),
+            resolve(import.meta.dirname, 'node_modules'),
+          ],
+        },
         use: [
           {
             loader: resolve(
