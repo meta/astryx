@@ -91,15 +91,41 @@ const RECURSIVE_READER =
   /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s.*\|\s*xargs\b/;
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
-const TEXT_ARGUMENTS = /(?:^|[\s|;&(])(?:sed|[efz]?grep|rg|ag|ack)(?=\s|$)/;
+const TEXT_ARGUMENTS = /^(?:\w+=\S*\s+)*(?:sed|[efz]?grep|rg|ag|ack)(?=\s|$)/;
+
+/** Splits a segment at pipes that are outside quotes. */
+function pipelineStages(segment) {
+  const stages = [];
+  let quote = null;
+  let start = 0;
+  for (let index = 0; index < segment.length; index++) {
+    const char = segment[index];
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '|') {
+      stages.push(segment.slice(start, index));
+      start = index + 1;
+    }
+  }
+  stages.push(segment.slice(start));
+  return stages;
+}
 
 /**
- * Blanks quoted text that holds a space, a `|` or a nested quote in a segment
- * with a sed or search command, so `'../lib'` inside a pattern is not a path.
+ * In a pipeline stage run by sed or a search command, blanks quoted text that
+ * holds a space, a `|` or a nested quote: that is the script or the pattern, so
+ * `'../lib'` inside it is not a path. Other stages keep their quoted text.
  */
 function textAsText(segment) {
-  if (!TEXT_ARGUMENTS.test(segment)) return segment;
-  return segment.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted));
+  return pipelineStages(segment)
+    .map(stage =>
+      TEXT_ARGUMENTS.test(stage.trim())
+        ? stage.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted))
+        : stage,
+    )
+    .join('|');
 }
 
 /** The search pattern of a grep-like command, which is text, not a path it reads. */

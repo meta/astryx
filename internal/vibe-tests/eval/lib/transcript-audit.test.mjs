@@ -145,6 +145,10 @@ describe('reads the review found unaudited', () => {
     'cd / && rg -l getByRole 2> /dev/null',
     'cd / && grep -rn getByRole --exclude-dir=/proc',
     "find / -name '*.probe.mjs' | head -1 | xargs cat",
+    `python3 -c "print(open('/repo/x.probe.mjs').read())" | grep expect`,
+    `node -e "console.log(require('fs').readFileSync('/repo/x.probe.mjs', 'utf8'))" | grep getByRole`,
+    `bash -c "cat /repo/x.probe.mjs | grep expect"`,
+    `sh -c 'cat /runs/r1/runs/other__arm__r1/workspace/src/App.tsx | grep Button'`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
