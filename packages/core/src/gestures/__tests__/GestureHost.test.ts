@@ -3348,6 +3348,34 @@ describe('GestureHost', () => {
     }
   });
 
+  it('reads the page’s clock as it is at each touch: a hold that starts after fake timers replace it begins at its deadline', () => {
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = pageHost.attach(box, press);
+    // The page replaces its clock after the host exists, as fake timers do.
+    // jsdom stamps the touch with Date.now(), on the new clock's origin.
+    vi.useFakeTimers();
+    try {
+      const event = new Event('touchstart', {bubbles: true, cancelable: true});
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {value: [contact]});
+      box.dispatchEvent(event);
+      vi.advanceTimersByTime(499);
+      expect(states).not.toContain('began');
+      vi.advanceTimersByTime(1);
+      expect(states).toContain('began');
+    } finally {
+      detach();
+      vi.useRealTimers();
+    }
+  });
+
   it('reads the page’s own clock object for the page’s document', () => {
     const now = vi.spyOn(browserClock, 'now');
     const pageHost = new GestureHost(document, {
