@@ -335,10 +335,12 @@ export interface DateInputProps extends Omit<
    * When set, displays a colored border and status icon.
    * If message is provided, displays below the input.
    *
-   * While typed text is rejected, the field shows its own error message in
-   * place of `status`. With `onEntryErrorChange`, an `error` status with a
-   * message shows instead, and the field's own message applies only without
-   * one. A `warning` or `success` status never replaces a rejection.
+   * For a typed date the field rejects, and for unfinished text that Enter or
+   * blur keeps, the field shows its own error message in place of `status`.
+   * Unreadable text is announced, not shown. With `onEntryErrorChange`, an
+   * `error` status with a message shows instead, and the field's own message
+   * applies only without one. A `warning` or `success` status never replaces
+   * a rejection.
    */
   status?: InputStatus;
 

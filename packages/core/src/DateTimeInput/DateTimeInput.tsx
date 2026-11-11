@@ -502,10 +502,12 @@ export interface DateTimeInputProps extends Omit<
   /**
    * Status indicator for the input.
    *
-   * While typed date text is rejected, the field shows its own error message
-   * in place of `status`. With `onEntryErrorChange`, an `error` status with a
-   * message shows instead, and the field's own message applies only without
-   * one. A `warning` or `success` status never replaces a rejection.
+   * For a typed date the date segment rejects, and for unfinished date text
+   * that Enter or blur keeps, the field shows its own error message in place
+   * of `status`. Unreadable date text is announced, not shown. With
+   * `onEntryErrorChange`, an `error` status with a message shows instead, and
+   * the field's own message applies only without one. A `warning` or
+   * `success` status never replaces a rejection.
    */
   status?: InputStatus;
 

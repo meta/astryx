@@ -3269,6 +3269,26 @@ describe('DateTimeInput onEntryErrorChange', () => {
     expect(screen.queryByText('HOST MESSAGE')).not.toBeInTheDocument();
   });
 
+  it('without the callback, shows the caller status while the native date control replaces a kept rejection', () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const status = {type: 'error', message: 'HOST MESSAGE'} as const;
+    const {rerender} = render(field({presentation: 'popover', status}));
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '01/05/2027'},
+    });
+    expect(screen.getByText(OUT_OF_RANGE_MESSAGE)).toBeInTheDocument();
+    rerender(field({presentation: 'native', status}));
+    expect(screen.getByText('HOST MESSAGE')).toBeInTheDocument();
+    expect(screen.queryByText(OUT_OF_RANGE_MESSAGE)).not.toBeInTheDocument();
+  });
+
   it('never reports from the native pickers or the bottom sheet, and keeps the prop off the DOM', () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: /pointer:\s*coarse/.test(query),
