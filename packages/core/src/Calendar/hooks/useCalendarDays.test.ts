@@ -203,13 +203,13 @@ describe('useCalendarDays — day names', () => {
     const {result} = renderHook(() => useCalendarDays({year: 2026, month: 6}));
 
     expect(result.current.dayNames).toEqual([
-      'Su',
-      'Mo',
-      'Tu',
-      'We',
-      'Th',
-      'Fr',
-      'Sa',
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
     ]);
   });
 
@@ -219,13 +219,13 @@ describe('useCalendarDays — day names', () => {
     );
 
     expect(result.current.dayNames).toEqual([
-      'Mo',
-      'Tu',
-      'We',
-      'Th',
-      'Fr',
-      'Sa',
-      'Su',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
     ]);
   });
 
@@ -235,13 +235,13 @@ describe('useCalendarDays — day names', () => {
     );
 
     expect(result.current.dayNames).toEqual([
-      'Sa',
-      'Su',
-      'Mo',
-      'Tu',
-      'We',
-      'Th',
-      'Fr',
+      'Sat',
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
     ]);
   });
 });

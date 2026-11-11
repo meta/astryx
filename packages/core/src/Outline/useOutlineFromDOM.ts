@@ -42,6 +42,8 @@ export function useOutlineFromDOM(
     collectOutlineItems(containerRef.current),
   );
 
+  // Syncs the outline items with the container's DOM through a
+  // MutationObserver.
   useEffect(() => {
     const container = containerRef.current;
     setItems(collectOutlineItems(container));

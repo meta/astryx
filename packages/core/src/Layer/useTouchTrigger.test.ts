@@ -115,52 +115,6 @@ describe('useTapStop', () => {
     fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
     expect(fireEvent.click(trigger)).toBe(true);
   });
-
-  describe('with a condition, for a field that reads the tap', () => {
-    let isTap: () => boolean = () => false;
-    function ConditionalStopTrigger({stop}: {stop: boolean}) {
-      const {isTap: read, ...handlers} = useTapStop('mousedown', {
-        shouldStop: () => stop,
-      });
-      isTap = read;
-      return createElement('span', handlers, 'trigger');
-    }
-
-    it('cancels a finger press only when the condition picks it', () => {
-      const {rerender} = render(
-        createElement(ConditionalStopTrigger, {stop: false}),
-      );
-      const trigger = screen.getByText('trigger');
-      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
-      expect(fireEvent.mouseDown(trigger)).toBe(true);
-      rerender(createElement(ConditionalStopTrigger, {stop: true}));
-      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
-      expect(fireEvent.mouseDown(trigger)).toBe(false);
-    });
-
-    it('reads the latest press as a tap until the next press, past its mouse press', () => {
-      render(createElement(ConditionalStopTrigger, {stop: true}));
-      const trigger = screen.getByText('trigger');
-      fireEvent.pointerDown(trigger, {pointerType: 'pen'});
-      fireEvent.mouseDown(trigger);
-      fireEvent.click(trigger);
-      expect(isTap()).toBe(true);
-      fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
-      expect(isTap()).toBe(false);
-      expect(fireEvent.mouseDown(trigger)).toBe(true);
-    });
-
-    it('gives the reader only to a caller that passes a condition', () => {
-      function Probe() {
-        expect(Object.keys(useTapStop('mousedown')).sort()).toEqual([
-          'onMouseDown',
-          'onPointerDown',
-        ]);
-        return null;
-      }
-      render(createElement(Probe));
-    });
-  });
 });
 
 describe('isActionTrigger: a disabled control', () => {

@@ -839,6 +839,23 @@ describe('Token — owned handlers on the link+remove container', () => {
   });
 });
 
+describe('popup state on a clickable token (FR10)', () => {
+  it('passes aria-haspopup and aria-expanded to the inner button', () => {
+    render(
+      <Token
+        label="Status"
+        onClick={() => {}}
+        aria-haspopup="dialog"
+        aria-expanded={false}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Status'});
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
+  });
+});
+
 describe('Token selected state', () => {
   it('reflects a selection its field marks as the `selected` theme state', () => {
     const {rerender} = render(

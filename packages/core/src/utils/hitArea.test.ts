@@ -16,6 +16,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   clampedHitInsets,
+  groupGrowth,
   HIT_INSET_PROPERTIES,
   type HitInsets,
   type HitRect,
@@ -29,6 +30,47 @@ import {
 function rect(left: number, top: number, width: number, height: number) {
   return {left, top, right: left + width, bottom: top + height};
 }
+
+describe('groupGrowth', () => {
+  it('grows each side of a row as far as the member on that edge would, and a wide group by its narrow end members', () => {
+    // Three 32 px toggles in a 104 × 32 row, 4 px apart.
+    const row = rect(0, 100, 104, 32);
+    const members = [
+      rect(0, 100, 32, 32),
+      rect(36, 100, 32, 32),
+      rect(72, 100, 32, 32),
+    ];
+    expect(groupGrowth(row, members)).toEqual({
+      top: 6,
+      right: 6,
+      bottom: 6,
+      left: 6,
+    });
+    // A column of wide members grows only at its top and bottom.
+    const column = rect(0, 0, 120, 64);
+    expect(
+      groupGrowth(column, [rect(0, 0, 120, 32), rect(0, 32, 120, 32)]),
+    ).toEqual({top: 6, right: 0, bottom: 6, left: 0});
+    // A row wider than its members shrinks past its last member, so it
+    // covers only their targets: 32 px buttons ending 160 px short.
+    expect(groupGrowth(rect(0, 100, 264, 32), members)).toEqual({
+      top: 6,
+      right: -154,
+      bottom: 6,
+      left: 6,
+    });
+    expect(groupGrowth(row, [])).toEqual(NO_HIT_INSETS);
+    // The full growth it gives stops at a neighbour, as a control's does.
+    expect(
+      clampedHitInsets(
+        row,
+        [rect(-8, 100, 4, 32)],
+        44,
+        groupGrowth(row, members),
+      ).left,
+    ).toBe(2);
+  });
+});
 
 describe('clampedHitInsets', () => {
   it('grows a lone 24 px target to 44 px, centered', () => {
@@ -164,6 +206,13 @@ describe('writeHitInsets', () => {
   });
 });
 
+// Lets the promise callbacks that follow an animation's end run.
+async function promiseCallbacks(): Promise<void> {
+  for (let index = 0; index < 5; index++) {
+    await Promise.resolve();
+  }
+}
+
 describe('watchHitArea', () => {
   let coarse = true;
   let pointerListeners: Set<() => void>;
@@ -186,6 +235,18 @@ describe('watchHitArea', () => {
         toJSON: () => r,
       };
     };
+  }
+
+  /** Give `element` the whole-pixel layout size that jsdom leaves at 0. */
+  function layOut(element: HTMLElement, width: number, height: number): void {
+    Object.defineProperty(element, 'offsetWidth', {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(element, 'offsetHeight', {
+      configurable: true,
+      value: height,
+    });
   }
 
   function show(...elements: Element[]): void {
@@ -264,6 +325,174 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
+    // The layer opens from half size about the page origin, so every rect on
+    // screen is half its layout box during the first pass.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const control = byId('switch');
+    Object.assign(control.style, {
+      width: '24px',
+      height: '24px',
+      boxSizing: 'border-box',
+    });
+    layOut(control, 24, 24);
+    place(control, half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    place(byId('other'), half(rect(400, 400, 24, 24)));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The same insets as the page at full size gives.
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+    stop();
+  });
+
+  it('reads no computed style for a control at its layout size', () => {
+    const control = byId('switch');
+    const other = byId('other');
+    layOut(control, 24, 24);
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle');
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    // One control is at its layout size and the other has none, so neither
+    // resolves style in the measuring pass.
+    expect(getComputedStyle).not.toHaveBeenCalled();
+    stops.forEach(stop => stop());
+  });
+
+  it("reads a group's growth from its members in its layout px, so a group in an opening layer keeps its insets", () => {
+    // As above, the layer opens from half size about the page origin.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const group = byId('other');
+    Object.assign(group.style, {
+      width: '68px',
+      height: '32px',
+      boxSizing: 'border-box',
+    });
+    layOut(group, 68, 32);
+    place(group, half(rect(200, 300, 68, 32)));
+    place(byId('switch'), half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    // Two 32 px members, each 6 px short of 44 on each axis.
+    const members = [
+      half(rect(200, 300, 32, 32)),
+      half(rect(236, 300, 32, 32)),
+    ];
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(group, insets => heard.push(insets), {
+      growth: (box, toLayout) => groupGrowth(box, members.map(toLayout)),
+    });
+    show(group);
+    flush();
+    // At half size the members would read 16 px and grow 14 px.
+    expect(heard).toEqual([{top: 6, right: 6, bottom: 6, left: 6}]);
+    stop();
+  });
+
+  it('matches the page against its selector once, and keeps what it found current from each mutation', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+    // A later pass reads every rect again, but finds the elements kept.
+    place(byId('link'), rect(140, 100, 60, 24));
+    log.length = 0;
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+
+    // A neighbour added in the same task as the pass counts in it. Only the
+    // added element is matched, not the whole page again.
+    const above = document.createElement('button');
+    above.id = 'above';
+    document.body.append(above);
+    place(above, rect(100, 80, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+
+    // An attribute the selector reads makes an element a neighbour.
+    const below = document.createElement('span');
+    below.id = 'below';
+    document.body.append(below);
+    place(below, rect(100, 130, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+    below.setAttribute('role', 'button');
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 3, left: 10});
+
+    // A neighbour removed stops counting.
+    above.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 3, left: 10});
+    stop();
+  });
+
+  it('counts a control watched after the last pass by its own box, not by a part inside it', () => {
+    // A group whose box reaches nearer the control than the input inside it.
+    const group = document.createElement('div');
+    const input = document.createElement('input');
+    group.append(input);
+    document.body.append(group);
+    place(group, rect(100, 60, 24, 30));
+    place(input, rect(100, 20, 24, 10));
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The input is too far away to stop the control's growth.
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    // The group starts a watch. No element changes, but its box, not its
+    // input, is now the neighbour.
+    const stopGroup = watchHitArea(group, () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 5, right: 4, bottom: 10, left: 10});
+    // The group stops its watch: its input, too far away, is the neighbour
+    // again.
+    stopGroup();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -276,6 +505,9 @@ describe('watchHitArea', () => {
   });
 
   it('batches every pending control into one frame: all reads, then all writes', () => {
+    // The clock holds still, so a slow machine cannot spend the frame budget
+    // and split the batch. The budget has its own case below.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const first = byId('switch');
     const second = byId('other');
     place(first, rect(100, 100, 24, 24));
@@ -443,6 +675,31 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('reads nothing on the page at a finger’s press, and swallows no click, for a watch whose owner reads its own targets (checkAtPress off)', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {}, {checkAtPress: false});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    const read = vi.spyOn(link, 'getBoundingClientRect');
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    expect(read).not.toHaveBeenCalled();
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    stop();
+  });
+
   it('runs no observer or window listener for hit areas while the primary pointer is fine', () => {
     coarse = false;
     const constructed = vi.fn();
@@ -463,6 +720,77 @@ describe('watchHitArea', () => {
     expect(constructed).not.toHaveBeenCalled();
     expect(onWindow).not.toHaveBeenCalled();
     expect(onElement).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('leaves a touch on content that the element paints past its own box to that content, however near a neighbour is', () => {
+    // A row moved aside, its panel's entry painted beside it, and the next
+    // row 2 px below the touch.
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="row"><button id="entry">Read</button></div>' +
+        '<a id="next" href="#next">Next</a>',
+    );
+    const row = byId('row');
+    const entry = byId('entry');
+    place(row, rect(88, 16, 388, 60));
+    place(entry, rect(16, 16, 72, 60));
+    place(byId('next'), rect(16, 78, 388, 60));
+    const stop = watchHitArea(row, () => {}, {ownsDescendantTouches: true});
+    show(row);
+    flush();
+    // On the entry: 36 px from the row's box, 32 px from the next row.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 52, clientY: 46});
+    entry.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    entry.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    // The same touch on the row itself, in its band, is still checked.
+    const bandPress = new Event('pointerdown', {bubbles: true});
+    Object.assign(bandPress, {
+      pointerType: 'touch',
+      clientX: 52,
+      clientY: 46,
+    });
+    row.dispatchEvent(bandPress);
+    const bandClick = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    row.dispatchEvent(bandClick);
+    expect(bandClick.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  it('still swallows a touch on a control’s own grown input that a neighbour is nearer, unless the watch owns its descendants’ touches', () => {
+    // A switch whose invisible input grows past its track, as its coarse hit
+    // area. A link moved to 2 px past the switch.
+    const control = byId('switch');
+    control.insertAdjacentHTML('beforeend', '<input id="input" />');
+    const input = byId('input');
+    place(control, rect(100, 100, 24, 24));
+    place(input, rect(100, 100, 28, 24));
+    place(byId('link'), rect(126, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // On the input, 2.5 px past the switch and 0.5 px from the link.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 126.5, clientY: 112});
+    input.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    input.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
     stop();
   });
 
@@ -563,6 +891,64 @@ describe('watchHitArea', () => {
     stops.forEach(stop => stop());
   });
 
+  it('observes the page for its interactive elements only while the pointer is coarse and a watch is live (spec:AST-094 FR24)', () => {
+    const Native = globalThis.MutationObserver;
+    let pageObservers = 0;
+    vi.stubGlobal(
+      'MutationObserver',
+      class extends Native {
+        private isOnPage = false;
+        override observe(target: Node, options?: MutationObserverInit) {
+          if (target === document && !this.isOnPage) {
+            this.isOnPage = true;
+            pageObservers += 1;
+          }
+          super.observe(target, options);
+        }
+        override disconnect() {
+          if (this.isOnPage) {
+            this.isOnPage = false;
+            pageObservers -= 1;
+          }
+          super.disconnect();
+        }
+      },
+    );
+    const control = byId('switch');
+    const other = byId('other');
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    // Under a fine pointer: none.
+    coarse = false;
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(0);
+    // Coarse, with two watches: one.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    // The pointer turns fine: released.
+    coarse = false;
+    pointerListeners.forEach(listener => listener());
+    expect(pageObservers).toBe(0);
+    // Coarse again, then the last watch stops: released.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    stops[0]();
+    expect(pageObservers).toBe(1);
+    stops[1]();
+    expect(pageObservers).toBe(0);
+  });
+
   it('removes its document listener when the last watch stops (spec:AST-094 FR24)', () => {
     const offDocument = vi.spyOn(document, 'removeEventListener');
     const stops = ['switch', 'other'].map(id =>
@@ -605,6 +991,439 @@ describe('watchHitArea', () => {
     left();
   });
 
+  it('reads no layout as a finger presses: the click that the press sends measures, and a nearer neighbour swallows it', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    log.length = 0;
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    // The press decides nothing yet, so a scroll it starts waits on no layout.
+    expect(log).toEqual([]);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(log).toContain('read link');
+    expect(click.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  describe('when an animation moves boxes between the touch and its click', () => {
+    /** One running animation of `target`, from keyframes jsdom cannot run. */
+    const running = (target: Element, frames: Keyframe[]) => ({
+      playState: 'running',
+      effect: {
+        target,
+        getComputedTiming: () => ({endTime: 300}),
+        getKeyframes: () => frames,
+      },
+      finished: new Promise<void>(() => {}),
+    });
+    const tap = (control: Element, x: number, y: number) => {
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: x, clientY: y});
+      control.dispatchEvent(press);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      return click;
+    };
+    // jsdom has no Web Animations: the page reports the given animations.
+    const reportAnimations = (animations: ReadonlyArray<object>) =>
+      Object.defineProperty(document, 'getAnimations', {
+        configurable: true,
+        value: () => animations,
+      });
+    afterEach(() => {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    });
+
+    it('lets the click through when a glide has moved its control: the fresh box is not the one the finger landed on', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 112, clientY: 112});
+      control.dispatchEvent(press);
+      // By the click, a glide moved the row down. The link is now where the
+      // finger landed.
+      place(control, rect(100, 140, 24, 24));
+      place(link, rect(100, 100, 60, 24));
+      reportAnimations([
+        running(row, [
+          {offset: 0, transform: 'translateY(0px)'},
+          {offset: 1, transform: 'translateY(40px)'},
+        ]),
+      ]);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(false);
+      stop();
+    });
+
+    it('measures at the press a control that a pass saw an ancestor animation move: its box is still where the finger landed', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      // A glide runs, so the pass holds the control back.
+      reportAnimations([
+        running(row, [
+          {offset: 0, transform: 'translateY(0px)'},
+          {offset: 1, transform: 'translateY(40px)'},
+        ]),
+      ]);
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      log.length = 0;
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+      control.dispatchEvent(press);
+      expect(log).toContain('read link');
+      // By the click, the glide moved the row: the press already decided.
+      place(control, rect(100, 140, 24, 24));
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(true);
+      stop();
+    });
+
+    it('leaves out a neighbour that an animation moves: its box now is not its box at the touch', () => {
+      const control = byId('switch');
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link slides in to 8 px away.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        running(link, [
+          {offset: 0, translate: '268px 0'},
+          {offset: 1, translate: '0 0'},
+        ]),
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(false);
+      stop();
+    });
+
+    it('still checks the click when the control’s row holds a paused animation: a paused box does not move', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        {
+          ...running(row, [
+            {offset: 0, transform: 'translateY(0px)'},
+            {offset: 1, transform: 'translateY(40px)'},
+          ]),
+          playState: 'paused',
+        },
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+
+    it('keeps a neighbour under a paused animation in the click’s check: it does not move', () => {
+      const control = byId('switch');
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away, and a paused animation holds it there.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        {
+          ...running(link, [
+            {offset: 0, translate: '268px 0'},
+            {offset: 1, translate: '0 0'},
+          ]),
+          playState: 'paused',
+        },
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+
+    it('still checks the click when the control’s row only fades or tints: nothing moved since the touch', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        running(row, [
+          {offset: 0, opacity: '1', backgroundColor: 'rgba(0, 0, 0, 0)'},
+          {offset: 1, opacity: '0.6', backgroundColor: 'rgb(0, 0, 0)'},
+        ]),
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+  });
+
+  it('leaves the insets alone at the click of a press that scales the control, and measures them once the press’s motion ends', async () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(400, 100, 60, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+    // The press scales the control about its center, and its motion runs.
+    control.style.transform = 'matrix(0.9, 0, 0, 0.9, 0, 0)';
+    place(control, rect(101.2, 101.2, 21.6, 21.6));
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    control.getAnimations = () => [
+      {
+        playState: 'running',
+        effect: {getComputedTiming: () => ({endTime: 150})},
+        finished,
+      } as unknown as Animation,
+    ];
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 112, clientY: 112});
+    control.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    // The scaled box reads other insets, but the click writes none.
+    expect(heard).toHaveLength(1);
+    // The motion ends at the layout box: the pass finds the same insets.
+    control.style.transform = '';
+    place(control, rect(100, 100, 24, 24));
+    control.getAnimations = () => [];
+    finish();
+    await finished;
+    await promiseCallbacks();
+    flush();
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+    stop();
+  });
+
+  it('runs no pass while the page scrolls: a control that scrolls into view is measured once the scroll ends', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      const control = byId('switch');
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      flush();
+      log.length = 0;
+      window.dispatchEvent(new Event('scroll'));
+      show(control);
+      window.dispatchEvent(new Event('resize'));
+      flush();
+      // A frame of the scroll reads no layout and writes no insets.
+      expect(log).toEqual([]);
+      expect(heard).toEqual([]);
+      window.dispatchEvent(new Event('scrollend'));
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+      // Where no scrollend comes, the pass runs once the scroll is still.
+      log.length = 0;
+      place(byId('link'), rect(140, 100, 60, 24));
+      window.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
+      flush();
+      expect(log).toEqual([]);
+      vi.advanceTimersByTime(1000);
+      flush();
+      expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('measures nothing while an ancestor animates, as a screen that slides in or a layer that grows, and measures once it comes to rest', async () => {
+    const control = byId('switch');
+    const screen = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const slide = {
+      playState: 'running',
+      effect: {target: screen, getComputedTiming: () => ({endTime: 300})},
+      finished,
+    };
+    // jsdom has no Web Animations: the page reports one running slide.
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => (slide.playState === 'running' ? [slide] : []),
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(log).toEqual([]);
+      expect(heard).toEqual([]);
+      slide.playState = 'finished';
+      finish();
+      await finished;
+      await promiseCallbacks();
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
+  it('measures a control under a paused parent animation: an app can leave it paused, and a paused box does not move', () => {
+    const control = byId('switch');
+    const screen = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const slide = {
+      playState: 'paused',
+      effect: {target: screen, getComputedTiming: () => ({endTime: 300})},
+      finished: new Promise<void>(() => {}),
+    };
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => [slide],
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
+  it('measures a control under a parent that only fades or tints: no box moves', () => {
+    const control = byId('switch');
+    const row = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const tint = {
+      playState: 'running',
+      effect: {
+        target: row,
+        getComputedTiming: () => ({endTime: 300}),
+        getKeyframes: () => [
+          {offset: 0, opacity: '0', backgroundColor: 'rgba(0, 0, 0, 0)'},
+          {offset: 1, opacity: '1', backgroundColor: 'rgb(0, 0, 0)'},
+        ],
+      },
+      finished: new Promise<void>(() => {}),
+    };
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => [tint],
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
+  it('keeps the page’s interactive elements across a layer’s open and close, and a row watched in it: it matches only what changed, never the whole page again', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(400, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+
+    // A layer opens beside the control with two rows, and a row is watched.
+    const layer = document.createElement('div');
+    layer.innerHTML =
+      '<div role="menuitem" id="row1" tabindex="-1"></div>' +
+      '<div role="menuitem" id="row2" tabindex="-1"></div>';
+    document.body.append(layer);
+    place(byId('row1'), rect(132, 100, 60, 24));
+    place(byId('row2'), rect(132, 128, 60, 24));
+    const stopRow = watchHitArea(byId('row1'), () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+
+    // The layer closes: its rows stop counting.
+    stopRow();
+    layer.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 10, bottom: 10, left: 10});
+    expect(queries).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it('stops hearing a control after its function runs', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -614,6 +1433,17 @@ describe('watchHitArea', () => {
     stop();
     flush();
     expect(heard).toEqual([]);
+  });
+
+  it('stops a watch whose window closed before it, as a removed iframe’s', () => {
+    const iframe = document.body.appendChild(document.createElement('iframe'));
+    const frameDocument = iframe.contentDocument as Document;
+    const control = frameDocument.body.appendChild(
+      frameDocument.createElement('button'),
+    );
+    const stop = watchHitArea(control, () => {});
+    iframe.remove();
+    expect(() => stop()).not.toThrow();
   });
 });
 

@@ -25,6 +25,11 @@ import {
 } from '../../../foundation/fs/paths.mjs';
 import {printIntegrationCheckResponse, registerDoctor} from './doctor.mjs';
 import {expectRecordsCarry} from '../../../test-utils/text-projection.mjs';
+import {warmIntegrationChecks} from '../../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 let previousCwd;

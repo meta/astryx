@@ -107,7 +107,20 @@ guidance owns the process used to propose and test APIs.
   shared naming grammar. Component-specific vocabulary stays local. A prop that
   chooses how a component responds to input is named `<thing>Behavior` and takes
   a closed union of behavior names, and its name holds no input word (press,
-  touch, tap, hover, mouse, click) when the values can name the behavior.
+  touch, tap, hover, mouse, click) when the values can name the behavior. A
+  public prop names a system primitive with the system's existing vocabulary:
+  it introduces no new term for a concept the system already names (DEC-1). A
+  gap between an element and its anchor is an `offset`, as `useLayer`'s
+  `offset` is; a distance a positioned element keeps in from a container's or
+  the viewport's edge is an `inset`, as LayerProvider's and ToastViewport's
+  `inset` are. Depth is
+  `elevation`, which takes values from `Elevation`, as Card, Button, and Banner
+  take it. `lift` names motion under a press, such as
+  Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
+  `springs.contextMenuLift`, so it does not name a layout distance. An element
+  ref a hook takes is named for the element's job, as `containerRef`,
+  `scrollRef`, `menuRef`, `triggerRef`, and `inputRef` are, or `ref` when the element has
+  no narrower job.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
   a composed child. One interaction behavior is one prop, never parallel touch,
@@ -157,7 +170,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
@@ -210,26 +225,31 @@ guidance owns the process used to propose and test APIs.
 - **INV20 — Variants, not visual booleans.** Avoid boolean flags that only swap visuals; prefer variants. This
   applies INV2's naming and INV4's caller-owned intent to visual choices; see
   [Open visual vocabularies and closed axes](../contributing/api-conventions.md#open-visual-vocabularies-and-closed-axes).
-- **INV21 — One API per job.** No new
-  API that shares a job with existing API, unless the existing API is being
-  deprecated in favor of it. INV3 keeps one prop to one concept and INV16 keeps
-  one `presentation` prop for a surface choice; INV21 applies the same rule
-  across props, components, hooks, and factories. A hook that delegates
-  entirely to a public factory, with no behavior of its own, and a component
-  built entirely on a public factory are one API with that factory, not a
-  second one (`spec:AST-107` FR6, FR8). A deprecation follows
-  INV9.
-- **INV22 — Every interaction hook has a non-React path.** A public hook that
-  attaches gesture, press, drag, or motion behavior to an element delegates
-  entirely to a public `create…(element, options)` factory that takes the same
-  options, with React content taken as a render callback (`spec:AST-107` FR8),
-  and returns a handle with `destroy()` (`spec:AST-107` FR6), except a
-  hook whose result only an Astryx React component or StyleX can use, such as
-  `useAnimatedLayout`, `useEntryAnimation`, `useContainerReveal`,
-  `useTouchTrigger`, `useTableRowExpansion`, and `useTableColumnResize`. A hook
-  whose current signature cannot delegate gains a ref-taking signature beside
-  it; the old signature is deprecated under INV9. A factory's announced and shown
-  strings follow `architecture:internationalization` INV3a's options.
+- **INV21 — One API per job.** No new API that shares a job with existing API,
+  unless the existing API is being deprecated in favor of it. INV3 keeps one
+  prop to one concept and INV16 keeps one `presentation` prop for a surface
+  choice; INV21 applies the same rule across props, components, hooks, and
+  factories. A hook that delegates entirely to a public factory, with no
+  behavior of its own, and a component built entirely on a public factory are
+  one API with that factory, not a second one (`spec:AST-107` FR6, FR8). A
+  deprecation follows INV9. A hook whose value a component takes through one
+  slot prop is one API with that component, not a second one, as in `const value
+= useX(…); <Component x={value} />` (owner decision, 2026-11-04).
+- **INV21a — Shipped APIs change only for user value.** A breaking or
+  deprecating change to a shipped public API needs user value; conformance to a
+  system rule alone does not justify it. New APIs follow the current rules;
+  shipped APIs are grandfathered until a real need arises (owner decision,
+  2026-11-04). Each component API change still needs its own owner approval.
+- **INV22 — Interaction utilities have non-React equivalents.** Interaction
+  utilities have non-React equivalents (`create…`) that closely match their
+  hooks (the same option names and meanings, events and return concepts). A hook
+  whose result only an Astryx component or StyleX can use (a slot hook, whose
+  output feeds one Astryx component prop, or `useAnimatedLayout`,
+  `useEntryAnimation`, `useContainerReveal`, `useTouchTrigger`,
+  `useTableRowExpansion`, `useTableColumnResize`) has none by default; the owner
+  may add one (owner decision, 2026-11-04). `useMenuPress` has no non-React
+  equivalent by owner decision (2026-11-04); one may be added when a caller
+  needs it.
 - **INV23 — Each private data attribute has one owner module.** A
   `data-astryx-*` attribute is private unless this invariant names it public.
   Each private attribute has one internal owner module in the package that
@@ -239,9 +259,21 @@ guidance owns the process used to propose and test APIs.
   written. The owner exports only ready-made styles that read the attribute, the
   props or writer that set it, and the runtime readers its package needs, such
   as a `closest` or `matches` helper or a getter; it never exports the raw name
-  or a selector. Every other file in that package spreads those exports and
+  or a selector. A plain-TS owner,
+  `packages/core/src/privateAttributes/<name>.ts`, may export its name and
+  selector text to its `.stylex.ts` sibling and to the theme engine in
+  `packages/core/src/theme/`; no other file imports it, and `.stylex.ts` owners
+  still never export them. When a plain-TS owner exists, its `.stylex.ts`
+  sibling is not an owner: it writes the attribute's selectors only as literals
+  for its own `stylex.create` calls, because StyleX resolves a selector only
+  where it is written, and it never exports them or sets the attribute. Every
+  other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
-  package's owner module through an internal path. StyleX merges styles one
+  package's owner module through an internal path. An owner module whose
+  attribute marks an element its package does not render may write its
+  selector once in an injected rule instead of `stylex.create`; Core may
+  re-export only that module's writer to Lab through an internal entry, and
+  the attribute name and selector stay private to the owner. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
   property it sets, its rest state and pointer states included, and a caller
   does not set those properties again on the same element. Outside the owner
@@ -251,7 +283,9 @@ guidance owns the process used to propose and test APIs.
   sit in its baseline, which only shrinks. Tests may name a private attribute,
   because they assert the DOM a component renders. A private attribute appears
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
-  promise, and may change in any release. The public data attributes are
+  promise, and may change in any release. A data attribute outside the
+  `data-astryx-*` namespace is public too, and is added only when a current
+  record names it (DEC-2). The public `data-astryx-*` attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -264,22 +298,29 @@ guidance owns the process used to propose and test APIs.
   among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
   theme build, AspectRatio, the Chat composer, the press and menu-press hooks,
   and the edge-compensation styles, and the lint rule allows their names.
-- **INV24 — Each published package's public surface has a generated API
-  report.** `pnpm api:report` generates one committed report per published
-  package from its built declarations and stylesheet, with a section for each
-  entry point. A report lists exports, component props with their types, hook
+- **INV24 — Each pull request carries a generated public API delta.** No package
+  commits a generated API report. For a pull request that changes a published
+  package's source or build, CI runs one surface generator on the merge base and
+  on the exact head, from each published package's built declarations and
+  stylesheet by entry point, and writes the API changes between them,
+  uncommitted, as CI's API-changes artifact. The delta lists new, changed, and
+  removed exports, component props with their types, hooks with their
   signatures, supporting types, public CSS custom properties and theme targets,
-  and the public `data-astryx-*` attributes INV23 names. A reachable member tagged internal
-  appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
-  including Lab, do not. A member inside a canonical experimental boundary
-  appears marked experimental (`spec:AST-017` FR21). The pull-request report
-  lists the API changes between the reports built from the merge base and from
-  the head: added, changed, and removed rows, each with its signature and a
-  usage example, and flags a committed report that differs from the head's
-  build as stale, in one line. The report and its changes are evidence: they
-  fail no check and decide no acceptance (INV13).
-- **INV25 — Undeclared public API goes to a human.** Review compares each added
-  or changed row of a pull request's API changes with current records. A row
+  the public `data-astryx-*` attributes INV23 names, and public events, each row
+  with its signature. A reachable member tagged internal appears (INV12); Core's
+  `./internal/*` subpaths and unpublished packages, including Lab, do not. A
+  member inside a canonical experimental boundary appears marked experimental
+  (`spec:AST-017` FR21). The merge gate reads that artifact only for a pull
+  request that changes a published package's source or build, and fails closed
+  when it is missing or the generator errors. For any other pull request the
+  gate reads no artifact, and its review notes say "New public API: none". The
+  review bot's review of each pull request starts its summary notes with the
+  delta, each row with a usage example, or says "New public API: none";
+  public-API review reads that delta. The delta's rows are evidence and decide
+  no acceptance (INV13).
+- **INV25 — Undeclared public API goes to a human.** Public-API review
+  compares each added or changed row of the pull request's API delta (INV24)
+  with current records. A row
   that a record current at the merge base, or a record change in the same pull
   request, decides needs no further step. A row that no current record decides,
   including a reachable member tagged internal, goes to human review with that
@@ -296,12 +337,12 @@ source. Lab components are not stable public promises until promotion.
   intentional observable contract triggers public-API review. A top-level export
   need not change for a reachable supporting contract to change.
 - Each review compares declarations and reachable exports from merge-base to head
-  and from current main to the synthetic merge. The API changes from the
-  generated reports (INV24) inventory that evidence and map each row to its
-  canonical component, family, architecture, or system owner; they do not decide
+  and from current main to the synthetic merge. The pull request's API delta
+  (INV24) inventories that evidence and maps each row to its canonical
+  component, family, architecture, or system owner; it does not decide
   acceptance.
-- A pull request that changes a published package's public surface regenerates
-  its API reports with `pnpm api:report`; a stale report is flagged, not failed.
+- A pull request that changes a published package's public surface shows the
+  change in its API delta (INV24) and commits no generated report.
 - After the generated surface inventory identifies the exact API and behavior
   delta and its canonical owner, route it under
   `architecture:knowledge-contracts`. This record does not redefine review results
@@ -311,6 +352,9 @@ source. Lab components are not stable public promises until promotion.
   defect does not by itself require consumer-doc changes.
 - A new prop includes the admission argument from `spec:AST-002/DEC-1`; it does
   not get accepted only because it solves one callsite.
+- Public-API review rejects a public prop that names an existing system concept
+  with a new term (INV2, DEC-1); the prop takes the system's word for that
+  concept.
 - Adding a touch presentation or a touch input mode for an open surface to a
   stable component checks INV16: a `presentation` value keeps the fine-pointer
   surface and mode, and every such touch mode is reachable by callers.
@@ -359,12 +403,62 @@ Transition Action sequencing and pending behavior belong to their component or
 family contract. This record links that owner once it is current; it does not
 copy the component matrix.
 
+### DEC-1 — Public props use the system's existing vocabulary
+
+**Decider:** `cixzhang`, `2026-11-03`
+
+A public prop that names a system primitive uses the word the system already
+has for it, so a builder who knows one component reads the same concept the
+same way on the next. A gap from an anchor is `offset`, a distance a
+positioned element keeps in from an edge is `inset`, depth is `elevation`, and
+`lift` stays the name of motion under a press. An API for a new component, such as a search field, starts from
+the existing patterns in the system and introduces no new term for a concept
+the system already names.
+
+Rejected: component-local names for shared concepts.
+
+### DEC-2 — A data attribute outside the private `data-astryx-*` namespace is public surface
+
+**Reference:** `architecture:public-component-api/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "New data attributes are public facing and shoudln't be used
+for internal only concerns without a clear spec that by passes this rule", and
+"main reason to be careful of data attributes is we generate them for themes".
+Theme compilation writes selectors on data attributes (the `data-astryx-*`
+scopes and attributes that mirror props, such as `data-size` and
+`data-variant`), so a data attribute a component renders can be read or
+targeted by a theme and becomes public surface. A component therefore adds a
+new data attribute only when a current record names it and states why; an
+internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
+attribute at all.
+
+For a per-instance dynamic style, the first choice is a StyleX dynamic style
+(`stylex.create` with a function): it sets a generated custom property inline
+on that instance (`--x-<property>`, or a hashed name under a pseudo-element or
+condition). That property is private by this rule: no theme value, record, or
+document names it, and it may change in any release. The owner said, on
+Avatar's initials: "We should make this the agent's first choice for these
+types of dynamic styles."
+
+Rejected: adding a data attribute for an internal concern without a record
+that names it.
+
+### DEC-6 — Pull requests carry an API delta, not a committed report
+
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
+
+Rejected: keeping a committed generated API report per package.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
+| INV2, DEC-1             | Public-API review against the system vocabulary                                                                          | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                              | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                          | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -377,15 +471,20 @@ copy the component matrix.
 | INV18                   | Public-API review against the component's anatomy table                                                                  | A prop that selects or configures a subcomponent's prop or label, a composition that renders a slot the anatomy does not describe, or a rendered content slot that is not a part named in the anatomy                                                                                                                                                                                                                                                                                   |
 | INV19                   | Public-API review with a bundle and runtime cost note for a costly feature                                               | A feature with a large resource cost that every caller pays with no plug-in path or named feature prop                                                                                                                                                                                                                                                                                                                                                                                  |
 | INV20                   | Public-API review of new boolean props                                                                                   | A boolean whose only effect is a visual swap where a variant fits                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor                                                                                                                                                                                                                                                                                                                                                                                              |
-| INV22                   | Public-API review of each public gesture, press, drag, or motion hook against its `create…` factory                      | A public interaction hook with no public factory taking the same options and returning `destroy()`, outside the listed exemptions                                                                                                                                                                                                                                                                                                                                                       |
+| INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor; a hook fed to one component slot prop counted as a second API                                                                                                                                                                                                                                                                                                                               |
+| INV21a                  | Public-API review of each breaking or deprecating change to a shipped API                                                | A breaking or deprecating change to a shipped public API justified only by conformance to a system rule                                                                                                                                                                                                                                                                                                                                                                                 |
+| INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside hooks whose result only an Astryx component or StyleX can use and `useMenuPress` (by owner decision), or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                               |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
-| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
-| INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
+| INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
+| INV25                   | Public-API review routing against the pull request's API delta                                                           | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
 
+- INV23 gap: nothing checks data attributes outside `data-astryx-*` yet; the
+  lint and its verification row see only `data-astryx-*` names, and existing
+  attributes outside that namespace, such as ToastViewport's `data-toast-id`,
+  have no inventory.
 - INV2, INV3: shipped props that predate the behavior-prop rule keep their
   names until a minor renames them under INV9. This list is a partial
   inventory; known deviations include Tooltip and HoverCard `focusTrigger`,
@@ -403,23 +502,36 @@ Known verification gaps:
   and `useResizable` `collapsible` and CodeBlock `isCollapsible`; Calendar
   `mode` and FileInput `isMultiple`; FileInput `mode`; Tokenizer and
   PowerSearch `tokenOverflowBehavior`; OverflowList `behavior`.
-- INV22: known gaps include `useLongPress`, `useMenuPress`,
-  `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
-  `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
-  `useTooltip`, `useHoverCard`, and `useChatStreamScroll`: each attaches
-  gesture, press, drag, or motion behavior and has no `create…` factory yet;
-  no full inventory exists yet. Each conforms by adding its factory and, where
-  its signature cannot delegate, a ref-taking signature beside the deprecated
-  one.
+- INV2: a shipped prop that names a concept with a word the system uses for
+  another keeps its name until a minor renames it under INV9. Outline's
+  `offset` is the distance below the top of its scroll root
+  (`component:Outline` FR4), not a gap from an anchor.
+- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false` does
+  not snap, `true` is native scroll snap, and a value from `useSnapPaging` is
+  snap paging. It is a known deviation from three rules: an `is…` or `has…`
+  boolean names only a true on/off with no third state (INV3); a prop that
+  chooses how a component responds to input is a `<thing>Behavior` closed union
+  (INV2); and a behavior that differs by device offers a per-device value
+  (INV3), where the paging value pages under a finger and a trackpad swipe and
+  keeps native snap under a mouse wheel. It keeps one snap prop for builders
+  (`component:Carousel/DEC-2`) and is not renamed.
+- INV22: known gaps include `useLongPress`, `usePressFeedback`,
+  `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
+  `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and
+  `useChatStreamScroll`: each attaches gesture, press, drag, or motion behavior
+  and has no `create…` factory yet; no full inventory exists yet. Each conforms
+  by adding its factory; a shipped hook's signature changes only when a real
+  need arises (INV21a).
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
-- INV24: the reports cover declarations, CSS custom properties, theme targets,
+- INV24: the delta covers declarations, CSS custom properties, theme targets,
   and public attributes; context-member behavior, undeclared defaults, CLI
   schemas, and observable behavior for both the branch and synthetic merge
-  still need explicit review. When no build of the merge base is kept, the
-  API changes compare with the merge base's committed reports, marked as
-  such, and list the rows a stale committed report carries.
+  still need explicit review.
+- INV24 gap: the review recipe's API delta has no fixture test yet, and no
+  repository test covers the merge gate's fail-closed read of the compare
+  artifact.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's

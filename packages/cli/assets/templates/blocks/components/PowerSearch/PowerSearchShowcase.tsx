@@ -55,12 +55,13 @@ export default function PowerSearchShowcase() {
   const [filters, setFilters] = useState<PowerSearchFilter[]>(initialFilters);
 
   return (
-    <PowerSearch
-      style={{width: 400}}
-      config={config}
-      filters={filters}
-      onChange={newFilters => setFilters([...newFilters])}
-      placeholder="Search by status, title..."
-    />
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <PowerSearch
+        config={config}
+        filters={filters}
+        onChange={newFilters => setFilters([...newFilters])}
+        placeholder="Search by status, title..."
+      />
+    </div>
   );
 }

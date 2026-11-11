@@ -58,7 +58,7 @@ export const docs = {
       name: 'isOpen',
       type: 'boolean',
       description:
-        'Controlled open state. true force-shows, false force-hides, undefined lets hover/focus manage visibility.',
+        'Controlled open state. true force-shows; false force-hides, and focus that would show it calls onShow; undefined lets hover/focus manage visibility.',
     },
     {
       name: 'isDefaultOpen',
@@ -69,7 +69,8 @@ export const docs = {
     {
       name: 'onShow',
       type: '() => void',
-      description: 'Callback fired when the tooltip becomes visible.',
+      description:
+        'Callback fired when the tooltip becomes visible. Under isOpen={false}, it reports focus that would show the tooltip.',
     },
     {
       name: 'onHide',
@@ -110,6 +111,18 @@ export const docs = {
       description:
         'Render function for the anchor-positioned tooltip content. The positioning opt-out is excluded: the tooltip always derives its position from placement/alignment.',
     },
+    {
+      name: 'show',
+      type: '() => void',
+      description:
+        'Opens the tooltip now and keeps it open until hide(), Escape, a press outside, or focus leaving its trigger. Its text is announced once, and onShow fires. Under a controlled isOpen it only calls onShow. Does nothing while isEnabled is false.',
+    },
+    {
+      name: 'hide',
+      type: '() => void',
+      description:
+        'Closes the tooltip now, and onHide fires. Under a controlled isOpen it only calls onHide.',
+    },
   ],
   usage: {
     description:
@@ -124,6 +137,11 @@ export const docs = {
         guidance: true,
         description:
           'Prefer the Tooltip component for standard wrapping; use the hook when the trigger is not a simple child.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a toggle-style trigger, have your own button call show() and hide() on each press. Give it aria-describedby and aria-controls set to describedBy, and aria-expanded (true while show() holds the tooltip, false after hide() or onHide), and keep its own accessible name. For an info icon, use InfoTip instead.',
       },
       {
         guidance: false,
@@ -167,6 +185,8 @@ export const docsDense = {
     anchorId: 'CSS anchor name.',
     describedBy: 'ID for aria-describedby.',
     renderTooltip: 'renders anchor-positioned tooltip content.',
+    show: 'opens + holds until hide()/Escape/outside press/focus leave; announces once; onShow. Controlled: onShow only. No-op when disabled.',
+    hide: 'closes; onHide. Controlled: onHide only.',
   },
   usage: {
     description:
@@ -181,6 +201,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Prefer Tooltip for standard wrapping; use hook when trigger is not simple child.',
+      },
+      {
+        guidance: true,
+        description:
+          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby + aria-controls={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
       },
       {
         guidance: false,

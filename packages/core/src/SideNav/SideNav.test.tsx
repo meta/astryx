@@ -200,6 +200,51 @@ describe('SideNav', () => {
     expect(nav.children).toHaveLength(1);
   });
 
+  it('does not render an empty footer row when only footer is set', () => {
+    render(
+      <SideNav footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    // The sticky bottom spaces its children with a gap, so an empty row adds
+    // space below the footer. The footer must be its only child.
+    const stickyBottom = screen.getByTestId('footer').parentElement;
+    expect(stickyBottom?.children).toHaveLength(1);
+    expect(document.querySelector('[class*="footerRow"]')).toBeNull();
+  });
+
+  it('keeps the footer row for footerIcons beside a footer', () => {
+    render(
+      <SideNav
+        footer={<span data-testid="footer">Footer</span>}
+        footerIcons={<span data-testid="icons">Icons</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(screen.getByTestId('icons'));
+    expect(screen.getByTestId('footer').parentElement?.children).toHaveLength(
+      2,
+    );
+  });
+
+  it('keeps the footer row for the built-in collapse button beside a footer', () => {
+    render(
+      <SideNav
+        collapsible={{}}
+        footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(
+      screen.getByRole('button', {name: 'Collapse sidebar'}),
+    );
+  });
+
   it('centers footer content when collapsed, matching children alignment', () => {
     render(
       <SideNav
@@ -825,10 +870,12 @@ describe('SideNavHeading collapsed', () => {
     const popoverEl = document.querySelector('[popover]') as HTMLElement;
     const anchorId = popoverEl.style.positionAnchor;
     expect(anchorId).not.toBe('');
-    const triggerAnchorNames = trigger.style.anchorName
-      .split(',')
-      .map(s => s.trim());
-    expect(triggerAnchorNames).toContain(anchorId);
+    const triggerAnchorNames = () =>
+      trigger.style.anchorName.split(',').map(s => s.trim());
+    // A closed menu's trigger is no anchor; an open one's is.
+    expect(triggerAnchorNames()).not.toContain(anchorId);
+    fireEvent.click(trigger);
+    expect(triggerAnchorNames()).toContain(anchorId);
   });
 });
 
@@ -1003,6 +1050,66 @@ describe('SideNavItem', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['button item', {}],
+    ['item with href', {href: '/dashboard'}],
+  ])(
+    'does not run a caller’s handlers other than focus and blur on a disabled %s',
+    (_name, extraProps) => {
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      const onPointerDown = vi.fn();
+      const onMouseDown = vi.fn();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <SideNavItem
+          label="Dashboard"
+          isDisabled
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          {...extraProps}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Dashboard'});
+      // fireEvent bypasses `pointer-events: none`, as programmatic input does.
+      fireEvent.pointerDown(button);
+      fireEvent.mouseDown(button);
+      fireEvent.keyDown(button, {key: 'x'});
+      fireEvent.keyUp(button, {key: 'x'});
+      expect(onPointerDown).not.toHaveBeenCalled();
+      expect(onMouseDown).not.toHaveBeenCalled();
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+      fireEvent.focus(button);
+      fireEvent.blur(button);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('still runs an enabled item’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <SideNavItem
+        label="Dashboard"
+        onClick={() => {}}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.pointerDown(button);
+    fireEvent.keyDown(button, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a disabled item with href as a focusable button that does not navigate', () => {
     const handleClick = vi.fn();
     render(
@@ -1020,6 +1127,39 @@ describe('SideNavItem', () => {
     expect(button).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(button);
     expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('does not run a caller’s handlers other than focus and blur on a disabled split row', () => {
+    const onKeyDown = vi.fn();
+    const onKeyUp = vi.fn();
+    const onPointerDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <SideNavItem
+        label="Settings"
+        href="/settings"
+        collapsible
+        isDisabled
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onPointerDown={onPointerDown}
+        onFocus={onFocus}
+        onBlur={onBlur}>
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+    const primary = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(primary);
+    fireEvent.keyDown(primary, {key: 'x'});
+    fireEvent.keyUp(primary, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onKeyUp).not.toHaveBeenCalled();
+    fireEvent.focus(primary);
+    fireEvent.blur(primary);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
   });
 
   it('exposes aria-disabled on the primary of a disabled split row', () => {
@@ -1597,6 +1737,37 @@ function renderExpanded(ui: React.ReactElement) {
 // =============================================================================
 
 describe('SideNavItem (collapsed)', () => {
+  it('does not run a caller’s handlers other than focus and blur on a disabled collapsed leaf', () => {
+    const onKeyDown = vi.fn();
+    const onKeyUp = vi.fn();
+    const onPointerDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    renderCollapsed(
+      <SideNavItem
+        label="Dashboard"
+        icon={<StubIcon />}
+        isDisabled
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onPointerDown={onPointerDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />,
+    );
+    const leaf = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.pointerDown(leaf);
+    fireEvent.keyDown(leaf, {key: 'x'});
+    fireEvent.keyUp(leaf, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onKeyUp).not.toHaveBeenCalled();
+    fireEvent.focus(leaf);
+    fireEvent.blur(leaf);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
   it('hides items without icons when collapsed', () => {
     const {container} = renderCollapsed(<SideNavItem label="No Icon Item" />);
     expect(screen.queryByText('No Icon Item')).not.toBeInTheDocument();

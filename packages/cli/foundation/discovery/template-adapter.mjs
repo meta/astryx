@@ -27,7 +27,9 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
 import {
@@ -218,11 +220,13 @@ const BLOCKS_DIR = path.join(TEMPLATES_DIR, 'blocks');
 /**
  * Inline placeholder swapped in for demo imagery when scaffolding a template,
  * so scaffolded pages render with zero setup (see stripTemplateAssetRefs).
- * Neutral hex colors (not design tokens) so it renders in any project, themed
- * or not. Mirrors apps/docsite/public/template-assets/placeholder.svg.
+ * A gray at low opacity, not design tokens, so it renders in any project,
+ * themed or not, and takes its tone from the surface behind it: light on a
+ * light page, dark in dark mode. Mirrors
+ * apps/docsite/public/template-assets/placeholder.svg.
  */
 const PLACEHOLDER_IMAGE =
-  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23f5f6f8%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23c2cad6%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23c2cad6%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.12%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23808080%22%20stroke-opacity%3D%220.55%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.55%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
 
 /**
  * Extensions that need a video-safe placeholder rather than the image data
@@ -1115,8 +1119,7 @@ export function listTemplates() {
   const all = [];
   if (fs.existsSync(PAGES_DIR)) {
     all.push(
-      ...fs
-        .readdirSync(PAGES_DIR, {withFileTypes: true})
+      ...listDirEntries(PAGES_DIR)
         .filter(e => e.isDirectory())
         .map(e => e.name),
     );
@@ -1133,7 +1136,7 @@ function findDocFiles(dir, pattern) {
   /** @type {string[]} */
   const results = [];
   if (!fs.existsSync(dir)) return results;
-  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+  for (const entry of listDirEntries(dir)) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...findDocFiles(full, pattern));
@@ -1160,9 +1163,7 @@ export function findPageDocFile(dirPath) {
 
 async function discoverPages() {
   if (!fs.existsSync(PAGES_DIR)) return [];
-  const dirs = fs
-    .readdirSync(PAGES_DIR, {withFileTypes: true})
-    .filter(e => e.isDirectory());
+  const dirs = listDirEntries(PAGES_DIR).filter(e => e.isDirectory());
 
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
@@ -1602,7 +1603,7 @@ function findIntegrationDocFiles(root) {
   if (!fs.existsSync(root)) return results;
   /** @param {string} dir */
   const walk = dir => {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dir)) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
@@ -1976,6 +1977,41 @@ export async function findShowcase(componentName, cwd, options) {
 /** The npm scope of every Astryx package. */
 const ASTRYX_PACKAGE_SCOPE = '@astryxdesign/';
 
+/** A JSX opening tag; componentsInSource says why the pattern looks so. */
+const JSX_TAG = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+
+/** Comments and line breaks that may sit between two words of an import. */
+// A block comment ends at its first `*/`, and a line comment at its line's
+// end. So each comment has one reading, and a failed match cannot backtrack
+// through every split of a comment run.
+const SPACE_OR_COMMENT = String.raw`\s|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\n\r\u2028\u2029]*(?![^\n\r\u2028\u2029])`;
+const BETWEEN = `(?:${SPACE_OR_COMMENT})*`;
+const GAP = new RegExp(`(?:${SPACE_OR_COMMENT})+`, 'g');
+// The pair scan can start again at each word of a run of spaces and
+// comments, so a run costs up to its length squared. The longest run in the
+// bundled templates is about 10 KB.
+const MAX_GAP = 16 * 1024;
+
+/**
+ * One `imported as local` pair. The imported name is an identifier (group 1)
+ * or a string (group 3); the local name is group 4.
+ */
+const ALIAS = new RegExp(
+  String.raw`(?:(?<![\p{ID_Continue}$])([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)|(['"])((?:\\[\s\S]|(?!\2)[^\\\n])*)\2)` +
+    BETWEEN +
+    String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+// What follows each `as`: the pair scan reads the same text after its `as`.
+const AS_LOCAL = new RegExp(
+  String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+
 const UBIQUITOUS = new Set([
   'Text',
   'Heading',
@@ -2061,14 +2097,36 @@ export function extractComponents(pagePath) {
 /**
  * The components a template source composes. A surface that returns rewritten
  * source lists the components of that source, so a component the rewrite
- * removed is not listed.
+ * removed is not listed. A template Astryx ships answers from its stored list
+ * (TEMPLATE_COMPONENTS_FILE), which holds what parsing it returns; any other
+ * source, such as an integration's template, is parsed.
  * @param {string} src
  * @returns {string[]}
  */
 export function componentsInSource(src) {
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
+  if (known) return [...known];
+  return parsedComponents(src);
+}
+
+/** Where the component lists of the templates Astryx ships are stored. */
+export const TEMPLATE_COMPONENTS_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'templates',
+  'components.generated.json',
+);
+
+/**
+ * The components a template source composes, read from its syntax tree (see
+ * componentsInSource).
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function parsedComponents(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
-  // Templates author bare component names post un-prefix migration
-  // (P2380608025), so the `XDS` prefix is optional. Anchoring on the `<`
+  // Templates author bare component names post un-prefix migration,
+  // so the `XDS` prefix is optional. Anchoring on the `<`
   // JSX-tag boundary keeps this precise (avoids matching imports/comments/
   // identifiers) while remaining prefix-agnostic.
   //
@@ -2079,7 +2137,7 @@ export function componentsInSource(src) {
   // and `Record<string, Phase>` no longer do. Those were being indexed as
   // rendered components, putting type names like `Record`, `SVGProps` and
   // `ReadonlySet` into template keyword and "components used" output.
-  const tagRegex = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+  const tagRegex = new RegExp(JSX_TAG);
   /** @type {string[]} */
   const matches = [];
   let m;
@@ -2093,11 +2151,23 @@ export function componentsInSource(src) {
   // strings and type annotations cannot add or hide a name.
   const {declared: localDeclNames, astryxImports} = topLevelBindings(src);
 
+  return catalogNames(
+    matches
+      .filter(n => !localDeclNames.has(n))
+      .map(n => astryxImports.get(n) ?? n),
+  );
+}
+
+/**
+ * Rendered component names as the catalog lists them: without theme wrappers
+ * and ubiquitous parts, each part suffix stripped, each name once, sorted.
+ * @param {string[]} names
+ * @returns {string[]}
+ */
+function catalogNames(names) {
   return [
     ...new Set(
-      matches
-        .filter(n => !localDeclNames.has(n))
-        .map(n => astryxImports.get(n) ?? n)
+      names
         .filter(n => !['Theme', 'ThemeProvider'].includes(n))
         .filter(n => !UBIQUITOUS.has(n))
         .map(n =>
@@ -2111,4 +2181,47 @@ export function componentsInSource(src) {
         .filter(Boolean),
     ),
   ].sort();
+}
+
+/**
+ * Every name componentsInSource can return for `src`, read without parsing
+ * it, or null when it cannot be bounded so. It keeps the tag names a parse
+ * would drop as page-local. It adds each name an `imported as local` pair
+ * makes a tag stand for, wherever that text appears. An escaped name in an
+ * identifier or a string defeats the reading, so then it is null.
+ * @param {string} src
+ * @returns {string[] | null}
+ */
+export function componentNameBound(src) {
+  if (src.includes('\\u')) return null;
+  for (const gap of src.matchAll(GAP)) {
+    if (gap[0].length > MAX_GAP) return null;
+  }
+  const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
+  const local = new Set(tags);
+  // A pair adds a name only when its local name is a tag. Most sources have
+  // no `as` before a tag's name, so they skip the slower pair scan. Each
+  // match restarts one character on: a `/*` in a comment can hide a pair.
+  const asLocal = new RegExp(AS_LOCAL);
+  let pairs = false;
+  for (let m = asLocal.exec(src); m && !pairs; m = asLocal.exec(src)) {
+    asLocal.lastIndex = m.index + 1;
+    pairs = local.has(m[1]);
+  }
+  if (!pairs) return catalogNames(tags);
+  /** @type {string[]} */
+  const imported = [];
+  // Each match restarts one character on, so no pair hides inside another.
+  const alias = new RegExp(ALIAS);
+  for (let m = alias.exec(src); m; m = alias.exec(src)) {
+    // Step one code point: a `u` regex moves an index inside a surrogate
+    // pair back to the pair's start.
+    alias.lastIndex =
+      m.index + ((src.codePointAt(m.index) ?? 0) > 0xffff ? 2 : 1);
+    if (!local.has(m[4])) continue;
+    const name = m[1] ?? m[3];
+    if (name.includes('\\')) return null;
+    imported.push(name);
+  }
+  return catalogNames([...tags, ...imported]);
 }

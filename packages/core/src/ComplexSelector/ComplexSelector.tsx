@@ -4,8 +4,8 @@
 
 /**
  * @file ComplexSelector.tsx
- * @input Uses React, StyleX, Field, Icon slots, Layer positioning, and usePopover
- * @output Exports a rich-selector shell with exact token-sized input, secondary, and ghost triggers, plus an imperative open/close handle
+ * @input Uses React, StyleX, Field, Icon slots, Layer positioning, usePopover, and useTooltip
+ * @output Exports a rich-selector shell with exact token-sized input, secondary, and ghost triggers, an imperative open/close handle, and a focusable disabled-reason tooltip
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -35,11 +35,13 @@ import {
 } from '../Field/fieldParts';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {mergeRefs} from '../utils/mergeRefs';
+import {isFocusLost} from '../utils/focusReturn';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -78,8 +80,7 @@ registerEnglishFallback(english);
 const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
-  // The tooltip-placement status info-tip sits beside the chevron and keeps
-  // its size when the trigger text is long.
+  // The status glyph or info-tip keeps its size when the trigger text is long.
   statusTip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -347,7 +348,10 @@ export interface ComplexSelectorRenderState {
 export interface ComplexSelectorHandle {
   /** Open the selector surface. No-op when disabled or already open. */
   open(): void;
-  /** Close the selector surface. Restores focus to the trigger. */
+  /**
+   * Close the selector surface. Focus returns to the trigger only when it
+   * would otherwise be lost; a caller-rendered trigger always gets it back.
+   */
   close(): void;
   /** Toggle the selector surface open or closed. */
   toggle(): void;
@@ -413,6 +417,30 @@ export interface ComplexSelectorProps<Value> extends Omit<
   isRequired?: boolean;
   /** Blocks opening and value commits, including from an already-open popup. */
   isDisabled?: boolean;
+  /**
+   * Explains why the selector is disabled. With `isDisabled`, a tooltip shows
+   * this text on hover and keyboard focus, and the text describes the trigger
+   * through `aria-describedby`. The disabled trigger keeps its tab stop and
+   * still cannot open. With `renderTrigger`, the tooltip and the description
+   * go to the control you render. Drop that control's own tooltip while the
+   * selector is disabled (for example `tooltip={isDisabled ? undefined :
+   * 'Filter'}`), so it never shows two.
+   *
+   * Use this instead of wrapping a disabled selector in `Tooltip`, whose text
+   * would not describe the trigger.
+   *
+   * @example
+   * ```
+   * <ComplexSelector
+   *   label="Fruit blend"
+   *   value={value}
+   *   isDisabled
+   *   disabledMessage="You need the Editor role to change this">
+   *   {(value, onChange, close) => <FruitGrid ... />}
+   * </ComplexSelector>
+   * ```
+   */
+  disabledMessage?: string;
   /** Shows loading state on the trigger. */
   isLoading?: boolean;
   /** Validation status. */
@@ -535,6 +563,7 @@ export function ComplexSelector<Value>({
   isOptional = false,
   isRequired = false,
   isDisabled = false,
+  disabledMessage,
   isLoading = false,
   status,
   statusVariant = 'attached',
@@ -594,16 +623,23 @@ export function ComplexSelector<Value>({
   const contentId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
-  // With `tooltip` placement Field renders no message box, so the status
-  // lives in an info-tip button on the trigger row (family:input-fields FR8).
-  // Only that placement renders an on-field status affordance here.
+  // With `tooltip` placement, Field renders no message box. The info-tip
+  // holds the message and describes the trigger.
   const isTooltipStatus = effectiveStatusVariant === 'tooltip';
   const {statusIcon: statusTip, describedBy: statusTipDescribedBy} =
     useInputStatusIcon({
-      status: isTooltipStatus ? status : undefined,
+      status,
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
+  // The tooltip listens on the trigger button, not the control box. So the
+  // status info-tip in the box opens only its own message.
+  const showsDisabledMessage = isDisabled && !!disabledMessage;
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    isEnabled: showsDisabledMessage,
+  });
+
   const ariaDescribedBy =
     [
       description ? descriptionId : null,
@@ -612,12 +648,17 @@ export function ComplexSelector<Value>({
         : status?.message
           ? statusMessageId
           : null,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ]
       .filter((id): id is string => id != null)
       .join(' ') || undefined;
 
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    ref,
+    disabledMessageTooltip.interactionRef,
+  );
 
   const [isPending, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -630,12 +671,22 @@ export function ComplexSelector<Value>({
     onOpenChange?.(true);
   }, [onOpenChange]);
 
+  // The popup's content element, read when it closes.
+  const popupContentRef = useRef<HTMLElement | null>(null);
+  const hasCallerTrigger = renderTrigger != null;
   const handlePopoverHide = useCallback(() => {
-    // Focus is restored first so a consumer that moves focus elsewhere from
-    // the callback wins, instead of being overwritten a line later.
-    triggerRef.current?.focus();
+    const trigger = triggerRef.current;
+    // A press that moved focus to another control keeps it there. A caller's
+    // control always gets focus back. Focus moves before the callback, so a
+    // consumer that moves it from the callback wins.
+    if (
+      hasCallerTrigger ||
+      isFocusLost(popupContentRef.current, trigger?.ownerDocument)
+    ) {
+      trigger?.focus();
+    }
     onOpenChange?.(false);
-  }, [onOpenChange]);
+  }, [hasCallerTrigger, onOpenChange]);
 
   const popover = usePopover({
     dialogLabel: label,
@@ -644,7 +695,11 @@ export function ComplexSelector<Value>({
     surfaceTarget: 'complex-selector-popup',
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
+  popupContentRef.current = popover.contentRef.current;
 
   const isOpen = popover.isOpen;
 
@@ -790,22 +845,33 @@ export function ComplexSelector<Value>({
     placement,
     alignment,
     offset: spacingVars['--spacing-1'],
-    xstyle: [styles.popover, layerAnimations[placement]],
+    xstyle: styles.popover,
   });
 
   if (renderTrigger != null) {
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no chevron — the caller owns the control;
-    // the selector owns the popup, its anchor, and focus return.
+    // the selector owns the popup, its anchor, focus return, and the disabled
+    // reason's tooltip.
     const triggerProps: ComplexSelectorRenderTriggerProps = {
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
       ...rest,
-      'aria-describedby': ariaDescribedByProp,
-      ref: mergeRefs<HTMLElement>(el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-      }, ref),
+      'aria-describedby':
+        [
+          ariaDescribedByProp,
+          showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+        },
+        disabledMessageTooltip.ref,
+        ref,
+      ),
       id: triggerId,
       // This path never forwarded caller handlers before, so the newly
       // forwarded ones compose component first and cannot cancel opening.
@@ -837,6 +903,8 @@ export function ComplexSelector<Value>({
       <>
         {renderTrigger(triggerProps)}
         {popup}
+        {showsDisabledMessage &&
+          disabledMessageTooltip.renderTooltip(disabledMessage)}
       </>
     );
   }
@@ -844,7 +912,11 @@ export function ComplexSelector<Value>({
   const selectorContent = (
     <>
       <div
-        ref={popover.triggerRef}
+        ref={el => {
+          popover.triggerRef(el);
+          // Anchor names compose, so the tooltip can anchor here in every state.
+          disabledMessageTooltip.positionRef(el);
+        }}
         {...pressable}
         onClick={handleControlBoxClick}
         {...mergeProps(
@@ -905,42 +977,56 @@ export function ComplexSelector<Value>({
           aria-busy={isBusy || undefined}
           // A disabled trigger keeps its tab stop and says so through
           // aria-disabled (`spec:AST-085` FR1). Its press runs neither the
-          // caller's handler nor the toggle (FR2).
-          aria-disabled={isDisabled ? 'true' : undefined}
+          // caller's handler nor the toggle (FR2). Otherwise a caller's own
+          // aria-disabled reaches the trigger.
+          {...(isDisabled ? {'aria-disabled': 'true' as const} : null)}
           onClick={isDisabled ? swallowDisabledPress : handleTriggerButtonClick}
           onKeyDown={handleTriggerButtonKeyDown}
           {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.triggerText)}>{triggerContent}</span>
         </button>
-        {isRenderable(statusTip) && (
-          // The info-tip is its own control: a press on it, or on its message
-          // bubble (portaled, so outside this span in the DOM but inside it in
-          // React), shows the message without opening the popup.
-          <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
-            {statusTip}
-          </span>
-        )}
         {isBusy && <Spinner size="sm" aria-hidden="true" />}
-        <Icon
-          icon="chevronDown"
-          size="sm"
-          color="secondary"
-          // No wrapper: Icon's own span already provides the 16px box (`sm`)
-          // and the secondary icon color the wrapper used to set, so the glyph
-          // IS the trigger's icon element — one node carrying the box, the
-          // color, the rotation, and the theme target.
-          xstyle={[
-            styles.triggerIcon,
-            styles.triggerIconRotation,
-            isOpen && styles.triggerIconOpen,
-          ]}
-          {...themeProps('complex-selector-indicator-icon', {
-            state: isOpen ? 'expanded' : 'collapsed',
-          })}
-        />
+        {isRenderable(statusTip) &&
+          (isTooltipStatus ? (
+            // The info-tip is its own control: a press on it, or on its
+            // message bubble (portaled, so outside this span in the DOM but
+            // inside it in React), shows the message without opening the
+            // popup.
+            <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
+              {statusTip}
+            </span>
+          ) : (
+            // The plain icon is part of the field: a press on it opens the
+            // popup, as a press on the trigger does.
+            <span {...stylex.props(styles.statusTip)}>{statusTip}</span>
+          ))}
+        {/* A status icon or info-tip takes the chevron's place, as in
+            Selector. */}
+        {!isRenderable(statusTip) && (
+          <Icon
+            icon="chevronDown"
+            size="sm"
+            color="secondary"
+            // No wrapper: Icon's own span already provides the 16px box (`sm`)
+            // and the secondary icon color the wrapper used to set, so the glyph
+            // IS the trigger's icon element — one node carrying the box, the
+            // color, the rotation, and the theme target.
+            xstyle={[
+              styles.triggerIcon,
+              styles.triggerIconRotation,
+              isOpen && styles.triggerIconOpen,
+            ]}
+            {...themeProps('complex-selector-indicator-icon', {
+              state: isOpen ? 'expanded' : 'collapsed',
+            })}
+          />
+        )}
       </div>
 
       {popup}
+
+      {showsDisabledMessage &&
+        disabledMessageTooltip.renderTooltip(disabledMessage)}
     </>
   );
 

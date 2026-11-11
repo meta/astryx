@@ -6,9 +6,10 @@
  * @file useTouchTrigger.ts
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
- *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
+ *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES, useTapRecognizer and
+ *   useTapStop (internal:
  *   not re-exported from index). Also useTouchTriggerInternal, with the
- *   outside dismissal's arm for the press pin (Core-internal).
+ *   outside dismissal's arm for useTooltip's hold (Core-internal).
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
@@ -48,17 +49,22 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import {currentGesture} from './gestureCounter';
+import {noteOutsideDismissal} from './outsidePress';
 import {
   innermostInteractive,
   matchesInteractiveSelectors,
 } from '../hooks/useClickableContainer';
 import {isDisabledControl} from '../utils/pressDisabled';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import {
+  isTextEntrySincePointer,
+  useInteractionModalityTrackingFor,
+} from '../utils/interactionModality';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -79,10 +85,70 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  */
 export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
 
-/** A tap stop that cancels only some taps, for a field that reads the tap. */
-export interface TapStopOptions {
-  /** Whether this tap's mouse event is cancelled. */
-  shouldStop: (mouse: ReactMouseEvent<Element>) => boolean;
+/** Waits for the tap that a touch or pen press may become. Internal. */
+export interface TapRecognizer {
+  /**
+   * Call on every press. A touch or pen press on `trigger` waits for its tap:
+   * the press's own `click`. A touch the browser takes for a scroll or a
+   * pinch (`pointercancel`) is no tap, and a new press replaces one still
+   * waiting. Returns whether the press is touch or pen.
+   */
+  press(
+    event: PointerEvent,
+    trigger: Element | null,
+    onTap: (tapEvent: Event) => void,
+  ): boolean;
+  /** Stops waiting for a press still waiting for its tap. */
+  forget(): void;
+}
+
+/** One tap recognizer for a trigger, released on unmount. Internal. */
+export function useTapRecognizer(): TapRecognizer {
+  const [recognizer] = useState(createTapRecognizer);
+  // Releases a pending tap on unmount.
+  useEffect(() => () => recognizer.forget(), [recognizer]);
+  return recognizer;
+}
+
+function createTapRecognizer(): TapRecognizer {
+  let stopWaiting: (() => void) | null = null;
+  const forget = () => {
+    stopWaiting?.();
+    stopWaiting = null;
+  };
+  return {
+    press(event, trigger, onTap) {
+      forget();
+      if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        return false;
+      }
+      if (trigger == null) {
+        return true;
+      }
+      // The tap must belong to this press. A key press or a new pointer press
+      // advances the gesture, so a keyboard activation that later fires
+      // `click` on the trigger (Enter on a button) is not mistaken for it.
+      const gesture = currentGesture();
+      const stop = () => {
+        trigger.removeEventListener('click', handleTap);
+        trigger.removeEventListener('pointercancel', stop);
+        if (stopWaiting === stop) {
+          stopWaiting = null;
+        }
+      };
+      const handleTap = (tapEvent: Event) => {
+        stop();
+        if (currentGesture() === gesture) {
+          onTap(tapEvent);
+        }
+      };
+      trigger.addEventListener('click', handleTap);
+      trigger.addEventListener('pointercancel', stop);
+      stopWaiting = stop;
+      return true;
+    },
+    forget,
+  };
 }
 
 export function useTapStop(event: 'click'): {
@@ -93,44 +159,20 @@ export function useTapStop(event: 'mousedown'): {
   onPointerDown: (event: ReactPointerEvent<Element>) => void;
   onMouseDown: (event: ReactMouseEvent<Element>) => void;
 };
-export function useTapStop(
-  event: 'mousedown',
-  options: TapStopOptions,
-): {
-  onPointerDown: (event: ReactPointerEvent<Element>) => void;
-  onMouseDown: (event: ReactMouseEvent<Element>) => void;
-  /** Whether the latest press was a finger's or a pen's, until the next one. */
-  isTap: () => boolean;
-};
-export function useTapStop(
-  event: 'click' | 'mousedown',
-  options?: TapStopOptions,
-) {
+export function useTapStop(event: 'click' | 'mousedown') {
   const pressIsTapRef = useRef(false);
-  const lastPressIsTapRef = useRef(false);
-  const shouldStop = options?.shouldStop;
-  const onPointerDown = useCallback((pointer: ReactPointerEvent<Element>) => {
+  const onPointerDown = (pointer: ReactPointerEvent<Element>) => {
     pressIsTapRef.current = TOUCH_POINTER_TYPES.has(pointer.pointerType);
-    lastPressIsTapRef.current = pressIsTapRef.current;
-  }, []);
-  const cancel = useCallback(
-    (mouse: ReactMouseEvent<Element>) => {
-      if (pressIsTapRef.current && (shouldStop?.(mouse) ?? true)) {
-        mouse.preventDefault();
-      }
-      pressIsTapRef.current = false;
-    },
-    [shouldStop],
-  );
-  const isTap = useCallback(() => lastPressIsTapRef.current, []);
-  if (event === 'click') {
-    return {onPointerDown, onClick: cancel};
-  }
-  // Only a caller that reads the tap gets the reader, so a caller that
-  // spreads the handlers onto an element passes no unknown prop.
-  return options == null
-    ? {onPointerDown, onMouseDown: cancel}
-    : {onPointerDown, onMouseDown: cancel, isTap};
+  };
+  const cancel = (mouse: ReactMouseEvent<Element>) => {
+    if (pressIsTapRef.current) {
+      mouse.preventDefault();
+    }
+    pressIsTapRef.current = false;
+  };
+  return event === 'click'
+    ? {onPointerDown, onClick: cancel}
+    : {onPointerDown, onMouseDown: cancel};
 }
 
 /**
@@ -287,8 +329,10 @@ export interface UseTouchTriggerReturn {
 
   /**
    * Whether the interaction in flight is a touch one. Unlike the raw ref this
-   * goes false again as soon as the user reaches for the keyboard, so
-   * focus-driven triggers stay available after a tap.
+   * goes false again as soon as the user navigates with the keyboard, so
+   * focus-driven triggers stay available after a tap. Typing into a
+   * text-entry field after the tap, as on an on-screen keyboard, keeps it
+   * true.
    */
   isTouchInteraction: () => boolean;
 
@@ -313,8 +357,8 @@ export interface UseTouchTriggerReturn {
 }
 
 /**
- * useTouchTrigger's return plus the outside dismissal's arm, for Core's own
- * press pin (usePressPin). Not exported from the Layer entry point.
+ * useTouchTrigger's return plus the outside dismissal's arm, for useTooltip's
+ * hold behind show() and hide(). Not exported from the Layer entry point.
  *
  * @internal
  */
@@ -322,9 +366,14 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
   /**
    * Arms the outside dismissal a tap-open gets: a press that lifts outside
    * the trigger and the layer, or a scroll that starts there, hides it. A
-   * press pin arms it too.
+   * hold arms it too.
    */
   armOutsideDismiss: () => void;
+  /**
+   * Answers a tap the trigger completed before the layer mounted, by the same
+   * rules as a tap it sees, and arms the outside dismissal when it opens.
+   */
+  answerTap: (tapEvent: Event | null) => void;
 }
 
 /**
@@ -358,13 +407,19 @@ export function useTouchTrigger(
 }
 
 /**
- * useTouchTrigger, plus the outside dismissal's arm that a press pin uses to
- * close on a press or scroll outside.
+ * useTouchTrigger, plus the outside dismissal's arm that useTooltip's hold
+ * uses to close on a press or scroll outside.
  *
  * @internal
  */
 export function useTouchTriggerInternal(
   options: UseTouchTriggerOptions,
+  /**
+   * Called when a press that the outside dismissal watches ends with its
+   * pointer lifted inside the layer: the layer stays open, and useTooltip
+   * ends a hold that the press started.
+   */
+  onReleaseInLayer?: () => void,
 ): UseTouchTriggerInternalReturn {
   const {
     touchTrigger,
@@ -389,6 +444,8 @@ export function useTouchTriggerInternal(
   hideRef.current = hide;
   const layerIdRef = useRef(layerId);
   layerIdRef.current = layerId;
+  const onReleaseInLayerRef = useRef(onReleaseInLayer);
+  onReleaseInLayerRef.current = onReleaseInLayer;
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -400,11 +457,9 @@ export function useTouchTriggerInternal(
   // The documents the outside dismissal listens on: the page's, and the
   // trigger's own when it renders in another document, such as an iframe.
   const outsideDocumentsRef = useRef<Document[]>([]);
-  // A touch press on the trigger still waiting for its tap: calling it stops
-  // waiting. The next press, a cancel, the tap itself or unmounting calls it.
-  const forgetPendingTapRef = useRef<(() => void) | null>(null);
+  const tapRecognizer = useTapRecognizer();
 
-  const readModality = useInteractionModalityTrackingFor(triggerRef);
+  useInteractionModalityTrackingFor(triggerRef);
 
   const disarmOutsideDismiss = useCallback(() => {
     isTapOpenRef.current = false;
@@ -451,10 +506,16 @@ export function useTouchTriggerInternal(
               doc.getElementById(layerIdRef.current)?.contains(target) === true,
           )
         ) {
+          if (event.type === 'pointerup') {
+            onReleaseInLayerRef.current?.();
+          }
           return;
         }
       }
       disarmOutsideDismiss();
+      if (target != null) {
+        noteOutsideDismissal(target.ownerDocument ?? document);
+      }
       hideRef.current();
     };
 
@@ -466,12 +527,12 @@ export function useTouchTriggerInternal(
     }
   }, [triggerRef, disarmOutsideDismiss]);
 
+  // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
-  useEffect(() => () => forgetPendingTapRef.current?.(), []);
-
   const isTouchInteraction = useCallback(
-    () => isTouchPointerRef.current && readModality() === 'pointer',
-    [readModality],
+    () =>
+      isTouchPointerRef.current && isTextEntrySincePointer(triggerRef.current),
+    [triggerRef],
   );
 
   const handlePointerEnter = useCallback((event: PointerEvent) => {
@@ -484,12 +545,12 @@ export function useTouchTriggerInternal(
 
   // What a tap on the trigger does. It runs from the tap's `click`, after the
   // render that armed it, so it reads the latest props through this ref.
-  const answerTapRef = useRef<(tapEvent: Event) => void>(() => {});
-  answerTapRef.current = (tapEvent: Event) => {
+  const answerTapRef = useRef<(tapEvent: Event | null) => void>(() => {});
+  answerTapRef.current = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     // A tap that landed in a disabled control is that control's: its reason
     // opens. Every other tap is the trigger's to decide.
-    const tapped = tapEvent.target instanceof Element ? tapEvent.target : null;
+    const tapped = tapEvent?.target instanceof Element ? tapEvent.target : null;
     const mode =
       touchTrigger === 'auto'
         ? tapped != null && tapLandsOnDisabledControl(tapped)
@@ -522,45 +583,20 @@ export function useTouchTriggerInternal(
     (event: PointerEvent): boolean => {
       const isTouch = TOUCH_POINTER_TYPES.has(event.pointerType);
       isTouchPointerRef.current = isTouch;
-      // A new press replaces one that never became a tap.
-      forgetPendingTapRef.current?.();
-
       if (!isTouch || isControlled) {
+        tapRecognizer.forget();
         return false;
       }
-
       const trigger =
         event.currentTarget instanceof Element
           ? event.currentTarget
           : triggerRef.current;
-      if (trigger == null) {
-        return true;
-      }
-
-      // The tap must belong to this press. A key press or a new pointer press
-      // advances the gesture, so a keyboard activation that later fires
-      // `click` on the trigger (Enter on a button) is not mistaken for it.
-      const gesture = currentGesture();
-      const forget = () => {
-        trigger.removeEventListener('click', handleTap);
-        trigger.removeEventListener('pointercancel', forget);
-        if (forgetPendingTapRef.current === forget) {
-          forgetPendingTapRef.current = null;
-        }
-      };
-      const handleTap = (tapEvent: Event) => {
-        forget();
-        if (currentGesture() === gesture) {
-          answerTapRef.current(tapEvent);
-        }
-      };
-      trigger.addEventListener('click', handleTap);
-      // The browser took the touch for a scroll or a pinch: no tap is coming.
-      trigger.addEventListener('pointercancel', forget);
-      forgetPendingTapRef.current = forget;
+      tapRecognizer.press(event, trigger, tapEvent =>
+        answerTapRef.current(tapEvent),
+      );
       return true;
     },
-    [isControlled, triggerRef],
+    [isControlled, triggerRef, tapRecognizer],
   );
 
   // A layer closed by any other path (Escape, a consumer, the browser) leaves
@@ -576,6 +612,11 @@ export function useTouchTriggerInternal(
     wasOpenRef.current = isOpen;
   }, [isOpen, disarmOutsideDismiss]);
 
+  const answerTap = useCallback(
+    (tapEvent: Event | null) => answerTapRef.current(tapEvent),
+    [],
+  );
+
   return {
     isTouchPointerRef,
     isTouchInteraction,
@@ -583,5 +624,6 @@ export function useTouchTriggerInternal(
     handlePointerDown,
     clearTapOpen: disarmOutsideDismiss,
     armOutsideDismiss,
+    answerTap,
   };
 }

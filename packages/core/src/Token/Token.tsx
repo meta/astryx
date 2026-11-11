@@ -41,8 +41,11 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {TokenNamingContext} from './TokenNamingContext';
+import {textDirectionProps} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -146,6 +149,7 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
   interactive: {
     cursor: {
@@ -312,6 +316,8 @@ export function Token({
   'data-testid': testId,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
+  'aria-haspopup': ariaHasPopup,
+  'aria-expanded': ariaExpanded,
   ref,
   ...rest
 }: TokenProps) {
@@ -323,6 +329,7 @@ export function Token({
   const selected = use(TokenSelectedContext) ? 'selected' : null;
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
+  const naming = use(TokenNamingContext);
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -331,7 +338,9 @@ export function Token({
   const removeButton = onRemove != null && (
     <button
       type="button"
-      aria-label={t('@astryx.token.remove', {label})}
+      aria-label={t('@astryx.token.remove', {
+        label: naming?.removeName ?? label,
+      })}
       {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
@@ -349,6 +358,7 @@ export function Token({
     <>
       {icon}
       <span
+        {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -357,12 +367,14 @@ export function Token({
     </>
   );
 
-  // Naming inputs reach the element that owns the token's action: the inner
-  // button of a clickable token, otherwise the root
+  // Naming and popup inputs reach the element that owns the token's action:
+  // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
     'aria-labelledby': ariaLabelledBy,
     'aria-describedby': ariaDescribedBy,
+    'aria-haspopup': ariaHasPopup,
+    'aria-expanded': ariaExpanded,
   };
 
   const sharedProps = {
@@ -468,6 +480,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -509,6 +522,19 @@ export function Token({
       }
       effectiveOnClick(e);
     };
+    // A finger press on Remove or a control in end content does not run the
+    // token's action, so the token shows no press for it. The inner button,
+    // the first button child, is the token's own action.
+    const handleContainerPointerDown = (
+      e: React.PointerEvent<HTMLSpanElement>,
+    ) => {
+      rest.onPointerDown?.(e);
+      cancelNestedTouchPress(
+        e,
+        e.currentTarget,
+        e.currentTarget.querySelector(':scope > button'),
+      );
+    };
 
     return (
       <span
@@ -535,16 +561,21 @@ export function Token({
           style,
         )}
         {...rest}
-        {...sharedProps}>
+        {...sharedProps}
+        onPointerDown={
+          isDisabled ? rest.onPointerDown : handleContainerPointerDown
+        }>
         {icon}
         <button
           type="button"
           onClick={effectiveOnClick}
+          aria-label={ariaLabelledBy == null ? naming?.actionName : undefined}
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
