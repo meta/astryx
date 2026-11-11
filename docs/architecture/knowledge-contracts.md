@@ -329,7 +329,9 @@ Every record is either:
   the remote anchor, exact bytes, and existing links before removing source files.
 - **INV24 — Storage does not change proof or authority.** The pull request's text
   states the claim, tested build, relevant state, observed result, and evidence
-  links; an image or expiring artifact is not the only record of the conclusion.
+  links (none for a device or emulator clip that INV22 keeps with the
+  maintainers); an image or expiring artifact is not the only record of the
+  conclusion.
   Attachments remain evidence under INV16, not authority. Owner-specific receipt
   requirements, operational audit stores, and CI artifact lifetimes remain with
   their current owners. [AST-009](../specs/AST-009/spec.md) owns real-AT receipts;
