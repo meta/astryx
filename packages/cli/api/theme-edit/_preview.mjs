@@ -551,6 +551,42 @@ function withSources(project, v) {
   return v;
 }
 
+/** Controlled parts a sample gives a value: they call onChange on a click. */
+const CONTROLLED = new Set([
+  'TabList',
+  'SegmentedControl',
+  'RadioList',
+  'Switch',
+  'CheckboxInput',
+  'Selector',
+  'TextInput',
+  'TextArea',
+  'NumberInput',
+]);
+
+/**
+ * A copy of an element tree in which every controlled part with a value and
+ * no onChange gets one that does nothing, so a click on it never throws.
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withHandlers(v) {
+  if (Array.isArray(v)) return v.map(withHandlers);
+  if (isElement(v)) {
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {}).map(([k, x]) => [k, withHandlers(x)]),
+    );
+    if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
+      props.onChange = {__code: '() => {}'};
+    return {
+      ...v,
+      props,
+      ...(v.children === undefined ? {} : {children: withHandlers(v.children)}),
+    };
+  }
+  return v;
+}
+
 /**
  * Whether an element tree uses the page's sample search source.
  * @param {unknown} v
@@ -649,7 +685,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
     .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
     .map(it => ({
       ...it,
-      tree: withSources(project, withCoreNames(project, it.tree)),
+      tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
     }))
     .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
@@ -723,7 +759,7 @@ export function overviewPageSource(project, {theme = null} = {}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
-      withCoreNames(project, x.tree)
+      withHandlers(withCoreNames(project, x.tree))
     ),
   })).filter(x => x.tree !== undefined);
   const body = sections
