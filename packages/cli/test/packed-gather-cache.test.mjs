@@ -100,11 +100,16 @@ beforeAll(() => {
 }, 120_000);
 
 afterAll(() => {
-  // A run's background release check can still be writing into a temp
-  // folder's release cache: retry while the folder empties.
-  const gone = {recursive: true, force: true, maxRetries: 10, retryDelay: 100};
-  if (work) fs.rmSync(work, gone);
-  if (project) fs.rmSync(project, gone);
+  // Best effort: a run's background release check can still be writing into a
+  // temp folder's release cache, and a temp folder left behind is harmless.
+  for (const dir of [work, project]) {
+    if (!dir) continue;
+    try {
+      fs.rmSync(dir, {recursive: true, force: true});
+    } catch {
+      // Left for the system to clear.
+    }
+  }
 });
 
 /**
