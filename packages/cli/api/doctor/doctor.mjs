@@ -2179,12 +2179,6 @@ async function runComputerChecks(cwd) {
 }
 
 /**
- * Ordered list of synchronous check functions. Append here to add a check.
- * (checkConfig is async and is awaited separately by {@link runChecks}.)
- * A check that returns null does not apply to the project and is left out.
- * @type {Array<(ctx: DoctorContext) => DoctorCheck | null>}
- */
-/**
  * Where `search` and `build` keep their gathered catalog between runs, and
  * how much it holds. Left out of a checkout, which keeps none.
  * @returns {DoctorCheck | null}
@@ -2201,6 +2195,12 @@ export function checkGatherCache() {
   };
 }
 
+/**
+ * Ordered list of synchronous check functions. Append here to add a check.
+ * (checkConfig is async and is awaited separately by {@link runChecks}.)
+ * A check that returns null does not apply to the project and is left out.
+ * @type {Array<(ctx: DoctorContext) => DoctorCheck | null>}
+ */
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,

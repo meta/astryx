@@ -19,9 +19,9 @@
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
  *
- *   The folder is the user's own, under the system temp folder: created 0700,
- *   used only while it is a real folder owned by the user and closed to
- *   others, each file written 0600 by a rename, oldest first evicted past
+ *   The folder is `catalogs` in the user's cache folder (userCacheDir):
+ *   created 0700, used only while it is a real folder owned by the user and
+ *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
  *   CACHE_LIMIT_BYTES. Any failure to read, check, parse or write is silent
  *   and the run gathers fresh, as it would with no cache.
  */
@@ -34,6 +34,8 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
+import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
+import {userCacheDir} from '../env/user-dirs.mjs';
 import {
   fileStamp,
   recordReads,
@@ -128,34 +130,23 @@ function buildId() {
 }
 
 /**
- * Where the user's cache folder is, in the system temp folder.
+ * Where the kept catalogs live: a folder of their own in the user's cache
+ * folder.
  * @returns {string}
  */
 function cacheDirPath() {
-  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
-  return path.join(
-    os.tmpdir(),
-    `astryx-cli-cache${uid == null ? '' : `-${uid}`}`,
-  );
+  return path.join(userCacheDir(), 'catalogs');
 }
 
 /**
- * The user's cache folder, or null when it is missing or cannot be used: not
- * a real folder, owned by someone else, or open to others.
+ * The kept catalogs' folder, or null when it is missing or cannot be used:
+ * not a real folder, owned by someone else, open to others, or on a system
+ * with no user ids, where ownership cannot be checked (see isPrivateDir).
  * @returns {string | null}
  */
 export function gatherCacheDir() {
   const dir = cacheDirPath();
-  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
-  try {
-    const stat = fs.lstatSync(dir);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) return null;
-    if (uid != null && stat.uid !== uid) return null;
-    if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) return null;
-    return dir;
-  } catch {
-    return null;
-  }
+  return isPrivateDir(dir) ? dir : null;
 }
 
 /**
@@ -178,11 +169,13 @@ function commandOf(argv) {
 export async function recordRunFor(argv, fn) {
   const command = commandOf(argv);
   // Under Yarn Plug'n'Play, Node's module hooks hand PnP's resolver options
-  // it refuses, so the run keeps no catalogs and installs no hook.
+  // it refuses, so the run keeps no catalogs and installs no hook; nor where
+  // the system has no user ids, as the folder's owner cannot be checked.
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
     process.versions.pnp ||
+    currentUid() == null ||
     withoutRecording(buildId) == null
   ) {
     return fn();
@@ -192,7 +185,7 @@ export async function recordRunFor(argv, fn) {
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
     try {
-      withoutRecording(() => fs.mkdirSync(dir, {mode: 0o700}));
+      withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
       // A folder that cannot be made keeps no catalogs; nothing more.
     }
@@ -224,7 +217,7 @@ export async function recordRun(fn) {
   /** @param {string | symbol} name */
   const noteEnv = name => {
     if (typeof name === 'string' && !env.has(name)) {
-      env.set(name, realEnv[name] ?? UNSET);
+      env.set(name, envState(realEnv[name]));
     }
   };
   const proxy = new Proxy(realEnv, {
@@ -241,7 +234,7 @@ export async function recordRun(fn) {
       return Reflect.getOwnPropertyDescriptor(target, name);
     },
     ownKeys(target) {
-      if (!env.has('\0names')) env.set('\0names', namesOf(target));
+      if (!env.has('\0names')) env.set('\0names', envState(namesOf(target)));
       return Reflect.ownKeys(target);
     },
   });
@@ -358,6 +351,19 @@ function lookupStamp(folder) {
 }
 
 /**
+ * How an environment variable the run read is kept: a digest of its value,
+ * never the value (it can be a token), or UNSET when it was not set.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function envState(value) {
+  // Only a set variable has a value; a name such as `toString` reads a
+  // function from Object.prototype, which is no variable.
+  if (typeof value !== 'string') return UNSET;
+  return createHash('sha256').update(value).digest('hex').slice(0, 32);
+}
+
+/**
  * Every environment variable's name, sorted and joined, standing for a read of
  * the whole environment.
  * @param {NodeJS.ProcessEnv} env
@@ -400,8 +406,9 @@ function entryFile(dir, key, id) {
  */
 function staleReason(stamps, env) {
   for (const [name, value] of env) {
-    const current =
-      name === '\0names' ? namesOf(process.env) : (process.env[name] ?? UNSET);
+    const current = envState(
+      name === '\0names' ? namesOf(process.env) : process.env[name],
+    );
     if (current !== value) {
       return name === '\0names'
         ? 'the environment has other variables'

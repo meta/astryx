@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -38,7 +39,12 @@ describe('a recorded run', () => {
       expect(env[name]).toBe('1');
       delete env[name];
       expect(name in real).toBe(false);
-      expect(recordedRun()?.env.get('PATH')).toBe(real.PATH ?? null);
+      // Kept as a digest of the value, never the value itself.
+      expect(recordedRun()?.env.get('PATH')).toBe(
+        real.PATH === undefined
+          ? null
+          : createHash('sha256').update(real.PATH).digest('hex').slice(0, 32),
+      );
 
       await persistedGather(['test'], async () => 'value', identity);
 

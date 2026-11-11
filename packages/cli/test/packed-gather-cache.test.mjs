@@ -132,6 +132,8 @@ function run(args, {tmp, cwd = project, env = {}}) {
         // Node's compile cache (bin/astryx.mjs) keeps its own folder in the
         // same temp folder; these runs look only at the catalog's.
         NODE_DISABLE_COMPILE_CACHE: '1',
+        // The kept catalogs live in the user's cache folder.
+        XDG_CACHE_HOME: tmp,
         ...env,
       },
     },
@@ -139,8 +141,8 @@ function run(args, {tmp, cwd = project, env = {}}) {
   return {status: result.status, stdout: result.stdout, stderr: result.stderr};
 }
 
-/** The user's cache folder's name in a temp folder. */
-const CACHE_NAME = `astryx-cli-cache${process.getuid ? `-${process.getuid()}` : ''}`;
+/** The kept catalogs' folder in a user cache folder (XDG_CACHE_HOME). */
+const CACHE_NAME = path.join('astryx', 'catalogs');
 
 /**
  * A temp folder whose cache folder exists, as after a machine's first search
@@ -152,6 +154,9 @@ function keptTmp(name) {
   const tmp = path.join(work, 'tmp', name);
   fs.mkdirSync(path.join(tmp, CACHE_NAME), {recursive: true, mode: 0o700});
   fs.chmodSync(path.join(tmp, CACHE_NAME), 0o700);
+  // The release cache beside it, as any earlier run leaves it: a run's
+  // background release check makes it, and the gather looks it up.
+  fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
   return tmp;
 }
 
@@ -165,15 +170,12 @@ const freshTmp = () => path.join(work, 'tmp', `fresh-${fresh++}`);
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
 function entries(tmp) {
-  if (!fs.existsSync(tmp)) return new Map();
-  const dir = fs
-    .readdirSync(tmp)
-    .find(name => name.startsWith('astryx-cli-cache'));
+  const dir = path.join(tmp, CACHE_NAME);
   /** @type {Map<string, {ino: number, mtimeMs: number}>} */
   const out = new Map();
-  if (!dir) return out;
-  for (const name of fs.readdirSync(path.join(tmp, dir))) {
-    const {ino, mtimeMs} = fs.statSync(path.join(tmp, dir, name));
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const {ino, mtimeMs} = fs.statSync(path.join(dir, name));
     out.set(name, {ino, mtimeMs});
   }
   return out;
@@ -211,7 +213,7 @@ function expectSameAsFresh(tmp, options = {}) {
   return outcomes;
 }
 
-describe('a kept catalog', () => {
+describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   it('answers as a fresh gather, and is used while nothing changed', () => {
     const tmp = keptTmp('warm');
     const cold = run(QUERIES[0], {tmp});
@@ -396,7 +398,8 @@ describe('a kept catalog', () => {
   it('is not kept by the first run, which only makes its folder', () => {
     const tmp = path.join(work, 'tmp', 'first');
     const first = run(QUERIES[0], {tmp});
-    expect(fs.readdirSync(tmp)).toEqual([CACHE_NAME]);
+    expect(fs.readdirSync(path.join(tmp, 'astryx'))).toContain('catalogs');
+    expect(fs.statSync(path.join(tmp, CACHE_NAME)).mode & 0o777).toBe(0o700);
     expect(fs.readdirSync(path.join(tmp, CACHE_NAME))).toEqual([]);
     expect(first).toEqual(run(QUERIES[0], {tmp: freshTmp()}));
     run(QUERIES[0], {tmp});
@@ -491,6 +494,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
         env: {
           ...process.env,
           TMPDIR: tmp,
+          XDG_CACHE_HOME: tmp,
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
@@ -503,6 +507,27 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(first.status, first.stderr).toBe(0);
     expect(second.stdout).toBe(first.stdout);
     expect(entries(tmp).size).toBe(0);
+  }, 120_000);
+
+  it('keeps a digest of each environment value it read, never the value', () => {
+    const tmp = keptTmp('secrets');
+    const secret = 'probe-secret-value-4f1c';
+    const env = {PROBE_API_TOKEN: secret};
+    const answer = run(QUERIES[0], {tmp, env});
+    expect(run(QUERIES[0], {tmp, env})).toEqual(answer);
+    const dir = path.join(tmp, CACHE_NAME);
+    const files = fs.readdirSync(dir);
+    expect(files.length).toBeGreaterThan(0);
+    let states = 0;
+    for (const name of files) {
+      const text = fs.readFileSync(path.join(dir, name), 'utf8');
+      expect(text, name).not.toContain(secret);
+      for (const [, state] of JSON.parse(text).env ?? []) {
+        states += 1;
+        expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(true);
+      }
+    }
+    expect(states).toBeGreaterThan(0);
   }, 120_000);
 
   it('is skipped silently when its folder cannot be used', () => {
@@ -529,6 +554,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
         env: {
           ...process.env,
           TMPDIR: notAFolder,
+          XDG_CACHE_HOME: notAFolder,
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
