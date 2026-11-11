@@ -709,7 +709,10 @@ const jiti = createJiti(entry, {
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
-    const filename = opts.filename ?? '';
+    // jiti names the file with forward slashes on Windows (`C:/...`), while
+    // `entry`, `root` and the node_modules test use the platform separator.
+    // Without this, no file reads as local there and none is transformed.
+    const filename = opts.filename ? path.normalize(opts.filename) : '';
     let source = opts.source;
     if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
       localFiles.push(filename);
