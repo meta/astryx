@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:Tour
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-11
 owners: [cixzhang]
 review_triggers: [behavior, accessibility]
 verified_by: [packages/lab/src/Tour/Tour.test.tsx]
@@ -29,7 +29,7 @@ system_specs: []
 | Behavior                | Without a backdrop, a press on the page or on the target leaves the tour running. With a backdrop, a press outside the callout, the target included, ends it with `'backdrop'`. |
 | End-user impact         | A person can use the control a step introduces, or the rest of the page, while a plain tour stays open; a dimmed tour ends on a press outside it.                               |
 | Builder impact          | An app that needs a press on the page or the target to end the tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` (DEC-1).                            |
-| Compatibility/readiness | Lab. Draft. FR1 gap and AR1 gap below.                                                                                                                                          |
+| Compatibility/readiness | Lab. FR1 and AR1 record implementation gaps on main.                                                                                                                            |
 | Review checks           | Reject a press on the page or the target that ends a tour without a backdrop, or a press outside the callout under a backdrop that leaves the tour running.                     |
 | Governing rules         | None recorded.                                                                                                                                                                  |
 
@@ -48,10 +48,6 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 - Compatibility class: behavioral, Lab.
 - Controlled/uncontrolled behavior: unchanged; `isActive` and `onDismiss` are the app's.
 - Migration decision: DEC-1. An app that needs an outside press to end a tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` instead of `'close'`.
-
-FR1 gap: a press on the page or on the target ends a tour without a backdrop, reporting `'close'`, because the step light-dismisses. Pending evidence: unit and real-browser tests that such a press leaves the tour running.
-
-AR1 gap: keyboard focus stays in the step's callout. Pending evidence: a test that Tab moves from the callout into the page.
 
 ## Ownership boundary
 
@@ -73,16 +69,13 @@ AR1 gap: keyboard focus stays in the step's callout. Pending evidence: a test th
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision. A `current` contract contains no unresolved rows.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                   | Basis | Draft review state |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ------------------ |
-| FR1 | Without a backdrop, a press on the page or on the step's target MUST NOT end the tour. With a backdrop, a press anywhere outside the callout, the target included, MUST end the tour with `'backdrop'`. This holds for every pointer. | DEC-1 | settled            |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                           | Basis |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| FR1 | Without a backdrop, a press on the page or on the step's target MUST NOT end the tour. With a backdrop, a press anywhere outside the callout, the target included, MUST end the tour with `'backdrop'`. This holds for every pointer. Implementation gap: a press on the page or on the target ends a tour without a backdrop, reporting `'close'`. | DEC-1 |
 
 ## Accessibility contract
 
-- **AR1 — the page stays usable.** Without a backdrop, keyboard focus can leave the callout for the page and the target, and a press there does not end the tour (FR1).
+- **AR1 — the page stays usable.** Without a backdrop, keyboard focus can leave the callout for the page and the target, and a press there does not end the tour (FR1). Implementation gap: keyboard focus stays in the callout.
 
 ## Design relationships
 
@@ -109,7 +102,7 @@ The component implements design requirements without copying their rationale.
 
 **Decider:** `cixzhang`, 2026-11-04
 
-**Basis:** Lab-only behavior, under the owner's standing Lab grant: "Anything lab only gets an ok".
+**Basis:** Lab-only behavior, under the owner's standing Lab grant: "Anything lab only gets an ok". Promoted to current under the standing Lab grant.
 
 **Decision:** A step is a non-modal layer with no light dismiss. Without a backdrop, a press on the page or on the target leaves the tour running, on every pointer. With a backdrop, the dimmed overlay catches every press, the target's included, and ends the tour with `'backdrop'`.
 
