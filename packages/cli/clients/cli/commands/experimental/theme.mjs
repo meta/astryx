@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental theme` — make and change a theme one checked
- * change at a time. Experimental (spec:AST-017 FR27): it is registered only
+ * @file `astryx experimental theme` — the `editor` group makes and changes a
+ * theme one checked change at a time; beside it sit experimental copies of
+ * the theme commands. Experimental (spec:AST-017 FR27): it is registered only
  * under the `experimental` group.
  *
  * The command surface comes from the colocated CommandDocs via
@@ -10,9 +11,9 @@
  * prints its receipt.
  *
  * Usage:
- *   astryx experimental theme new brand --like neutral
- *   astryx experimental theme set brand corners pill
- *   astryx experimental theme explain "white text in the banner"
+ *   astryx experimental theme editor new brand --like neutral
+ *   astryx experimental theme editor set brand corners pill
+ *   astryx experimental theme editor how "white text in the banner"
  */
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
@@ -23,23 +24,29 @@ import {emit, text} from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
-  themeEditExplain,
+  themeEditHow,
   themeEditNew,
-  themeEditPreview,
-  themeEditReset,
+  themeEditPreviewAdd,
+  themeEditPreviewApp,
+  themeEditPreviewList,
+  themeEditPreviewRemove,
   themeEditSet,
   themeEditShow,
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
-import {doc as newDoc} from '../experimental-theme-new.doc.mjs';
-import {doc as setDoc} from '../experimental-theme-set.doc.mjs';
-import {doc as resetDoc} from '../experimental-theme-reset.doc.mjs';
-import {doc as showDoc} from '../experimental-theme-show.doc.mjs';
-import {doc as undoDoc} from '../experimental-theme-undo.doc.mjs';
+import {doc as editorDoc} from '../experimental-theme-editor.doc.mjs';
+import {doc as newDoc} from '../experimental-theme-editor-new.doc.mjs';
+import {doc as setDoc} from '../experimental-theme-editor-set.doc.mjs';
+import {doc as showDoc} from '../experimental-theme-editor-show.doc.mjs';
+import {doc as undoDoc} from '../experimental-theme-editor-undo.doc.mjs';
 import {doc as previewDoc} from '../experimental-theme-preview.doc.mjs';
-import {doc as explainDoc} from '../experimental-theme-explain.doc.mjs';
+import {doc as previewAddDoc} from '../experimental-theme-preview-add.doc.mjs';
+import {doc as previewAppDoc} from '../experimental-theme-preview-app.doc.mjs';
+import {doc as previewListDoc} from '../experimental-theme-preview-list.doc.mjs';
+import {doc as previewRemoveDoc} from '../experimental-theme-preview-remove.doc.mjs';
+import {doc as howDoc} from '../experimental-theme-editor-how.doc.mjs';
 import {doc as paletteDoc} from '../experimental-theme-palette.doc.mjs';
 import {doc as paletteGenerateDoc} from '../experimental-theme-palette-generate.doc.mjs';
 import {doc as compileDoc} from '../experimental-theme-compile.doc.mjs';
@@ -52,13 +59,18 @@ import {doc as templateDoc} from '../experimental-theme-template.doc.mjs';
 import {doc as targetsDoc} from '../experimental-theme-targets.doc.mjs';
 import {doc as newFn} from '../../../../api/theme-edit/themeEditNew.doc.mjs';
 import {doc as setFn} from '../../../../api/theme-edit/themeEditSet.doc.mjs';
-import {doc as resetFn} from '../../../../api/theme-edit/themeEditReset.doc.mjs';
 import {doc as showFn} from '../../../../api/theme-edit/themeEditShow.doc.mjs';
 import {doc as undoFn} from '../../../../api/theme-edit/themeEditUndo.doc.mjs';
-import {doc as previewFn} from '../../../../api/theme-edit/themeEditPreview.doc.mjs';
-import {doc as explainFn} from '../../../../api/theme-edit/themeEditExplain.doc.mjs';
+import {doc as previewAddFn} from '../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs';
+import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewApp.doc.mjs';
+import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
+import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
+import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 
 const PREFIX = 'astryx experimental theme';
+const EDITOR = `${PREFIX} editor`;
+/** The lookup command, named once: its CommandDoc's last word. */
+const HOW = `${EDITOR} ${howDoc.name.split(' ').pop()}`;
 
 /**
  * Commands in a line, with the run prefix this project uses.
@@ -146,7 +158,7 @@ function changeLines(r) {
     lines.push(`[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`);
   else
     lines.push(
-      `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `reset ${describe(s)} to the base theme's value`}${d.replaced ? ` (was ${d.replaced.value})` : ''}`,
+      `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `undid ${describe(s)}: back to the base theme's value`}${d.replaced ? ` (was ${d.replaced.value})` : ''}`,
     );
   if (d.family)
     lines.push(
@@ -188,15 +200,15 @@ function changeLines(r) {
 }
 
 /**
- * The text of an explain answer, by its kind.
+ * The text of a lookup answer, by its kind.
  * @param {any} d
  * @returns {string[]}
  */
-function explainLines(d) {
+function lookupLines(d) {
   if (d.kind === 'question') {
     if (!d.results.length) {
       return [
-        `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold). Or: ${PREFIX} explain --list parts`,
+        `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold). Or: ${HOW} --list parts`,
       ];
     }
     return [
@@ -249,7 +261,7 @@ function explainLines(d) {
         ...items.map(x => x.name),
         ...(d.common
           ? [
-              `(the common ones; any standard CSS property works: ${PREFIX} explain <filter> --list properties)`,
+              `(the common ones; any standard CSS property works: ${HOW} <filter> --list properties)`,
             ]
           : []),
       ];
@@ -271,10 +283,32 @@ function explainLines(d) {
               '',
             )}${x.states.length ? `  --state ${x.states.join('|')}` : ''}${x.recorded ? '' : '  (no compiled record: changes on it are not checked)'}`,
       ),
-      `What a part reads: ${PREFIX} explain <part>`,
+      `What a part reads: ${HOW} <part>`,
     ];
   }
   return d.lines;
+}
+
+/**
+ * Refuse an option the command does not have. Set, undo and how take
+ * unknown options so a design token (`--color-accent`) can be the thing
+ * they name; a `--` word anywhere else is a mistyped option.
+ * @param {string} command the subcommand, for the suggestion
+ * @param {Array<string | undefined>} rest the operands after the thing
+ * @returns {ReturnType<typeof cliError> | null}
+ */
+function strayOption(command, rest) {
+  const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
+  if (word == null) return null;
+  return cliError(
+    `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
+    {
+      suggestions: [
+        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+      ],
+      code: ERROR_CODES.ERR_INVALID_OPTION,
+    },
+  );
 }
 
 /**
@@ -294,13 +328,15 @@ function explained(c, doc, {tokens = false} = {}) {
 }
 
 /**
- * Register `theme` and its subcommands under the `experimental` group.
- * @param {import('commander').Command} group the `experimental` command
- * @param {import('commander').Command} program the root program
+ * A command group: bare, it prints its help; with an unknown word, the
+ * unknown-subcommand error with every subcommand as a suggestion.
+ * @param {import('commander').Command} parent
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @returns {import('commander').Command}
  */
-export function registerExperimentalTheme(group, program) {
+function defineGroup(parent, doc) {
   /** @type {import('commander').Command} */
-  const theme = defineCommand(group, groupDoc, {
+  const cmd = defineCommand(parent, doc, {
     action: (
       /** @type {unknown} */ _options,
       /** @type {import('commander').Command} */ c,
@@ -308,9 +344,9 @@ export function registerExperimentalTheme(group, program) {
       const extras = c?.args ?? [];
       if (extras.length > 0) {
         return cliError(
-          `unknown subcommand 'experimental theme ${String(extras[0])}'`,
+          `unknown subcommand '${doc.name} ${String(extras[0])}'`,
           {
-            suggestions: (theme.commands ?? []).map(command => ({
+            suggestions: (cmd.commands ?? []).map(command => ({
               name: command.name(),
               reason: 'available subcommand',
             })),
@@ -318,21 +354,34 @@ export function registerExperimentalTheme(group, program) {
           },
         );
       }
-      theme.help();
+      cmd.help();
       return NO_RESULT_SET;
     },
   });
+  return cmd;
+}
+
+/**
+ * Register `theme` and its subcommands under the `experimental` group.
+ * @param {import('commander').Command} group the `experimental` command
+ * @param {import('commander').Command} program the root program
+ */
+export function registerExperimentalTheme(group, program) {
+  const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
   theme.addHelpText(
     'after',
     `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} experimental theme targets      Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} experimental theme explain <part>  What one part reads, and the commands that change it\n` +
-      `  ${getCliInvocation()} component <Name>                One component's theming table\n`,
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n` +
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n` +
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
   );
 
+  const editor = defineGroup(theme, editorDoc);
+  explained(editor, editorDoc);
+
   explained(
-    defineCommand(theme, newDoc, {
+    defineCommand(editor, newDoc, {
       fn: newFn,
       action: (/** @type {string} */ name, /** @type {any} */ o) =>
         run(
@@ -348,7 +397,7 @@ export function registerExperimentalTheme(group, program) {
             ...r.data.problems.map(p => `  contrast: ${p}`),
             `  preview: ${r.data.preview}`,
             ...pictureLines(r.data),
-            `  next: ${PREFIX} set ${r.data.theme} <thing> <value>   (${PREFIX} explain "<what you want>")`,
+            `  next: ${EDITOR} set ${r.data.theme} <thing> <value>   (${HOW} "<what you want>")`,
           ],
         ),
     }),
@@ -356,7 +405,7 @@ export function registerExperimentalTheme(group, program) {
   );
 
   explained(
-    defineCommand(theme, setDoc, {
+    defineCommand(editor, setDoc, {
       fn: setFn,
       action: (
         /** @type {string} */ name,
@@ -364,6 +413,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string[]} */ value,
         /** @type {any} */ o,
       ) =>
+        strayOption('set', value) ??
         run(
           program,
           () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
@@ -375,27 +425,7 @@ export function registerExperimentalTheme(group, program) {
   );
 
   explained(
-    defineCommand(theme, resetDoc, {
-      fn: resetFn,
-      action: (
-        /** @type {string} */ name,
-        /** @type {string} */ thing,
-        /** @type {string | undefined} */ which,
-        /** @type {any} */ o,
-      ) =>
-        run(
-          program,
-          () =>
-            themeEditReset(name, thing, {...changeOptions(o), value: which}),
-          changeLines,
-        ),
-    }),
-    resetDoc,
-    {tokens: true},
-  );
-
-  explained(
-    defineCommand(theme, showDoc, {
+    defineCommand(editor, showDoc, {
       fn: showFn,
       action: (/** @type {string} */ name, /** @type {any} */ o) =>
         run(
@@ -441,52 +471,164 @@ export function registerExperimentalTheme(group, program) {
   );
 
   explained(
-    defineCommand(theme, undoDoc, {
+    defineCommand(editor, undoDoc, {
       fn: undoFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
-        run(
-          program,
-          () => themeEditUndo(name, {cwd: process.cwd(), png: o.png ?? false}),
-          r => [
-            `[ok] ${r.data.theme}: undid the last change${r.data.undone.length ? `: ${r.data.undone.join('; ')}` : ''}`,
-            `  now ${r.data.settings} settings; ${r.data.stepsLeft} earlier change${r.data.stepsLeft === 1 ? '' : 's'} can still be undone`,
-            `  preview: ${r.data.preview}`,
-            ...pictureLines(r.data),
-          ],
-        ),
-    }),
-    undoDoc,
-  );
-
-  explained(
-    defineCommand(theme, previewDoc, {
-      fn: previewFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+      action: (
+        /** @type {string} */ name,
+        /** @type {string | undefined} */ thing,
+        /** @type {string | undefined} */ which,
+        /** @type {any} */ o,
+        /** @type {import('commander').Command} */ c,
+      ) =>
+        strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
         run(
           program,
           () =>
-            themeEditPreview(name, {
+            themeEditUndo(name, {
+              ...changeOptions(o),
+              ...(thing == null ? {} : {thing, value: which}),
+            }),
+          r =>
+            r.data.action === 'step'
+              ? [
+                  `[ok] ${r.data.theme}: undid the last change${r.data.undone.length ? `: ${r.data.undone.join('; ')}` : ''}`,
+                  `  now ${r.data.settings} settings; ${r.data.stepsLeft} earlier change${r.data.stepsLeft === 1 ? '' : 's'} can still be undone`,
+                  `  preview: ${r.data.preview}`,
+                  ...pictureLines(r.data),
+                ]
+              : changeLines(
+                  /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
+                    r
+                  ),
+                ),
+        ),
+    }),
+    undoDoc,
+    {tokens: true},
+  );
+
+  const preview = defineGroup(theme, previewDoc);
+  explained(preview, previewDoc);
+
+  explained(
+    defineCommand(preview, previewAddDoc, {
+      fn: previewAddFn,
+      action: (
+        /** @type {string[] | string | undefined} */ words,
+        /** @type {any} */ o,
+      ) =>
+        run(
+          program,
+          () =>
+            themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
               cwd: process.cwd(),
-              write: o.write,
-              group: o.group,
-              png: o.png ?? false,
+              theme: o.theme,
+              template: o.template,
+              top: o.top == null ? undefined : Number(o.top),
+              path: o.path,
             }),
           r => [
-            r.data.mode === 'page'
-              ? `[ok] wrote the theme-building page for ${r.data.theme} into the app (${r.data.components} components): ${r.data.files.join(', ')}. Serve it from a route to build the theme in the browser.`
-              : `[ok] rendered the theme-building page for ${r.data.theme} (${r.data.components} components): ${r.data.html}`,
-            ...r.data.skipped.map(x => `  left out: ${x}`),
-            ...pictureLines(r.data),
+            `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}; pages: ${r.data.pages.join(', ')}`,
+            `  theme: ${r.data.theme ?? "the app's own"}`,
+            ...r.data.notes.map(n => `  note: ${n}`),
+            `  open: ${r.data.open}`,
           ],
         ),
     }),
-    previewDoc,
+    previewAddDoc,
   );
 
   explained(
-    defineCommand(theme, explainDoc, {
-      fn: explainFn,
-      action: (/** @type {string[]} */ words, /** @type {any} */ o) => {
+    defineCommand(preview, previewAppDoc, {
+      fn: previewAppFn,
+      action: (/** @type {string} */ dir, /** @type {any} */ o) =>
+        run(
+          program,
+          () =>
+            themeEditPreviewApp(dir, {
+              cwd: process.cwd(),
+              theme: o.theme,
+              overwrite: o.overwrite ?? false,
+            }),
+          r => [
+            `[ok] new app in ${r.data.folder} (${r.data.files.length} files) with the theme preview; pages: ${r.data.pages.join(', ')}`,
+            `  theme: ${r.data.theme ?? "the app's own neutral theme"}`,
+            ...r.data.notes.map(n => `  note: ${n}`),
+            `  open: ${r.data.open}`,
+          ],
+        ),
+    }),
+    previewAppDoc,
+  );
+
+  explained(
+    defineCommand(preview, previewListDoc, {
+      fn: previewListFn,
+      action: (/** @type {any} */ o) =>
+        run(
+          program,
+          () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
+          r =>
+            r.data.folder
+              ? [
+                  `theme preview in ${r.data.folder} (theme: ${r.data.theme ?? "the app's own"}):`,
+                  ...r.data.pages.map(p => `  ${p.id}  ${p.label}`),
+                ]
+              : [`no theme preview yet: ${PREFIX} preview add`],
+          r =>
+            resultSet({
+              count: r.data.pages.length,
+              resultKind: 'mixed',
+              empty: r.data.pages.length === 0,
+            }),
+        ),
+    }),
+    previewListDoc,
+  );
+
+  explained(
+    defineCommand(preview, previewRemoveDoc, {
+      fn: previewRemoveFn,
+      action: (/** @type {string | undefined} */ page, /** @type {any} */ o) =>
+        run(
+          program,
+          () =>
+            themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+          r => [
+            r.data.pages.length
+              ? `[ok] removed ${page} from the theme preview; pages: ${r.data.pages.join(', ')}`
+              : `[ok] removed the theme preview in ${r.data.folder}`,
+            ...r.data.removed.map(f => `  deleted ${f}`),
+          ],
+        ),
+    }),
+    previewRemoveDoc,
+  );
+
+  explained(
+    defineCommand(editor, howDoc, {
+      fn: howFn,
+      action: async (/** @type {string[]} */ words, /** @type {any} */ o) => {
+        if (!words.length && o.list == null && !(o.at ?? []).length) {
+          const c = editor.commands.find(
+            x => x.name() === howDoc.name.split(' ').pop(),
+          );
+          // In JSON mode outputHelp prints the help envelope.
+          if (program.opts().json) c?.outputHelp();
+          else
+            print([
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|families|properties]`,
+              '',
+              'Examples:',
+              ...(howDoc.examples ?? []).flatMap(e => [
+                `  # ${e.label}`,
+                `  ${e.cli}`,
+              ]),
+            ]);
+          return NO_RESULT_SET;
+        }
+        const stray = strayOption('how', words.slice(1));
+        if (stray) return stray;
         // A number after a picture is how many colors to list.
         const count =
           words.length === 2 &&
@@ -498,13 +640,13 @@ export function registerExperimentalTheme(group, program) {
         return run(
           program,
           () =>
-            themeEditExplain(subject, {
+            themeEditHow(subject, {
               cwd: process.cwd(),
               list: o.list,
               at: o.at ?? [],
               count,
             }),
-          r => explainLines(/** @type {any} */ (r.data)),
+          r => lookupLines(/** @type {any} */ (r.data)),
           r => {
             const d = /** @type {any} */ (r.data);
             const n =
@@ -518,7 +660,7 @@ export function registerExperimentalTheme(group, program) {
         );
       },
     }),
-    explainDoc,
+    howDoc,
     {tokens: true},
   );
 

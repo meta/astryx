@@ -41,6 +41,11 @@ import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
 import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
+import {
+  layerEntranceSide,
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
 import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
@@ -496,6 +501,14 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * The component writes the entrance's side itself, after the commit that
+   * moves the layer (a Selector's list over its selected option). The runtime
+   * then skips its own read as the layer shows, so a show reads the layer
+   * once. A layer element swapped in while it is open still gets the
+   * runtime's read.
+   */
+  writesEntranceSide?: boolean;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -584,15 +597,22 @@ function animationNames(layer: HTMLElement): string {
   return style?.getPropertyValue('animation-name').trim() || 'none';
 }
 
+/** The settled boxes of a layer and its anchor, from one measurement pass. */
+interface AnchorBoxes {
+  readonly layer: DOMRect;
+  readonly anchor: DOMRect;
+}
+
 /**
  * Whether the standard list has failed a layer that must keep its anchor
  * clear: its box covers the anchor or, while the anchor is in view, leaves the
  * viewport on the block axis. Only a box that overlaps the anchor counts; a
  * layer flush against it does not.
  */
-function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
-  const a = anchor.getBoundingClientRect();
-  const l = settledBox(layer);
+function failsAnchor(
+  {layer: l, anchor: a}: AnchorBoxes,
+  viewportBlock: number,
+): boolean {
   if (l.width <= 0 || l.height <= 0) {
     return false;
   }
@@ -601,8 +621,6 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
     a.left < l.right &&
     l.top < a.bottom &&
     a.top < l.bottom;
-  // The viewport's block extent, as the layer's anchor positioning sees it.
-  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
   const anchorInView = a.bottom > 0 && a.top < viewportBlock;
   return covers || (anchorInView && (l.top < 0 || l.bottom > viewportBlock));
 }
@@ -619,12 +637,50 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * in the first frame painted after a scroll of the anchor stops
  * (`observeScrollStop`), because during a scroll the browser does not choose
  * an option again. Nothing watches an anchor that moves without resizing, so
- * the layer never jumps to another side mid-scroll.
+ * the layer never jumps to another side mid-scroll. It returns the boxes it
+ * read when it leaves the layer in place, so a show reads them once. After a
+ * fresh placement, or without an anchor, it returns `null`.
  */
-function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
-  if (anchor && failsAnchor(layer, anchor)) {
-    placeAfresh(layer);
+function keepAnchorClear(
+  layer: HTMLElement,
+  anchor: HTMLElement | null,
+): AnchorBoxes | null {
+  if (anchor == null) {
+    return null;
   }
+  // One measurement pass. `settledBox` can write the layer's transforms and
+  // restore them, so it reads last.
+  const anchorBox = anchor.getBoundingClientRect();
+  // The viewport's block extent, as the layer's anchor positioning sees it.
+  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
+  const boxes = {anchor: anchorBox, layer: settledBox(layer)};
+  if (failsAnchor(boxes, viewportBlock)) {
+    placeAfresh(layer);
+    return null;
+  }
+  return boxes;
+}
+
+/**
+ * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
+ * stand when it left the layer in place; otherwise the side is read here,
+ * after the placement. Only an anchored layer has a side.
+ */
+function writeEntranceSide(
+  layer: HTMLElement,
+  trigger: HTMLElement | null,
+  boxes: AnchorBoxes | null,
+): void {
+  if (trigger == null || !layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+    writeLayerEntranceSide(layer, null);
+    return;
+  }
+  writeLayerEntranceSide(
+    layer,
+    boxes == null
+      ? readLayerEntranceSide(layer, trigger)
+      : layerEntranceSide(boxes.layer, boxes.anchor),
+  );
 }
 
 /**
@@ -1213,6 +1269,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
+  const writesEntranceSide =
+    mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
   onCloseStartRef.current =
     mode === 'context' ? options.onCloseStart : undefined;
@@ -1546,8 +1604,11 @@ function useLayerImplementation(
       if (lightDismiss) {
         claimContextMenuPress(popover);
       }
-      if (keepsAnchorClear) {
-        keepAnchorClear(popover, triggerRef.current);
+      const anchorBoxes = keepsAnchorClear
+        ? keepAnchorClear(popover, triggerRef.current)
+        : null;
+      if (!writesEntranceSide) {
+        writeEntranceSide(popover, triggerRef.current, anchorBoxes);
       }
       isOpenRef.current = true;
       setIsOpen(true);
@@ -1557,6 +1618,7 @@ function useLayerImplementation(
     anchorId,
     onShow,
     keepsAnchorClear,
+    writesEntranceSide,
     lightDismiss,
     requestContextMount,
     applyDeferredWritingContext,
@@ -2038,9 +2100,10 @@ function useLayerImplementation(
         // keyboard cap follows the replacement element too.
         followLayerElement();
         if (showPopoverElement(el)) {
-          if (keepsAnchorClear) {
-            keepAnchorClear(el, triggerRef.current);
-          }
+          const anchorBoxes = keepsAnchorClear
+            ? keepAnchorClear(el, triggerRef.current)
+            : null;
+          writeEntranceSide(el, triggerRef.current, anchorBoxes);
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -2048,10 +2111,12 @@ function useLayerImplementation(
               isOpenRef.current &&
               current === el &&
               openedPopoverRef.current !== el &&
-              showPopoverElement(el) &&
-              keepsAnchorClear
+              showPopoverElement(el)
             ) {
-              keepAnchorClear(el, triggerRef.current);
+              const anchorBoxes = keepsAnchorClear
+                ? keepAnchorClear(el, triggerRef.current)
+                : null;
+              writeEntranceSide(el, triggerRef.current, anchorBoxes);
             }
           });
         }

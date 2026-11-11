@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file FunctionDoc for `themeEditShow()` / `astryx experimental theme show`. */
+/** @file FunctionDoc for `themeEditShow()` / `astryx experimental theme editor show`. */
 
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
 export const doc = {
@@ -81,6 +81,6 @@ export const doc = {
       code: 'await themeEditShow(...)',
     },
   ],
-  command: 'experimental theme show',
+  command: 'experimental theme editor show',
   related: ['themeBuild'],
 };

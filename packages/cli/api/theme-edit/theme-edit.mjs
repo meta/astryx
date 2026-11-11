@@ -1,16 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Programmatic API for `astryx experimental theme`: make and change a
- * theme one checked change at a time.
+ * @file Programmatic API for `astryx experimental theme editor` (make and
+ * change a theme one checked change at a time) and `theme preview` (show it
+ * on pages in the app).
  *
  *   themeEditNew('brand', {like: 'neutral'})           themeEdit.new
  *   themeEditSet('brand', 'corners', 'pill')            themeEdit.set
- *   themeEditReset('brand', 'corners')                  themeEdit.reset
+ *   themeEditUndo('brand')                              themeEdit.undo (one step)
+ *   themeEditUndo('brand', {thing: 'corners'})          themeEdit.undo (one setting)
  *   themeEditShow('brand')                              themeEdit.show
- *   themeEditUndo('brand')                              themeEdit.undo
- *   themeEditPreview('brand', {write: 'src/app/theme'}) themeEdit.preview
- *   themeEditExplain('banner')                          themeEdit.explain
+ *   themeEditPreviewAdd('a sales dashboard')            themeEdit.previewAdd
+ *   themeEditPreviewApp('theme-app')                    themeEdit.previewApp
+ *   themeEditHow('banner')                              themeEdit.how
  *
  * Every change is checked first against what the installed Core's parts
  * really read; a change that cannot take effect is refused and nothing is
@@ -52,25 +54,11 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 }
 
 /**
- * Return one setting to the base theme's value: the setting is removed,
- * and the theme is rebuilt and previewed.
- * @experimental
- * @param {string} theme
- * @param {string} thing
- * @param {ChangeOptions & {value?: string}} [options] `value` names which half of
- *   the `headings` dial to reset (`weight` or `tracking`)
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
- */
-export async function themeEditReset(theme, thing, options = {}) {
-  return adapter.themeEditReset(theme, thing, options);
-}
-
-/**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
  * @experimental
  * @param {string} theme
- * @param {{cwd?: string, png?: boolean, group?: string}} [options]
+ * @param {import('./theme-edit.type.mjs').ThemeEditShowOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
@@ -78,27 +66,65 @@ export async function themeEditShow(theme, options = {}) {
 }
 
 /**
- * Put the theme back as it was before its last change.
+ * Put the theme back as it was before its last change. With `thing`, remove
+ * that one setting instead, wherever it is in the settings: it goes back to
+ * the base theme's value.
  * @experimental
  * @param {string} theme
- * @param {{cwd?: string, png?: boolean}} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse>}
+ * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditUndo(theme, options = {}) {
   return adapter.themeEditUndo(theme, options);
 }
 
 /**
- * The theme-building page: every component grouped, each variant side by
- * side, overlays open, and full template pages. Rendered to one HTML file,
- * or with `write` written into the app as a page module.
+ * Add pages to the in-app theme preview, and write the preview route the
+ * first time. With a description, the build ranking picks the template
+ * pages that fit it best (`top` of them); `template` names one instead.
+ * With neither, the default pages: the sample app page and every component.
  * @experimental
- * @param {string} theme
- * @param {{cwd?: string, write?: string, group?: string, png?: boolean}} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewResponse>}
+ * @param {string} [description]
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAddOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
  */
-export async function themeEditPreview(theme, options = {}) {
-  return adapter.themeEditPreview(theme, options);
+export async function themeEditPreviewAdd(description, options = {}) {
+  return adapter.themeEditPreviewAdd(description, options);
+}
+
+/**
+ * Make a new starter app with the theme preview route and its default pages
+ * inside. With `theme`, the theme is copied into the app and the pages wear
+ * it. No install runs.
+ * @experimental
+ * @param {string} dir
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAppOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
+ */
+export async function themeEditPreviewApp(dir, options = {}) {
+  return adapter.themeEditPreviewApp(dir, options);
+}
+
+/**
+ * The pages of the in-app theme preview.
+ * @experimental
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewListResponse>}
+ */
+export async function themeEditPreviewList(options = {}) {
+  return adapter.themeEditPreviewList(options);
+}
+
+/**
+ * Remove one page from the in-app theme preview, or with no page the whole
+ * preview: only the files it wrote are deleted.
+ * @experimental
+ * @param {string} [page]
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
+ */
+export async function themeEditPreviewRemove(page, options = {}) {
+  return adapter.themeEditPreviewRemove(page, options);
 }
 
 /**
@@ -111,9 +137,9 @@ export async function themeEditPreview(theme, options = {}) {
  * list of dials, tokens, parts, families or CSS properties.
  * @experimental
  * @param {string} subject a part, family, setting, aspect, question, or PNG file; with `list`, a filter
- * @param {import('./theme-edit.type.mjs').ThemeEditExplainOptions} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditExplainResponse>}
+ * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse>}
  */
-export async function themeEditExplain(subject, options = {}) {
-  return adapter.themeEditExplain(subject, options);
+export async function themeEditHow(subject, options = {}) {
+  return adapter.themeEditHow(subject, options);
 }
