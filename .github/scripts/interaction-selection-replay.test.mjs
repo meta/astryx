@@ -9,6 +9,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -95,5 +96,18 @@ describe('the Chromium selection replay record', () => {
     for (const key of Object.keys(record.reviewed))
       expect(key).toMatch(/^#\d+ packages\/[^/]+\/src\/\S+\.spec\.ts$/);
     expect(reviewKey(10816, 'a.spec.ts')).toBe('#10816 a.spec.ts');
+  });
+});
+
+describe('the replay selects as the lane does', () => {
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'interaction-selection-replay.mjs'),
+    'utf8',
+  );
+
+  it("passes the lane's story rule, so a story-only change replays its narrow selection", () => {
+    expect(source).toContain('storyScope: storyScopeFor({listed, read})');
+    // The stories the rule reads are in the replayed tree.
+    expect(source).toMatch(/git -C "\$\{ROOT\}" archive [^`]*apps\/storybook\/stories/);
   });
 });

@@ -334,8 +334,9 @@ export function selectProofs({listed, changed, shared, filters}) {
 /**
  * What a changed story reaches: the component folders it imports by value,
  * and every interaction spec that opens one of its story ids. Null when the
- * tree lacks the story, its meta names no id, an import does not resolve, or
- * a spec's templated id that could name this story is not filled.
+ * tree lacks the story, its meta names no id, an import does not resolve, a
+ * spec's templated id that could name this story is not filled, or a spec
+ * opens a story id no story file makes (a renamed title strands its openers).
  * @param {{listed: string[], read: (file: string) => string}} options
  * @returns {(file: string) => {folders: string[], specs: string[]} | null}
  */
@@ -350,6 +351,8 @@ export function storyScopeFor({listed, read}) {
     opened ??= listed
       .filter(isInteractionSpec)
       .map(spec => [spec, storyIdsOpened(spec, {listed, read, stories})]);
+    if (opened.some(([, {ids}]) => ids.some(id => !stories.has(id))))
+      return null;
     const own = [...stories]
       .filter(([, files]) => files.includes(file))
       .map(([id]) => id);
@@ -818,7 +821,7 @@ function selectChromium(args) {
     console.log(`Chromium selection: the full suite (${result.reason}).`);
   else {
     console.log(
-      `Chromium selection: ${result.specs.length} spec file(s) for ${result.touched.length} touched and ${result.dependents.length} dependent component folder(s).`,
+      `Chromium selection: ${result.specs.length} spec file(s) for ${result.touched.length} touched, ${result.dependents.length} dependent and ${result.stories?.length ?? 0} changed-story component folder(s).`,
     );
     for (const spec of result.specs) console.log(`  ${spec}`);
   }

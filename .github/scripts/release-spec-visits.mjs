@@ -23,7 +23,6 @@ import path from 'node:path';
 import {
   componentFolderNamed,
   storyFiles,
-  storyIdOf,
   storyIdsOpened,
   componentFolderOf,
   componentPathOf,
@@ -33,8 +32,8 @@ import {
   valueImports,
 } from './a11y-pr-contracts.mjs';
 
-/** A release file: FR32's release spec by name. */
-export {storyFiles, storyIdOf};
+/** The story index, for the release-spec plan's tests. */
+export {storyFiles};
 
 /** A release file: FR32's release spec by name. */
 export const isReleaseFile = file => /\.release\.[^/]*\.spec\.ts$/.test(file);
