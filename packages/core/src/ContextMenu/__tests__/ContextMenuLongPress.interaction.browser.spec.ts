@@ -249,6 +249,7 @@ test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms w
   page,
 }) => {
   const {driver, center} = await openTouchStory(page);
+  await startFrameLog(page);
   // One 3 px move at 700 ms, then still. An idle page gets the move at once.
   await driver.play(
     drag(
@@ -257,9 +258,17 @@ test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms w
       {holdMs: 699, durationMs: 1, restMs: 300},
     ),
   );
+  const frames = await readFrameLog(page);
   const start = await touchStartedAt(page);
   const shown = await menuShownAt(page);
+  const decided = await menuShownTimerAt(page);
   expect(shown, 'the menu never showed').not.toBeNull();
+  // The moment's own timer task shows the menu: nothing waits.
+  expect(
+    decided,
+    'the menu showed after the task that decided it',
+  ).not.toBeNull();
+  expectDecidedOnTime(frames, start + menuDisplayMs, decided as number);
   const after = (shown as number) - start;
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
   expect(after).toBeLessThan(menuDisplayMs + 20);

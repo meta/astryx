@@ -13,7 +13,7 @@
  * @position Unit tests of packages/core/src/ContextMenu/contextMenuPress.ts
  */
 
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createHarness} from '../gestures/__tests__/harness';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {ContextMenuPressRecognizer} from './contextMenuPress';
@@ -34,20 +34,23 @@ function setup(
 }
 
 /**
- * Runs `body` with the page's clock (`performance.now()`) faked. `at(time)`
- * moves it to when the page gets the next input, which may be after the time
- * the input came with.
+ * Runs `body` with the page's clock (`performance.now()`), which every case
+ * fakes from 0. `at(time)` moves it to when the page gets the next input,
+ * which may be after the time the input came with.
  */
 function withPageClock(body: (at: (time: number) => void) => void): void {
-  vi.useFakeTimers({toFake: ['performance']});
-  try {
-    body(time => vi.advanceTimersByTime(time - performance.now()));
-  } finally {
-    vi.useRealTimers();
-  }
+  body(time => vi.advanceTimersByTime(time - performance.now()));
 }
 
 describe('ContextMenuPressRecognizer', () => {
+  // The page's clock starts with the harness's, so no case runs late by it.
+  beforeEach(() => {
+    vi.useFakeTimers({toFake: ['performance']});
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('commits at UIKit’s moment (iOS 26.2: 400 ms, first 60 Hz tick 417 ms), not a millisecond before', () => {
     const {harness, press, states} = setup();
     harness.finger(1).down(100, 200, 1000, {recognizers: [press]});
@@ -194,6 +197,47 @@ describe('ContextMenuPressRecognizer', () => {
       harness.advance(DISPLAY);
       at(DISPLAY + 20);
       finger.move(14, 0, DISPLAY + 5, [{x: 10, y: 0, time: DISPLAY - 10}]);
+      expect(press.isMenuDue).toBe(true);
+      finger.up(DISPLAY + 300);
+    });
+  });
+
+  for (const blockedUntil of [760, 800, 900]) {
+    it(`judges a coalesced move from behind a block until ${blockedUntil} ms before the menu shows`, () => {
+      withPageClock(at => {
+        const {harness, press, states} = setup();
+        const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+        harness.advance(COMMIT);
+        // On time until 640 ms. Then the page is blocked past the moment.
+        at(640);
+        finger.move(3, 0, 640);
+        // The finger crossed 11.5 px at 650 ms. Its moves wait behind the
+        // block and come as one coalesced move.
+        at(blockedUntil);
+        finger.move(14, 0, blockedUntil - 5, [
+          {x: 13, y: 0, time: 650},
+          {x: 14, y: 0, time: 700},
+        ]);
+        expect(press.isMenuDue).toBe(false);
+        expect(states).toEqual([
+          `began@${COMMIT}`,
+          'changed@640',
+          `cancelled@${blockedUntil - 5}`,
+        ]);
+      });
+    });
+  }
+
+  it('shows a still finger’s menu after a block, once no move comes from behind it', () => {
+    withPageClock(at => {
+      const {harness, press} = setup();
+      const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+      // The moment's timer runs 65 ms late behind a block.
+      at(DISPLAY + 65);
+      harness.advance(DISPLAY);
+      expect(press.isMenuDue).toBe(false);
+      at(DISPLAY + 115);
+      harness.advance(DISPLAY + 50);
       expect(press.isMenuDue).toBe(true);
       finger.up(DISPLAY + 300);
     });
