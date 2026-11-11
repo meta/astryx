@@ -70,9 +70,9 @@ export function splitByDuration(items, count, cost) {
 /**
  * Legs that each hold at most `budget` seconds: from `start` legs, one more at
  * a time while a leg is over, up to `maxLegs`. An item longer than the budget
- * runs in a leg of its own and does not raise the other legs' limit. When the
- * items over the budget alone fill `maxLegs`, the items split into `maxLegs`
- * legs by time instead, so there are never more than `maxLegs` legs.
+ * runs in a leg of its own and does not raise the other legs' limit. When
+ * those legs, and one more for the rest, would pass `maxLegs`, the items split
+ * into `maxLegs` legs by time instead, so there are never more than `maxLegs`.
  * @param {string[]} items
  * @param {(item: string) => number} cost
  * @param {{budget: number, maxLegs?: number, start?: number}} limits
@@ -84,7 +84,7 @@ export function fitLegsToBudget(items, cost, {budget, maxLegs, start = 1}) {
   const total = leg => leg.reduce((sum, item) => sum + cost(item), 0);
   const alone = unique.filter(item => cost(item) > budget).sort();
   const rest = unique.filter(item => cost(item) <= budget);
-  if (maxLegs != null && alone.length >= maxLegs && rest.length > 0) {
+  if (maxLegs != null && alone.length + (rest.length > 0 ? 1 : 0) > maxLegs) {
     const shares = splitByDuration(unique, maxLegs, cost).filter(
       leg => leg.length > 0,
     );
