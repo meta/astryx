@@ -128,10 +128,15 @@ export interface ListReorderSession {
 
 /** The machinery a reorderable object carries. */
 export interface ListReorderEngine {
-  /** A List's reorder session over the rows of the element `getList` returns. */
+  /**
+   * A reorder session over the rows of the element `getList` returns.
+   * `readRows` reads those rows in order; without it, they are the
+   * element's children, as in a List.
+   */
   createSession(
     getList: () => HTMLElement | null,
     hintId: string,
+    readRows?: (container: HTMLElement) => HTMLElement[],
   ): ListReorderSession;
   /**
    * Reorder mode for the item with `key`, started from the app's own UI. It
