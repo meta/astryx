@@ -356,6 +356,10 @@ app to turn on.
   `keyboardTarget.ts` uses both.
 - `keyboardTarget.ts` exports `FIELD_CLEARANCE_AT_REPORT`, the 4 CSS px that a
   field's reveal and BottomSheet's hook both set at Chrome's first report.
+- `keyboardHeight.ts` exports `getResizedRoom`, the room a browser makes by
+  shrinking the page for the keyboard (FR8), and `getResizedRoomWidth`, the
+  width it measured that room at. `keyboardTarget.ts` reads both, and
+  `useMobileKeyboard.ts` reads the room.
 - The consumer documentation gains the Android viewport setting (FR8).
 
 ### Implementation gaps
@@ -444,11 +448,13 @@ gap below is open.
   question).
 - **Gap 15 — An unmeasured width under resizes-content.** The room is how far
   the root's box is short of its tallest at the same width, as Core measured it.
-  At a width Core has not measured with the keyboard closed, the room reads 0
-  until the keyboard closes. That happens after a turn of the phone. It also
-  happens when a field without Core's handling, such as a plain input, opens the
-  keyboard before any Core field has measured the page. A field revealed there
-  ends on the keyboard's top edge, not 10 CSS px clear.
+  It counts only while a text-entry control has focus, so a shorter window with
+  nothing focused, as in Android's split screen, makes no room. At a width Core
+  has not measured with the keyboard closed, the room reads 0 until the keyboard
+  closes. That happens after a turn of the phone. It also happens when a field
+  without Core's handling, such as a plain input, opens the keyboard before any
+  Core field has measured the page. A field revealed there ends on the
+  keyboard's top edge, not 10 CSS px clear.
 - **Gap 19 — A field in a modal BottomSheet shorter than `tall`:** the sheet's
   full-viewport dialog has no scroller, and BottomSheet's keyboard path runs
   only for `height="tall"`, so the field keeps the browser's own reveal; Chrome
