@@ -1717,7 +1717,7 @@ describe('swipe', () => {
     });
 
     it.each(['mouse', 'pen'] as const)(
-      'closes a row a finger opened on a %s press on its content, and the click that press makes activates nothing',
+      'leaves a row a finger opened open on a %s press on its content, and the click that press makes reaches the row: only a touch tap closes it',
       async pointerType => {
         expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
         const {row, onClick} = renderRow();
@@ -1748,8 +1748,8 @@ describe('swipe', () => {
         // The browser's click for that press.
         fireEvent.click(content, {detail: 1});
         await settled();
-        expect(xOf(row)).toBe(0);
-        expect(onClick).not.toHaveBeenCalled();
+        expect(xOf(row)).toBe(72);
+        expect(onClick).toHaveBeenCalledTimes(1);
       },
     );
 

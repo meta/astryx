@@ -51,17 +51,16 @@
  * row's content has left its box. Then the row springs back, or holds out when
  * the entry has `hasRemoval`.
  *
- * A mouse drag and a mouse wheel's notches never swipe a row
- *: the pan takes touches, pens and a trackpad's
- * scroll. A finger that lands while another is down, on the row or anywhere
- * else, never starts the pan: the page pinches.
+ * A mouse drag and a mouse wheel's notches never swipe a row: the pan takes
+ * touches, pens and a trackpad's scroll. A finger that lands while another is
+ * down, on the row or anywhere else, never starts the pan: the page pinches.
  *
  * An open row closes on a pointer landing outside it. It counts as open while
  * resting, or while settling to rest open: UIKit counts a row open from the
  * release that opens it. It also closes on a scroll of anything that holds it
  * while focus is outside its open panel. Escape closes it with focus inside it.
- * A press by any pointer on its own content closes it too, and activates
- * nothing on the row.
+ * A touch tap on its own content closes it too, and activates nothing on the
+ * row. A mouse's or a pen's press on it reaches the row.
  *
  * Under Reduce Motion the drag itself is direct manipulation and follows one
  * for one. But what a release, a confirm or a close starts never travels or
@@ -1344,17 +1343,18 @@ export function useSwipeAction({
     // callbacks it reaches are stable: one shared drag for the root's life.
   }, [landed]);
 
-  // A tap on an open row's own content closes it and activates nothing, as
-  // UIKit's dismissal does. The tap recognizes at the lift. The host keeps the
-  // click it would have made from the row. It cancels the touch, or, where the
-  // primary pointer is fine, its click guard swallows the click. Any pointer's
-  // press dismisses, since a trackpad opens a row too. The panel's entries keep
-  // their own taps, and a closed row never offers this recognizer a touch.
+  // A touch tap on an open row's own content closes it and activates nothing,
+  // as UIKit's dismissal does. The tap recognizes at the lift. The host keeps
+  // the click it would have made from the row. It cancels the touch, or, where
+  // the primary pointer is fine, its click guard swallows the click. A mouse's
+  // or a pen's press reaches the row. The panel's entries keep their own taps,
+  // and a closed row never offers this recognizer a touch.
   useGestureRecognizer(
     rootRef,
     () =>
       new TapGestureRecognizer({
         name: 'item-swipe-dismiss',
+        allowedPointerTypes: ['touch'],
         shouldReceiveTouch: (_tap, touch) =>
           isOpen() &&
           !(

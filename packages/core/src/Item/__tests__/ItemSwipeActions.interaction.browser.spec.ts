@@ -2215,7 +2215,7 @@ test.describe('under a trackpad or a mouse wheel (a desktop context)', () => {
     ).toEqual([]);
   });
 
-  test('a mouse click on the content of a row a trackpad opened closes it and reaches nothing, as a finger’s tap does (spec:AST-057 DEC-7)', async ({
+  test('a mouse click on the content of a row a trackpad opened reaches the row, and the row stays open: only a touch tap closes it (spec:AST-057 FR7)', async ({
     page,
     browserName,
   }) => {
@@ -2236,12 +2236,13 @@ test.describe('under a trackpad or a mouse wheel (a desktop context)', () => {
     });
     // The row's content is still under the middle of where the row rested.
     await page.mouse.click(at.x - openWidth, at.y);
-    await expect.poll(async () => xOf(row)).toBeCloseTo(0, 0);
-    await expect(panel).toHaveAttribute('inert', '');
-    expect(
-      await row.evaluate(
-        node => (node as HTMLElement & {clicks?: number}).clicks,
-      ),
-    ).toBe(0);
+    await expect
+      .poll(async () =>
+        row.evaluate(node => (node as HTMLElement & {clicks?: number}).clicks),
+      )
+      .toBe(1);
+    await page.waitForTimeout(400);
+    expect(await xOf(row)).toBeCloseTo(-openWidth, 0);
+    await expect(panel).not.toHaveAttribute('inert', '');
   });
 });
