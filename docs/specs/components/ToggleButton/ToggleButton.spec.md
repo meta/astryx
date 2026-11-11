@@ -124,14 +124,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                 | Required invariant                                                                             | Allowed variation |
-| --------------------- | ---------------------------------------------------------------------------------------------- | ----------------- |
-| Unpressed             | `aria-pressed="false"`; ghost surface; regular weight.                                         | Icon.             |
-| Pressed               | `aria-pressed="true"`; pressed paint; semibold label; same outer size.                         | Pressed icon.     |
-| Action pending        | Optimistic pressed value; Spinner and `aria-busy`; still operable.                             | Spinner delay.    |
-| Valued group member   | Pressed from the group; activation calls the group; no Action.                                 | Elevation.        |
-| Disabled with tooltip | `aria-disabled`; focusable; no state request.                                                  | —                 |
-| Disabled, no tooltip  | Focusable with `aria-disabled`; no state request. Implementation gap: native `disabled` (FR7). | —                 |
+| State                 | Required invariant                                                     | Allowed variation |
+| --------------------- | ---------------------------------------------------------------------- | ----------------- |
+| Unpressed             | `aria-pressed="false"`; ghost surface; regular weight.                 | Icon.             |
+| Pressed               | `aria-pressed="true"`; pressed paint; semibold label; same outer size. | Pressed icon.     |
+| Action pending        | Optimistic pressed value; Spinner and `aria-busy`; still operable.     | Spinner delay.    |
+| Valued group member   | Pressed from the group; activation calls the group; no Action.         | Elevation.        |
+| Disabled with tooltip | `aria-disabled`; focusable; no state request.                          | —                 |
+| Disabled, no tooltip  | Focusable with `aria-disabled`; no state request.                      | —                 |
 
 ### Transformation and precedence order
 
@@ -199,7 +199,7 @@ record carries no anatomy-theming map.
 | FR1, FR2, ORD1, AR1 | `ToggleButton.test.tsx`; `ToggleButton.a11y.chromium.spec.ts` standalone and group states                                                                                             | Unpressed, pressed, icon-only, composed label                 | Missing or stale `aria-pressed` fails.                                                                                                                                                                                                                     | `audit:ToggleButton/accessibility` |
 | FR3–FR5, ORD2       | `ToggleButton.test.tsx` callback, Action, and caller-`onClick` suites                                                                                                                 | Callback only, Action only, both, prevented, pending re-click | Order flips, a prevented callback still runs the Action, or callback-only reports pending fails. Evidence gap: no test runs `pressedChangeAction` on a click prevented before the toggle's handler.                                                        | `audit:ToggleButton/behavior`      |
 | FR6                 | `ToggleButton.test.tsx` group-ownership cases                                                                                                                                         | Member with standalone handlers; member with `onClick`        | A member that runs its own handler or skips the group toggle fails.                                                                                                                                                                                        | `audit:ToggleButton/behavior`      |
-| FR7, ORD3           | `ToggleButton.test.tsx` disabled suite; `ToggleButton.a11y.test.tsx` and `ToggleButton.a11y.chromium.spec.ts` disabled states                                                         | Member and group disabled; tooltip-bearing disabled           | A disabled toggle that toggles, or an enabled group re-enabling a member, fails. The shared disabled state expects native `disabled`, matching the FR7 gap.                                                                                                | `audit:ToggleButton/accessibility` |
+| FR7, ORD3           | `ToggleButton.test.tsx` disabled suite; `ToggleButton.a11y.test.tsx` and `ToggleButton.a11y.chromium.spec.ts` disabled states                                                         | Member and group disabled; tooltip-bearing disabled           | A disabled toggle that toggles, or an enabled group re-enabling a member, fails.                                                                                                                                                                           | `audit:ToggleButton/accessibility` |
 | FR8, FR9, AR3       | `ToggleButton.test.tsx` width-reservation, pressed-icon, and forced-colors cases                                                                                                      | Labelled and icon-only; pressed and unpressed                 | A wrong icon or no forced-colors pressed paint fails. The width-reservation case asserts the hidden copy, matching the FR8 gap.                                                                                                                            | `audit:ToggleButton/visual`        |
 | FR11, FR12          | `ToggleButton.test.tsx` elevation and className cases                                                                                                                                 | Standalone and grouped elevation; caller className            | A lost elevation, missing target, or dropped caller class fails. Evidence gap: no test reads the painted shadow or passes a caller `aria-pressed` or `data-is-pressed`.                                                                                    | `audit:ToggleButton/theming`       |
 | FR8 (outer size)    | Evidence gap: no test measures that pressing keeps the outer size                                                                                                                     | Labelled toggle pressed and unpressed                         | —                                                                                                                                                                                                                                                          | `audit:ToggleButton/layout`        |
@@ -212,10 +212,6 @@ record carries no anatomy-theming map.
 
 ## Current-state impact
 
-- **Disabled focusability (FR7).** A disabled ToggleButton without a tooltip
-  renders native `disabled`, as `component:Button` FR10 records, against
-  `spec:AST-085` FR1 and FR4 and `family:buttons` FR3. The shared toggle-pattern browser states expect
-  that native `disabled`.
 - **Duplicated label (FR8, PR1).** A labelled toggle renders a hidden semibold
   copy of its label to reserve width, so `children` mount twice, against
   `architecture:component-style-authoring` INV7.
