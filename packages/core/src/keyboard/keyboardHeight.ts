@@ -27,6 +27,7 @@ import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
@@ -113,7 +114,10 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-const stores = new WeakMap<Window, KeyboardStore>();
+const stores = sharedWeakMap<Window, KeyboardStore>(
+  'keyboard/keyboard-height/stores',
+  1,
+);
 
 function storeOf(win: Window): KeyboardStore {
   let store = stores.get(win);
@@ -386,13 +390,13 @@ export interface RefuseFocusRevealOptions {
 // One shared `blur` subscription per document serves every caller of
 // refuseFocusReveal in it, so listeners do not grow with the number of
 // instances. The first caller adds it, and the last removes it.
-const focusTakeovers = new WeakMap<
+const focusTakeovers = sharedWeakMap<
   Document,
   {
     stop: () => void;
     callers: Set<(event: FocusEvent) => void>;
   }
->();
+>('keyboard/keyboard-height/focus-takeovers', 1);
 
 /**
  * Delivers the focus moves `claim` accepts with `preventScroll`, so the
@@ -518,10 +522,10 @@ export interface RevealPanWatch {
 // One shared touch subscription per document serves every reveal-pan watch
 // in it, so no instance adds a listener. The first watch adds it, and the
 // last removes it.
-const touchStartWatches = new WeakMap<
+const touchStartWatches = sharedWeakMap<
   Document,
   {stop: () => void; watches: Set<() => void>}
->();
+>('keyboard/keyboard-height/touch-start-watches', 1);
 
 function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   let shared = touchStartWatches.get(doc);

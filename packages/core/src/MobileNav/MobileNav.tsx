@@ -43,6 +43,7 @@
  * - /packages/cli/assets/templates/blocks/components/MobileNav/ (showcase blocks)
  */
 
+import {usePresentationHold} from '../Layer/presentationHold';
 import {
   useCallback,
   useEffect,
@@ -533,20 +534,17 @@ export function MobileNav({
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
-  // Keeps the dialog rendered from the commit that closes it until the delayed
-  // `close()` below has run. The `display` transition on the dialog is meant to
-  // do this, but a browser that does not hold a discrete `display` transition
-  // (WebKit) drops the dialog to `display: none` at once while it is still an
-  // open modal: nothing is visible, yet the whole page stays inert until the
-  // timer fires. Set during render, so it is already true in the commit that
-  // closes. The drawer's transform and the backdrop stay keyed to `isOpen`, so
-  // the slide-out is unchanged.
-  const [isCloseHeld, setIsCloseHeld] = useState(false);
-  const [wasOpen, setWasOpen] = useState(isOpen);
-  if (wasOpen !== isOpen) {
-    setWasOpen(isOpen);
-    setIsCloseHeld(!isOpen);
-  }
+  // Keeps the dialog rendered from the open until the delayed `close()` below
+  // has run: the layer runtime's presentation hold. The `display` transition
+  // on the dialog is meant to do this, but a browser that does not hold a
+  // discrete `display` transition (WebKit) drops the dialog to
+  // `display: none` at once while it is still an open modal: nothing is
+  // visible, yet the whole page stays inert until the timer fires. Held during
+  // render, so it is already held in the commit that closes. The drawer's
+  // transform and the backdrop stay keyed to `isOpen`, so the slide-out is
+  // unchanged.
+  const {isHeld: isPresentationHeld, release: releasePresentation} =
+    usePresentationHold({isOpen, presentation: true});
   // The same page lock as every other modal. Its effect runs before the
   // open/close effect below, so it measures the scrollbar gutter before
   // showModal() can hide the scrollbar.
@@ -616,12 +614,12 @@ export function MobileNav({
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
-        setIsCloseHeld(false);
+        releasePresentation();
       }, resolveCloseDelay(dialog));
     } else {
       // Nothing is open, so there is no close to hold the dialog for, and no
       // close timer is left to release the hold.
-      setIsCloseHeld(false);
+      releasePresentation();
     }
 
     return () => {
@@ -634,7 +632,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
     };
-  }, [isOpen]);
+  }, [isOpen, releasePresentation]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -720,7 +718,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          (isOpen || isCloseHeld) && styles.open,
+          isPresentationHeld && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,

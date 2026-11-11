@@ -4,7 +4,7 @@
 
 /**
  * @file useSelectorPresentation.ts
- * @input Uses the shared adaptive presentation policy and usePopover
+ * @input Uses the shared adaptive presentation policy and usePopoverInternal
  * @output Coordinates popover and bottom-sheet disclosure state
  * @position Internal presentation controller shared by Selector and MultiSelector
  */
@@ -17,8 +17,8 @@ import {
   type RefObject,
 } from 'react';
 import {
-  usePopover,
-  type UsePopoverOptions,
+  usePopoverInternal,
+  type InternalPopoverOptions,
   type UsePopoverReturn,
 } from '../Popover/usePopover';
 import {
@@ -37,7 +37,7 @@ interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
   onHide: () => void;
   onShow: () => void;
-  popoverOptions: Omit<UsePopoverOptions, 'onHide' | 'onShow'>;
+  popoverOptions: Omit<InternalPopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
   /**
    * The component's one modality tracking, its `ref` attached to the trigger,
@@ -131,7 +131,7 @@ export function useSelectorPresentation({
     resetFocusReturn();
     onShowRef.current();
   }, [resetFocusReturn]);
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
