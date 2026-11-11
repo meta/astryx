@@ -118,7 +118,7 @@ export const VIBRANCY_DEFAULT = 50;
 
 /**
  * The vibrancy dial a settings list sets, or null.
- * @param {import('./_settings.mjs').Setting[]} settings
+ * @param {Setting[]} settings
  * @returns {number | null}
  */
 function dialVibrancy(settings) {
@@ -308,7 +308,7 @@ function dialFamilies(data) {
 function readConfig(file) {
   if (!fs.existsSync(file)) return null;
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   } catch (e) {
     throw new AstryxError(
       `${path.basename(path.dirname(file))}/palette.config.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand. Nothing was changed.`,
@@ -324,7 +324,7 @@ function readConfig(file) {
  * known to be a hand edit.
  * @param {string} cwd
  * @param {string} slug
- * @returns {import('./_settings.mjs').Setting[]}
+ * @returns {Setting[]}
  */
 function savedSettings(cwd, slug) {
   try {

@@ -98,5 +98,4 @@ export const doc = {
     },
   ],
   related: ['experimental theme editor', 'experimental theme targets'],
-  replaces: ['theme targets'],
 };

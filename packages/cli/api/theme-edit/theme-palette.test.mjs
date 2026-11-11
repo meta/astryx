@@ -217,7 +217,7 @@ describe('color dials through the palette generator', () => {
       dark: '#ff0000',
     });
     expect(show.data.colors[0].tokens['--color-accent']).toMatch(
-      /^#ff0000 \(your exact setting wins over the generated light/,
+      /^light #ff0000 \(your exact setting wins over the generated \d+/,
     );
     const source = read('p.settings.ts');
     expect(source).toContain('"--color-accent": "#ff0000"');
