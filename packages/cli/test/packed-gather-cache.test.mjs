@@ -100,8 +100,11 @@ beforeAll(() => {
 }, 120_000);
 
 afterAll(() => {
-  if (work) fs.rmSync(work, {recursive: true, force: true});
-  if (project) fs.rmSync(project, {recursive: true, force: true});
+  // A run's background release check can still be writing into a temp
+  // folder's release cache: retry while the folder empties.
+  const gone = {recursive: true, force: true, maxRetries: 10, retryDelay: 100};
+  if (work) fs.rmSync(work, gone);
+  if (project) fs.rmSync(project, gone);
 });
 
 /**
