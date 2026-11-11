@@ -206,8 +206,8 @@ calendar: CalendarSystem) => string | null | undefined`. A format returns the
 - `packages/core/locales/en.json` gains `@astryx.chart.noData` with a
   translator description (`architecture:internationalization` INV6).
 - `component:ChartAxis` uses the shared default text for continuous ticks
-  without `formatTick` (FR13) and takes `formatTick` (FR15); its draft FR3
-  changes to match.
+  without `formatTick` (FR13) and takes `formatTick` (FR15); its record's FR3
+  defers to both.
 - FR8 gap: for an empty value, the default tooltip body reads `null` or
   `undefined`, and the hidden data table shows an empty cell.
 - FR11 gap: the function that `currency()` returns ignores a call-time locale.
