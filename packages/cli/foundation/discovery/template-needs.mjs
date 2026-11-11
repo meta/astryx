@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
+import {parse as parseModule} from '@babel/parser';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {
@@ -35,32 +36,113 @@ const STYLEX_RUNTIME = '@stylexjs/stylex';
 // Node builtins: anything with a `node:` prefix or in builtinModules.
 const NODE_BUILTINS = new Set(module.builtinModules);
 
+/** A package name npm accepts: lowercase, optionally scoped. */
+const NPM_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+
 /**
  * Extract bare (non-relative) package names from ES import statements.
+ *
+ * Only real module specifiers count: `import … from`, a side-effect
+ * `import '…'`, `export … from`, and a dynamic `import('…')` with a string.
+ * Words in comments, strings and JSX text never count, and a specifier that
+ * is not an npm package name (`@/components`, `~/lib`, `#internal`, a word
+ * with capitals or spaces) is an alias or a typo, not a package to install.
  *
  * @param {string} source Template source code
  * @returns {Set<string>} Unique package names (scoped packages normalized to
  *   `@scope/name`, unscoped to the first path segment).
  */
 export function extractImportedPackages(source) {
-  // Matches `import … from '<specifier>'`, `import '<specifier>'`, and
-  // dynamic `import('<specifier>')`. Only bare specifiers (not starting with
-  // `.` or `/`).
-  const re = /(?:from\s+|import\s*\(?)['"]((?:@[^/'"]+\/)?[^./'"@][^'"]*)['"]/g;
   /** @type {Set<string>} */
   const pkgs = new Set();
-  let m;
-  while ((m = re.exec(source)) !== null) {
-    const spec = m[1];
+  for (const spec of moduleSpecifiers(source)) {
     // Skip Node builtins: `node:fs`, `fs`, `fs/promises`, etc.
     if (spec.startsWith('node:')) continue;
+    if (spec.startsWith('.') || spec.startsWith('/')) continue;
     const name = spec.startsWith('@')
       ? spec.split('/').slice(0, 2).join('/')
       : spec.split('/')[0];
-    if (NODE_BUILTINS.has(name)) continue;
+    if (NODE_BUILTINS.has(name) || !NPM_NAME.test(name)) continue;
     pkgs.add(name);
   }
   return pkgs;
+}
+
+/**
+ * The module specifiers a source imports or re-exports, read from its syntax
+ * tree. A source the parser cannot read is scanned line by line instead, with
+ * comments removed, so only statements that start a line count.
+ * @param {string} source
+ * @returns {string[]}
+ */
+function moduleSpecifiers(source) {
+  let ast;
+  try {
+    ast = parseModule(source, {
+      sourceType: 'module',
+      errorRecovery: true,
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch {
+    return scannedSpecifiers(source);
+  }
+  /** @type {string[]} */
+  const specs = [];
+  /** @param {any} node */
+  const visit = node => {
+    if (node == null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (
+      (node.type === 'ImportDeclaration' ||
+        node.type === 'ExportNamedDeclaration' ||
+        node.type === 'ExportAllDeclaration') &&
+      node.source?.type === 'StringLiteral'
+    ) {
+      specs.push(node.source.value);
+    } else if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Import' &&
+      node.arguments?.[0]?.type === 'StringLiteral'
+    ) {
+      specs.push(node.arguments[0].value);
+    } else if (
+      node.type === 'ImportExpression' &&
+      node.source?.type === 'StringLiteral'
+    ) {
+      specs.push(node.source.value);
+    }
+    for (const key of Object.keys(node)) {
+      if (
+        key === 'loc' ||
+        key === 'leadingComments' ||
+        key === 'trailingComments' ||
+        key === 'innerComments'
+      ) {
+        continue;
+      }
+      const child = node[key];
+      if (child != null && typeof child === 'object') visit(child);
+    }
+  };
+  visit(ast.program);
+  return specs;
+}
+
+/** @param {string} source @returns {string[]} */
+function scannedSpecifiers(source) {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const re =
+    /^\s*(?:import|export)\b[^'"\n;]*?(?:\bfrom\s*)?['"]([^'"\n]+)['"]|\bimport\(\s*['"]([^'"\n]+)['"]\s*\)/gm;
+  /** @type {string[]} */
+  const specs = [];
+  let m;
+  while ((m = re.exec(code)) !== null) specs.push(m[1] ?? m[2]);
+  return specs;
 }
 
 /** @type {Record<string, string>} */

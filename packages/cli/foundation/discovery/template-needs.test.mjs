@@ -89,6 +89,70 @@ describe('extractImportedPackages', () => {
   });
 });
 
+describe('extractImportedPackages reads only real module specifiers', () => {
+  it('ignores words in comments, strings, template literals and JSX text', () => {
+    const source = [
+      "import {Button} from '@astryxdesign/core';",
+      '/**',
+      ' * Next: the copy goes stale. Pressing Next moves on.',
+      " *   import { neutralTheme } from '@astryxdesign/theme-neutral';",
+      ' */',
+      "// import {Editor} from 'canvas-editor';",
+      "const code = `import {useState} from 'react';`;",
+      'const label = "from \'Distribution\'";',
+      'export function Page() {',
+      "  return <p>import x from 'left-pad'</p>;",
+      '}',
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['@astryxdesign/core']),
+    );
+  });
+
+  it('reads export-from and dynamic imports', () => {
+    const source = [
+      "export {format} from 'date-fns';",
+      "export * from 'recharts';",
+      "const lazy = () => import('canvas-confetti');",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['date-fns', 'recharts', 'canvas-confetti']),
+    );
+  });
+
+  it('drops path aliases and names npm does not accept', () => {
+    const source = [
+      "import {Card} from '@/components/card';",
+      "import {cn} from '~/lib/utils';",
+      "import data from '#internal/data';",
+      "import X from 'Next';",
+      "import {a} from 'valid-pkg';",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(new Set(['valid-pkg']));
+  });
+
+  it('still reads a source the parser cannot read, statement by statement', () => {
+    const source = [
+      "import {a} from 'kept-pkg';",
+      "// import {b} from 'commented-pkg';",
+      'const = ;',
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(new Set(['kept-pkg']));
+  });
+
+  it.each([
+    ['pages/form-wizard/page.tsx', 'Next'],
+    ['pages/form-wizard-vertical/page.tsx', 'Distribution'],
+    ['pages/table-tree/page.tsx', 'canvas-editor'],
+  ])('reads no package from the comments of the %s template', (file, word) => {
+    const source = fs.readFileSync(
+      path.join(import.meta.dirname, '../../assets/templates', file),
+      'utf-8',
+    );
+    expect(extractImportedPackages(source).has(word)).toBe(false);
+  });
+});
+
 // ── analyzeTemplateNeeds ────────────────────────────────────────────────────
 
 describe('analyzeTemplateNeeds', () => {
