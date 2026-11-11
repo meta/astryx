@@ -4992,20 +4992,6 @@ jobs:
           # listed in lab_specs_path.
           lab-only-specs: '.'
 
-      # A diff GitHub truncates lists no changed files, and a re-run cannot
-      # list them; the pull request must be split (spec:AST-030 FR12).
-      - name: Require a complete changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.lab_specs_path == ''
-        env:
-          TRUNCATED: ${{ steps.scope.outputs.truncated }}
-        run: |
-          if [ "$TRUNCATED" = true ]; then
-            echo "::error::GitHub truncated this pull request's file list, so the release specs to run are unknown. Split the pull request."
-          else
-            echo "::error::The scope step could not list the changed files, so the release specs to run are unknown. Re-run the job."
-          fi
-          exit 1
-
       # The merge commit's package and harness sources for the import graph,
       # its stories for the visits, and the visit map and recorded times.
       - name: Check out the merge commit's sources
@@ -5026,12 +5012,24 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.scope.outputs.lab_specs_path }}
+          TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
           # A planner failure fails the step, never reads as "nothing to run".
           set -o pipefail
+          # A change with no file list (GitHub truncated it, or the scope step
+          # could not decide) puts every release spec in scope: uncertainty
+          # fails closed (spec:AST-030 FR4). A head over 3,000 files must
+          # still be split before merge (FR12).
+          if [ -n "$FILES_PATH" ]; then
+            changes=(--changed "$FILES_PATH")
+          elif [ "$TRUNCATED" = true ]; then
+            changes=(--all --truncated)
+          else
+            changes=(--all)
+          fi
           git -C .plan ls-files > "$RUNNER_TEMP/listed.txt"
           node .plan/.github/scripts/release-specs-plan.mjs \
-            --listed "$RUNNER_TEMP/listed.txt" --changed "$FILES_PATH" \
+            --listed "$RUNNER_TEMP/listed.txt" "${changes[@]}" \
             --root .plan --out "$RUNNER_TEMP/release-specs-plan.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # Each release spec the plan names runs in full and alone (`--workers=1`),
