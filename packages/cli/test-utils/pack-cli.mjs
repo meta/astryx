@@ -33,6 +33,10 @@ export const PREPACK_FILES = [
     file: 'assets/templates/components.generated.json',
     script: 'scripts/generate-template-components.mjs',
   },
+  {
+    file: 'clients/cli/commands.generated.json',
+    script: 'scripts/generate-command-list.mjs',
+  },
 ];
 
 /**
