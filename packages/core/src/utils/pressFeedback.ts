@@ -26,8 +26,9 @@
 // control's box (pressBox.stylex.ts), as a checkbox or a radio row does, is
 // the exception. There the controller paints a mouse's or a pen's press at
 // once and fades it on release, as it does a finger's. The surface's `:active`
-// arm yields while it does, and a link or a button nested in it takes its own
-// press.
+// arm yields while it does. On a row, a press on a nested control is that
+// control's: the row's container rule ends the row's paint
+// (hooks/useClickableContainer.ts).
 // Under a coarse primary pointer the CSS drops `:active`, so the controller
 // paints every press. A mouse, trackpad or Space press paints at once. The
 // controller reads the same query as the stylesheet, so they agree.
@@ -405,36 +406,7 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(found instanceof HTMLElement) || found.matches(DISABLED)) {
     return null;
   }
-  if (nestedControlTakesPress(target, found) && paintsFinePointerPress(found)) {
-    return null;
-  }
   return found;
-}
-
-/** A link or a button: a nested one takes its own press. */
-const NESTED_CONTROL = 'a[href], button, [role="button"], [role="link"]';
-/**
- * A surface's activator is its first control in tree order, such as the radio
- * a RadioList row delegates to. Its press is the surface's.
- */
-const ACTIVATOR = `input, select, textarea, ${NESTED_CONTROL}`;
-
-/**
- * Whether a link or a button nested in `surface` takes the press on `target`
- * for every pointer. The surface's activator does not: its press is the
- * surface's.
- */
-function nestedControlTakesPress(
-  target: Element,
-  surface: HTMLElement,
-): boolean {
-  const control = target.closest(NESTED_CONTROL);
-  return (
-    control != null &&
-    control !== surface &&
-    surface.contains(control) &&
-    control !== surface.querySelector(ACTIVATOR)
-  );
 }
 
 /**
@@ -519,7 +491,7 @@ function stylesheetDroppedActive(): boolean {
 }
 
 /**
- * Whether the press on `target` lands on a surface that declares the
+ * Whether the press on `target` lands on a surface that takes the
  * fine-pointer press. There a mouse's or a pen's press paints at once, on any
  * primary pointer.
  */
@@ -530,12 +502,10 @@ function paintsFinePress(target: EventTarget | null): boolean {
 
 /**
  * Whether `surface` takes the fine-pointer press. It does when it owns a
- * control's box, with no other pressable surface between the two.
+ * control's box.
  */
 function paintsFinePointerPress(surface: Element): boolean {
-  return pressBoxesIn(surface).some(
-    box => box.closest(`[${PRESSABLE_ATTRIBUTE}]`) === surface,
-  );
+  return pressBoxesIn(surface).length > 0;
 }
 
 /**
@@ -582,7 +552,7 @@ function pressButton(
 /**
  * Whether a release on `element` ends at once. Under Reduce Motion a fine
  * pointer's release changes at once, with no fade. This holds on a surface
- * that declares the fine-pointer press, where the primary pointer is fine.
+ * that takes the fine-pointer press, where the primary pointer is fine.
  */
 function releasesAtOnce(element: Element): boolean {
   return (
@@ -621,7 +591,7 @@ function onPointerDown(event: PointerEvent): void {
     // A mouse already has hover and keeps `:active` where the primary pointer
     // is fine; the touch treatment's CSS is inside `@media (pointer: coarse)`.
     // Not tracking it there keeps desktop identical and costs the mouse path
-    // nothing, except on a surface that declares the fine-pointer press. Only
+    // nothing, except on a surface that takes the fine-pointer press. Only
     // the primary button paints, as `:active` does. On such a surface a
     // macOS ctrl-click is a context click, so it paints nothing either.
     if (
@@ -633,7 +603,8 @@ function onPointerDown(event: PointerEvent): void {
     }
     return;
   }
-  // A pen's barrel or eraser button on a fine-pointer surface is not a press.
+  // On a surface that takes the fine-pointer press, a pen's barrel or eraser
+  // button is not a press.
   if (
     event.pointerType === 'pen' &&
     !isPrimaryClick(event) &&
@@ -662,8 +633,9 @@ function onPointerDown(event: PointerEvent): void {
     finish(finger);
   }
   const element = surfaceAt(event.target);
-  // A pen on a fine-pointer surface presses at once, in a scroll view too:
-  // the delay and the brake wait out a finger's scroll.
+  // On a surface that takes the fine-pointer press, a pen presses at once on
+  // any primary pointer, in a scroll view too. The delay and the brake wait
+  // out a finger's scroll.
   const presentsAtOnce =
     event.pointerType === 'pen' &&
     element != null &&

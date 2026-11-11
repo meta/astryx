@@ -107,6 +107,39 @@ describe('RadioList', () => {
     });
   });
 
+  it('paints no row press for a mouse, pen or finger press on a select in end content, and one for a press on the label', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={
+            <select aria-label="Billing">
+              <option>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          }
+        />
+      </RadioList>,
+    );
+    const select = screen.getByRole('combobox', {name: 'Billing'});
+    const row = select.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      fireEvent.pointerDown(select, {pointerId: 1, pointerType, button: 0});
+      expect(row).not.toHaveAttribute('data-astryx-press');
+      fireEvent.pointerUp(select, {pointerId: 1, pointerType, button: 0});
+    }
+    const label = screen.getByText('Pro');
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('renders with label', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}}>
@@ -1122,14 +1155,14 @@ function readsRowPress(el: Element): boolean {
 
 /**
  * Does the row declare the mouse press's paint while pressed, but not while a
- * nested link or button is the pressed one?
+ * nested control is the pressed one?
  */
 function declaresRowPress(el: Element): boolean {
   return rulesWithSelector(el, ':active').some(
     rule =>
       rule.includes('--_radio-row-press:') &&
       rule.includes('var(--color-overlay-pressed)') &&
-      /:not\(:has\(a:active, ?button:active/.test(rule),
+      rule.includes(':not(:has(button:not([aria-readonly="true"]):active'),
   );
 }
 

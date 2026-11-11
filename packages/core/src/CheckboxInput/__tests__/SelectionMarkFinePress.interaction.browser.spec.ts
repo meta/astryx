@@ -9,7 +9,8 @@
  *   RadioList row or a mapped circle paints at `pointerdown`. The press
  *   controller paints it, and it fades on release. It paints once. Under Reduce
  *   Motion the release ends at once. A right click paints nothing, and a
- *   read-only row paints no row press. A pen presses a checkbox the same way
+ *   read-only row paints no row press. A press on a select in a RadioList row
+ *   leaves its circle at rest. A pen presses a checkbox the same way
  * @position Fine-pointer half of the selection marks' press; the finger half
  *   is in CheckboxListPress.a11y.chromium.spec.ts and the indicator specs
  */
@@ -277,6 +278,54 @@ test.describe('with a mouse', () => {
     const on = seen.find(entry => entry.state === 'on');
     expect(on?.image ?? '', JSON.stringify(seen)).toContain('gradient');
     expect(seen.map(entry => entry.state)).toContain('fading');
+  });
+
+  test('a mouse press on a select in a RadioList row leaves the row and its circle at rest', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-radiolist--default');
+    await stopClicks(page);
+    const row = optionRow(page, 'SMS');
+    // A select at the row's end, as a caller's end content holds.
+    await row.evaluate(el => {
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', 'Frequency');
+      select.append(new Option('Daily'), new Option('Weekly'));
+      el.append(select);
+    });
+    const layer = markWrapper(page, '.astryx-radio-indicator', 'SMS');
+    const paint = async () =>
+      layer.evaluate(el => {
+        const after = getComputedStyle(el, '::after');
+        return `${after.backgroundColor} ${after.backgroundImage}`;
+      });
+    const atRest = await paint();
+    const centre = async (target: Locator) => {
+      const box = await target.boundingBox();
+      if (box == null) {
+        throw new Error('core-radiolist--default: nothing to press');
+      }
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    };
+    const select = await centre(row.getByRole('combobox', {name: 'Frequency'}));
+    await page.mouse.move(select.x, select.y);
+    await page.mouse.down();
+    await page.evaluate(
+      async () =>
+        new Promise(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    expect(await row.getAttribute('data-astryx-press')).toBeNull();
+    expect(await paint()).toBe(atRest);
+    await page.mouse.up();
+    await page.keyboard.press('Escape');
+    // The probe sees a press: one on the row's own label paints the circle.
+    const label = await centre(row.getByText('SMS', {exact: true}));
+    await page.mouse.move(label.x, label.y);
+    await page.mouse.down();
+    await expect.poll(paint).not.toBe(atRest);
+    await page.mouse.up();
   });
 
   test('a mouse press on a read-only CheckboxList row paints no row press, and its box keeps its own', async ({

@@ -589,6 +589,38 @@ describe('CheckboxList', () => {
     ).toBeInTheDocument();
   });
 
+  it('paints no row press for a mouse press on a control nested in the label, and one for a press on the label text', () => {
+    render(
+      <CheckboxList label="Alerts" value={[]} onChange={() => {}}>
+        <CheckboxListItem
+          label={
+            <>
+              Weekly digest{' '}
+              <span role="switch" aria-checked="false" tabIndex={0}>
+                Snooze
+              </span>
+            </>
+          }
+          aria-label="Weekly digest"
+          value="digest"
+        />
+      </CheckboxList>,
+    );
+    const nested = screen.getByRole('switch');
+    const label = nested.parentElement;
+    const row = nested.closest('[data-astryx-pressable]');
+    if (label == null || row == null) {
+      throw new Error('the row has no label or no press surface');
+    }
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(nested, mouse);
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerUp(nested, mouse);
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('keeps a link in a ReactNode label independent from selection', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
