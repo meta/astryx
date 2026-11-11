@@ -7,7 +7,8 @@
  * @output Real-engine proof: a finger, a mouse and a pen on a CheckboxList
  *   row's label or box press the row. They paint the same pixels. The box
  *   fades with the row on the lift. A pressed ClickableCard and an outer
- *   row paint none of the box's press, and a read-only row paints none
+ *   row paint none of the box's press. A read-only row paints no row press,
+ *   and its box keeps its own
  * @position Run with `pnpm test:a11y-contract`. Browser layer of the row's
  *   press surface; the jsdom layer is CheckboxList.test.tsx ("CheckboxListItem
  *   press surface").
@@ -550,7 +551,7 @@ test.describe('CheckboxList row press', () => {
     }
   });
 
-  test('a read-only row paints no press, on the row or on the box', async ({
+  test('a read-only row paints no row press, and its box keeps its own press', async ({
     browser,
   }) => {
     for (const where of ['label', 'box'] as const) {
@@ -566,8 +567,17 @@ test.describe('CheckboxList row press', () => {
         };
         await row.press(row[where]);
         await row.page.waitForTimeout(HOLD_MS);
-        expect(await pressedSurface(row.page)).toBeNull();
-        expect(await pixel(row.page, row.boxSample)).toEqual(rest.box);
+        // A read-only row takes no press. Its checkbox stays enabled, so a
+        // press on the box paints the box, and only the box.
+        expect(await pressedSurface(row.page)).toBe(
+          where === 'box' ? 'div' : null,
+        );
+        const box = await pixel(row.page, row.boxSample);
+        if (where === 'box') {
+          expect(darker(box, rest.box)).toBe(true);
+        } else {
+          expect(box).toEqual(rest.box);
+        }
         expect(await pixel(row.page, row.rowSample)).toEqual(rest.row);
         await row.lift(row[where]);
       } finally {

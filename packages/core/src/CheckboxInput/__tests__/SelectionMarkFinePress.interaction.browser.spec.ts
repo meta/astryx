@@ -8,8 +8,8 @@
  * @output Browser proofs: a mouse press on a checkbox, a CheckboxList row, a
  *   RadioList row or a mapped circle paints at `pointerdown`. The press
  *   controller paints it, and it fades on release. It paints once. Under Reduce
- *   Motion the release ends at once. A right click and a read-only row paint
- *   nothing. A pen presses a checkbox the same way
+ *   Motion the release ends at once. A right click paints nothing, and a
+ *   read-only row paints no row press. A pen presses a checkbox the same way
  * @position Fine-pointer half of the selection marks' press; the finger half
  *   is in CheckboxListPress.a11y.chromium.spec.ts and the indicator specs
  */
@@ -279,49 +279,55 @@ test.describe('with a mouse', () => {
     expect(seen.map(entry => entry.state)).toContain('fading');
   });
 
-  test('a mouse press on a read-only CheckboxList row paints no press', async ({
+  test('a mouse press on a read-only CheckboxList row paints no row press, and its box keeps its own', async ({
     page,
   }) => {
-    await openStory(page, storybook(), 'core-checkboxlist--read-only');
-    await stopClicks(page);
-    const row = page.locator('#storybook-root li').first();
-    const box = await row.boundingBox();
-    if (box == null) {
-      throw new Error('core-checkboxlist--read-only: no row');
-    }
-    // Any press the controller marks inside the row, on any element.
-    await row.evaluate(el => {
-      const seen: string[] = [];
-      (window as unknown as {__readOnlySeen: string[]}).__readOnlySeen = seen;
-      new MutationObserver(records => {
-        for (const record of records) {
-          const value = (record.target as Element).getAttribute(
-            'data-astryx-press',
-          );
-          if (value != null) {
-            seen.push(value);
-          }
-        }
-      }).observe(el, {
-        attributes: true,
-        attributeFilter: ['data-astryx-press'],
-        subtree: true,
-      });
+    await openStory(page, storybook(), 'core-checkboxlist--default', {
+      isReadOnly: '!true',
     });
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await stopClicks(page);
+    const row = optionRow(page, 'SMS');
+    await expect(row.locator('input[aria-readonly="true"]')).toBeAttached();
+    const rowBox = await row.boundingBox();
+    if (rowBox == null) {
+      throw new Error('core-checkboxlist--default: no row');
+    }
+    // The label: a read-only row takes no press.
+    await page.mouse.move(
+      rowBox.x + rowBox.width / 2,
+      rowBox.y + rowBox.height / 2,
+    );
     await page.mouse.down();
     await page.waitForTimeout(150);
-    const layerImages = await row.evaluate(el =>
-      Array.from(el.querySelectorAll('*')).map(
-        child => getComputedStyle(child, '::after').backgroundImage,
-      ),
-    );
-    await page.mouse.up();
+    expect(await row.getAttribute('data-astryx-press')).toBeNull();
     expect(
-      await page.evaluate(
-        () => (window as unknown as {__readOnlySeen: string[]}).__readOnlySeen,
+      await row.evaluate(el => el.querySelector('[data-astryx-press]')),
+    ).toBeNull();
+    await page.mouse.up();
+    // The box: a read-only checkbox stays enabled, so it keeps its press.
+    const layer = markWrapper(page, '.astryx-checkbox-indicator', 'SMS');
+    const box = await layer.boundingBox();
+    if (box == null) {
+      throw new Error('core-checkboxlist--default: no box');
+    }
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect
+      .poll(async () =>
+        layer.evaluate(
+          el =>
+            el
+              .closest('[data-astryx-pressable]')
+              ?.getAttribute('data-astryx-press') ?? null,
+        ),
+      )
+      .toBe('on');
+    expect(
+      await layer.evaluate(
+        el => getComputedStyle(el, '::after').backgroundImage,
       ),
-    ).toEqual([]);
-    expect(layerImages.filter(image => image.includes('gradient'))).toEqual([]);
+    ).toContain('gradient');
+    expect(await row.getAttribute('data-astryx-press')).toBeNull();
+    await page.mouse.up();
   });
 });
