@@ -190,5 +190,6 @@ what the eval measures, so compare results only within one arm version.
 - The `pilot` set (5 tasks) only shows that the pipeline works; fresh agents
   pass all of it in both arms. The `v1` set is the fixed comparison set:
   multi-step forms, paged tables with selection, menus, comboboxes, dialogs,
-  switches, accordions and announced notifications. Run it with
+  switches, accordions, announced notifications, responsive navigation,
+  theming, tooltips, loading states, filters and sliders. Run it with
   `--task-set v1`.
