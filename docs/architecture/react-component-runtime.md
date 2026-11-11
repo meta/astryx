@@ -302,11 +302,10 @@ those contracts.
   reorder session, for a collection that adapts the reorderable object to its
   own values or whose rows are not `ListItem`s (`createReorderable`'s
   plain-element `attach`, `spec:AST-103` FR4b, is not built). One chosen
-  start, `start: 'next-frame'`, is for a call made in an input event's own
-  task. A close that an interaction starts on a busy page then starts on the
-  first frame after that task, so its motion does not skip ahead
-  (`spec:AST-094` FR6). It is internal: `createAnimator`'s options do not have
-  it, and no public entry exports it.
+  start, `start: 'next-frame'`, exists for motion an interaction starts in an
+  input event's own task. On a busy page such motion then starts on the first
+  frame after that task, so it does not skip ahead. It is internal:
+  `createAnimator`'s options do not have it, and no public entry exports it.
   Components import
   them statically, and the bundler
   keeps one copy per page however many components use them. A touch
