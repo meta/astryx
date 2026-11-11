@@ -692,6 +692,18 @@ function lockIsStale(lockDir, now) {
 }
 
 /**
+ * The text of a lock's owner record, or '' when it has none.
+ * @param {string} lockDir
+ */
+function ownerText(lockDir) {
+  try {
+    return fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Take a lock folder, or return false when another live run holds it. A lock
  * whose holder has gone, such as a run stopped with Ctrl-C or killed, is taken
  * over at once, and one from another computer once its holder has stopped
@@ -708,6 +720,9 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
     if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') {
       throw error;
     }
+    // The record judged stale, read before the judgement: the lock moved
+    // aside must still hold it, or another run took the lock in between.
+    const judged = ownerText(lockDir);
     if (!lockIsStale(lockDir, now)) return false;
     // The run that held it is gone; end the install it left running, if any,
     // before starting another.
@@ -717,6 +732,15 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
       fs.renameSync(lockDir, aside);
     } catch {
       // Another run took it over first.
+      return false;
+    }
+    if (ownerText(aside) !== judged) {
+      // A live lock taken after the judgement: put it back, and wait.
+      try {
+        fs.renameSync(aside, lockDir);
+      } catch {
+        // Its place is taken again: it stays aside, still held by its run.
+      }
       return false;
     }
     fs.rmSync(aside, {recursive: true, force: true});

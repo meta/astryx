@@ -3,6 +3,8 @@
 import {describe, it, expect, afterEach} from 'vitest';
 import {spawn} from 'node:child_process';
 import * as fs from 'node:fs';
+import fsMutable from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -629,6 +631,39 @@ describe('resolvePublishedVersion', () => {
 });
 
 describe('tryLock', () => {
+  it('puts back a lock another run took between the stale judgement and the rename', () => {
+    const dir = path.join(tempDir('lock'), '.lock-race');
+    fs.mkdirSync(dir, {recursive: true});
+    const owner = path.join(dir, 'owner.json');
+    fs.writeFileSync(
+      owner,
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    // Another run takes the lock just as this one moves it aside.
+    const rename = fsMutable.renameSync;
+    let taken = false;
+    fsMutable.renameSync = (from, to) => {
+      if (!taken && from === dir) {
+        taken = true;
+        fs.writeFileSync(
+          owner,
+          JSON.stringify({pid: process.pid, host: 'other', at: Date.now()}),
+        );
+      }
+      return rename(from, to);
+    };
+    syncBuiltinESMExports();
+    try {
+      expect(tryLock(dir)).toBe(false);
+    } finally {
+      fsMutable.renameSync = rename;
+      syncBuiltinESMExports();
+    }
+    expect(JSON.parse(fs.readFileSync(owner, 'utf8')).host).toBe('other');
+  });
+
   it('takes a free lock once, keeps a live holder, and reclaims a stale one', () => {
     const dir = path.join(tempDir('lock'), '.lock-x');
     expect(tryLock(dir)).toBe(true);
