@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/theme/generateThemeRules.ts,
+    packages/core/src/theme/statusRoleDefaults.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
