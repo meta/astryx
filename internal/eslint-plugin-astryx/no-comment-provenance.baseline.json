@@ -2251,12 +2251,6 @@
     "FR2",
     "spec:AST-085"
   ],
-  "packages/core/src/utils/hitArea.ts": [
-    "AST-094",
-    "AST-103",
-    "FR5",
-    "spec quote"
-  ],
   "packages/core/src/utils/inputPresentation.ts": ["AST-043"],
   "packages/core/src/utils/plainDate.ts": [
     "AST-067",
