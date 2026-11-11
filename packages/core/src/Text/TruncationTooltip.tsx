@@ -28,8 +28,8 @@ import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
-import {currentGesture} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
+import {isTextEntryControl} from '../keyboard/keyboardHeight';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -123,10 +123,6 @@ export function useTruncationTooltipInterest(
     [want],
   );
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
-  // A touch or pen press's own focus is not held: Chrome on Android focuses a
-  // tapped child before the tap's click, and holding that focus would take
-  // the tap. A key press after the press makes a new gesture.
-  const touchPressGestureRef = useRef<number | null>(null);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (!isEnabled || interestRef.current.isRead) {
@@ -138,7 +134,17 @@ export function useTruncationTooltipInterest(
         event.currentTarget,
         tapEvent => want('tap', tapEvent),
       );
-      touchPressGestureRef.current = isTouch ? currentGesture() : null;
+      // A finger or pen on a text-entry control only focuses it: no tooltip
+      // covers text the person starts to type.
+      const target = event.target;
+      if (
+        isTouch &&
+        isElement(target) &&
+        isTextEntryControl(target.closest('input, textarea, [contenteditable]'))
+      ) {
+        tapRecognizer.forget();
+        return;
+      }
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
@@ -153,12 +159,15 @@ export function useTruncationTooltipInterest(
       if (
         isElement(target) &&
         target.matches(':focus-visible') &&
-        touchPressGestureRef.current !== currentGesture()
+        // A touch or pen press's own focus is not held: Chrome on Android
+        // focuses a tapped child before the tap's click, and holding that
+        // focus would take the tap.
+        !tapRecognizer.isTouchPressCurrent()
       ) {
         want('focus');
       }
     },
-    [want],
+    [want, tapRecognizer],
   );
   const onBlur = useCallback(() => forget('focus'), [forget]);
   return {

@@ -100,6 +100,11 @@ export interface TapRecognizer {
   ): boolean;
   /** Stops waiting for a press still waiting for its tap. */
   forget(): void;
+  /**
+   * Whether the last press was touch or pen and no key press or new press
+   * has come since. A focus at that time is the press's own focus.
+   */
+  isTouchPressCurrent(): boolean;
 }
 
 /** One tap recognizer for a trigger, released on unmount. Internal. */
@@ -112,6 +117,7 @@ export function useTapRecognizer(): TapRecognizer {
 
 function createTapRecognizer(): TapRecognizer {
   let stopWaiting: (() => void) | null = null;
+  let touchPressGesture: number | null = null;
   const forget = () => {
     stopWaiting?.();
     stopWaiting = null;
@@ -120,8 +126,10 @@ function createTapRecognizer(): TapRecognizer {
     press(event, trigger, onTap) {
       forget();
       if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        touchPressGesture = null;
         return false;
       }
+      touchPressGesture = currentGesture();
       if (trigger == null) {
         return true;
       }
@@ -148,6 +156,8 @@ function createTapRecognizer(): TapRecognizer {
       return true;
     },
     forget,
+    isTouchPressCurrent: () =>
+      touchPressGesture != null && touchPressGesture === currentGesture(),
   };
 }
 

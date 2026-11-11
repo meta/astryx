@@ -701,42 +701,88 @@ describe('the truncation tooltip mounts on the first interaction', () => {
   // Chrome on Android focuses a focusable element between a press and its
   // click. That focus is not :focus-visible, so it must not take the tap.
   it.each([
-    ['a button', <button type="button">Edit</button>, 'button', 'Edit', false],
+    [
+      'opens on the first tap on a button inside truncated text, though the tap focuses it first',
+      <button type="button">Edit</button>,
+      'button',
+      'Edit',
+      false,
+      true,
+    ],
     // A tapped text field matches :focus-visible, unlike a tapped button.
-    ['a text field', <input aria-label="Note" />, 'textbox', 'Note', true],
-  ] as const)(
-    'opens on the first tap on %s inside truncated text, though the tap focuses it first',
-    async (_name, child, role, name, isFocusVisible) => {
-      const {showPopover, restore} = withOverflowAndPopover();
-      try {
-        render(
-          <Text type="body" maxLines={1}>
-            {LABEL} {child}
-          </Text>,
-        );
-        // Let the Tooltip module load, as it does once text is truncated.
-        await act(async () => {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        });
-        const target = screen.getByRole(role, {name});
-        const realMatches = target.matches.bind(target);
-        vi.spyOn(target, 'matches').mockImplementation((selector: string) =>
-          selector === ':focus-visible'
-            ? isFocusVisible
-            : realMatches(selector),
-        );
-        fireEvent.pointerDown(target, {pointerType: 'touch'});
-        fireEvent.pointerUp(target, {pointerType: 'touch'});
-        act(() => target.focus());
-        fireEvent.click(target);
+    [
+      'opens nothing on a tap on a text field inside truncated text; the tap only focuses it',
+      <input aria-label="Note" />,
+      'textbox',
+      'Note',
+      true,
+      false,
+    ],
+  ] as const)('%s', async (_name, child, role, name, isFocusVisible, opens) => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL} {child}
+        </Text>,
+      );
+      // Let the Tooltip module load, as it does once text is truncated.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      const target = screen.getByRole(role, {name});
+      const realMatches = target.matches.bind(target);
+      vi.spyOn(target, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? isFocusVisible : realMatches(selector),
+      );
+      fireEvent.pointerDown(target, {pointerType: 'touch'});
+      fireEvent.pointerUp(target, {pointerType: 'touch'});
+      act(() => target.focus());
+      fireEvent.click(target);
+      if (opens) {
         await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
           timeout: 3000,
         });
-      } finally {
-        restore();
+      } else {
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        });
+        expect(showPopover).not.toHaveBeenCalled();
+        expect(target).toHaveFocus();
       }
-    },
-  );
+    } finally {
+      restore();
+    }
+  });
+
+  it('mounts on a keyboard Tab to a text field inside the clamped text, and opens nothing', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      const user = userEvent.setup();
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL} <input aria-label="Note" />
+        </Text>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Note'});
+      // A field matches :focus-visible on any focus; jsdom does not model it.
+      const realMatches = field.matches.bind(field);
+      vi.spyOn(field, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      await user.tab();
+      expect(field).toHaveFocus();
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      expect(showPopover).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
 
   it('opens nothing for a click that follows a scroll with no press of its own', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
