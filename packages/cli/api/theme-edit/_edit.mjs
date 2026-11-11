@@ -268,8 +268,7 @@ function asNewRefusal(e, slug, settings) {
  */
 async function previewAndRoute(ctx, slug, data, png) {
   const p = await previewAfter(ctx, slug, data, png);
-  await keepPreviewRoute(ctx, slug);
-  return p;
+  return {...p, previewStale: await keepPreviewRoute(ctx, slug)};
 }
 
 /**
@@ -278,12 +277,15 @@ async function previewAndRoute(ctx, slug, data, png) {
  * the next `preview add` writes the route again.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
+ * @returns {Promise<string[]>} preview files changed by hand, left showing
+ *   the theme as it was
  */
 async function keepPreviewRoute(ctx, slug) {
   try {
-    await refreshPreviewRoute(ctx.project.cwd, slug);
+    return (await refreshPreviewRoute(ctx.project.cwd, slug)).stale;
   } catch {
     // A damaged or moved preview.
+    return [];
   }
 }
 
@@ -542,7 +544,7 @@ export async function themeEditShow(theme, options = {}) {
     ctx.project.core.tokenDefaults,
   );
   const preview = await renderPreview(ctx, theme, data);
-  await keepPreviewRoute(ctx, theme);
+  const previewStale = await keepPreviewRoute(ctx, theme);
   const sheet = await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots = png
@@ -586,6 +588,7 @@ export async function themeEditShow(theme, options = {}) {
       ...colorsReport(pal, data),
       problems,
       preview,
+      previewStale,
       sheet: sheet.file,
       sheetComponents: sheet.components,
       skipped: sheet.skipped,

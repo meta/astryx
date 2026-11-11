@@ -51,6 +51,7 @@
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
  * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
+ * @property {string[]} [previewStale] - Files of the in-app theme preview that were changed by hand, so they were not written again and still show the theme as it was.
  */
 
 /**
@@ -93,6 +94,7 @@
  * @property {string[]} pictures
  * @property {string | null} pictureProblem
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
+ * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
  */
 
 /**
@@ -121,6 +123,7 @@
  * @property {string[]} data.problems
  * @property {string[]} data.notes
  * @property {string} data.preview
+ * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
  * @property {string} data.sheet - The theme-building page with every component.
  * @property {number} data.sheetComponents
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.

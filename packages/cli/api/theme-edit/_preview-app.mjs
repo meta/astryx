@@ -37,7 +37,12 @@ import {
   previewRouteSource,
   themeImports,
 } from './_preview.mjs';
-import {paletteFiles, paletteMapping} from './_palette.mjs';
+import {
+  paletteFiles,
+  paletteMapping,
+  tempFor,
+  writeWhole,
+} from './_palette.mjs';
 import {build} from '../build/build.mjs';
 import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
@@ -212,6 +217,26 @@ function previewDir(cwd, where, opts = {}) {
           `--path ${where} is a file; the preview goes in a folder of its own.`,
           {run: [retry(null)]},
         );
+      // The project root, src/ and the routes folder hold the app itself;
+      // nothing the preview writes there is served.
+      if (dir === cwd || dir === path.join(cwd, 'src') || routes.includes(dir))
+        refuse(
+          E.ERR_INVALID_ARGUMENT,
+          fs.existsSync(path.join(dir, PREVIEW_DATA))
+            ? `--path ${where} holds an older theme preview, in a folder that holds the app itself; remove it, then add the preview in its own folder.`
+            : `--path ${where} is no place for the preview: the folder holds the app itself, and the app does not serve a preview there.`,
+          {
+            run: fs.existsSync(path.join(dir, PREVIEW_DATA))
+              ? [`${PREVIEW} remove --path ${shq(shownDir(cwd, dir))}`]
+              : [
+                  retry(
+                    routes.length
+                      ? shown(cwd, path.join(routes[0], 'theme-preview'))
+                      : 'theme-preview',
+                  ),
+                ],
+          },
+        );
       const app = appOf(dir);
       const why =
         reservedFolder(cwd, dir) ?? (app && unroutedSegment(app, dir));
@@ -248,6 +273,20 @@ function previewDir(cwd, where, opts = {}) {
         `There are ${recorded.length} theme previews here (${recorded.map(d => `${shownDir(cwd, d)}/`).join(', ')}) and none in the default place; name one with --path.`,
         {run: recorded.map(d => retry(shownDir(cwd, d)))},
       );
+    // An older release could put a preview at the project root or in src/,
+    // where its pages/ folder is the Pages Router: every page is public.
+    const older = [cwd, path.join(cwd, 'src')].find(d =>
+      fs.existsSync(path.join(d, PREVIEW_DATA)),
+    );
+    if (older && !recorded.length) {
+      if (opts.write)
+        refuse(
+          E.ERR_INVALID_ARGUMENT,
+          `An older theme preview is in ${shownDir(cwd, older)}/, a folder that holds the app itself (its pages/ may be public routes of the app); remove it, then add the preview again.`,
+          {run: [`${PREVIEW} remove --path ${shq(shownDir(cwd, older))}`]},
+        );
+      return {dir: older, app: null};
+    }
   }
   const dir = known ?? candidates[0];
   if (!dir && opts.optional) return /** @type {any} */ (null);
@@ -339,11 +378,12 @@ export default function Home() {
  * @param {string} where
  * @param {(root: string) => Array<{rel: string, text: string | Buffer}>} extra files relative to the app folder
  * @param {Record<string, string>} dependencies added to the starter's package.json
+ * @param {string | null} [slug] the theme, repeated in suggestions
  * @returns {{root: string, writes: Array<{file: string, text: string | Buffer}>}}
  */
-function planStarterApp(cwd, where, extra, dependencies) {
+function planStarterApp(cwd, where, extra, dependencies, slug = null) {
   const again = (/** @type {string | null} */ p) =>
-    `${PREVIEW} app ${shq(p ?? 'theme-app')}`;
+    `${PREVIEW} app ${shq(p ?? 'theme-app')}${slug == null ? '' : ` --theme ${shq(slug)}`}`;
   checkFolderName(where, 'The app folder', again);
   /** @type {string} */
   let root;
@@ -497,9 +537,10 @@ function starterPackageJson(text, dependencies) {
  * nothing behind. No install runs here.
  * @param {string} cwd
  * @param {{root: string, writes: Array<{file: string, text: string | Buffer}>}} plan
+ * @param {(dir: string) => string} again the command with this folder
  * @returns {string[]} the files written
  */
-function writeStarterApp(cwd, plan) {
+function writeStarterApp(cwd, plan, again) {
   const {root} = plan;
   const parent = path.dirname(root);
   /** The folders on the way to the app that this call makes. @type {string[]} */
@@ -546,16 +587,12 @@ function writeStarterApp(cwd, plan) {
       refuse(
         E.ERR_FILE_EXISTS,
         `${shownDir(cwd, root)} was filled by something else while the app was written, so the app was not put there.`,
-        {run: [`${PREVIEW} app ${shq(`${shownDir(cwd, root)}-2`)}`]},
+        {run: [again(`${shownDir(cwd, root)}-2`)]},
       );
     refuse(
       E.ERR_WRITE_FAILED,
       `The app could not be written (${code}); nothing of it was left in ${shownDir(cwd, root)}.`,
-      {
-        run: [
-          `${PREVIEW} app ${shq(shownDir(cwd, root))}  # once the cause is fixed`,
-        ],
-      },
+      {run: [`${again(shownDir(cwd, root))}  # once the cause is fixed`]},
     );
   }
   return plan.writes.map(w => shown(cwd, w.file)).sort();
@@ -628,12 +665,9 @@ function damagedPreview(cwd, dir, why, pf) {
   const folder = shownDir(cwd, dir);
   refuse(
     E.ERR_THEME_INVALID,
-    `${folder}/${PREVIEW_DATA} is damaged: ${why}. It lists the preview's pages and the files it wrote, so the preview commands leave the folder alone until it is fixed. Fix the file by hand, or delete the folder and add the preview again.`,
+    `${folder}/${PREVIEW_DATA} is damaged: ${why}. It lists the preview's pages and the files it wrote, so the preview commands leave the folder alone until it is fixed.`,
     {
-      run: [
-        `rm -r ${shq(folder)}  # only when nothing of yours is in it`,
-        `${PREVIEW} add${pf}  # then, to write the preview again`,
-      ],
+      fix: `fix ${folder}/${PREVIEW_DATA} by hand; or give the folder a new name that starts with _ (Next does not serve such a folder, and nothing in it is lost), then run ${PREVIEW} add${pf} again`,
     },
   );
 }
@@ -679,6 +713,19 @@ const digest = text =>
   createHash('sha256').update(text).digest('hex').slice(0, 16);
 
 /**
+ * The hash recorded for a file the preview writes: of its text without
+ * white space, semicolons, commas and quote styles, so a formatter run
+ * (prettier, eslint --fix) does not count as a change by hand.
+ * @param {string | Buffer} text
+ */
+const contentHash = text =>
+  digest(
+    String(text)
+      .replace(/["'`]/g, "'")
+      .replace(/[\s;,]+/g, ''),
+  );
+
+/**
  * Whether a file the preview wrote was changed since, by its recorded hash.
  * A file with no hash (written by an older release) counts as unchanged.
  * @param {string} dir
@@ -689,7 +736,9 @@ function editedByHand(dir, data, rel) {
   const was = data.hashes?.[rel];
   if (!was) return false;
   try {
-    return digest(fs.readFileSync(path.join(dir, rel))) !== was;
+    const text = fs.readFileSync(path.join(dir, rel));
+    // Older records hold the hash of the exact text.
+    return contentHash(text) !== was && digest(text) !== was;
   } catch {
     return false;
   }
@@ -724,20 +773,27 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
       {run: [elsewhere]},
     );
   if (fs.readFileSync(file, 'utf8') === w.text) return 'same';
+  const page = /^_?pages\/([^/]+)\.tsx$/.exec(w.rel)?.[1];
   if (!data.files.includes(w.rel))
     refuse(
       E.ERR_FILE_EXISTS,
-      `${name} exists and the preview did not write it; it is never replaced. Move it, or put the preview in another folder.`,
-      {run: [elsewhere]},
+      `${name} exists and the preview did not write it; it is never replaced.`,
+      page
+        ? {
+            fix: `give ${name} another name if you want to keep it, then run the command again; or add another page`,
+            run: ['astryx template --list --type page'],
+          }
+        : {
+            fix: `move ${name} out of the folder, then run the command again; or put the preview in another folder`,
+            run: [elsewhere],
+          },
     );
   if (editedByHand(dir, data, w.rel))
     refuse(
       E.ERR_FILE_EXISTS,
-      `${name} was changed by hand after the preview wrote it, so it is not replaced. Move your changes out of it, or delete it, and run the command again.`,
+      `${name} was changed by hand after the preview wrote it, so it is not replaced.`,
       {
-        run: [
-          `rm ${shq(name)}  # drops your changes; then run the command again`,
-        ],
+        fix: `copy your changes out of ${name}, then delete it or give it another name, and run the command again`,
       },
     );
   return 'replace';
@@ -757,9 +813,16 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
  * @param {string} again the command, to run again once the cause is fixed
  */
 function commitPreview(cwd, dir, data, writes, deletes, again) {
-  const suffix = `.astryx-${process.pid}-${Date.now()}.tmp`;
+  /** The temp file of each target. @type {Map<string, string>} */
+  const temps = new Map();
+  const tmp = (/** @type {string} */ file) => {
+    if (!temps.has(file)) temps.set(file, tempFor(file));
+    return /** @type {string} */ (temps.get(file));
+  };
   /** @type {string[]} */
   const staged = [];
+  /** Folders this call made. @type {string[]} */
+  const made = [];
   /** @type {Array<{file: string, before: Buffer | null}>} */
   const touched = [];
   const before = (/** @type {string} */ file) => {
@@ -769,20 +832,43 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       return null;
     }
   };
+  /** @param {string} folder */
+  const mkdir = folder => {
+    /** @type {string[]} */
+    const missing = [];
+    for (let d = folder; !fs.existsSync(d); d = path.dirname(d))
+      missing.unshift(d);
+    fs.mkdirSync(folder, {recursive: true});
+    made.push(...missing);
+  };
+  /** @param {string} file @param {string} text */
+  const stage = (file, text) => {
+    // Recorded before the write, so a write that fails halfway (a full
+    // disk) leaves no temp file behind.
+    staged.push(tmp(file));
+    fs.writeFileSync(tmp(file), text);
+    try {
+      // A file someone made read-only keeps its mode.
+      fs.chmodSync(tmp(file), fs.statSync(file).mode & 0o777);
+    } catch {
+      // A new file.
+    }
+  };
   let current = dir;
+  let step = 'written';
   try {
     for (const w of writes) {
       current = confined(path.join(dir, w.rel), dir, 'a preview file');
-      fs.mkdirSync(path.dirname(current), {recursive: true});
-      fs.writeFileSync(current + suffix, w.text);
-      staged.push(current + suffix);
+      mkdir(path.dirname(current));
+      stage(current, w.text);
     }
     for (const w of writes) {
       current = path.join(dir, w.rel);
       touched.push({file: current, before: before(current)});
-      fs.renameSync(current + suffix, current);
+      fs.renameSync(tmp(current), current);
     }
     staged.length = 0;
+    step = 'removed';
     for (const rel of deletes) {
       current = confined(path.join(dir, rel), dir, 'a preview file');
       const was = before(current);
@@ -790,8 +876,10 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       touched.push({file: current, before: was});
       fs.rmSync(current);
     }
+    step = 'written';
     const hashes = {...data.hashes};
-    for (const w of writes) if (!w.keepHash) hashes[w.rel] = digest(w.text);
+    for (const w of writes)
+      if (!w.keepHash || !hashes[w.rel]) hashes[w.rel] = contentHash(w.text);
     for (const rel of deletes) delete hashes[rel];
     for (const rel of Object.keys(hashes))
       if (!data.files.includes(rel)) delete hashes[rel];
@@ -799,9 +887,8 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
     if (!data.files.includes(PREVIEW_DATA)) data.files.push(PREVIEW_DATA);
     current = path.join(dir, PREVIEW_DATA);
     touched.push({file: current, before: before(current)});
-    fs.writeFileSync(current + suffix, `${JSON.stringify(data, null, 2)}\n`);
-    staged.push(current + suffix);
-    fs.renameSync(current + suffix, current);
+    stage(current, `${JSON.stringify(data, null, 2)}\n`);
+    fs.renameSync(tmp(current), current);
   } catch (e) {
     for (const t of staged) fs.rmSync(t, {force: true});
     for (const t of touched.reverse())
@@ -811,10 +898,16 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       } catch {
         // Best effort: the refusal below names the file.
       }
+    for (const d of made.reverse())
+      try {
+        fs.rmdirSync(d);
+      } catch {
+        // Not empty: something else is in it now.
+      }
     if (/** @type {any} */ (e)?.code === undefined) throw e;
     refuse(
       E.ERR_WRITE_FAILED,
-      `${shown(cwd, current)} could not be written (${/** @type {any} */ (e).code}), so every file of the preview was put back as it was.`,
+      `${shown(cwd, current)} could not be ${step} (${/** @type {any} */ (e).code}), so every file of the preview was put back as it was.`,
       {run: [`${again}  # once the cause is fixed`]},
     );
   }
@@ -862,11 +955,9 @@ function movedPages(cwd, dir, data) {
     )
       refuse(
         E.ERR_FILE_EXISTS,
-        `${shown(cwd, target)} exists and the preview did not write it; the preview moves its pages there, so move that file first.`,
+        `${shown(cwd, target)} exists and the preview did not write it; the preview moves its pages there.`,
         {
-          run: [
-            `mv ${shq(shown(cwd, target))} ${shq(`${shown(cwd, target)}.mine`)}`,
-          ],
+          fix: `give ${shown(cwd, target)} another name if you want to keep it, then run the command again`,
         },
       );
     p.file = `${PAGES_DIR}/${p.id}`;
@@ -875,7 +966,8 @@ function movedPages(cwd, dir, data) {
       data.hashes[to] = data.hashes[from];
       delete data.hashes[from];
     }
-    if (text != null) writes.push({rel: to, text, keepHash: true});
+    if (text == null) continue;
+    writes.push({rel: to, text, keepHash: true});
     deletes.push(from);
     moved.push(p.id);
   }
@@ -1034,7 +1126,9 @@ async function routeWrites(cwd, dir, data, theme, opts = {}) {
  * preview, and a file changed by hand, are left as they are.
  * @param {string} cwd
  * @param {string} slug
- * @returns {Promise<boolean>} whether the route or the Colors page was rewritten
+ * @returns {Promise<{changed: boolean, stale: string[]}>} `changed`: the
+ *   route or the Colors page was rewritten; `stale`: preview files changed by
+ *   hand, which keep showing the theme as it was
  */
 export async function refreshPreviewRoute(cwd, slug) {
   const at = previewDir(cwd, undefined, {optional: true});
@@ -1042,6 +1136,8 @@ export async function refreshPreviewRoute(cwd, slug) {
     ...new Set([...(at ? [at.dir] : []), ...recordedPreviews(cwd, slug)]),
   ];
   let changed = false;
+  /** @type {string[]} */
+  const stale = [];
   for (const dir of dirs) {
     /** @type {PreviewData | null} */
     let data;
@@ -1056,15 +1152,20 @@ export async function refreshPreviewRoute(cwd, slug) {
       await routeWrites(cwd, dir, data, await routeTheme(cwd, dir, data))
     ).filter(w => {
       const file = confined(path.join(dir, w.rel), dir, 'a preview file');
-      if (!data.files.includes(w.rel) || editedByHand(dir, data, w.rel))
+      if (!data.files.includes(w.rel)) return false;
+      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === w.text)
         return false;
-      return !(fs.existsSync(file) && fs.readFileSync(file, 'utf8') === w.text);
+      if (editedByHand(dir, data, w.rel)) {
+        stale.push(shown(cwd, file));
+        return false;
+      }
+      return true;
     });
     if (!writes.length) continue;
     commitPreview(cwd, dir, data, writes, [], `${EDITOR} show ${slug}`);
     changed = true;
   }
-  return changed;
+  return {changed, stale};
 }
 
 /**
@@ -1109,7 +1210,7 @@ function recordPreview(cwd, slug, dir, keep = true) {
     .filter(x => x !== rel);
   if (keep) list.push(rel);
   const file = previewsFile(cwd, slug);
-  if (list.length) fs.writeFileSync(file, `${JSON.stringify(list, null, 2)}\n`);
+  if (list.length) writeWhole(file, `${JSON.stringify(list, null, 2)}\n`);
   else fs.rmSync(file, {force: true});
 }
 
@@ -1529,6 +1630,36 @@ async function namedTemplate(cwd, id, flags) {
 }
 
 /**
+ * The text of a recorded page written again: a default page, or the page
+ * template its id names when the app can show it; else null.
+ * @param {string} cwd
+ * @param {string} id
+ * @param {(id: string) => Promise<{text: string}>} defaultPage
+ * @returns {Promise<string | null>}
+ */
+async function pageAgain(cwd, id, defaultPage) {
+  if (id === 'overview' || id === 'components')
+    return (await defaultPage(id)).text;
+  try {
+    const shownTemplate =
+      /** @type {import('../template/template.type.mjs').TemplateShowResponse} */ (
+        await template(id, {cwd, type: 'page'})
+      );
+    const source = shownTemplate.data.source;
+    const needs = analyzeTemplateNeeds(source, cwd);
+    if (
+      needs.missingPackages.length ||
+      notInstalled(cwd, source, []).length ||
+      (STYLEX_IMPORT.test(source) && detectStylingSystem(cwd) !== 'stylex')
+    )
+      return null;
+    return source;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Add pages to the in-app theme preview, and write the preview route the
  * first time. With a description, the build ranking picks the template
  * pages that fit it best (`top` of them); `template` names one instead.
@@ -1797,6 +1928,48 @@ export async function themeEditPreviewAdd(description, options = {}) {
       refreshed.push(page.id);
     }
   }
+  // A recorded page whose file is gone is written again (a default page,
+  // or the template its id names), or else left out of the nav, so the
+  // route never imports a missing file.
+  /** @type {string[]} */
+  const rewrote = [];
+  /** @type {string[]} */
+  const dropped = [];
+  for (const p of [...data.pages]) {
+    const rel = `${p.file}.tsx`;
+    if (writes.has(rel) || fs.existsSync(path.join(at.dir, rel))) continue;
+    if (
+      p.id === COLORS_PAGE.id &&
+      data.files.includes(rel) &&
+      (data.theme || gone)
+    )
+      continue;
+    const text = data.files.includes(rel)
+      ? await pageAgain(cwd, p.id, defaultPage)
+      : null;
+    if (text != null) {
+      const to = `${PAGES_DIR}/${p.id}.tsx`;
+      const w = {rel: to, text};
+      checkWrite(cwd, at.dir, data, w, elsewhere);
+      writes.set(to, w);
+      data.files = data.files.filter(f => f !== rel);
+      if (!data.files.includes(to)) data.files.push(to);
+      p.file = `${PAGES_DIR}/${p.id}`;
+      rewrote.push(p.id);
+    } else {
+      data.pages = data.pages.filter(x => x !== p);
+      data.files = data.files.filter(f => f !== rel);
+      dropped.push(p.id);
+    }
+  }
+  if (rewrote.length)
+    notes.push(
+      `wrote ${rewrote.join(', ')} again: ${rewrote.length > 1 ? 'their files were' : 'its file was'} gone`,
+    );
+  if (dropped.length)
+    notes.push(
+      `left ${dropped.join(', ')} out of the nav: ${dropped.length > 1 ? 'their files were' : 'its file was'} gone, and the preview cannot write ${dropped.length > 1 ? 'them' : 'it'} again`,
+    );
   if (!data.files.includes('page.tsx'))
     checkWrite(cwd, at.dir, data, {rel: 'page.tsx', text: '\0'}, elsewhere);
   const theme = await routeTheme(cwd, at.dir, data);
@@ -1879,7 +2052,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const notes = [];
   const routeDir = path.join('src', 'app', 'theme-preview');
   // The folder checks come before the theme build, so a refusal writes nothing.
-  planStarterApp(cwd, dir, () => [], {});
+  planStarterApp(cwd, dir, () => [], {}, slug);
   /** @type {string | null} */
   let colorsSource = null;
   if (slug != null && theme) {
@@ -2001,8 +2174,14 @@ export async function themeEditPreviewApp(dir, options = {}) {
       },
     ],
     dependencies,
+    slug,
   );
-  const files = writeStarterApp(cwd, plan);
+  const files = writeStarterApp(
+    cwd,
+    plan,
+    d =>
+      `${PREVIEW} app ${shq(d)}${slug == null ? '' : ` --theme ${shq(slug)}`}`,
+  );
   const folder = shownDir(cwd, plan.root);
   if (
     plan.root !== cwd &&
@@ -2157,6 +2336,28 @@ export async function themeEditPreviewRemove(page, options = {}) {
       );
     }
     const move = movedPages(cwd, at.dir, data);
+    // A page whose file is gone leaves the nav, so the route never imports
+    // a missing file.
+    const moving = new Set(move.writes.map(w => w.rel));
+    const lost = data.pages.filter(p => {
+      const rel = `${p.file}.tsx`;
+      if (moving.has(rel) || fs.existsSync(path.join(at.dir, rel)))
+        return false;
+      return !(
+        p.id === COLORS_PAGE.id &&
+        data.files.includes(rel) &&
+        (data.theme || gone)
+      );
+    });
+    if (lost.length) {
+      data.pages = data.pages.filter(p => !lost.includes(p));
+      data.files = data.files.filter(
+        f => !lost.some(p => f === `${p.file}.tsx`),
+      );
+      notes.push(
+        `left ${lost.map(p => p.id).join(', ')} out of the nav: ${lost.length > 1 ? 'their files were' : 'its file was'} gone`,
+      );
+    }
     /** @type {Array<{rel: string, text: string}>} */
     let planned;
     try {
@@ -2214,7 +2415,17 @@ export async function themeEditPreviewRemove(page, options = {}) {
     };
   }
 
-  // The whole preview: every entry is checked before the first delete.
+  // The whole preview: every entry is checked before the first delete. A
+  // route changed by hand would be kept and still import the pages, so it
+  // stops the remove instead.
+  if (data.files.includes('page.tsx') && editedByHand(at.dir, data, 'page.tsx'))
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `${shown(cwd, path.join(at.dir, 'page.tsx'))} was changed by hand after the preview wrote it. It imports the preview pages, so removing them would leave a route that does not build.`,
+      {
+        fix: `copy your changes out of ${shown(cwd, path.join(at.dir, 'page.tsx'))}, delete it or give it another name, then run ${PREVIEW} remove${pf} again`,
+      },
+    );
   /** @type {Array<{file: string, before: Buffer}>} */
   const plan = [];
   for (const rel of data.files) {
