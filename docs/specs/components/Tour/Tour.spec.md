@@ -10,13 +10,9 @@ approved_by: null
 approved_at: null
 owners: [cixzhang]
 review_triggers: [behavior, accessibility]
-verified_by:
-  [
-    packages/lab/src/Tour/Tour.test.tsx,
-    packages/lab/src/Tour/__tests__/TourCardTarget.interaction.browser.spec.ts,
-  ]
+verified_by: [packages/lab/src/Tour/Tour.test.tsx]
 modules: []
-families: []
+families: [family:overlay-dismissal]
 design_specs: []
 architecture: []
 contributing: []
@@ -32,8 +28,8 @@ system_specs: []
 | Public contract         | Unchanged by this record.                                                                                                                         |
 | Behavior                | Without a backdrop, a press on the page or on the target leaves the tour running. With a backdrop, a press anywhere ends it with `'backdrop'`.    |
 | End-user impact         | A person can use the control a step introduces, or the rest of the page, while a plain tour stays open; a dimmed tour ends on a press outside it. |
-| Builder impact          | None; `hasBackdrop` chooses between the two.                                                                                                      |
-| Compatibility/readiness | Lab. Draft.                                                                                                                                       |
+| Builder impact          | An app that needs a press to end the tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` (DEC-1).                        |
+| Compatibility/readiness | Lab. Draft. FR1 gap and AR1 gap below.                                                                                                            |
 | Review checks           | Reject a press that ends a tour without a backdrop, or a press under a backdrop that leaves the tour running.                                     |
 | Governing rules         | None recorded.                                                                                                                                    |
 
@@ -50,7 +46,11 @@ step's callout affects the tour. Consumer usage lives in `Tour.doc.mjs`.
 - Released default preserved: `no` for a tour without a backdrop: a press on the page or on the target leaves it running (FR1, DEC-1).
 - Compatibility class: behavioral, Lab.
 - Controlled/uncontrolled behavior: unchanged; `isActive` and `onDismiss` are the app's.
-- Migration decision: none needed. An app that ends a plain tour on an outside press passes `hasBackdrop`.
+- Migration decision: DEC-1. An app that needs an outside press to end a tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` instead of `'close'`.
+
+FR1 gap: a press on the page or on the target ends a tour without a backdrop, reporting `'close'`, because the step light-dismisses. Pending evidence: unit and real-browser tests that such a press leaves the tour running.
+
+AR1 gap: keyboard focus stays in the step's callout. Pending evidence: a test that Tab moves from the callout into the page.
 
 ## Ownership boundary
 
@@ -61,7 +61,7 @@ step's callout affects the tour. Consumer usage lives in `Tour.doc.mjs`.
 **Does not own / non-goals**
 
 - The callout's placement, focus movement, and the step controls. Not recorded here.
-- Escape, which ends the tour through the shared layer dismissal stack.
+- Escape, which ends the tour through the shared layer dismissal stack (`family:overlay-dismissal`).
 
 ## Public concepts
 
@@ -96,9 +96,10 @@ None recorded.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                                                                                                                             | Representative states                   | Mutation or failure expectation                                           | Audit section |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------- | ------------- |
-| FR1      | "keeps the tour running when the target is pressed"; "keeps the tour running when the page is pressed"; "dismisses with \"backdrop\" when the backdrop is clicked"; "pressing the introduced control keeps the tour…"; "a press on the dimmed page ends a backdrop tour" | No backdrop and backdrop; a card target | A press that ends a plain tour, or leaves a dimmed tour running, fails it | None          |
+| Contract | Verification                                                                                    | Representative states | Mutation or failure expectation     | Audit section |
+| -------- | ----------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------- | ------------- |
+| FR1      | "dismisses with \"backdrop\" when the backdrop is clicked"; the no-backdrop half is the FR1 gap | Backdrop              | A dimmed tour left running fails it | None          |
+| AR1      | Pending: the AR1 gap                                                                            | No backdrop           | Focus kept in the callout fails it  | None          |
 
 ## Decision log
 
