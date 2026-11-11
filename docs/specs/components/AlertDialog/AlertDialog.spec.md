@@ -98,8 +98,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The alert-dialog role, its name and description links, and the least-destructive
   initial focus.
 - The imperative wrapper hook.
-- The touch presentation's motion, input hold, and phone width (FR6, FR7, FR9);
-  `useAlertMotion.ts` drives the motion and the hold.
+- The touch presentation's motion, input hold, and phone width (FR6, FR7, FR9).
+  `useAlertMotion.ts`, private to AlertDialog, drives the motion and the hold.
+  It composes the theme-timed present and dismiss with the input hold. Kept
+  apart, `AlertDialog.tsx` stays readable and the hook is unit-tested on its
+  own.
 
 **Does not own / non-goals**
 

@@ -839,7 +839,11 @@ it on the surface inside the layer and run no layout while it plays.
   presentation, held from the open until its close settles (INV14).
 - `Layer/inputHold.ts` owns the input hold that a touch presentation places
   while it enters or leaves (`spec:AST-094` FR35); a dismissal hold leaves a
-  nested layer, its path, and a child live region live.
+  nested layer, its path, and a child live region live. It finds a nested
+  layer with `hasLayerRootWithin`, a reader of the layer-root owner
+  (`architecture:public-component-api` INV23). The owner's other readers test
+  an element or its ancestors, and the hold asks whether a subtree holds a
+  layer root.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing. The stack, the modal outlet registry, the gesture
