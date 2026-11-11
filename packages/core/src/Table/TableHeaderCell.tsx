@@ -109,6 +109,15 @@ const headerMenuCellStyles = stylex.create({
   },
 });
 
+const stickyHeaderStyles = stylex.create({
+  cell: {
+    position: 'sticky',
+    insetBlockStart: 0,
+    zIndex: 2,
+    backgroundColor: colorVars['--color-background-surface'],
+  },
+});
+
 const dividerColumnStyles = stylex.create({
   cell: {
     borderInlineEndWidth: {
@@ -169,6 +178,9 @@ export function TableHeaderCell({
     }
     if (hasContextMenu) {
       cellStyles.push(headerMenuCellStyles.cell);
+    }
+    if (ctx.stickyHeader) {
+      cellStyles.push(stickyHeaderStyles.cell);
     }
   }
 
