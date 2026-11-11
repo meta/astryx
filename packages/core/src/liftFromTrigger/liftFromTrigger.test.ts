@@ -14,6 +14,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as inputHold from '../Layer/inputHold';
+import type * as InputStream from '../utils/inputStream';
 import {
   createLiftFromTrigger,
   type LiftFromTriggerOptions,
@@ -27,6 +28,23 @@ vi.mock('../Layer/inputHold', async importOriginal => ({
 }));
 
 const {holdInput} = inputHold;
+
+// The input-stream subscriptions this test made and has not ended.
+const stream = vi.hoisted(() => ({live: new Set<object>()}));
+vi.mock('../utils/inputStream', async importOriginal => {
+  const actual = await importOriginal<typeof InputStream>();
+  const subscribeInput: typeof actual.subscribeInput = (...args) => {
+    const stop = actual.subscribeInput(...args);
+    const {live} = stream;
+    const subscription = {};
+    live.add(subscription);
+    return () => {
+      live.delete(subscription);
+      stop();
+    };
+  };
+  return {...actual, subscribeInput};
+});
 
 const SPRING = {response: 0.3, dampingRatio: 1};
 
@@ -156,6 +174,7 @@ beforeEach(() => {
       : realMatches.call(this, selector);
   } as typeof realMatches;
   documentListeners = new Map();
+  stream.live = new Set();
   vi.spyOn(document, 'addEventListener').mockImplementation(
     (type, listener, opts) => {
       documentListeners.set(type, (documentListeners.get(type) ?? 0) + 1);
@@ -185,11 +204,15 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** Every listener this test added to the document is gone. */
-function expectNoDocumentListeners() {
+/**
+ * Every listener this test added to the document is gone, and so is every
+ * input-stream subscription.
+ */
+function expectNoListeners() {
   for (const [type, live] of documentListeners) {
     expect({type, live: Math.max(live, 0)}).toEqual({type, live: 0});
   }
+  expect(stream.live.size).toBe(0);
 }
 
 describe('lift', () => {
@@ -353,7 +376,7 @@ describe('lift', () => {
     expectInlineAsBefore(source);
     expect(count()).toBe(rest);
     expect(open.size).toBe(0);
-    expectNoDocumentListeners();
+    expectNoListeners();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -372,8 +395,35 @@ describe('lift', () => {
     expect(document.body.contains(layer)).toBe(true);
     lift.dispose();
     expect(count()).toBe(rest);
-    expectNoDocumentListeners();
+    expectNoListeners();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('hears a press on the layer lift even when the app stops it at the window: the close still ends', async () => {
+    const {source} = renderList();
+    const lift = createLiftFromTrigger();
+    lift.lift(source, options());
+    const layer = document.body.lastElementChild as HTMLElement;
+    // An app that stops every pointerup on the window's capture phase.
+    const stop = (event: Event) => event.stopPropagation();
+    window.addEventListener('pointerup', stop, true);
+    const press = (type: string) => {
+      const event = new Event(type, {bubbles: true});
+      Object.assign(event, {pointerId: 7, isPrimary: true});
+      layer.dispatchEvent(event);
+    };
+    try {
+      press('pointerdown');
+      lift.drop();
+      await vi.runAllTimersAsync();
+      expect(document.body.contains(layer)).toBe(true);
+      press('pointerup');
+      await vi.runAllTimersAsync();
+      expect(document.body.contains(layer)).toBe(false);
+      expectNoListeners();
+    } finally {
+      window.removeEventListener('pointerup', stop, true);
+    }
   });
 
   it('twenty lifts and drops leave the page, the document listeners and the timers as they were (no leaks)', async () => {
@@ -387,7 +437,7 @@ describe('lift', () => {
     }
     expect(count()).toBe(rest);
     expectInlineAsBefore(source);
-    expectNoDocumentListeners();
+    expectNoListeners();
     expect(vi.getTimerCount()).toBe(0);
   });
 

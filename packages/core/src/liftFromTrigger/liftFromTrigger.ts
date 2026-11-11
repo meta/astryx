@@ -35,6 +35,7 @@ import {
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {resolveMotion} from '../motion/resolveMotion';
 import type {SpringDescription} from '../motion/spring';
+import {type InputEventMap, subscribeInput} from '../utils/inputStream';
 import {
   liftFromTriggerRect,
   type LiftFromTriggerScaleRule,
@@ -574,38 +575,42 @@ export function createLiftFromTrigger(): LiftFromTrigger {
 
   // Every pointer still down that went down on the layer: on the tint as it
   // presents, or the shield as it closes. The watch reads them from the
-  // document, so an inert target hides none. It also knows whether the last
-  // one to lift still owes its click. A touch's click comes after its
-  // pointer's up.
+  // window's input stream. So an inert target hides none, and neither does an
+  // app that stops them on the way down. It also knows whether the last one
+  // to lift still owes its click. A touch's click comes after its pointer's
+  // up.
   const watchPointers = (current: LiftState) => {
     const {layer, waits} = current;
-    const doc = layer.ownerDocument;
+    const view = layer.ownerDocument.defaultView;
     const pointers = new Set<number>();
     let isClickPending = false;
-    const options = {capture: true, signal: waits.signal};
-    doc.addEventListener(
-      'pointerdown',
-      event => {
-        if (event.composedPath().includes(layer)) {
-          pointers.add(event.pointerId);
-        }
-      },
-      options,
-    );
+    // Each subscription ends with the layer, or earlier by its returned stop.
+    const listen = <K extends keyof InputEventMap>(
+      type: K,
+      listener: (event: InputEventMap[K]) => void,
+    ): (() => void) => {
+      if (view == null || waits.signal.aborted) {
+        return () => {};
+      }
+      const stop = subscribeInput(view, type, listener);
+      waits.signal.addEventListener('abort', stop, {once: true});
+      return stop;
+    };
+    listen('pointerdown', event => {
+      if (event.composedPath().includes(layer)) {
+        pointers.add(event.pointerId);
+      }
+    });
     const up = (event: PointerEvent) => {
       if (pointers.delete(event.pointerId) && event.type === 'pointerup') {
         isClickPending = true;
       }
     };
-    doc.addEventListener('pointerup', up, options);
-    doc.addEventListener('pointercancel', up, options);
-    doc.addEventListener(
-      'click',
-      () => {
-        isClickPending = false;
-      },
-      options,
-    );
+    listen('pointerup', up);
+    listen('pointercancel', up);
+    listen('click', () => {
+      isClickPending = false;
+    });
     // Settles once no pointer is down on the layer and the last one's click
     // has landed too, or shortly after (a long press sends none).
     return async (): Promise<void> =>
@@ -619,12 +624,12 @@ export function createLiftFromTrigger(): LiftFromTrigger {
               if (pointers.size > 0) {
                 return;
               }
-              doc.removeEventListener('pointerup', lifted, true);
-              doc.removeEventListener('pointercancel', lifted, true);
+              stopUp();
+              stopCancel();
               wait();
             };
-            doc.addEventListener('pointerup', lifted, options);
-            doc.addEventListener('pointercancel', lifted, options);
+            const stopUp = listen('pointerup', lifted);
+            const stopCancel = listen('pointercancel', lifted);
             return;
           }
           if (!isClickPending) {
@@ -635,13 +640,13 @@ export function createLiftFromTrigger(): LiftFromTrigger {
           waits.signal.addEventListener('abort', () => clearTimeout(timer), {
             once: true,
           });
+          const stopClick = listen('click', finish);
           function finish() {
-            doc.removeEventListener('click', finish, true);
+            stopClick();
             clearTimeout(timer);
             isClickPending = false;
             wait();
           }
-          doc.addEventListener('click', finish, options);
         };
         wait();
       });

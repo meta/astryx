@@ -24,6 +24,8 @@ export function useLiftFromTrigger(): LiftFromTrigger {
   const liftRef = useRef<LiftFromTrigger | null>(null);
   liftRef.current ??= createLiftFromTrigger();
   const lift = liftRef.current;
+  // Effect: ends the lift presentation at unmount, so its layer, listeners and
+  // timers leave the page.
   useEffect(() => () => lift.dispose(), [lift]);
   return lift;
 }
