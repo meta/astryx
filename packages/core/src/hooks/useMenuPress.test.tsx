@@ -130,6 +130,20 @@ function fireTouchEnd(target: Element): Event {
   return event;
 }
 
+/** A cancelable touch event at `target` whose one changed touch has `identifier`. */
+function fireTouch(
+  target: Element,
+  type: 'touchstart' | 'touchend',
+  identifier: number,
+): Event {
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  Object.defineProperty(event, 'changedTouches', {
+    value: [{identifier, target}],
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 beforeEach(() => {
   __resetMenuPressForTest();
 });
@@ -648,6 +662,26 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     fireEvent.pointerUp(row('B'), touch(2));
     fireEvent.pointerDown(screen.getByTestId('outside'), touch(3));
     expect(fireTouchEnd(row('B')).defaultPrevented).toBe(false);
+  });
+
+  it("leaves another finger's touchend alone and cancels the lifted touch's own", () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch(7));
+    fireTouch(row('A'), 'touchstart', 7);
+    fireEvent.pointerUp(row('A'), touch(7));
+    expect(fireTouch(row('A'), 'touchend', 99).defaultPrevented).toBe(false);
+    expect(fireTouch(row('A'), 'touchend', 7).defaultPrevented).toBe(true);
+    expect(onSelect.mock.calls).toEqual([['A']]);
+  });
+
+  it('names the touch by its place in the touchstart when its identifier is not the pointer id', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), touch(2));
+    fireTouch(row('A'), 'touchstart', 0);
+    fireEvent.pointerUp(row('A'), touch(2));
+    expect(fireTouch(row('A'), 'touchend', 1).defaultPrevented).toBe(false);
+    expect(fireTouch(row('A'), 'touchend', 0).defaultPrevented).toBe(true);
   });
 });
 
