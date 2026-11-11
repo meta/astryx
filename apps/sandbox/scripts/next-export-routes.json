@@ -839,6 +839,7 @@
     "/templates/useScrollLockHookUsage/",
     "/templates/useScrollOverflowHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
+    "/templates/useSpeechRecognitionHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useTableColumnSettingsStateHookUsage/",
     "/templates/useTableSortableStateHookUsage/",
