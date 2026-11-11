@@ -353,13 +353,18 @@ describe('the interaction leg count job in ci.yml', () => {
   ];
 
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
-    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
-    expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
-    // The WebKit proofs do not run for main's nightly full run.
+    expect(counter.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'webkit-weekly-request',
+    ]);
+    // The lanes' gate, which admits main's nightly Chromium run and the
+    // weekly full WebKit run.
     expect(counter.if).toBe(
       ci.jobs['pr-interaction-webkit'].if.replace(
-        "github.event_name != 'workflow_dispatch' && always()",
-        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
       ),
     );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
@@ -734,13 +739,13 @@ describe('the interaction proof legs in ci.yml', () => {
       }
     }
 
-    it("plans every WebKit spec only for the release tooling's interaction-check/ pull request", () => {
-      expect(job.env.WEBKIT_ALL_SPECS).toBe(
+    it("decides the WebKit scope only for the release tooling's interaction-check/ pull request", () => {
+      expect(job.env.WEBKIT_RELEASE_CHECK).toBe(
         "${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}",
       );
       // The expression's three conditions, read against a pull request.
       const fullScope = pr =>
-        job.env.WEBKIT_ALL_SPECS.slice(3, -2)
+        job.env.WEBKIT_RELEASE_CHECK.slice(3, -2)
           .trim()
           .split(' && ')
           .every(condition => {
@@ -1560,7 +1565,17 @@ describe('the Chromium selection in ci.yml', () => {
     );
     expect(select.run).toContain('sparse-checkout add');
     expect(select.run).toContain('--root .test-scope');
-    expect(select.run).toContain('--every-spec "${WEBKIT_ALL_SPECS:-false}"');
+    expect(select.run).toContain(
+      '--selection .test-scope/.github/interaction-selection.json',
+    );
+    expect(select.run).toContain(
+      '--primitives .test-scope/.github/a11y-shared-primitives.json',
+    );
+    // The release interaction check runs every Chromium spec; WebKit's own
+    // scope (WEBKIT_ALL_SPECS) does not decide it.
+    expect(select.run).toContain(
+      '--every-spec "${WEBKIT_RELEASE_CHECK:-false}"',
+    );
     expect(select.run).toContain(
       'specs=${r.full ? "full" : JSON.stringify(r.specs)}',
     );
@@ -1616,7 +1631,9 @@ describe('the Chromium selection in ci.yml', () => {
       status: result.status,
       filters: result.stdout
         .split('\n')
-        .filter(line => line && !line.startsWith('No ')),
+        .filter(
+          line => line && !line.startsWith('No ') && !line.startsWith('::'),
+        ),
       output: fs.readFileSync(out, 'utf8'),
     };
   }
@@ -1635,6 +1652,12 @@ describe('the Chromium selection in ci.yml', () => {
       });
       expect(filters(run, {CHROMIUM_SPECS: 'full'}).filters).toEqual([]);
       expect(filters(run, {CHROMIUM_SPECS: ''}).filters).toEqual([]);
+      // A selection that does not parse runs every spec, never none.
+      expect(filters(run, {CHROMIUM_SPECS: '["a.spec.ts"'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: '',
+      });
     }
   });
 });
@@ -1681,5 +1704,77 @@ describe('checkoutReader', () => {
     expect([...proofs.get('packages/core/src/Sheet/ease.test.ts')]).toEqual([
       'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts',
     ]);
+  });
+});
+
+describe("the Chromium selection on this repository's own proofs", () => {
+  const listed = execFileSync('git', ['-C', root, 'ls-files'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const scope = new RegExp(
+    ci.jobs['interaction-legs'].steps.find(
+      each => each.id === 'select-chromium',
+    ).env.SCOPE_PATHS,
+  );
+  const readJson = file =>
+    JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+  const options = {
+    listed,
+    scope,
+    fullSuite: false,
+    importers: importerGraph(root),
+    proofs: proofImporters({root, listed, isProof: isProofPage}),
+    selection: readJson('.github/interaction-selection.json'),
+    primitives: readJson('.github/a11y-shared-primitives.json').primitives,
+  };
+
+  /** Each interaction proof in another folder that a component record names. */
+  function recordNamedProofs() {
+    const named = [];
+    for (const record of listed.filter(file =>
+      /^docs\/specs\/components\/[^/]+\/[^/]+\.spec\.md$/.test(file),
+    )) {
+      const folder = listed
+        .map(file => /^packages\/[^/]+\/src\/[^/]+\//.exec(file)?.[0])
+        .find(prefix => prefix?.endsWith(`/${record.split('/')[3]}/`));
+      if (folder == null) continue;
+      const front = fs.readFileSync(path.join(root, record), 'utf8');
+      const verified = /^verified_by:\s*\[([^\]]*)\]/m.exec(front)?.[1] ?? '';
+      for (const spec of verified.split(',').map(each => each.trim()))
+        if (isInteractionSpec(spec) && !spec.startsWith(folder))
+          named.push({folder, spec});
+    }
+    return named;
+  }
+
+  // Proofs a record's requirements name in its text, not in `verified_by`.
+  const TEXT_NAMED = [
+    {
+      folder: 'packages/core/src/Collapsible/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/TreeList/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/Layout/',
+      spec: 'packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts',
+    },
+  ];
+
+  it('runs every record-named proof in another folder when its component changes', () => {
+    const named = [...recordNamedProofs(), ...TEXT_NAMED];
+    expect(named.length).toBeGreaterThanOrEqual(9);
+    for (const {folder, spec} of named) {
+      const source = listed.find(
+        file => file.startsWith(folder) && /\/[A-Z][^/.]*\.tsx$/.test(file),
+      );
+      const picked = chromiumSelection({...options, changed: [source]});
+      expect(picked.full, source).toBe(false);
+      expect(picked.specs, `${source} → ${spec}`).toContain(spec);
+    }
   });
 });

@@ -240,7 +240,9 @@ function buildLucideTypes() {
   const icons = new Set(
     [
       ...source.matchAll(
-        /^declare const (\w+): react\.ForwardRefExoticComponent/gm,
+        // lucide-react 1.66 declares each icon as `LucideIcon`; older
+        // releases spell out the forward-ref component type.
+        /^declare const (\w+): (?:react\.ForwardRefExoticComponent|LucideIcon\b)/gm,
       ),
     ].map(m => m[1]),
   );

@@ -79,7 +79,7 @@
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-y2k-palette-refs.mjs --check && astryx theme build src/y2kTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/emit-commonjs-declarations.mjs dist/source.d.ts && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
-    "lucide-react": "^1.18.0"
+    "lucide-react": "^1.66.0"
   },
   "peerDependencies": {
     "@astryxdesign/core": "0.7.13",
