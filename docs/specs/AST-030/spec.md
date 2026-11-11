@@ -548,9 +548,7 @@ they are separately named.
   whatever the window, as the pre-cut release-evidence run, so a check finishes
   about an hour before the 08:00 release cut. The pre-cut run starts even when
   a monitoring check already ran on the tip: a release cut's evidence is a
-  release-check that a person or the release tooling dispatches, or one of the
-  two scheduled release-evidence runs (the pre-cut run and the release
-  re-check), each titled "Release evidence of <sha>". The three-hourly
+  release-check that a person or the release tooling dispatches, or one of the two release-evidence runs the workflows start, the scheduled pre-cut run and the release re-check (FR23), each titled "Release evidence of <sha>". The three-hourly
   monitoring checks are not release evidence. The full unit run keeps its own
   hourly schedule (FR21), and the release cut's own exact-commit checks are
   unchanged (DEC-19).
