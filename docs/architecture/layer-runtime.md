@@ -722,11 +722,11 @@ govern them. It does not cover the INV7 gaps either.
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
 runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
 presentation hold (`Layer/presentationHold.ts`), which Popover uses for its
-sheet and anchored presentations, and the one lift-from-trigger module exists
-(INV15, `packages/core/src/liftFromTrigger/`); no runtime backdrop tint
-exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
-and Selector each build their own top-layer mounting, exit, backdrop, or
-presentation hold.
+sheet and anchored presentations; no runtime backdrop tint exists, and Dialog,
+Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport, and Selector each
+build their own top-layer mounting, exit, backdrop, or presentation hold.
+ContextMenu and Lightbox do not use the lift-from-trigger module (INV15,
+`packages/core/src/liftFromTrigger/`).
 BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules

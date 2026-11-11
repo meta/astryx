@@ -72,9 +72,10 @@ export interface LiftFromTriggerOptions {
    */
   readonly release?: () => void;
   /**
-   * Called once the layer shows and before the source lifts into it, with
-   * where the source lands. A surface shown here sits above the tint, and its
-   * own reads find the page barely changed. The source lifts above it.
+   * Called once the layer shows and before the source's writes, with where
+   * the source lands. A surface shown here sits above the tint. Its reads find
+   * the page as it was, apart from the shown layer and what `release` changed.
+   * The source then lifts above it.
    */
   readonly onLayerShown?: (lifted: LiftFromTriggerResult) => void;
   /**
