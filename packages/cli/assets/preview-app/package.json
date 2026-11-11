@@ -1,0 +1,23 @@
+{
+  "name": "astryx-theme-preview",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "{{astryxVersion}}",
+    "@astryxdesign/theme-neutral": "{{astryxVersion}}",
+    "next": "^16.3.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^6.0.3"
+  }
+}

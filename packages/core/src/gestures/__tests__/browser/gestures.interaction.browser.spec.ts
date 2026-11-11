@@ -26,7 +26,11 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
+import {
+  webInputDriver,
+  WHEEL_SCROLL_END_MS,
+  WHEEL_SKIP,
+} from '@astryxdesign/interaction-harness';
 
 /**
  * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
@@ -1357,6 +1361,107 @@ function spread(at: Point, from: number, by: number, drift = 0): Step[] {
   return steps;
 }
 
+/**
+ * A page pointerup listener that runs `ms`, as a busy app's can. WebKit
+ * stamps the touchend that follows only once it is done.
+ */
+async function holdEveryLift(page: Page, ms: number): Promise<void> {
+  await page.evaluate(spin => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + spin;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  }, ms);
+}
+
+test('a flick keeps its release speed when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const start = await center(page, 'hpan');
+  const flickOnPan = () => drag(start, {x: start.x + 120, y: start.y}, 6);
+  await driver.play(flickOnPan());
+  const releases = async () =>
+    page.evaluate(() => ({
+      drag: window.__releases.hpan ?? 0,
+      scroll: window.__releases.hpanScroll ?? 0,
+    }));
+  const free = await releases();
+  await holdEveryLift(page, 50);
+  await driver.play(flickOnPan());
+  const held = await releases();
+  expect(free.drag).toBeGreaterThan(0);
+  expect(free.scroll).toBeGreaterThan(0);
+  // On the touchend's clock, the held lift read as a resting finger: 0. That
+  // holds for a dragged surface (a sheet, a pop) and a scrolling one (a pager).
+  expect(held.drag).toBeGreaterThan(free.drag / 2);
+  expect(held.scroll).toBeGreaterThan(free.scroll / 2);
+});
+
+test('a pinch keeps its release speed when a page pointerup listener holds its touchend', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const at = await center(page, 'pinchable');
+  await driver.play(spread(at, 20, 40));
+  const free = await page.evaluate(() => window.__releases.pinch ?? 0);
+  await holdEveryLift(page, 50);
+  await driver.play(spread(at, 20, 40));
+  const held = await page.evaluate(() => window.__releases.pinch ?? 0);
+  expect(free).toBeGreaterThan(0);
+  expect(held).toBeGreaterThan(free / 2);
+});
+
+test('a tap lifted before the long press’s time stays a tap when a page pointerup listener holds its touchend past that time', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const target = document.createElement('div');
+    target.id = 'tapOrHold';
+    target.style.height = '80px';
+    document.body.prepend(target);
+    const {host, LongPressGestureRecognizer, TapGestureRecognizer} =
+      window.__api;
+    const seen: string[] = [];
+    Object.assign(window, {__tapOrHold: seen});
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    tap.addListener(r => {
+      if (r.state === 'ended') {
+        seen.push('tap');
+      }
+    });
+    const hold = new LongPressGestureRecognizer({name: 'hold'});
+    hold.addListener(r => {
+      if (r.state === 'began') {
+        seen.push('hold');
+      }
+    });
+    host.attach(target, tap);
+    host.attach(target, hold);
+  });
+  const at = await center(page, 'tapOrHold');
+  await holdEveryLift(page, 160);
+  await driver.play([
+    {t: 0, down: [{...at, id: 1}]},
+    {t: 380, down: []},
+  ]);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () => (window as unknown as {__tapOrHold: string[]}).__tapOrHold,
+        ),
+      {message: 'the tap stays a tap'},
+    )
+    .toEqual(['tap']);
+});
+
 test('pinch-zoom stays the browser’s on an element without a pinch recognizer', async ({
   page,
   browserName,
@@ -2043,17 +2148,32 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const card = await center(page, 'card');
-    // Six 16 px steps at a still cursor: the card leaves it after two.
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...card, dx: 16});
-    }
+    // One trackpad scroll at a still cursor, a step a frame. Its first 48 px
+    // step takes the card off the cursor at once. The three 16 px steps after
+    // it land off the card, merged or not, so only the latch carries them.
+    // Awaited steps land a round trip apart, which a loaded runner stretches
+    // past the scroll's end. The burst keeps a frame between steps and fails
+    // a split by name.
+    const {receivedSteps} = await driver.wheelBurst({
+      ...card,
+      steps: [{dx: 48}, {dx: 16}, {dx: 16}, {dx: 16}],
+      maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
     );
     const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
     // Every step after the first moved the card, and none scrolled the page.
-    expect(moved).toHaveLength(5);
+    // WebKit merges the steps it holds while the page is busy, as it does a
+    // trackpad's. So the count is of the steps the page received. The card
+    // took all 96 px past the 10 px hysteresis.
+    expect(moved).toHaveLength(receivedSteps - 1);
+    const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+    expect(shown.at(-1)?.split(':')[2]).toBe('-86');
+    // The card had left the cursor, half its 60 px width, before the last
+    // wheel reached the page. So the latch carried that wheel.
+    expect(Number(shown.at(-2)?.split(':')[2])).toBeLessThan(-30);
     expect(pan.slice(-2).map(entry => entry.split(':')[1])).toEqual([
       'ended',
       'possible',
@@ -2233,9 +2353,15 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const strip = await center(page, 'strip');
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...strip, dx: 8});
-    }
+    // Six 8 px steps a frame apart. WebKit reads them as one trackpad scroll,
+    // whose first step stays under the pan's 10 px hysteresis, so a split
+    // fails the burst by name. Chromium's notches are no trackpad scroll.
+    await driver.wheelBurst({
+      ...strip,
+      steps: Array.from({length: 6}, () => ({dx: 8})),
+      maxGapMs:
+        browserName === 'webkit' ? WHEEL_SCROLL_END_MS.horizontal : undefined,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
@@ -2251,9 +2377,10 @@ test.describe('where the primary pointer is fine', () => {
       // WebKit's sends a trackpad's precise deltas, which the pan follows.
       expect(pan[0]).toMatch(/^pan:began:/);
       expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
-      // The content moves the way the fingers do: a scroll right drags it left.
-      const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
-      expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+      // The content moves the way the fingers do: a scroll right drags it
+      // left. WebKit may merge the steps into the pan's first move.
+      const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+      expect(Number(shown.at(-1)?.split(':')[2])).toBeLessThan(0);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
     }
     // Across the pan's axis the wheel is the page's.
@@ -3226,7 +3353,10 @@ test("a press in a same-origin iframe's scroll view waits the content-touch dela
     const row = doc.getElementById('row') as HTMLElement;
     const times: {touch?: number; handled?: number; highlight?: number} = {};
     (window as unknown as {__frameTimes: typeof times}).__frameTimes = times;
-    doc.addEventListener(
+    // On the window's capture phase, added before the host's listener there,
+    // so this reads its clocks first. The host reads its own after, never
+    // before, however long a busy machine holds the page between them.
+    view.addEventListener(
       'touchstart',
       event => {
         times.touch = event.timeStamp;

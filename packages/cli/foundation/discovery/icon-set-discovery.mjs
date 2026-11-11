@@ -100,6 +100,15 @@ export function hasLicenseNotice(dir) {
  */
 
 /**
+ * One backup set the project's list names, and what it resolves to.
+ * @typedef {object} IconSetBackup
+ * @property {string} selector the name as the list writes it
+ * @property {'selected' | 'ambiguous' | 'missing' | 'withdrawn'} status
+ * @property {DiscoveredIconSet} [set] the set, when selected
+ * @property {string} reason one sentence saying why
+ */
+
+/**
  * The project's icon set (FR8).
  * @typedef {object} IconSetChoice
  * @property {'selected' | 'none' | 'ambiguous' | 'missing' | 'withdrawn'} status
@@ -109,7 +118,13 @@ export function hasLicenseNotice(dir) {
  *   `withdrawn`: it names a set that is installed but withdrawn (invalid, or
  *   its module does not resolve), and `reason` says why
  * @property {DiscoveredIconSet} [set] the project's set, when selected
- * @property {string} [configured] the `experimental.iconSet` config value, when set
+ * @property {string} [configured] the main set `experimental.iconSet` names
+ *   (its first entry, when it is a list), when set
+ * @property {IconSetBackup[]} [backups] the backup sets the list names after
+ *   the main set, in order, when it names any
+ * @property {DiscoveredIconSet[]} [order] the sets a template icon is looked
+ *   up in, in order: the main set, then each backup that resolves. Present
+ *   only when the main set is selected
  * @property {string} reason one sentence saying why
  */
 
@@ -407,55 +422,135 @@ export function withdrawnNamed(withdrawn, selector) {
 }
 
 /**
- * Pick the project's icon set (FR8, FR17): the set `experimental.iconSet`
- * names, as `"<set>"` or `"<package>/<set>"`; otherwise the only installed
+ * The entries of an `experimental.iconSet` value, main set first: a string is
+ * a one-entry list.
+ * @param {string | readonly string[] | undefined} configured
+ * @returns {string[]}
+ */
+export function iconSetList(configured) {
+  if (configured == null) return [];
+  return typeof configured === 'string' ? [configured] : [...configured];
+}
+
+/**
+ * What one name in the list resolves to: a set, or why not.
+ * @param {DiscoveredIconSet[]} sets
+ * @param {string} selector `"<set>"` or `"<package>/<set>"`
+ * @param {WithdrawnIconSet[]} withdrawn
+ * @returns {{status: 'selected' | 'ambiguous' | 'missing' | 'withdrawn', set?: DiscoveredIconSet, reason: string}}
+ */
+function resolveSelector(sets, selector, withdrawn) {
+  const exact = sets.filter(set => `${set.package}/${set.name}` === selector);
+  const byName =
+    exact.length > 0 ? exact : sets.filter(set => set.name === selector);
+  if (byName.length === 1) {
+    return {
+      status: 'selected',
+      set: byName[0],
+      reason: `experimental.iconSet names "${selector}".`,
+    };
+  }
+  if (byName.length > 1) {
+    return {
+      status: 'ambiguous',
+      reason: `experimental.iconSet "${selector}" names a set in ${byName.map(set => set.package).join(' and ')}; write it as "<package>/<set>".`,
+    };
+  }
+  const gone = withdrawnNamed(withdrawn, selector);
+  if (gone.length > 0) {
+    return {
+      status: 'withdrawn',
+      reason: `experimental.iconSet names "${selector}", which is installed but withdrawn: ${gone.map(each => each.reason).join(' ')}`,
+    };
+  }
+  return {
+    status: 'missing',
+    reason: `experimental.iconSet names "${selector}", but no installed set has that name${sets.length > 0 ? ` (installed: ${sets.map(iconSetKey).join(', ')})` : ''}.`,
+  };
+}
+
+/** The command that chooses a main set and backups, as the CLI prints it. */
+export const ICON_USE_ORDER_COMMAND =
+  'astryx experimental icon use <main> --backup <set>';
+
+/**
+ * Installed sets the project's list leaves out: the problem, and the fix that
+ * adds them as backups after the list's own. Doctor and `experimental icon
+ * use` print the same words. Every set is named the same way: by its name
+ * when no other installed set has that name, else as `<package>/<set>`.
+ * @param {Array<{package: string, name: string}>} installed every installed set
+ * @param {{package: string, name: string}} main the list's main set
+ * @param {Array<{package: string, name: string}>} backups the list's
+ *   backups, in order
+ * @param {Array<{package: string, name: string}>} unlisted the installed
+ *   sets the list leaves out
+ * @returns {{problem: string, command: string, fix: string}}
+ */
+export function unlistedIconSets(installed, main, backups, unlisted) {
+  /** @param {{package: string, name: string}} set */
+  const named = set =>
+    installed.filter(each => each.name === set.name).length > 1
+      ? iconSetKey(set)
+      : set.name;
+  const left = unlisted.map(named);
+  const them = left.length === 1 ? 'it' : 'them';
+  const command = `astryx experimental icon use ${named(main)}${[...backups.map(named), ...left].map(each => ` --backup ${each}`).join('')}`;
+  return {
+    problem: `${installed.length} icon sets are installed and ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not in your list`,
+    command,
+    fix: `Add ${them} as backup with \`${command}\`, or uninstall ${them}.`,
+  };
+}
+
+/**
+ * Pick the project's icon set (FR8, FR17): the main set `experimental.iconSet`
+ * names, as `"<set>"` or `"<package>/<set>"`, or as the first entry of a list
+ * whose other entries are backup sets in order; otherwise the only installed
  * set; otherwise none. A configured name that matches no valid set but an
  * installed set that was withdrawn says so, with why.
  * @param {DiscoveredIconSet[]} sets installed sets, in integration load order
- * @param {string | undefined} configured the `experimental.iconSet` config value
+ * @param {string | readonly string[] | undefined} configured the `experimental.iconSet` config value
  * @param {WithdrawnIconSet[]} [withdrawn] installed sets that were withdrawn
  * @returns {IconSetChoice}
  */
 export function chooseProjectIconSet(sets, configured, withdrawn = []) {
-  if (configured) {
-    const exact = sets.filter(
-      set => `${set.package}/${set.name}` === configured,
-    );
-    const byName =
-      exact.length > 0 ? exact : sets.filter(set => set.name === configured);
-    if (byName.length === 1) {
-      return {
-        status: 'selected',
-        set: byName[0],
-        configured,
-        reason: `experimental.iconSet names "${configured}".`,
-      };
-    }
-    if (byName.length > 1) {
-      return {
-        status: 'ambiguous',
-        configured,
-        reason: `experimental.iconSet "${configured}" names a set in ${byName.map(set => set.package).join(' and ')}; write it as "<package>/<set>".`,
-      };
-    }
-    const gone = withdrawnNamed(withdrawn, configured);
-    if (gone.length > 0) {
-      return {
-        status: 'withdrawn',
-        configured,
-        reason: `experimental.iconSet names "${configured}", which is installed but withdrawn: ${gone.map(each => each.reason).join(' ')}`,
-      };
-    }
-    return {
-      status: 'missing',
-      configured,
-      reason: `experimental.iconSet names "${configured}", but no installed set has that name${sets.length > 0 ? ` (installed: ${sets.map(iconSetKey).join(', ')})` : ''}.`,
+  const [main, ...rest] = iconSetList(configured);
+  if (main) {
+    const resolved = resolveSelector(sets, main, withdrawn);
+    /** @type {IconSetBackup[]} */
+    const backups = rest.map(selector => ({
+      selector,
+      ...resolveSelector(sets, selector, withdrawn),
+    }));
+    /** @type {IconSetChoice} */
+    const choice = {
+      status: resolved.status,
+      ...(resolved.set ? {set: resolved.set} : {}),
+      configured: main,
+      ...(backups.length > 0 ? {backups} : {}),
+      reason: resolved.reason,
     };
+    if (resolved.set) {
+      /** @type {DiscoveredIconSet[]} */
+      const order = [resolved.set];
+      for (const backup of backups) {
+        if (backup.set && !order.includes(backup.set)) order.push(backup.set);
+      }
+      choice.order = order;
+      if (order.length > 1) {
+        choice.reason = `experimental.iconSet names "${main}", with ${order
+          .slice(1)
+          .map(set => `"${iconSetKey(set)}"`)
+          .join(', then ')} as backup.`;
+      }
+    }
+    return choice;
   }
   if (sets.length === 1) {
     return {
       status: 'selected',
       set: sets[0],
+      order: [sets[0]],
       reason: `"${iconSetKey(sets[0])}" is the only installed icon set.`,
     };
   }
@@ -464,7 +559,7 @@ export function chooseProjectIconSet(sets, configured, withdrawn = []) {
   }
   return {
     status: 'ambiguous',
-    reason: `${sets.length} icon sets are installed (${sets.map(iconSetKey).join(', ')}) and astryx.config sets no experimental.iconSet.`,
+    reason: `${sets.length} icon sets are installed (${sets.map(iconSetKey).join(', ')}) and astryx.config sets no experimental.iconSet, so none is your main set.`,
   };
 }
 
@@ -477,13 +572,13 @@ export function iconSetKey(set) {
 }
 
 /**
- * Sets in tie order (FR6, FR8): the project's set first, then load order.
+ * Sets in tie order (FR6, FR8): the project's set and its backups first, in
+ * list order, then load order.
  * @param {DiscoveredIconSet[]} sets
  * @param {IconSetChoice} choice
  * @returns {DiscoveredIconSet[]}
  */
 export function orderIconSets(sets, choice) {
-  const first = choice.set;
-  if (!first) return [...sets];
-  return [first, ...sets.filter(set => set !== first)];
+  const first = choice.order ?? (choice.set ? [choice.set] : []);
+  return [...first, ...sets.filter(set => !first.includes(set))];
 }

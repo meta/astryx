@@ -10,6 +10,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock(
   '../../foundation/discovery/component-discovery.mjs',
@@ -41,7 +42,7 @@ const {validateIntegration} = await import('./validate-integration.mjs');
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-case-disk-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-case-disk-'));
 });
 
 afterEach(() => {

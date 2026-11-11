@@ -206,6 +206,11 @@ export const docs = {
           'Use a HoverCard for content the user must interact with; it disappears when the cursor leaves.',
       },
       {
+        guidance: false,
+        description:
+          'Put the trigger inside SVG <foreignObject>. In Chromium it cannot be a CSS anchor, so the card opens at the viewport corner. Render the trigger in an HTML layer positioned over the SVG node instead, and keep the SVG for shapes, edges and labels.',
+      },
+      {
         guidance: true,
         description:
           'Prefer placing HoverCard in a block context rather than directly in a <p>, heading, or link. Those placements are supported when necessary through a corrective portal, but the DOM and tab order may differ.',
@@ -410,6 +415,11 @@ export const docsZh = {
           'Use a HoverCard for content the user must interact with; it disappears when the cursor leaves.',
       },
       {
+        guidance: false,
+        description:
+          'Put the trigger inside SVG <foreignObject>. In Chromium it cannot be a CSS anchor, so the card opens at the viewport corner. Render the trigger in an HTML layer positioned over the SVG node instead, and keep the SVG for shapes, edges and labels.',
+      },
+      {
         guidance: true,
         description:
           'Prefer placing HoverCard in a block context rather than directly in a <p>, heading, or link. Those placements are supported when necessary through a corrective portal, but the DOM and tab order may differ.',
@@ -460,6 +470,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Use a HoverCard for content the user must interact with; it disappears when the cursor leaves.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put the trigger inside SVG <foreignObject>: Chromium cannot anchor to it, so the card opens at the viewport corner. Use an HTML trigger positioned over the SVG node.',
       },
       {
         guidance: true,

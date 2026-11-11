@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
           "name": "CircleCheckIndicator"
         },
         {
@@ -130,11 +134,19 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
           "kind": "component",
           "name": "EmojiPicker"
+        },
+        {
+          "kind": "component",
+          "name": "LineClamp"
         },
         {
           "kind": "component",
@@ -187,6 +199,10 @@
         {
           "kind": "component",
           "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
         },
         {
           "kind": "component",
@@ -251,6 +267,10 @@
         {
           "kind": "template",
           "name": "CommentThreadShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
         },
         {
           "kind": "template",

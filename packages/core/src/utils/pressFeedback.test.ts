@@ -29,6 +29,7 @@ import {
   installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  pressFadeMs,
 } from './pressFeedback';
 import {
   isTrackedByGroup,
@@ -697,6 +698,34 @@ describe('the release clock without a theme', () => {
   });
 });
 
+describe('the release clock on the pressed element', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /** An element with `tokens` set on it, in the document. */
+  function pressed(tokens: Record<string, string> = {}): HTMLElement {
+    const element = document.createElement('div');
+    for (const [name, value] of Object.entries(tokens)) {
+      element.style.setProperty(name, value);
+    }
+    document.body.appendChild(element);
+    return element;
+  }
+
+  it('reads --duration-exit where the element is, a zero included', () => {
+    expect(pressFadeMs(pressed({'--duration-exit': '250ms'}))).toBe(250);
+    expect(pressFadeMs(pressed({'--duration-exit': '0ms'}))).toBe(0);
+  });
+
+  it("gives the token's default for no value or a value that is not a time", () => {
+    expect(pressFadeMs(pressed())).toBe(PRESS_FADE_MS);
+    expect(pressFadeMs(pressed({'--duration-exit': 'fast'}))).toBe(
+      PRESS_FADE_MS,
+    );
+  });
+});
+
 /** The Reduce Motion fade, ms: the longest a finger's release plays there. */
 const REDUCED_FADE_MS = Number.parseFloat(reducedMotionFadeConsts.duration);
 
@@ -1017,6 +1046,38 @@ describe('two touches in a row', () => {
     rows[2].dispatchEvent(second);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(rows.some(row => row.hasAttribute(PRESSED_ATTRIBUTE))).toBe(false);
+  });
+});
+
+describe('a pointerup that matches no held press', () => {
+  it('is ignored when it carries no pointerId and nothing is held', () => {
+    // The input stream reports a listener's throw through `reportError`.
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    try {
+      // A page's own drag script or test helper can dispatch a bare event
+      // named `pointerup`; a real PointerEvent always has a numeric pointerId.
+      document.body.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it('leaves a held finger press alone', () => {
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    coarsePrimaryPointer();
+    try {
+      // No box component is mounted, so the finger holds a press but no contact.
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      document.body.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(reportError).not.toHaveBeenCalled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 });
 
