@@ -140,6 +140,10 @@ functions for Astryx resolution. Its public reads stay plain:
 `DefinedTheme['iconVariants']` is the theme's list. Inside `defineTheme`, entry
 functions receive `variant`, and static slot requests and slot functions return
 it, typed as that theme's listed names.
+`DefinedTheme['__componentIcons']` is public surface as shipped: its presence
+and its shape, the `componentIcons` slot values present when any value is a
+function, keep `spec:AST-017` compatibility. The owner chose "Accept
+__componentIcons as public" (`cixzhang`, 2026-11-11).
 
 ## Boundaries and invariants
 
@@ -326,6 +330,15 @@ theme's root, until component styles, the animator, script readers of
 `prefers-reduced-motion`, and motion-keyed adaptation rules key reduced motion
 on the mark. Until then, that part of INV15 and FR6 is current authority but
 not enforcement.
+
+INV9 gap: the `DefinedTheme` fields whose names begin with `__` (`__icons`,
+`__iconEntryVariants`, `__componentIcons`, `__built`, `__inputTokens`,
+`__localTokenOwners`, `__localTokenLineage`, `__onDark`, `__onLight`,
+`__adaptations`, `__adaptationRules`, and `__axes`) are reachable public
+surface, and this record defines no contract for them.
+
+INV13 gap: `DefinedTheme['__componentIcons']` and `DefinedTheme['__icons']` are
+reachable and return the theme's slot functions and function icon entries.
 
 ## Verification
 

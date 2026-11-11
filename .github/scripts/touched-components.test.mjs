@@ -542,7 +542,7 @@ describe('pr-touched-components routing', () => {
     expect(report.run).toContain('--a11y-step "$A11Y_STEP"');
     expect(report.run).toContain('--rtl-step "$RTL_STEP"');
     expect(report.run).toContain(
-      '--baseline-manifest .github/visual-baseline/manifest.json',
+      '--baseline-manifest .head-baseline/.github/visual-baseline/manifest.json',
     );
   });
 
@@ -553,7 +553,7 @@ describe('pr-touched-components routing', () => {
     const decide = visualStep('Decide the default touched visual check');
     expect(decide.run).toContain('--wide-verdict .visual-run/verdict.json');
     expect(decide.run).toContain(
-      '--baseline-manifest .github/visual-baseline/manifest.json',
+      '--baseline-manifest .head-visual-baseline/.github/visual-baseline/manifest.json',
     );
     expect(decide.env.ASTRYX_PR_HEAD_SHA).toBe(
       '${{ github.event.pull_request.head.sha }}',
@@ -575,7 +575,8 @@ describe('pr-touched-components routing', () => {
     expect(baseline.with).toMatchObject({
       ref: '${{ github.event.pull_request.head.sha }}',
       path: '.head-baseline',
-      'sparse-checkout': '.github/a11y-baseline.json',
+      'sparse-checkout':
+        '.github/a11y-baseline.json\n.github/visual-baseline/manifest.json\n',
     });
     expect(step('Report per-component results').run).toContain(
       '--a11y-baseline .head-baseline/.github/a11y-baseline.json',
@@ -704,8 +705,14 @@ describe('pr-component-a11y-contracts routing', () => {
       'heavy-ci',
       'build-storybook',
     ]);
-    // The same gate as the interaction proofs, which the test join also reads.
-    expect(contracts.if).toBe(ci.jobs['pr-interaction'].if);
+    // The same gate as the WebKit interaction proofs, which the test join
+    // also reads, without the weekly full WebKit run.
+    expect(contracts.if).toBe(
+      ci.jobs['pr-interaction-webkit'].if.replace(
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always()",
+        "github.event_name != 'workflow_dispatch' && always()",
+      ),
+    );
     expect(contracts['runs-on']).toBe('ubuntu-latest');
     expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
     expect(contracts.permissions).toEqual({
