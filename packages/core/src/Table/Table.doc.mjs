@@ -117,6 +117,7 @@ export const docs = {
     'rows',
     'selection',
     'pinning',
+    'sticky header',
   ],
   playground: {
     defaults: {
@@ -179,7 +180,7 @@ export const docs = {
     ],
   },
   description:
-    'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',
+    'Styled, data-driven table with density, dividers, hover highlight, striped rows, sticky headers, and named plugin support. T must extend Record<string, unknown>.',
   props: [
     {
       name: 'data',
@@ -222,6 +223,13 @@ export const docs = {
       type: 'boolean',
       description:
         'Applies a hover highlight background to rows on pointer devices.',
+      default: 'false',
+    },
+    {
+      name: 'stickyHeader',
+      type: 'boolean',
+      description:
+        'Keeps generated and caller-supplied header cells pinned to the logical block start of the nearest scrolling ancestor. Constrain the surrounding scroll region and give it block overflow for the header to move with the table.',
       default: 'false',
     },
     {
@@ -302,6 +310,11 @@ export const docs = {
         guidance: true,
         description:
           'Use density and divider variants to match the information density and scanning needs of your data.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use stickyHeader for long tables whose column labels should stay visible while the surrounding scroll region moves. Give that region a constrained block size and block overflow.',
       },
       {
         guidance: true,

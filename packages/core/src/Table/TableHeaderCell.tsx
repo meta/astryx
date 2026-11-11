@@ -91,6 +91,15 @@ const headerDividerStyles = stylex.create({
   },
 });
 
+const stickyHeaderStyles = stylex.create({
+  cell: {
+    position: 'sticky',
+    insetBlockStart: 0,
+    zIndex: 2,
+    backgroundColor: colorVars['--color-background-surface'],
+  },
+});
+
 const dividerColumnStyles = stylex.create({
   cell: {
     borderInlineEndWidth: {
@@ -147,6 +156,9 @@ export function TableHeaderCell({
     // Column dividers come from the shared builder (column axis only).
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
+    }
+    if (ctx.stickyHeader) {
+      cellStyles.push(stickyHeaderStyles.cell);
     }
   }
 

@@ -122,6 +122,10 @@ const meta: Meta = {
       control: 'boolean',
       description: 'Highlight rows on hover',
     },
+    stickyHeader: {
+      control: 'boolean',
+      description: 'Keep the header visible while the table scrolls vertically',
+    },
     verticalAlign: {
       control: 'select',
       options: ['middle', 'top', 'bottom'],
@@ -170,6 +174,36 @@ export const StripedWithHover: Story = {
     idKey: 'id',
     isStriped: true,
     hasHover: true,
+  },
+};
+
+export const StickyHeader: Story = {
+  args: {
+    stickyHeader: true,
+  },
+  render: args => {
+    const rows = Array.from({length: 18}, (_, index) => ({
+      ...users[index % users.length],
+      id: `sticky-${index + 1}`,
+      name: `${users[index % users.length].name} ${index + 1}`,
+    }));
+
+    return (
+      <div
+        style={{
+          maxHeight: '240px',
+          overflowY: 'auto',
+          border: '1px solid #d9d9de',
+          borderRadius: '8px',
+        }}>
+        <Table
+          data={rows}
+          columns={columns}
+          idKey="id"
+          stickyHeader={args.stickyHeader}
+        />
+      </div>
+    );
   },
 };
 

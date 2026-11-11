@@ -141,3 +141,37 @@ test('a fitting table passes horizontal wheel input to its outer scroller', asyn
     .poll(async () => outer.evaluate(element => element.scrollLeft))
     .toBeGreaterThan(0);
 });
+
+test('stickyHeader keeps column labels pinned while the block scroller moves', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-table--sticky-header&viewMode=story`,
+  );
+
+  const table = page.locator('table');
+  const scrollRegion = table.locator('..').locator('..').locator('..');
+  const header = table.locator('thead th').first();
+  await expect(scrollRegion).toHaveCSS('overflow-y', 'auto');
+  await expect(header).toHaveCSS('position', 'sticky');
+
+  const initialHeaderTop = await header.evaluate(
+    element => element.getBoundingClientRect().top,
+  );
+  await scrollRegion.evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(async () => scrollRegion.evaluate(element => element.scrollTop))
+    .toBeGreaterThan(0);
+  await expect
+    .poll(async () =>
+      header.evaluate(element => element.getBoundingClientRect().top),
+    )
+    .toBeGreaterThanOrEqual(initialHeaderTop - 1);
+  await expect
+    .poll(async () =>
+      header.evaluate(element => element.getBoundingClientRect().top),
+    )
+    .toBeLessThanOrEqual(initialHeaderTop + 1);
+});

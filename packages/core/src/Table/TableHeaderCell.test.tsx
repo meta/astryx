@@ -166,6 +166,35 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain('color: var(--color-text-secondary)');
   });
 
+  it('pins header cells when stickyHeader is enabled', () => {
+    const {container} = render(
+      <Table stickyHeader data={users} columns={columns} />,
+    );
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).toContain('position: sticky');
+    expect(declarations).toContain('top: 0px');
+    expect(declarations).toContain('z-index: 2');
+    expect(declarations).toContain(
+      'background-color: var(--color-background-surface)',
+    );
+  });
+
+  it('keeps the sticky header with custom cell renderers', () => {
+    const customColumns: TableColumn<User>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: item => <strong>{item.name}</strong>,
+      },
+      ...columns.slice(1),
+    ];
+    const {container} = render(
+      <Table stickyHeader data={users} columns={customColumns} />,
+    );
+    expect(container.querySelector('tbody strong')).toHaveTextContent('Alice');
+    expect(headerCellDeclarations(container)).toContain('position: sticky');
+  });
+
   it('draws the bottom divider even when the table has dividers off', () => {
     const {container} = render(
       <Table data={users} columns={columns} dividers="none" />,

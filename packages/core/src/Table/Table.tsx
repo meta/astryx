@@ -73,6 +73,10 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
   isStriped?: boolean;
   /** Hover highlight on rows. @default false */
   hasHover?: boolean;
+  /** Keep header cells pinned while the surrounding scroll region moves. @default false */
+  // The public name follows the issue's proposed API and common table terminology.
+  // eslint-disable-next-line @astryx/boolean-prop-naming
+  stickyHeader?: boolean;
   /**
    * Vertical alignment for body row cells.
    * Controls `vertical-align` on `<td>` elements.
@@ -327,6 +331,7 @@ function TableInner<T extends Record<string, unknown>>({
   dividers = 'rows',
   isStriped = false,
   hasHover = false,
+  stickyHeader = false,
   verticalAlign = 'middle',
   textOverflow: textOverflowProp,
   virtualization,
@@ -351,10 +356,19 @@ function TableInner<T extends Record<string, unknown>>({
       dividers,
       isStriped,
       hasHover,
+      stickyHeader,
       verticalAlign,
       textOverflow,
     }),
-    [density, dividers, isStriped, hasHover, verticalAlign, textOverflow],
+    [
+      density,
+      dividers,
+      isStriped,
+      hasHover,
+      stickyHeader,
+      verticalAlign,
+      textOverflow,
+    ],
   );
   const tableLabel = rest['aria-label'];
   const tableLabelledBy = rest['aria-labelledby'];

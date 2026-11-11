@@ -23,6 +23,7 @@ export interface TableContextValue {
   dividers: 'rows' | 'columns' | 'grid' | 'none';
   isStriped: boolean;
   hasHover: boolean;
+  stickyHeader: boolean;
   verticalAlign: TableVerticalAlign;
   textOverflow: 'wrap' | 'truncate';
 }
