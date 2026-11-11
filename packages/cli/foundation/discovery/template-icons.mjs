@@ -21,6 +21,10 @@
  * a meaning that no set in the list has loses its library import: each of its
  * uses renders a placeholder component that the file declares once, with a
  * comment that names the meaning, so the copied code needs no new package.
+ * An import from the library a listed set wraps (its data's `source`) is an
+ * icon the project chose: the main set's own library keeps its imports as
+ * written, and another set's library keeps an icon no set maps instead of a
+ * placeholder.
  * A declared key names a named import by the name it imports
  * (`{Trash as TrashIcon}` is `Trash`) and a default import by its local name
  * (`import DeleteIcon from …` is `DeleteIcon`). A mapped named import and
@@ -477,6 +481,19 @@ function isAstryxModule(module) {
 }
 
 /**
+ * Whether a set wraps the library a module belongs to: the module is the
+ * package the set's data names as its `source`, or a subpath of it.
+ * @param {DiscoveredIconSet} set
+ * @param {string} module
+ */
+function wrapsModule(set, module) {
+  const library = set.data.source?.package;
+  return (
+    library != null && (module === library || module.startsWith(`${library}/`))
+  );
+}
+
+/**
  * The name an import specifier reads from its module: `default` for a
  * default import, `*` for a namespace import.
  * @param {any} specifier
@@ -561,6 +578,30 @@ export function iconsNotImported(source, declared) {
   }
   const keys = new Set(iconBindings(ast).map(binding => binding.key));
   return Object.keys(declared).filter(key => !keys.has(key));
+}
+
+/**
+ * The definitions that two different icons in one template's `icons` share.
+ * A set draws one icon for each definition, so two different icons with one
+ * definition draw the same icon in every set. Two keys that differ only by an
+ * `Icon` suffix (`Trash2` and `Trash2Icon`) are one icon and never conflict.
+ * @param {Record<string, string>} declared
+ * @returns {Array<{definition: string, keys: string[]}>} each shared
+ *   definition with its keys, sorted by definition
+ */
+export function sharedTemplateMeanings(declared) {
+  /** @type {Map<string, Map<string, string>>} definition → icon → first key */
+  const byDefinition = new Map();
+  for (const [key, definition] of Object.entries(declared)) {
+    const icons = byDefinition.get(definition) ?? new Map();
+    const icon = key.replace(/Icon$/u, '');
+    if (!icons.has(icon)) icons.set(icon, key);
+    byDefinition.set(definition, icons);
+  }
+  return [...byDefinition]
+    .filter(([, icons]) => icons.size > 1)
+    .map(([definition, icons]) => ({definition, keys: [...icons.values()]}))
+    .sort((a, b) => a.definition.localeCompare(b.definition));
 }
 
 /**
@@ -847,6 +888,12 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
    * @type {Map<any, {record: SourceIcon, set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}>}
    */
   const planned = new Map();
+  /**
+   * Each import specifier kept because it comes from the library a listed
+   * set wraps, and that set.
+   * @type {Map<any, DiscoveredIconSet>}
+   */
+  const wrapped = new Map();
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration' || node.importKind === 'type')
       continue;
@@ -888,6 +935,14 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
             }
           : null;
       if (!record || (record.set && targets.includes(record.set))) continue;
+      // An import from the library a listed set wraps is already an icon
+      // the project chose. The main set's own library keeps its icons as
+      // written; another set's library keeps an icon that no set maps.
+      const wrapper = targets.find(each => wrapsModule(each, module));
+      if (wrapper === target) {
+        wrapped.set(specifier, wrapper);
+        continue;
+      }
       /** @type {{set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}} */
       let found = {set: target, match: null};
       for (const each of targets) {
@@ -896,6 +951,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           found = {set: each, match};
           break;
         }
+      }
+      if (!found.match && wrapper) {
+        wrapped.set(specifier, wrapper);
+        continue;
       }
       planned.set(specifier, {record, ...found});
       if (found.match || record.definitions.length > 0) {
@@ -1092,6 +1151,23 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         start: node.start,
         end: node.end,
         text: `${above}import ${parts.join(', ')} from ${source.slice(node.source.start, node.source.end)};`,
+      });
+    }
+  }
+
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    for (const specifier of node.specifiers) {
+      const wrapper = wrapped.get(specifier);
+      if (!wrapper) continue;
+      accounted.add(declaredKey(specifier));
+      icons.kept.push({
+        module: node.source.value,
+        export: importedName(specifier),
+        reason:
+          wrapper === target
+            ? `it already comes from ${node.source.value}, which ${icons.set} wraps`
+            : `no set in your list maps its icon definition, and it already comes from ${node.source.value}, which ${wrapper.package}/${wrapper.name} wraps`,
       });
     }
   }

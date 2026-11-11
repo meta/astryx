@@ -12,7 +12,7 @@ export const doc = {
   summary:
     'Step back one change, or remove one setting so it goes back to the base theme',
   description:
-    "With only the theme, it steps back one change: the settings file, the theme source and the build go back to how they were before the last change, and the preview is rewritten; the result names what was undone and how many earlier steps are left. When the settings file is damaged (not valid JSON), the step back restores the settings from before the last change without reading it. With a thing, it removes that one setting wherever it is in the settings, so it goes back to the base theme's value, and the theme is rebuilt and previewed. Name the setting the way it was set: the same thing and the same --on, --when, --state, --mode and --only (`show` lists every setting that way). For the headings dial, name which half: weight or tracking (default weight). Removing a color dial (accent, neutral, success, warning, danger, info) removes its family from the palette config and the tokens it fed; with no family left, the palette config, palette and receipt are deleted. A setting the theme does not have is refused and the error lists the settings it has for that thing. Experimental: it may change or be removed in a patch release.",
+    "With only the theme, it steps back one change: the settings file, the theme source and the build go back to how they were before the last change, and the preview is rewritten; the result names what was undone and how many earlier steps are left. When the settings file is damaged (not valid JSON), the step back restores the settings from before the last change without reading it. With a thing, it removes that one setting wherever it is in the settings, so it goes back to the base theme's value, and the theme is rebuilt and previewed. Name the setting the way it was set: the same thing and the same --on, --when, --state, --mode and --only (`show` lists every setting that way). For the headings dial, name which half: weight or tracking (default weight). Removing a color (accent, neutral, success, warning, danger, info) stops generating it, and the tokens it fed go back to the base theme; with no color left, the generated color files are deleted. Removing vibrancy makes the colors again at the default, 50. A setting the theme does not have is refused and the error lists the settings it has for that thing. Experimental: it may change or be removed in a patch release.",
   fn: 'themeEditUndo',
   args: [
     {
@@ -36,7 +36,7 @@ export const doc = {
       flag: '--on <where>',
       param: 'options.on',
       description:
-        'Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a family (inputs, containers, checks, menus; how --list families), or for font a role (body, heading, code)',
+        'Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a group (inputs, containers, checks, menus; how --list groups), or for font a role (body, heading, code)',
     },
     {
       flag: '--when <prop:value>',
@@ -60,7 +60,7 @@ export const doc = {
       flag: '--only',
       param: 'options.only',
       description:
-        'With one member of an always-alike family (inputs, checks), style just that part instead of the whole family',
+        'With one member of an always-alike group (inputs, checks), style just that part instead of the whole group',
     },
     {
       flag: '--png',
