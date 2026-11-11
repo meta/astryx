@@ -9,7 +9,7 @@
  * SYNC: When modified, update this header
  */
 
-import {getDaysInMonth} from '../utils/plainDate';
+import {plainDateCreate} from '../utils/plainDate';
 import {createISOTimeString} from '../utils/timeParser';
 import type {ISODateTimeString} from './DateTimeInput';
 
@@ -18,13 +18,14 @@ import type {ISODateTimeString} from './DateTimeInput';
  * Returns null if the string is not a valid local date-time.
  *
  * Accepts "YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS", with surrounding
- * whitespace. The date must exist in the calendar. The time follows
+ * whitespace. The date must exist in the Gregorian calendar, with year 0001
+ * or later, as the field's date model requires. The time follows
  * createISOTimeString: one- or two-digit fields, and a seconds fraction is
  * dropped. A time zone suffix ("Z", "+02:00") is rejected, because
  * DateTimeInput holds a wall-clock value with no zone.
  *
  * @example
- * ```ts
+ * ```
  * createISODateTimeString('2026-01-28T14:30'); // '2026-01-28T14:30'
  * createISODateTimeString('2026-02-30T14:30'); // null
  * ```
@@ -40,14 +41,9 @@ export function createISODateTimeString(
     return null;
   }
   const [, year, month, day, timePart] = match;
-  const monthNumber = Number(month);
-  const dayNumber = Number(day);
-  if (
-    monthNumber < 1 ||
-    monthNumber > 12 ||
-    dayNumber < 1 ||
-    dayNumber > getDaysInMonth(Number(year), monthNumber)
-  ) {
+  try {
+    plainDateCreate(Number(year), Number(month), Number(day));
+  } catch {
     return null;
   }
   const time = createISOTimeString(timePart);

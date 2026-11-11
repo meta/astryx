@@ -37,6 +37,7 @@ describe('createISODateTimeString', () => {
     ['a space in place of T', '2026-01-28 14:30'],
     ['a lowercase t', '2026-01-28t14:30'],
     ['whitespace after T', '2026-01-28T 14:30'],
+    ['year 0000', '0000-01-01T00:00'],
     ['month 13', '2026-13-01T14:30'],
     ['month 00', '2026-00-01T14:30'],
     ['day 00', '2026-01-00T14:30'],
