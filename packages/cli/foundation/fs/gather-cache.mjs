@@ -344,7 +344,8 @@ function noteLookups(specifier, parentURL, reads) {
  */
 function lookupStamp(folder) {
   try {
-    return `dir:${fs.statSync(folder).ino}`;
+    const stat = fs.statSync(folder, {throwIfNoEntry: false});
+    return stat ? `dir:${stat.ino}` : '-';
   } catch {
     return '-';
   }
