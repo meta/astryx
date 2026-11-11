@@ -2,29 +2,20 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {
   componentsInSource,
   parsedComponents,
   sourceKey,
-  TEMPLATE_COMPONENTS_FILE,
 } from './template-adapter.mjs';
 import {templateComponentsText} from '../../scripts/generate-template-components.mjs';
 
-// The file is written at `prepack`, so a checkout has none: write it for
-// these tests (componentsInSource reads it once per process) and remove it.
-const written = !fs.existsSync(TEMPLATE_COMPONENTS_FILE);
+// The file is written at `prepack`, so a checkout has none. Its text is read
+// here in memory: writing it into the tree would change what other suites,
+// running alongside, read.
 /** @type {Record<string, string[]>} */
-let stored = {};
-beforeAll(() => {
-  if (written)
-    fs.writeFileSync(TEMPLATE_COMPONENTS_FILE, templateComponentsText());
-  stored = JSON.parse(fs.readFileSync(TEMPLATE_COMPONENTS_FILE, 'utf-8'));
-});
-afterAll(() => {
-  if (written) fs.rmSync(TEMPLATE_COMPONENTS_FILE, {force: true});
-});
+const stored = JSON.parse(templateComponentsText());
 
 describe('stored template component lists', () => {
   it('hold what parsing returns for every shipped template source', () => {

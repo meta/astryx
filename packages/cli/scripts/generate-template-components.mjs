@@ -6,7 +6,7 @@
  * components each template source Astryx ships composes, keyed by a hash of
  * the source, so the published package reads a shipped template's components
  * without parsing it. The file is not committed; a checkout without it parses
- * every source, with the same result.
+ * every source, with the same result. `--clean` (at `postpack`) removes it.
  */
 
 import * as fs from 'node:fs';
@@ -65,7 +65,11 @@ const isMain =
   path.resolve(process.argv[1]) ===
     path.resolve(new URL(import.meta.url).pathname);
 
-if (isMain) {
+if (isMain && process.argv.includes('--clean')) {
+  // `postpack`: the checkout goes back to parsing, so a later edit to the
+  // parser shows there.
+  fs.rmSync(TEMPLATE_COMPONENTS_FILE, {force: true});
+} else if (isMain) {
   fs.writeFileSync(TEMPLATE_COMPONENTS_FILE, templateComponentsText());
   console.log(
     `Wrote ${path.relative(process.cwd(), TEMPLATE_COMPONENTS_FILE)}.`,
