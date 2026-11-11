@@ -78,8 +78,7 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {useDropdownMenuPress} from '../hooks/useMenuPress';
-import {isInScrollView} from '../hooks/menuScrollView';
+import {MENU_PRESS_LONG_PRESS_MS, useMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
@@ -1478,14 +1477,16 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useDropdownMenuPress({
+  const menuPress = useMenuPress({
     menuRef: listRef,
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
-    touchModel: pressTouchModel,
-    isInScrollView,
+    // A set delay keeps the released finger wait, which the popover
+    // presentation uses. Unset, a finger opens the menu as UIMenu does.
+    longPressDelayMs:
+      pressTouchModel === 'pointer' ? MENU_PRESS_LONG_PRESS_MS : undefined,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 

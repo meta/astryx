@@ -107,6 +107,32 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
 const THEME_WORDS = {group: 'theme', build: 'build'};
 
 /**
+ * A theme API refusal as the group that ran it words it: under
+ * `experimental theme`, the commands it names are that group's own (`build`
+ * is `compile` there). Under `theme`, the text is unchanged.
+ * @param {import('../../../api/error.mjs').AstryxError} err
+ * @param {ThemeCommandWords} [words]
+ */
+function themeError(err, words = THEME_WORDS) {
+  /** @param {string} text */
+  const local = text =>
+    words.group === THEME_WORDS.group
+      ? text
+      : text.replace(
+          /(?<!experimental )\btheme (add|use|remove|list|build|eject|template|targets)\b/g,
+          (_, sub) => `${words.group} ${sub === 'build' ? words.build : sub}`,
+        );
+  return cliError(local(err.message), {
+    suggestions: (err.suggestions || []).map(x => ({
+      ...x,
+      name: local(x.name),
+      ...(x.reason ? {reason: local(x.reason)} : {}),
+    })),
+    code: err.code,
+  });
+}
+
+/**
  * Path to this CLI's real entry (clients/cli/bin/astryx.mjs), resolved from
  * this module's location (clients/cli/commands/theme.mjs → ../bin/
  * astryx.mjs). Used to re-invoke `theme build` as a child process in watch mode.
@@ -620,10 +646,7 @@ function registerPaletteCommands(
       } catch (error) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (error);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
 
       // Generating a palette computes and writes candidate files; the numbers
@@ -933,10 +956,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
 
       await warnOnThemeIntegrationIssues(json);
@@ -978,10 +998,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
 
       await warnOnThemeIntegrationIssues(json);
@@ -1016,10 +1033,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
@@ -1039,10 +1053,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
@@ -1071,10 +1082,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
@@ -1102,10 +1110,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
 
       // Writes a starter theme file, or declines to overwrite one.
@@ -1146,10 +1151,7 @@ function registerThemeCommands(theme, program, docs, words) {
       } catch (e) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {
-          suggestions: err.suggestions || [],
-          code: err.code,
-        });
+        return themeError(err, words);
       }
 
       // A filter is a substring search with an exact-name fast path (see

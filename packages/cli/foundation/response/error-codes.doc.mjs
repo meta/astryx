@@ -401,6 +401,12 @@ export const doc = {
         "Not an error and never an exit code: the change is saved, but the components could not be rendered, so it was not checked against what they read and has no preview. The result carries it in `notChecked` with the cause, such as two copies of React (the app's and the one Core resolves). Reported only by the experimental theme command.",
     },
     {
+      value: 'ERR_THEME_BUSY',
+      stability: 'experimental',
+      description:
+        'Another command is changing the same theme (or the same preview) and did not finish within 30 seconds. Commands on one theme run one after the other; nothing was changed. Run the command again. Raised only by the experimental theme command.',
+    },
+    {
       value: 'ERR_THEME_UNKNOWN_THING',
       stability: 'experimental',
       description:
@@ -410,7 +416,7 @@ export const doc = {
       value: 'ERR_THEME_NOT_SET',
       stability: 'experimental',
       description:
-        '`reset` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by the experimental theme command.',
+        '`editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by the experimental theme command.',
     },
     {
       value: 'ERR_THEME_NOTHING_TO_UNDO',

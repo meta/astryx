@@ -874,6 +874,11 @@
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
     },
+    "./internal/page-scroller": {
+      "source": "./src/internal/page-scroller.ts",
+      "types": "./dist/internal/page-scroller.d.ts",
+      "default": "./dist/internal/page-scroller.js"
+    },
     "./internal/line-clamp": {
       "source": "./src/internal/line-clamp.ts",
       "types": "./dist/internal/line-clamp.d.ts",

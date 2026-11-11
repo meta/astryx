@@ -29,16 +29,6 @@ export const MENU_PRESS_HANDOFF_PX: number = UIKIT_MENU_PRESS_HANDOFF_PX;
 
 export type MenuPressPointerType = 'mouse' | 'touch' | 'pen';
 
-/**
- * A DOM pointer type as the machine's, or null for one it does not track.
- * @internal
- */
-export function normalizePointerType(
-  type: string,
-): MenuPressPointerType | null {
-  return type === 'mouse' || type === 'touch' || type === 'pen' ? type : null;
-}
-
 /** @internal */
 export type MenuPressState<T> =
   | {phase: 'idle'}

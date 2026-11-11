@@ -17,3 +17,8 @@ foundation/*.d.mts
 # Transient fixture dir written by authoring-migration.tsc.test.mjs (runs the
 # real tsc over migrated output); created + removed per test run.
 .codemod-tsc-*/
+
+# Stored component lists of the shipped templates, written at `prepack` by
+# scripts/generate-template-components.mjs so the published package reads them
+# instead of parsing each template's source. Not committed: a checkout parses.
+assets/templates/components.generated.json

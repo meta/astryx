@@ -20,10 +20,8 @@ import {
   MENU_PRESS_LONG_PRESS_MS,
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
-  useDropdownMenuPress,
   useMenuPress,
 } from './useMenuPress';
-import {isInScrollView} from './menuScrollView';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 import {holdInput, isInputShield} from '../Layer/inputHold';
 import {
@@ -122,14 +120,13 @@ function Harness({
     setIsOpen(next);
     onOpenChange?.(next);
   };
-  // DropdownMenu's own entry, so the harness can also drive its touch model.
-  // Without `touchModel` it keeps the pointer model, as the public hook does
-  // with a set delay.
-  const press = useDropdownMenuPress({
+  // The harness picks the touch model as DropdownMenu does, through the
+  // delay: `touchModel="uikit"` leaves it unset. Without `touchModel` it keeps
+  // the pointer model with the released wait.
+  const press = useMenuPress({
     menuRef,
     triggerRef,
     itemSelector: ITEM_SELECTOR,
-    isInScrollView,
     onTriggerPress: () => {
       if (isOpen) {
         open(false);
@@ -142,8 +139,10 @@ function Harness({
     hitTest,
     getScroller,
     onHighlight,
-    touchModel,
-    longPressDelayMs,
+    longPressDelayMs:
+      touchModel === 'uikit'
+        ? undefined
+        : (longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS),
   });
   return (
     <>
