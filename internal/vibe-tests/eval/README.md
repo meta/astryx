@@ -188,7 +188,7 @@ what the eval measures, so compare results only within one arm version.
   It does not write the execution-provenance sidecars in
   `../docs/execution-provenance.md`, which describe the older pipeline.
 - The `pilot` set (5 tasks) only shows that the pipeline works; fresh agents
-  pass all of it in both arms. The `v1` set (15 tasks) is the fixed comparison
-  set: multi-step forms, paged tables with selection, menus, comboboxes,
-  dialogs, responsive navigation, notifications, theming, tooltips, loading
-  states, filters and sliders. Run it with `--task-set v1`.
+  pass all of it in both arms. The `v1` set is the fixed comparison set:
+  multi-step forms, paged tables with selection, menus, comboboxes, dialogs,
+  switches, accordions and announced notifications. Run it with
+  `--task-set v1`.
