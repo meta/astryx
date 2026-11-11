@@ -7,9 +7,11 @@
 # merge queue can gate on them before landing a PR.
 name: CI
 # Main's nightly full interaction run and the weekly full WebKit run name
-# their commit, so the main heavy lanes tell them from a release-check. Every
-# other run keeps its default name.
-run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || '' }}"
+# their commit, so the main heavy lanes tell them from a release-check. A
+# cut-evidence release-check names its commit too, so people reading Actions
+# tell it from a monitoring release-check. Every other run keeps its default
+# name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && inputs.evidence && format('Release evidence of {0}', github.sha) || '' }}"
 
 on:
   pull_request:
@@ -49,6 +51,10 @@ on:
         description: 'Release re-check, sent by the release re-check workflow: takes the main check lane at once'
         type: boolean
         default: false
+      evidence:
+        description: 'Cut evidence, sent by the pre-cut release-check and the release re-check: the run is named Release evidence of <sha>'
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -78,7 +84,7 @@ permissions: {}
 # cannot starve them: release-bump, release-merge-back on a merge-back branch
 # (chore/merge-v*), and the build and audit jobs of a release-check a person or
 # the release tooling dispatches (one dispatched by github-actions[bot] stays
-# on standard runners). The release-check's short gating and join jobs
+# on standard runners, a cut-evidence run included). The release-check's short gating and join jobs
 # (release-authority, pr-a11y, a11y-contracts, pr-rtl, release-check) stay on ubuntu-slim. Arm jobs stay arm and x64 stay x64 on
 # both pools, so visual baselines and native builds see the same architecture.
 #
@@ -744,8 +750,19 @@ jobs:
           # takes most of that at a fraction of the highest level's time.
           compression-level: 6
 
+      # The built API surface the data tests read for public-hook coverage.
+      # The CLI and build packages, which the dependency build above skips,
+      # are listed as not built; the test names them as excluded and fails on
+      # any other package missing from the surface.
+      - name: Write the docsite's API surface
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        run: node scripts/api-report/cli.mjs --surface .api-surface-docsite
+
       - name: test-docsite (data tests)
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        env:
+          # Relative to the repository root.
+          ASTRYX_API_SURFACE: .api-surface-docsite
         run: pnpm -F @astryxdesign/docsite test
 
       # A docsite-only change skips test-node, and the registry generator
@@ -1594,7 +1611,7 @@ jobs:
             for (const [output, prefix, missing] of [
               ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
               ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
-              ['api_run_id', 'api-surface-main', 'the API changes compare with its committed reports unless the merge base is built for its sizes'],
+              ['api_run_id', 'api-surface-main', 'the merge base is built here instead when the pull request can change a published package'],
             ]) {
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
@@ -1627,24 +1644,25 @@ jobs:
       # No component record of this merge base was read (Main kept none, or
       # its download failed): build the base beside the Storybook build and
       # record its sizes with this head's analyzer, so every changed component
-      # still has a before size (AST-080 FR8). When Main kept no API surface
-      # either, it also builds the published packages the pull request
-      # changes, and the API changes step reports this base (INV24). A missing
-      # API surface alone starts no build: the API changes then compare with
-      # the merge base's committed reports, marked as such. It runs in the
-      # background; the wait before the analysis collects it.
+      # still has a before size (AST-080 FR8). No API surface of this merge
+      # base was read: build the published packages the pull request changes,
+      # so the API changes step compares with this base (INV24). Without a
+      # surface, no API changes are compared. A pull request that changes no
+      # package does not build the base for its API surface alone. It runs in
+      # the background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && (steps.component-download.outcome != 'success' || (steps.api-download.outcome != 'success' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')))
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           NEED_API: ${{ steps.api-download.outcome != 'success' }}
+          NEED_SIZES: ${{ steps.component-download.outcome != 'success' }}
         run: |
           git worktree add --detach .size-base "$BASE_SHA"
           mkdir -p .component-size-base
-          # The inner script reads BASE_SHA, HEAD_SHA and NEED_API from this
-          # step's env.
+          # The inner script reads BASE_SHA, HEAD_SHA, NEED_API and NEED_SIZES
+          # from this step's env.
           # shellcheck disable=SC2016
           nohup bash -c '
             set -e
@@ -1661,7 +1679,10 @@ jobs:
             for pkg in lab charts richtext vega; do
               git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
             done
-            node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            # Main kept the sizes of this merge base: keep its record.
+            if [ "$NEED_SIZES" = true ]; then
+              node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            fi
             if [ "$NEED_API" = true ]; then
               {
                 for dir in packages/themes/*/; do
@@ -1788,6 +1809,8 @@ jobs:
       # this job.
       - name: Wait for the merge base's sizes
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.base-build.outputs.started == 'true'
+        env:
+          NEED_SIZES: ${{ steps.component-download.outcome != 'success' }}
         run: |
           waited=0
           while [ ! -f base-build.done ] && [ ! -f base-build.failed ] && [ "$waited" -lt 600 ]; do
@@ -1797,9 +1820,11 @@ jobs:
           tail -n 20 base-build.log || true
           if [ -f base-build.done ]; then
             echo "::notice title=Merge base built::Main kept no record of the merge base; it was built beside Storybook (waited ${waited}s after the build)."
-          else
+          elif [ "$NEED_SIZES" = true ]; then
             rm -f .component-size-base/component-size.json
             echo "::warning title=Merge base not built::Building the merge base failed or timed out; Before and Delta stay empty."
+          else
+            echo "::warning title=Merge base not built::Building the merge base failed or timed out; the API changes are not compared."
           fi
 
       - name: Analyze components
@@ -1887,13 +1912,13 @@ jobs:
 
       # Advisory API changes (architecture:public-component-api INV24): each
       # published package's report from this build, compared with the merge
-      # base's surface (Main's record of it, else the base built above, else
-      # the reports committed there, read with git). A package the base built
-      # above cannot surface is reported as unknown, never from its committed
-      # report. A committed report that
-      # differs from this build is one stale line, not rows. It reads the
-      # dists built above and never fails the job; api-changes.json goes into
-      # the pr-analysis artifact. With no merge base there is nothing to compare.
+      # base's surface (Main's record of it, else the base built above). A
+      # package the surface lists but has no report for is reported as
+      # unknown. With neither surface, nothing is compared: baseRecord is null
+      # and each published package the pull request changes is unknown. It
+      # reads the dists built above and never fails the job;
+      # api-changes.json goes into the pr-analysis artifact. With no merge
+      # base there is nothing to compare.
       # A head cut before cli.mjs existed cannot run the next step;
       # say so (merging main runs it).
       - name: Note a head that predates cli.mjs
@@ -1909,16 +1934,15 @@ jobs:
         run: |
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
-          # Main's surface of the merge base, else the base built above for its
-          # sizes, reported here. A head that predates the built surface
-          # compares committed reports.
+          # Main's surface of the merge base, else the base built above,
+          # reported here.
           SURFACE=()
           if grep -q -- "'--base-surface'" scripts/api-report/cli.mjs; then
             if [ -f .api-surface-base/surface.json ]; then
               SURFACE=(--base-surface .api-surface-base --base-record main)
             elif [ -f base-build.done ] && [ -d .size-base ]; then
               node scripts/api-report/cli.mjs --surface .api-surface-build --root .size-base \
-                || echo "::notice::The merge base's API surface was not written; the API changes compare with its committed reports."
+                || echo "::notice::The merge base's API surface was not written; no API changes are compared."
               if [ -f .api-surface-build/surface.json ]; then
                 SURFACE=(--base-surface .api-surface-build --base-record build)
               fi
@@ -2509,7 +2533,10 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           A11Y_CONTRACT_WORKERS: 4
           # The Table release proof's timing budgets hold on 4-core-ubuntu only;
-          # on the scheduled ubuntu-latest checks its receipt reports timing.
+          # on the bot's ubuntu-latest checks, cut-evidence runs included, its
+          # receipt reports timing (spec:AST-030 DEC-17). Moving cut-evidence
+          # runs to the release runner adds `inputs.evidence` to this one
+          # condition, which runs-on shares (ci-table-timing-gate.test.mjs).
           ASTRYX_TABLE_TIMING_GATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '1' || '0' }}
         # Tests are split by recorded duration (a11y-contract-shard.mjs), not
         # Playwright's count-based --shard; every listed test runs in one leg.
