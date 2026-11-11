@@ -16,18 +16,22 @@
 
 /**
  * UIContextMenuInteraction's touch timeline on iOS 26.2. A context menu is not
- * a plain long press. At 400 ms the press commits. The click haptic plays, and
- * the touch can no longer become a tap. The menu displays at 735 ms if the
- * finger is still down, or at the lift after the commit. A finger that lifts
- * before the commit gets no menu. A finger that drifts too far before the menu
- * displays gets the same.
+ * a plain long press. A finger that rests on the view starts a press feedback
+ * after 150 ms. A copy of the view grows uniformly, and its size follows a
+ * linear ramp through a spring. At 400 ms the press commits. The click haptic
+ * plays, and the touch can no longer become a tap. The menu displays at 735 ms
+ * if the finger is still down, or at the lift after the commit. A finger that
+ * lifts before the commit gets no menu, and the copy springs back. A finger
+ * that drifts too far before the menu displays gets the same.
  *
  * UIKit runs this on display-link ticks. So a 60 Hz screen shows each moment
- * on the first frame after it: the commit at 417 ms.
+ * on the first frame after it: the feedback at 151 ms, the commit at 417 ms.
  * The times here are the moments themselves, from the `touchstart` timestamp.
  * UIKit counts from the main thread's receipt of the touch, about a frame
  * after the hardware timestamp that a browser stamps. A browser's compositor
  * shows a value about a frame after its time, so the two offsets cancel.
+ * Scales are fractions of the view's own size. The lift and dismissal springs
+ * are `springs.contextMenuLift` and `springs.contextMenuDismiss`.
  *
  * Every leaf has one or more `@source`. A GUESS value also has the `@measure`
  * task that confirms or replaces it. uikit.test.ts enforces both.

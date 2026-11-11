@@ -5,9 +5,10 @@
  * @input The built "Touch / long press" ContextMenu story, real touch input,
  *   the interaction harness, the context-menu constants and UIKit's frames
  * @output Interaction and animation proofs for a context menu that a held
- *   finger opens on UIKit's timeline. They cover the menu's moments, on
- *   time and behind a blocked main thread. They also cover the page under
- *   the finger, a pan outside and a storyboard of the press
+ *   finger opens on UIKit's timeline. They cover the menu's moments, the
+ *   press feedback against UIKit's frames and a blocked main thread. They
+ *   also cover the page under the finger, a pan outside and a storyboard of
+ *   the press
  * @position Interaction specs of packages/core/src/ContextMenu; Chromium's
  *   finger stands for Android's engine, and WebKit's for iOS
  */
@@ -1293,6 +1294,8 @@ async function openScrollableStory(page: Page) {
     throw new Error('no trigger');
   }
   const center = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  // Where the trigger's container sits: the trigger itself is scaled by the
+  // press feedback.
   const top = async () =>
     story.trigger.evaluate(
       el => (el.parentElement ?? el).getBoundingClientRect().y,
