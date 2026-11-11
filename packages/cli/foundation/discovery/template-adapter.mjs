@@ -24,10 +24,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
@@ -2104,7 +2104,7 @@ export function extractComponents(pagePath) {
  * @returns {string[]}
  */
 export function componentsInSource(src) {
-  const known = shippedTemplateComponents().get(sourceKey(src));
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
   if (known) return [...known];
   return parsedComponents(src);
 }
@@ -2116,40 +2116,6 @@ export const TEMPLATE_COMPONENTS_FILE = path.join(
   'templates',
   'components.generated.json',
 );
-
-/**
- * The key of a template source in TEMPLATE_COMPONENTS_FILE: a hash of its
- * text, so an edited or unknown source is never answered from the file.
- * @param {string} src
- * @returns {string}
- */
-export function sourceKey(src) {
-  return createHash('sha256').update(src).digest('hex').slice(0, 32);
-}
-
-/** @type {Map<string, string[]> | undefined} */
-let shippedComponents;
-
-/**
- * The component lists of the templates Astryx ships, by source key, read
- * once. Each is what parsedComponents returns for that source; parsing a
- * source costs far more than reading its list. A missing or unreadable file
- * leaves the map empty, so every source is parsed.
- * @returns {Map<string, string[]>}
- */
-function shippedTemplateComponents() {
-  if (shippedComponents) return shippedComponents;
-  try {
-    shippedComponents = new Map(
-      Object.entries(
-        JSON.parse(fs.readFileSync(TEMPLATE_COMPONENTS_FILE, 'utf-8')),
-      ),
-    );
-  } catch {
-    shippedComponents = new Map();
-  }
-  return shippedComponents;
-}
 
 /**
  * The components a template source composes, read from its syntax tree (see
