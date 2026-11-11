@@ -38,8 +38,9 @@ export const SHARD_SECONDS = 12 * 60;
 export const UNKNOWN_SECONDS = 60;
 
 /**
- * The fewest shards, each at most `SHARD_SECONDS` of recorded time unless one
- * spec alone is longer; every spec in exactly one shard.
+ * The fewest shards, each at most `SHARD_SECONDS` of recorded time; a spec
+ * longer than that runs in a shard of its own. Every spec is in exactly one
+ * shard.
  * @param {string[]} specs
  * @param {Record<string, number>} seconds recorded seconds per spec file
  * @returns {{specs: string[], seconds: number}[]}
@@ -48,26 +49,31 @@ export function shardSpecs(specs, seconds) {
   if (specs.length === 0) return [];
   const cost = spec =>
     Number.isFinite(seconds[spec]) ? seconds[spec] : UNKNOWN_SECONDS;
-  const total = specs.reduce((sum, spec) => sum + cost(spec), 0);
-  const limit = Math.max(SHARD_SECONDS, ...specs.map(cost));
+  const shardOf = leg => ({
+    specs: leg,
+    seconds: leg.reduce((sum, spec) => sum + cost(spec), 0),
+  });
+  const alone = specs.filter(spec => cost(spec) > SHARD_SECONDS).sort();
+  const rest = specs.filter(spec => cost(spec) <= SHARD_SECONDS);
+  const total = rest.reduce((sum, spec) => sum + cost(spec), 0);
+  let shared = [];
   for (
     let count = Math.max(1, Math.ceil(total / SHARD_SECONDS));
-    count <= specs.length;
+    rest.length > 0;
     count += 1
   ) {
-    const legs = splitByDuration(specs, count, cost).filter(
-      leg => leg.length > 0,
-    );
-    const shards = legs.map(leg => ({
-      specs: leg,
-      seconds: leg.reduce((sum, spec) => sum + cost(spec), 0),
-    }));
-    if (shards.every(shard => shard.seconds <= limit)) {
-      assertEachOnce(specs, legs, 'release spec');
-      return shards;
-    }
+    shared = splitByDuration(rest, count, cost)
+      .filter(leg => leg.length > 0)
+      .map(shardOf);
+    if (shared.every(shard => shard.seconds <= SHARD_SECONDS)) break;
   }
-  throw new Error('No shard split fits the release specs.');
+  const shards = [...alone.map(spec => shardOf([spec])), ...shared];
+  assertEachOnce(
+    specs,
+    shards.map(shard => shard.specs),
+    'release spec',
+  );
+  return shards;
 }
 
 /**

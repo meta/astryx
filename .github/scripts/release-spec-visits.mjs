@@ -14,28 +14,22 @@
  *   `@visits <Component>` line in a spec adds a component it renders through
  *   another one's story; it never removes one. A visit that cannot be
  *   resolved makes the spec run on every pull request the plan applies to.
+ *   An escape that a `@visits` line would have caught gets that line in the
+ *   pull request that fixes it.
  */
 
 import path from 'node:path';
 
-import {parseRouting, valueImports} from './a11y-pr-contracts.mjs';
-
-const RESOLVE_SUFFIXES = [
-  '',
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '/index.ts',
-  '/index.tsx',
-  '/index.js',
-];
+import {
+  parseRouting,
+  resolveModule as resolve,
+  valueImports,
+} from './a11y-pr-contracts.mjs';
 
 /** A release file: FR32's release spec by name. */
 export const isReleaseFile = file => /\.release\.[^/]*\.spec\.ts$/.test(file);
 
-const SPEC = /^packages\/[^/]+\/src\/.+\.spec\.ts$/;
+const SPEC = /^(?:packages\/[^/]+\/src|internal\/[^/]+\/src)\/.+\.spec\.ts$/;
 
 /**
  * Every release spec: a release file, or a spec tagged
@@ -134,14 +128,6 @@ function localModules(file, known, read) {
     }
   }
   return [...seen];
-}
-
-function resolve(known, target) {
-  return (
-    RESOLVE_SUFFIXES.map(suffix => `${target}${suffix}`).find(each =>
-      known.has(each),
-    ) ?? null
-  );
 }
 
 /**

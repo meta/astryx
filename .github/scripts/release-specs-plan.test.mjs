@@ -33,6 +33,7 @@ const SPEC =
 const OTHER =
   'packages/core/src/List/__tests__/List.release.a11y.chromium.spec.ts';
 const TAGGED = 'packages/core/src/Link/__tests__/Link.a11y.chromium.spec.ts';
+const PATTERN = 'internal/a11y-spec/src/patterns/tabs.chromium.spec.ts';
 const MAP = {
   stories: {'a11y-link-pattern': ['packages/core/src/Link/']},
   pages: {'Table.release.html': ['packages/core/src/Table/']},
@@ -78,6 +79,10 @@ const TREE = {
   'packages/core/src/Link/Link.doc.mjs': 'export default {};\n',
   'packages/core/src/Button/Button.tsx': 'export const Button = 1;\n',
   'packages/core/src/Markdown/Markdown.tsx': 'export const Markdown = 1;\n',
+  [PATTERN]:
+    "// @pr-a11y release-only\nimport {TABS} from './tabs.fixtures';\n",
+  'internal/a11y-spec/src/patterns/tabs.fixtures.ts':
+    'export const TABS = 1;\n',
   'apps/storybook/stories/LinkNavigation.stories.tsx': STORY(
     'Core/Link Navigation',
     'Link',
@@ -86,14 +91,14 @@ const TREE = {
 };
 
 describe('release specs', () => {
-  it('are release files and specs tagged @pr-a11y release-only', () => {
+  it('are release files and specs tagged @pr-a11y release-only, in packages and internal harnesses', () => {
     expect(isReleaseFile(SPEC)).toBe(true);
     expect(
       isReleaseFile('packages/core/src/Table/Table.release.harness.ts'),
     ).toBe(false);
     const read = file => TREE[file];
     expect(releaseSpecs(Object.keys(TREE), read)).toEqual(
-      [OTHER, SPEC, TAGGED].sort(),
+      [OTHER, PATTERN, SPEC, TAGGED].sort(),
     );
   });
 });
@@ -102,6 +107,10 @@ describe('planReleaseSpecs', () => {
   it('runs a release spec the change adds or changes, tagged ones included', () => {
     expect(planIn(TREE, [SPEC]).specs).toEqual([SPEC]);
     expect(planIn(TREE, [TAGGED]).specs).toEqual([TAGGED]);
+    expect(planIn(TREE, [PATTERN]).specs).toEqual([PATTERN]);
+    expect(
+      planIn(TREE, ['internal/a11y-spec/src/patterns/tabs.fixtures.ts']).specs,
+    ).toEqual([PATTERN]);
   });
 
   it('runs a release spec that imports a changed module, directly or through its harness', () => {
@@ -195,7 +204,7 @@ describe('planReleaseSpecs', () => {
       },
       map: MAP,
     });
-    expect(plan.specs).toEqual([OTHER, SPEC, TAGGED].sort());
+    expect(plan.specs).toEqual([OTHER, PATTERN, SPEC, TAGGED].sort());
     expect(plan.reasons[OTHER]).toContain('could not be followed');
   });
 
@@ -249,6 +258,20 @@ describe('the release specs of this repository', () => {
     expect(
       plan(['packages/core/src/Markdown/Markdown.doc.mjs']).specs,
     ).not.toContain(NAVIGATION);
+  });
+
+  it('visits the component folder that holds each release spec', () => {
+    // A spec in a component's folder proves that component; when its stories
+    // name another one, a `@visits` line names its own.
+    const stories = storyFiles(listed, read);
+    for (const spec of releaseSpecs(listed, read)) {
+      const own = /^(packages\/[^/]+\/src\/[A-Z][^/]*\/)/.exec(spec)?.[1];
+      if (own)
+        expect(
+          specVisits(spec, {listed, read, stories, map}).folders,
+          spec,
+        ).toContain(own);
+    }
   });
 
   it('maps every folder in the visit map to a folder that exists', () => {
@@ -310,9 +333,22 @@ describe('shardSpecs', () => {
       expect(shard.seconds).toBeLessThanOrEqual(SHARD_SECONDS);
   });
 
-  it('gives a spec longer than a shard a shard of its own', () => {
-    const shards = shardSpecs(['long', 'a', 'b'], {long: 900, a: 60, b: 60});
+  it('gives a spec longer than a shard a shard of its own, and keeps the others within the limit', () => {
+    const shards = shardSpecs(['long', 'a', 'b', 'c'], {
+      long: 900,
+      a: 400,
+      b: 400,
+      c: 400,
+    });
     expect(shards.find(shard => shard.specs.includes('long')).specs).toEqual([
+      'long',
+    ]);
+    for (const shard of shards.filter(each => each.specs.length > 1))
+      expect(shard.seconds).toBeLessThanOrEqual(SHARD_SECONDS);
+    expect(shards.flatMap(shard => shard.specs).sort()).toEqual([
+      'a',
+      'b',
+      'c',
       'long',
     ]);
   });

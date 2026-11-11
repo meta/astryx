@@ -409,7 +409,8 @@ const NOT_RENDERED =
   /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
 const STATEMENT =
   /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
-const RESOLVE_SUFFIXES = [
+/** The suffixes an import specifier resolves through, in order. */
+export const RESOLVE_SUFFIXES = [
   '',
   '.ts',
   '.tsx',
@@ -639,6 +640,18 @@ export function renderingFolders(importers, touched) {
 }
 
 /**
+ * The listed file an import target names, through `RESOLVE_SUFFIXES`, or
+ * null.
+ * @param {Set<string>} known every listed file
+ * @param {string} target a repository path without its suffix
+ */
+export function resolveModule(known, target) {
+  for (const suffix of RESOLVE_SUFFIXES)
+    if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+  return null;
+}
+
+/**
  * The files each proof page loads through value imports, followed file by
  * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
  * The roots are the interaction specs and what their pages render: the
@@ -661,11 +674,7 @@ export function proofImporters({
   read = file => fs.readFileSync(path.join(root, file), 'utf8'),
 }) {
   const known = new Set(listed);
-  const resolve = target => {
-    for (const suffix of RESOLVE_SUFFIXES)
-      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
-    return null;
-  };
+  const resolve = target => resolveModule(known, target);
   const targetOf = (file, specifier) => {
     if (specifier.startsWith('.'))
       return resolve(
