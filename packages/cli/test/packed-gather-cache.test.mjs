@@ -632,6 +632,39 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(fs.statSync(path.join(tmp, CACHE_NAME, table)).ino).toBe(ino);
   }, 120_000);
 
+  it("is not used after an edit to the installed CLI's table-building code", async () => {
+    // As patch-package or a hand edit leaves it: same build id, other code.
+    const tmp = keptTmp('code-edit');
+    const asks = ['color picker', 'menu button', 'date picker', 'tab list'].map(
+      q => ['search', q],
+    );
+    for (const ask of asks) run(ask, {tmp});
+    const before = asks.map(ask => run(ask, {tmp}).stdout);
+    const file = path.join(packed, 'api', 'search', '_entries.mjs');
+    const source = fs.readFileSync(file, 'utf8');
+    const edited = source.replace(
+      'const nw = nameWords(name).map(fold);',
+      'const nw = nameWords(name).map(fold).slice(0, 1);',
+    );
+    expect(edited).not.toBe(source);
+    try {
+      fs.writeFileSync(file, edited);
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== before[i]) changed++;
+      }
+      // The edit changes answers, so a stale table would have shown.
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(file, source);
+    }
+  }, 180_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');
