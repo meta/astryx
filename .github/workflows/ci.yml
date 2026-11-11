@@ -5016,8 +5016,8 @@ jobs:
       - name: Install Playwright
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
-      # A planned spec that the head deleted has nothing to run; one outside
-      # the config's spec globs would run nowhere, so it fails here by name.
+      # The job never drops a planned spec (spec:AST-030 FR32): one the head
+      # lacks, or one outside the config's spec globs, fails here by name.
       - name: Run the planned release specs
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -5028,11 +5028,19 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t PLANNED < <(node -e 'for (const file of JSON.parse(process.env.SPECS)) console.log(file)')
+          # The plan reads the merge commit, which holds every planned spec.
+          # A planned spec the head lacks was added on main after the branch
+          # point; it must run, so the step fails until main is merged in.
           RUN=()
-          for file in "${PLANNED[@]}"; do [ -f "$file" ] && RUN+=("$file"); done
-          if [ "${#RUN[@]}" -eq 0 ]; then
-            echo "Every planned release spec was deleted; nothing to run."
-            exit 0
+          MISSING=()
+          for file in "${PLANNED[@]}"; do
+            if [ -f "$file" ]; then RUN+=("$file"); else MISSING+=("$file"); fi
+          done
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            for file in "${MISSING[@]}"; do
+              echo "::error file=$file::$file is a planned release spec that this pull request's head does not have: main added it after the branch point. Merge main into the branch so it runs."
+            done
+            exit 1
           fi
           SPEC_FILES="$RUNNER_TEMP/release-specs/.github/scripts/lib/a11y-spec-files.mjs" node --input-type=module -e '
             import {pathToFileURL} from "node:url";

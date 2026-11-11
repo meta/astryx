@@ -194,8 +194,14 @@ describe('release-specs (changed)', () => {
     expect(result.pnpm).toBeNull();
   });
 
-  it('runs nothing for a planned spec that the head deleted', () => {
-    expect(runStep([TODAY], [])).toMatchObject({status: 0, pnpm: null});
+  it('fails, naming it, a planned spec the head lacks, never dropping it', () => {
+    // The plan reads the merge commit, so a planned spec that the head lacks
+    // was added on main after the branch point.
+    const result = runStep([TODAY], []);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`::error file=${TODAY}::`);
+    expect(result.stdout).toContain('Merge main into the branch');
+    expect(result.pnpm).toBeNull();
   });
 
   it('has no time budget and no retry: a failing spec fails the job', () => {
