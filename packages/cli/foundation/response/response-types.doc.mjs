@@ -117,19 +117,19 @@ export const doc = {
       value: 'themeEdit.new',
       stability: 'experimental',
       description:
-        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
+        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), the dial `settings` it started with, font `notes`, contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `family` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
-        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
@@ -165,7 +165,7 @@ export const doc = {
       value: 'themeEdit.how',
       stability: 'experimental',
       description:
-        'A how answer; `kind` says which: `part`, `family`, `setting`, `aspect`, `question` (answers with commands), `picture` (main colors or the color at points) or `list` (the items). Experimental: may change or be removed in a patch release.',
+        'A how answer; `kind` says which: `part` (`component`, `recorded`, `group`, `groupMembers`, `spreads`, `variants`, `states`, `reads` per aspect, `contains`), `group` (`members`, `spreads`), `setting` (a dial: `values`, `help`, `examples`, and for a color the `shades` each token starts from; a token: `tokenType`, `default`, `perMode`, `readBy`, `examples`; a property: `setBy`, `examples`), `aspect` or `question` (`results`, each a `text` and its `commands`), `picture` (main colors or the color at points) or `list` (the `items`). Experimental: may change or be removed in a patch release.',
     },
     // render (experimental: may change or be removed in a patch release)
     {

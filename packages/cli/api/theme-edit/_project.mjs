@@ -41,6 +41,9 @@ import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
  * @property {string} importPath
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {unknown} defaults - Playground defaults, or null.
+ * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
+ * @property {string | null} subComponentOf - The component it is a part of, or null.
+ * @property {Record<string, {type: string, required: boolean}>} props - Each prop's declared type and whether it is required.
  * @property {Array<{className: string, values: Record<string, string[]>}>} targets
  */
 
@@ -48,7 +51,7 @@ import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 1;
+const DOCS_VERSION = 2;
 
 /**
  * The nearest folder at or above `dir` that holds node_modules.
@@ -113,6 +116,21 @@ async function readComponents(coreDir) {
         importPath: resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
         defaults: doc.playground?.defaults ?? null,
+        wrapper:
+          typeof doc.playground?.wrapper?.component === 'string'
+            ? {
+                component: doc.playground.wrapper.component,
+                props: doc.playground.wrapper.props ?? {},
+              }
+            : null,
+        subComponentOf:
+          typeof doc.subComponentOf === 'string' ? doc.subComponentOf : null,
+        props: Object.fromEntries(
+          Object.entries(props).map(([n, p]) => [
+            n,
+            {type: String(p.type ?? ''), required: p.required === true},
+          ]),
+        ),
         targets: (doc.theming?.targets ?? []).map((/** @type {any} */ t) => ({
           className: t.className,
           values: Object.fromEntries(

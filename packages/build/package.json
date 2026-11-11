@@ -50,7 +50,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "build": "node build.mjs",
     "prepack": "pnpm build"
   },

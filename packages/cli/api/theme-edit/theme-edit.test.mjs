@@ -2,7 +2,7 @@
 
 /**
  * @file Tests for `astryx experimental theme` (the theme-edit API): refusals
- * with the command that works, families, typed modes, the lift pass, the
+ * with the command that works, groups, typed modes, the lift pass, the
  * settings round trip, `how` on real parts, and `colors`.
  * Every check runs against the Core this repository builds.
  */
@@ -232,7 +232,19 @@ describe('colors', () => {
     expect(settingsOf('t')).toBe(before);
   });
 
-  it('takes a CSS named color and derives the accent from it', async () => {
+  it('says when it cannot check contrast for a value with no fixed color', async () => {
+    const r = await themeEditSet(
+      't',
+      '--color-text-primary',
+      'var(--brand-ink)',
+      {cwd},
+    );
+    expect(r.data.problems.join(' ')).toContain('not checked');
+    expect(r.data.problems.join(' ')).toContain('var(--brand-ink)');
+    await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
+  });
+
+  it('takes a CSS named color and grows the accent palette from it', async () => {
     const r = await themeEditSet('t', 'accent', 'rebeccapurple', {cwd});
     expect(r.data.changedTokens.join(' ')).toContain('--color-text-accent');
     await themeEditUndo('t', {cwd, thing: 'accent'});
@@ -256,6 +268,51 @@ describe('undo recovery', () => {
       JSON.parse(good).settings,
     );
     await themeEditUndo('t', {cwd, thing: 'corners'});
+  });
+});
+
+describe('every refusal code', () => {
+  it('ERR_THEME_NOTHING_TO_UNDO: a theme with no earlier change', async () => {
+    await themeEditNew('blank', {cwd});
+    const r = await refusal(() => themeEditUndo('blank', {cwd}));
+    expect(r.code).toBe('ERR_THEME_NOTHING_TO_UNDO');
+    expect(r.run[0]).toContain('editor show blank');
+  });
+
+  it('ERR_THEME_UNKNOWN_TOKEN: a token name Core does not have, with near names', async () => {
+    const r = await refusal(() =>
+      themeEditSet('t', '--color-acent', '#7c3aed', {cwd}),
+    );
+    expect(r.code).toBe('ERR_THEME_UNKNOWN_TOKEN');
+  });
+});
+
+describe('the editor commands succeed from the command line', () => {
+  it('new, set, undo, show and how exit 0 with a JSON envelope each', async () => {
+    /** @param {string[]} args */
+    const ok = async args => {
+      const r = await runCli(
+        ['--json', 'experimental', 'theme', 'editor', ...args],
+        {cwd},
+      );
+      expect(r.status, args.join(' ')).toBe(0);
+      return JSON.parse(r.stdout);
+    };
+    expect((await ok(['new', 'cli', '--like', 'neutral'])).type).toBe(
+      'themeEdit.new',
+    );
+    expect((await ok(['set', 'cli', 'corners', 'pill'])).type).toBe(
+      'themeEdit.set',
+    );
+    expect(
+      (await ok(['set', 'cli', 'corners', '12px', '--on', 'card'])).type,
+    ).toBe('themeEdit.set');
+    expect(
+      (await ok(['undo', 'cli', 'corners', '--on', 'card'])).data.action,
+    ).toBe('undo');
+    expect((await ok(['undo', 'cli'])).data.action).toBe('step');
+    expect((await ok(['show', 'cli'])).type).toBe('themeEdit.show');
+    expect((await ok(['how', 'banner'])).data.kind).toBe('part');
   });
 });
 
@@ -308,13 +365,13 @@ describe('typed modes', () => {
   });
 });
 
-describe('families', () => {
+describe('groups', () => {
   it('styling one input styles every input; --only styles just that one', async () => {
     const all = await themeEditSet('t', 'border', '1px solid #999999', {
       cwd,
       on: 'text-input',
     });
-    expect(all.data.family?.name).toBe('inputs');
+    expect(all.data.group?.name).toBe('inputs');
     expect(all.data.parts).toEqual(
       expect.arrayContaining(['text-input', 'text-area', 'selector']),
     );
@@ -333,13 +390,13 @@ describe('families', () => {
     });
   });
 
-  it('a container styles only itself unless --on names the family', async () => {
+  it('a container styles only itself unless --on names the group', async () => {
     const card = await themeEditSet('t', 'box-shadow', 'none', {
       cwd,
       on: 'card',
     });
     expect(card.data.parts).toEqual(['card']);
-    expect(card.data.family).toBeNull();
+    expect(card.data.group).toBeNull();
     const all = await themeEditSet('t', 'box-shadow', 'none', {
       cwd,
       on: 'containers',
@@ -351,7 +408,7 @@ describe('families', () => {
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
 
-  it('--only is refused for a family that does not spread', async () => {
+  it('--only is refused for a group that does not spread', async () => {
     const r = await refusal(() =>
       themeEditSet('t', 'box-shadow', 'none', {cwd, on: 'card', only: true}),
     );
@@ -422,7 +479,7 @@ describe('settings round trip', () => {
       set.data.changedTokens.some(c => c.startsWith('--color-accent (light)')),
     ).toBe(true);
     expect(set.data.notes.join(' ')).toMatch(
-      /accent-colored text (is|and icons are) #[0-9a-f]{6}/,
+      /--color-accent uses accent shade \d+ \(#[0-9a-f]{6}\) in light/,
     );
     expect(JSON.parse(settingsOf('t')).settings).toEqual([
       {thing: 'accent', value: '#7c3aed', source: 'dial'},
@@ -441,7 +498,7 @@ describe('settings round trip', () => {
 
   it('show lists the settings and writes both pages', async () => {
     await themeEditSet('t', 'surfaces', 'outlined', {cwd});
-    const r = await themeEditShow('t', {cwd, group: 'actions'});
+    const r = await themeEditShow('t', {cwd, section: 'actions'});
     expect(r.data.settings.map(s => s.thing)).toContain('surfaces');
     expect(fs.readFileSync(path.join(cwd, r.data.sheet), 'utf8')).toContain(
       'astryx-button',
@@ -474,9 +531,9 @@ describe('how on real parts, questions and settings', () => {
 
   it('how lists what a part reads and its variants', async () => {
     const r = await themeEditHow('banner', {cwd});
-    const lines = /** @type {string[]} */ (r.data.lines).join('\n');
-    expect(lines).toContain('--when status:');
-    expect(lines).toMatch(/background +--color-info-muted/);
+    expect(r.data.kind).toBe('part');
+    expect(r.data.variants.status).toContain('info');
+    expect(r.data.reads.background[0].token).toBe('--color-info-muted');
   });
 
   it('how answers an aspect at the whole-theme level', async () => {
