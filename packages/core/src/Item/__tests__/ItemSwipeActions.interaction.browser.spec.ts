@@ -718,7 +718,7 @@ test("a held row stays under the finger: at every frame from the claim to the li
   }
 });
 
-test("past the confirm point a lead grows to the confirmation offset and the row keeps it, while its base stays at the finger's travel, frame by frame", async ({
+test("past the confirm point a lead grows to the confirmation offset on UIKit's tracking spring and the row keeps it, while its base stays at the finger's travel, frame by frame", async ({
   page,
 }) => {
   const opened = await openRow(page);
@@ -769,6 +769,7 @@ test("past the confirm point a lead grows to the confirmation offset and the row
       const x = moves.filter(move => move.at <= frame.at).at(-1)?.x;
       const travel = x == null ? 0 : start.x - x;
       return {
+        at: frame.at,
         swipe: openWidth + travel - swipeActions.hysteresis,
         base: openWidth + Math.max(0, travel),
         row: -frame.x,
@@ -795,6 +796,33 @@ test("past the confirm point a lead grows to the confirmation offset and the row
     Math.abs((leads.at(-1) ?? 0) - (confirmedOffset - after[0].base)),
     JSON.stringify(leads),
   ).toBeLessThan(3);
+  // The lead grows on UIKit's tracking spring from rest. A frame's lead puts
+  // the frame at one point of that curve, so the frame names when the lead
+  // began. Between 10 % and 70 % of the lead, every frame names one start,
+  // within two frames. A jump, or another curve, does not.
+  const finalLead = leads.at(-1) ?? 0;
+  const msAtProgress = (progress: number) => {
+    let low = 0;
+    let high = 2000;
+    for (let step = 0; step < 40; step += 1) {
+      const middle = (low + high) / 2;
+      if (springStep(SPRING, middle) < progress) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return (low + high) / 2;
+  };
+  const began = after
+    .map((sample, i) => ({at: sample.at, progress: leads[i] / finalLead}))
+    .filter(({progress}) => progress >= 0.1 && progress <= 0.7)
+    .map(({at, progress}) => at - msAtProgress(progress));
+  expect(began.length, JSON.stringify(leads)).toBeGreaterThanOrEqual(6);
+  expect(
+    Math.max(...began) - Math.min(...began),
+    JSON.stringify(began),
+  ).toBeLessThanOrEqual(34);
 });
 
 test('the settle after a held release is UIKit’s spring, frame by frame, with the panel in step', async ({
