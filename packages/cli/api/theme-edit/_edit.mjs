@@ -63,7 +63,7 @@ import {
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
-import {baseResolved} from './_project.mjs';
+import {baseResolved, installLine} from './_project.mjs';
 import {
   requireProject,
   context,
@@ -150,7 +150,9 @@ function editorLeftovers(dir, slug) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
  */
 export async function themeEditNew(name, options = {}) {
-  const {cwd = process.cwd(), like, png = false, settings = {}} = options;
+  const {cwd = process.cwd(), png = false, settings = {}} = options;
+  // `--like none` builds on no base, as `set <theme> base none` does.
+  const like = options.like === 'none' ? undefined : options.like;
   requireProject(cwd);
   if (!slugOk(name)) {
     const fixed =
@@ -725,6 +727,19 @@ async function change(sub, slug, thing, value, options) {
             ),
         )
       : [];
+  // A group setting covers part settings made before it for its members.
+  const covers =
+    sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            x.thing === s.thing &&
+            x.on &&
+            FAMILIES[/** @type {string} */ (s.on)].includes(x.on) &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? ''),
+        )
+      : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const styled = styledChanges(compiledBefore, compileTheme(ctx, data, base));
   const parts = partsOf(ctx, s);
@@ -735,6 +750,11 @@ async function change(sub, slug, thing, value, options) {
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    ...(covers.length
+      ? [
+          `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
+        ]
+      : []),
     // Phones keep the base theme's reading sizes (a coarse pointer below
     // the lg width), so a size change says where it applies.
     ...(sub === 'set' &&
@@ -875,7 +895,9 @@ async function change(sub, slug, thing, value, options) {
       ...(sub === 'undo' && prev
         ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
         : {}),
-      replaced: sub === 'set' ? prev : null,
+      // A plain value that replaced per-mode ones names the first of them;
+      // the notes name them all.
+      replaced: sub === 'set' ? (prev ?? covered[0] ?? null) : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
@@ -950,6 +972,18 @@ export async function themeEditShow(theme, options = {}) {
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   refuseStoredTokens(ctx, theme, data);
+  // show renders its pages with the project's React: when that cannot
+  // render, nothing is built or written, and the result says how to fix it.
+  if (ctx.unchecked && !readOnly)
+    refuse(
+      E.ERR_RENDER_FAILED,
+      `${theme} cannot be shown: ${ctx.unchecked} Nothing was written.`,
+      {
+        run: /react/i.test(ctx.unchecked)
+          ? [installLine(cwd, ['react', 'react-dom'])]
+          : [`${P} show ${theme}`],
+      },
+    );
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
@@ -1131,12 +1165,16 @@ function otherModeNotes(data) {
  * @returns {string[]}
  */
 function partValues(ctx, data, res, mode) {
+  const masked = maskedSettings(data);
   return data.settings
     .filter(
       s =>
         s.source === 'dial' && s.on && ['corners', 'spacing'].includes(s.thing),
     )
     .map(s => {
+      // A setting a later group setting covers shows that one's value.
+      const hidden = masked.get(s);
+      if (hidden) return `${describe(s)} -> not shown: ${hidden}`;
       const parts = partsOf(ctx, s);
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {

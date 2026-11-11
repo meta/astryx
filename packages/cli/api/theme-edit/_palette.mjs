@@ -48,12 +48,60 @@ import {P} from './_tables.mjs';
  * @param {string | Buffer} text
  */
 export function writeWhole(file, text) {
+  // A folder where a file goes (a folder named preview.html) is never
+  // written through or replaced.
+  if (fs.lstatSync(file, {throwIfNoEntry: false})?.isDirectory())
+    throw new AstryxError(
+      `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is a folder, so the editor cannot write that file there. Rename or move the folder, then run the command again.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  sweepTemps(path.dirname(file));
   const tmp = tempFor(file);
   try {
     fs.writeFileSync(tmp, text);
     fs.renameSync(tmp, file);
   } finally {
     fs.rmSync(tmp, {force: true});
+  }
+}
+
+/** Folders swept of left temp files in this run. */
+const swept = new Set();
+
+/**
+ * Remove the editor's own temp files a stopped command left in a folder:
+ * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`), whose
+ * process is gone and that are more than ten minutes old. Links are never
+ * followed. Once per folder per run.
+ * @param {string} dir
+ */
+function sweepTemps(dir) {
+  if (swept.has(dir)) return;
+  swept.add(dir);
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const n of names) {
+    const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
+    if (!m || Number(m[1]) === process.pid) continue;
+    const p = path.join(dir, n);
+    try {
+      const st = fs.lstatSync(p);
+      if (!st.isFile() || Date.now() - st.mtimeMs < 10 * 60_000) continue;
+      try {
+        process.kill(Number(m[1]), 0);
+        continue;
+      } catch (e) {
+        if (/** @type {any} */ (e)?.code !== 'ESRCH') continue;
+      }
+      fs.rmSync(p, {force: true});
+    } catch {
+      // Gone already, or not ours to judge.
+    }
   }
 }
 

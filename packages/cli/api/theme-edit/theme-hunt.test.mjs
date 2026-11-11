@@ -779,10 +779,12 @@ describe('hunt2: order and scope', () => {
   it('a step on a part starts from the whole-theme setting', async () => {
     await themeEditNew('o3', {cwd});
     await themeEditSet('o3', 'corners', 'large', {cwd});
+    // The card reads the container radius: large on no base makes it 18px,
+    // so one step more is pill.
     const r = await themeEditSet('o3', 'corners', 'more', {cwd, on: 'card'});
-    expect(r.data.setting.value).toBe('round');
+    expect(r.data.setting.value).toBe('pill');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toContain('--radius-inner');
+    expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
     expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);

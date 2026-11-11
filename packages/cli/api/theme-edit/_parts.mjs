@@ -19,7 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {importPathOf} from './_project.mjs';
+import {importPathOf, installLine} from './_project.mjs';
 import {renderPage, RenderError} from '../../foundation/render/render-page.mjs';
 import {
   EXTRA,
@@ -147,7 +147,14 @@ export async function renderGenerated(project, file, source, extra = []) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
       throw new AstryxError(
         `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
-        [],
+        missing
+          ? [
+              {
+                name: installLine(project.cwd, ['react', 'react-dom']),
+                reason: 'install them',
+              },
+            ]
+          : [],
         missing
           ? ERROR_CODES.ERR_RENDER_MISSING_DEPENDENCY
           : ERROR_CODES.ERR_RENDER_FAILED,

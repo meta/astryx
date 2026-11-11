@@ -499,6 +499,165 @@ function checkCycle(thing, value, TOKENS, data) {
     );
 }
 
+/** Values every property takes. */
+const GLOBAL_VALUES = /^(inherit|initial|unset|revert|revert-layer)$/i;
+const LENGTH = String.raw`(?:0|-?(?:\d+\.?\d*|\.\d+)(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|lh|rlh|svh|lvh|dvh|cqw|cqh|cqi|cqb)|(?:calc|min|max|clamp|var)\(.*\))`;
+const NONNEG = String.raw`(?:0|(?:\d+\.?\d*|\.\d+)(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|lh|rlh|svh|lvh|dvh|cqw|cqh|cqi|cqb)|(?:calc|min|max|clamp|var)\(.*\))`;
+
+/**
+ * The value grammar of the properties people set most, as the browser
+ * reads them; a value outside it would be dropped by the browser.
+ * @type {Record<string, {takes: string, test: (v: string) => boolean, words?: string[]}>}
+ */
+const PROPERTY_GRAMMAR = {
+  display: {
+    takes:
+      'a display keyword (block, inline, inline-block, flex, inline-flex, grid, inline-grid, contents, none, flow-root)',
+    words: [
+      'block',
+      'inline',
+      'inline-block',
+      'flex',
+      'inline-flex',
+      'grid',
+      'inline-grid',
+      'contents',
+      'none',
+      'flow-root',
+      'table',
+      'list-item',
+    ],
+    test: v => PROPERTY_GRAMMAR.display.words?.includes(v) ?? false,
+  },
+  'text-transform': {
+    takes: 'none, uppercase, lowercase, capitalize or full-width',
+    words: ['none', 'uppercase', 'lowercase', 'capitalize', 'full-width'],
+    test: v => PROPERTY_GRAMMAR['text-transform'].words?.includes(v) ?? false,
+  },
+  'font-weight': {
+    takes:
+      'a number from 1 to 1000 (400 is regular, 700 bold), normal, bold, bolder or lighter',
+    words: ['normal', 'bold', 'bolder', 'lighter'],
+    test: v =>
+      ['normal', 'bold', 'bolder', 'lighter'].includes(v) ||
+      (/^\d+(\.\d+)?$/.test(v) && Number(v) >= 1 && Number(v) <= 1000) ||
+      /^var\(/.test(v),
+  },
+  opacity: {
+    takes: 'a number from 0 to 1, or a percentage',
+    test: v => /^(\d*\.?\d+)%?$/.test(v) || /^(calc|var)\(/.test(v),
+  },
+  'z-index': {
+    takes: 'a whole number, or auto',
+    test: v => v === 'auto' || /^-?\d+$/.test(v) || /^(calc|var)\(/.test(v),
+  },
+  padding: {
+    takes: 'one to four lengths of 0 or more (auto is not a padding)',
+    test: v => new RegExp(`^${NONNEG}(\\s+${NONNEG}){0,3}$`).test(v),
+  },
+  margin: {
+    takes: 'one to four lengths or auto',
+    test: v =>
+      new RegExp(`^(?:${LENGTH}|auto)(\\s+(?:${LENGTH}|auto)){0,3}$`).test(v),
+  },
+  'border-radius': {
+    takes: 'one to four lengths of 0 or more (and a / for elliptical corners)',
+    test: v =>
+      new RegExp(
+        `^${NONNEG}(\\s+${NONNEG}){0,3}(\\s*/\\s*${NONNEG}(\\s+${NONNEG}){0,3})?$`,
+      ).test(v),
+  },
+  gap: {
+    takes: 'one or two lengths of 0 or more',
+    test: v => new RegExp(`^${NONNEG}(\\s+${NONNEG})?$`).test(v),
+  },
+  width: {
+    takes: 'a length of 0 or more, auto, or a sizing keyword',
+    test: v =>
+      new RegExp(`^${NONNEG}$`).test(v) ||
+      ['auto', 'min-content', 'max-content', 'fit-content'].includes(v),
+  },
+  height: {
+    takes: 'a length of 0 or more, auto, or a sizing keyword',
+    test: v =>
+      new RegExp(`^${NONNEG}$`).test(v) ||
+      ['auto', 'min-content', 'max-content', 'fit-content'].includes(v),
+  },
+};
+for (const k of [
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'padding-inline',
+  'padding-block',
+])
+  PROPERTY_GRAMMAR[k] = PROPERTY_GRAMMAR.padding;
+for (const k of ['max-width', 'min-width'])
+  PROPERTY_GRAMMAR[k] = {
+    ...PROPERTY_GRAMMAR.width,
+    takes: 'a length of 0 or more, none, or a sizing keyword',
+    test: v => PROPERTY_GRAMMAR.width.test(v) || v === 'none',
+  };
+
+/**
+ * Why a value is not one the property takes, or null (a property with no
+ * grammar here is not checked).
+ * @param {string} prop
+ * @param {string} value
+ * @returns {{takes: string, near: string | null} | null}
+ */
+function propertyProblem(prop, value) {
+  const g = PROPERTY_GRAMMAR[prop];
+  const v = value.trim().toLowerCase();
+  if (!g || GLOBAL_VALUES.test(v) || /^var\(/.test(v) || g.test(v)) return null;
+  const near = g.words ? (nearest(v, g.words)[0] ?? null) : null;
+  return {takes: g.takes, near};
+}
+
+/** Words people use for a dial's values, by dial. */
+const DIAL_WORDS = /** @type {Record<string, Record<string, string>>} */ ({
+  surfaces: {
+    elevated: 'raised',
+    elevation: 'raised',
+    shadow: 'raised',
+    shadows: 'raised',
+    lifted: 'raised',
+    frosted: 'glass',
+    blur: 'glass',
+    blurred: 'glass',
+    translucent: 'glass',
+    bordered: 'outlined',
+    border: 'outlined',
+    borders: 'outlined',
+    lined: 'outlined',
+    outline: 'outlined',
+    plain: 'flat',
+    minimal: 'flat',
+  },
+  buttons: {
+    uppercase: 'caps',
+    upper: 'caps',
+    allcaps: 'caps',
+    capitals: 'caps',
+    tint: 'soft',
+    tinted: 'soft',
+    subtle: 'soft',
+    outlined: 'outline',
+    bordered: 'outline',
+    ghost: 'outline',
+    filled: 'solid',
+    fill: 'solid',
+  },
+  mode: {
+    auto: 'both',
+    system: 'both',
+    default: 'both',
+    light: 'light-only',
+    dark: 'dark-only',
+  },
+});
+
 /**
  * A length in pixels: px as given, rem and em at 16px; null for anything
  * else (a percentage, calc(), a word).
@@ -756,13 +915,21 @@ export function checkSetting(
       const ok = DIALS[thing].values.split('|');
       const lower = v.toLowerCase();
       if (!ok.includes(v)) {
-        const near = ok.includes(lower) ? [lower] : nearest(lower, ok);
+        // A word that means one of the values names it; a word close in
+        // spelling only, the nearest; anything else, no guess (never the
+        // first value, which may be the opposite).
+        const meant = DIAL_WORDS[thing]?.[lower];
+        const near = ok.includes(lower)
+          ? [lower]
+          : meant
+            ? [meant]
+            : nearest(lower, ok);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${thing} takes ${DIALS[thing].values}, not "${v}".`,
           {
             didYouMean: near,
-            run: [`${P} set ${slug} ${thing} ${near[0] ?? ok[0]}`],
+            run: near[0] ? [`${P} set ${slug} ${thing} ${near[0]}`] : [],
           },
         );
       }
@@ -818,7 +985,7 @@ export function checkSetting(
       return s;
     }
     if (unset) return s;
-    /** @param {Array<[string, number]>} L @param {string} def */
+    /** @param {Array<[string, number]>} L @param {string | number} def */
     const ladder = (L, def) => {
       // The value in effect for the target: its own setting, else the
       // whole-theme one, else the starting point.
@@ -833,16 +1000,28 @@ export function checkSetting(
               (x.when ?? '') === (on ? (s.when ?? '') : '') &&
               (x.state ?? '') === (on ? (s.state ?? '') : ''),
           )?.value;
-      const cur = own(s.on ?? '') ?? (s.on ? own('') : undefined) ?? def;
-      let i = L.findIndex(([n]) => n === cur);
-      if (i < 0) {
-        const px = lengthPx(cur) ?? Number.NaN;
-        i = L.findIndex(([, n]) => n >= px);
-        if (i < 0) i = L.length - 1;
-      }
-      return L[
-        Math.max(0, Math.min(L.length - 1, i + (v === 'more' ? 1 : -1)))
-      ][0];
+      // A member of a group set on the group steps from the group's value.
+      const fam = s.on ? familyOf(s.on) : null;
+      const cur =
+        own(s.on ?? '') ??
+        (fam && fam !== s.on && !s.only ? own(fam) : undefined) ??
+        // A part's own radius (a number) already counts a whole-theme
+        // setting.
+        (s.on && typeof def !== 'number' ? own('') : undefined) ??
+        def;
+      const at = L.findIndex(([n]) => n === cur);
+      if (at >= 0)
+        return L[
+          Math.max(0, Math.min(L.length - 1, at + (v === 'more' ? 1 : -1)))
+        ][0];
+      // A size between rungs steps to the next rung that way, never past it.
+      const px = typeof cur === 'number' ? cur : (lengthPx(cur) ?? Number.NaN);
+      if (Number.isNaN(px)) return L[0][0];
+      const next =
+        v === 'more'
+          ? L.find(([, n]) => n > px + 0.01)
+          : [...L].reverse().find(([, n]) => n < px - 0.01);
+      return (next ?? (v === 'more' ? L[L.length - 1] : L[0]))[0];
     };
     if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
       const token = paletteToken(thing);
@@ -893,15 +1072,34 @@ export function checkSetting(
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
       if (step) {
-        // The base theme's radius may be in rem or em (0.625rem is 10px).
-        const px = lengthPx(ctx.base?.light['--radius-element'] ?? '');
-        const from =
-          px != null
-            ? CORNERS.reduce((a, b) =>
-                Math.abs(b[1] - px) < Math.abs(a[1] - px) ? b : a,
-              )[0]
-            : 'medium';
-        s.value = ladder(CORNERS, from);
+        // The base theme's radius may be in rem or em (0.625rem is 10px). A
+        // part starts from its own radius (a card reads the container
+        // radius), scaled by a whole-theme corners setting.
+        const baseEl = lengthPx(ctx.base?.light['--radius-element'] ?? '');
+        const token = s.on
+          ? /^var\((--[\w-]+)\)$/.exec(
+              partDefault(
+                ctx,
+                partsOf(ctx, s)[0] ?? s.on,
+                'borderRadius',
+                s.when,
+              ) ?? '',
+            )?.[1]
+          : null;
+        const partBase = token ? lengthPx(ctx.base?.light[token] ?? '') : null;
+        const whole = [...data.settings]
+          .reverse()
+          .find(x => x.thing === 'corners' && !x.on)?.value;
+        const wholePx = whole
+          ? (CORNERS.find(([n]) => n === whole)?.[1] ?? lengthPx(whole))
+          : null;
+        const px =
+          partBase != null
+            ? wholePx != null && baseEl
+              ? (wholePx * partBase) / baseEl
+              : partBase
+            : (wholePx ?? baseEl);
+        s.value = ladder(CORNERS, px ?? 'medium');
       } else if (!CORNERS.some(([n]) => n === v) && !/^\d+(\.\d+)?px$/.test(v))
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -1128,12 +1326,24 @@ export function checkSetting(
           'base applies to the whole theme; drop --on.',
           {run: [`${P} set ${slug} base ${quoteCommandArgument(v)}`]},
         );
-      if (![...LIKE, 'none'].includes(v))
+      if (![...LIKE, 'none'].includes(v)) {
+        // `NEUTRAL`, `base=neutral`, `None`: the base meant.
+        const meant = v
+          .toLowerCase()
+          .replace(/^base\s*[=:]\s*/, '')
+          .trim();
+        const near = [...LIKE, 'none'].includes(meant)
+          ? [meant]
+          : nearest(meant, [...LIKE, 'none']);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `base takes ${DIALS.base.values}, not "${v}".`,
-          {didYouMean: nearest(v, LIKE)},
+          {
+            didYouMean: near,
+            run: near[0] ? [`${P} set ${slug} base ${near[0]}`] : [],
+          },
         );
+      }
     } else if (thing === 'mode') {
       if (s.on)
         refuse(
@@ -1141,12 +1351,23 @@ export function checkSetting(
           'mode applies to the whole theme; drop --on.',
           {run: [`${P} set ${slug} mode ${quoteCommandArgument(v)}`]},
         );
-      if (!['both', 'light-only', 'dark-only'].includes(v))
+      if (!['both', 'light-only', 'dark-only'].includes(v)) {
+        const lower = v.toLowerCase().replace(/^mode\s*[=:]\s*/, '');
+        const meant =
+          DIAL_WORDS.mode[lower] ??
+          (['both', 'light-only', 'dark-only'].includes(lower) ? lower : null);
+        const near = meant
+          ? [meant]
+          : nearest(lower, ['both', 'light-only', 'dark-only']);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `mode takes both, light-only, or dark-only, not "${v}".`,
-          {didYouMean: nearest(v, ['both', 'light-only', 'dark-only'])},
+          {
+            didYouMean: near,
+            run: near[0] ? [`${P} set ${slug} mode ${near[0]}`] : [],
+          },
         );
+      }
     }
     return s;
   }
@@ -1384,6 +1605,20 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `"more"/"less" work only on dials. Give ${prop} an exact CSS value.`,
+      );
+    const grammar = propertyProblem(prop, v);
+    if (grammar)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${prop} takes ${grammar.takes}; "${v}" is not one.`,
+        {
+          ...(grammar.near ? {didYouMean: [grammar.near]} : {}),
+          run: grammar.near
+            ? [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(grammar.near)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ]
+            : [`${HOW} ${prop}`],
+        },
       );
     if (COLOR_PROPS.test(prop) && !isColorValue(v)) {
       refuse(

@@ -455,9 +455,17 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          bg:
+            bg !== baseValue(p, 'bg', m)
+              ? String(bg)
+              : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }

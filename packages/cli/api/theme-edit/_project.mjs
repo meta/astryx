@@ -21,6 +21,7 @@ import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs'
 import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
+import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -52,6 +53,22 @@ const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
 const DOCS_VERSION = 2;
+
+/**
+ * The theme editor's cache folder for a project: the `.cache/astryx-theme`
+ * of the node_modules that holds the Core the command reads (the
+ * project's own, or a workspace root's). The locks and the part-data cache
+ * both live here, so one command never finds two answers. Null without
+ * Core.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+export function themeCacheRoot(dir) {
+  const core = findProjectCoreDir(dir);
+  return core
+    ? path.join(path.dirname(path.dirname(core)), '.cache', 'astryx-theme')
+    : null;
+}
 
 /**
  * The nearest folder at or above `dir` that holds node_modules.
@@ -201,13 +218,15 @@ export async function openProject(cwd) {
     // No stylesheet: the part data is empty, and the version alone keys it.
   }
   const coreKey = `${coreVersion}-${fingerprint}`;
-  const root = nodeModulesRoot(key) ?? key;
   const core = await import(pathToFileURL(themeFile).href);
   const cacheDir = path.join(
-    root,
-    'node_modules',
-    '.cache',
-    'astryx-theme',
+    themeCacheRoot(key) ??
+      path.join(
+        nodeModulesRoot(key) ?? key,
+        'node_modules',
+        '.cache',
+        'astryx-theme',
+      ),
     coreKey,
   );
   // Reading every component doc takes a second; it is fixed per Core install.
