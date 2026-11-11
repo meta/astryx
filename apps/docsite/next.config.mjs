@@ -9,7 +9,7 @@
  *   Client main-app chunks start with the preview's cookie compatibility guard;
  *   large Webpack builds run with isolated, memory-optimized compilation. The
  *   experimental DOCSITE_ICON_SET setting draws template previews with an
- *   installed icon set.
+ *   installed icon set, with per-icon imports from the set's library.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -209,6 +209,24 @@ const nextConfig = {
             loader: resolve(
               import.meta.dirname,
               'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
+      // A set's module may import from a library that is one huge barrel.
+      // Babel compiles the docsite, so Next's per-package import
+      // optimizations do not run; this loader points those imports at the
+      // icon files, so the compile does not take every icon in the library.
+      config.module.rules.push({
+        test: /\.[cm]?jsx?$/u,
+        include: /[\\/]node_modules[\\/]/u,
+        enforce: 'pre',
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/icon-library-import-loader.mjs',
             ),
             options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
           },
