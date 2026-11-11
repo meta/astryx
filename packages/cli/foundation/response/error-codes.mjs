@@ -107,6 +107,7 @@
  *   | 'ERR_THEME_PRIVATE_TOKEN'
  *   | 'ERR_THEME_UNKNOWN_TOKEN'
  *   | 'ERR_THEME_NO_EFFECT'
+ *   | 'ERR_THEME_NOT_CHECKED'
  *   | 'ERR_THEME_UNKNOWN_THING'
  *   | 'ERR_THEME_NOT_SET'
  *   | 'ERR_THEME_NOTHING_TO_UNDO'
@@ -358,6 +359,10 @@ export const ERROR_CODES = Object.freeze({
    * The change could not take effect: neither the part nor any part inside it reads the token (or, for the whole theme, no part reads it). The suggestions name the token the part really reads and the property that sets it directly. Nothing was changed. Raised only by `experimental theme`.
    */
   ERR_THEME_NO_EFFECT: 'ERR_THEME_NO_EFFECT',
+  /**
+   * Not an error: the change is saved, but the components could not be rendered, so it was not checked and has no preview. The result's `notChecked` carries this code and the cause, such as two copies of React. Reported only by `experimental theme`.
+   */
+  ERR_THEME_NOT_CHECKED: 'ERR_THEME_NOT_CHECKED',
   /**
    * The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by `experimental theme`.
    */
