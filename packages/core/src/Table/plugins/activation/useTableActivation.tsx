@@ -173,11 +173,12 @@ const activeBarColor = colorVars['--color-accent'];
 const ACTIVE_ROW: string = ':where([data-active="true"])';
 
 /**
- * Attribute gate for the press-target cursor. The subscriber maintains it
- * alongside the tab stop: present while the row takes activation presses
- * (eligible with no competing current owner), absent otherwise.
+ * Press-taking gate, carried as a private custom property instead of an
+ * attribute. The subscriber sets it while the row takes activation presses
+ * and removes it otherwise; the cursor rule below reads it, so no public
+ * name is needed to carry press-taking liveness into CSS.
  */
-const ELIGIBLE_ROW: string = ':where([data-activation-eligible="true"])';
+const ELIGIBLE_CURSOR_VAR = '--_table-activation-cursor';
 
 /**
  * Active-plus-hover gate. The plain active gate above intentionally keeps
@@ -189,6 +190,22 @@ const ACTIVE_HOVER_ROW: string = '[data-active="true"]:hover';
 
 /** Width of the leading-edge active bar, the non-colour active cue. */
 const ACTIVE_BAR_WIDTH_PX = 3;
+
+/**
+ * First-cell gate for the forced-colors bar rule below. The bar lives on the
+ * row's first cell (box-shadow misses `<tr>`), so the rule keys off the
+ * active row's first child.
+ */
+const ACTIVE_FIRST_CELL: string = ':where([data-active="true"]) > :first-child';
+
+/** Rows whose `aria-current="true"` this module wrote. Membership decides
+ * cleanup: only the exposure this module wrote comes off, so a competing
+ * owner's value survives. */
+const rowsWithModuleCurrentState = new WeakSet<HTMLTableRowElement>();
+
+/** Bar cell per row. The bar is inline paint on the first cell, so clearing
+ * a deactivated row needs the cell without a public marker attribute. */
+const barCells = new WeakMap<HTMLTableRowElement, HTMLTableCellElement>();
 
 /**
  * What another plugin declared on a mounted row: the owned tab stop and key
@@ -228,7 +245,10 @@ const OWNERSHIP_OBSERVER_OPTIONS: MutationObserverInit = {
 /** Whether a row already exposes current state this module must not overwrite. */
 function hasCompetingCurrentOwner(row: Element | null): boolean {
   const current = row?.getAttribute('aria-current');
-  return current != null && current !== 'true';
+  // `aria-current="false"` states no current state, so only a real state
+  // value competes; FR3's incompatible owner is a state this module would
+  // otherwise overwrite.
+  return current != null && current !== 'true' && current !== 'false';
 }
 
 /**
@@ -263,9 +283,10 @@ function stripActivationTokens(live: string | null): string | null {
  * bar on the first cell. The wash rides the shared row-overlay variable so
  * pinned cells replay it through the freeze line; its stylesheet rule keys
  * off `data-active`, so no class toggling is needed here. The bar is an
- * inset shadow on the first cell; under forced colors the shadow maps to
- * nothing and the pinned overlay covers the cell, so there the marker is an
- * outline, which draws over the cell in a system color. No selection
+ * inset shadow on the first cell in default mode; under forced colors the
+ * shadow maps to nothing, so the stylesheet rule below paints an outline
+ * there instead, which draws over the cell in a system color and follows
+ * mode changes without a store update. No selection
  * semantics are inferred: `aria-selected` is never written here.
  */
 
@@ -290,7 +311,7 @@ function applyRowActivationStyle(
     }
     row.setAttribute('data-active', 'true');
     row.setAttribute('aria-current', 'true');
-    row.setAttribute('data-activation-current', 'true');
+    rowsWithModuleCurrentState.add(row);
   } else {
     clearRowActivationStyle(row);
     return;
@@ -299,12 +320,9 @@ function applyRowActivationStyle(
   // paint reliably on `<tr>`. Direction reads the row's own computed style,
   // not the nearest ancestor that names one.
   const firstCell = row.cells[0];
-  const previousBarCell = row.querySelector<HTMLTableCellElement>(
-    '[data-activation-bar="true"]',
-  );
+  const previousBarCell = barCells.get(row);
   if (previousBarCell != null && previousBarCell !== firstCell) {
     clearBarCell(previousBarCell);
-    previousBarCell.removeAttribute('data-activation-bar');
   }
   if (firstCell == null) {
     return;
@@ -313,68 +331,52 @@ function applyRowActivationStyle(
   // the row wash on a ::before layer above the cell's own paint, which would
   // otherwise cover the inset bar. Other cells ignore the variable.
   firstCell.style.setProperty(
-    '--table-row-overlay-inset',
+    '--_table-row-overlay-inset',
     `${ACTIVE_BAR_WIDTH_PX}px`,
   );
-  if (forcedColorsActive()) {
-    firstCell.style.boxShadow = '';
-    firstCell.style.outline = `${ACTIVE_BAR_WIDTH_PX}px solid CanvasText`;
-    firstCell.style.outlineOffset = `-${ACTIVE_BAR_WIDTH_PX}px`;
-  } else {
-    firstCell.style.outline = '';
-    firstCell.style.outlineOffset = '';
-    const bar = `inset ${isRtlElement(row) ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
-    if (firstCell.style.boxShadow !== bar) {
-      firstCell.style.boxShadow = bar;
-    }
+  // Inline shadow only: under forced colors it computes to nothing and the
+  // stylesheet outline above carries the marker instead.
+  const bar = `inset ${isRtlElement(row) ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
+  if (firstCell.style.boxShadow !== bar) {
+    firstCell.style.boxShadow = bar;
   }
-  firstCell.setAttribute('data-activation-bar', 'true');
+  barCells.set(row, firstCell);
 }
 /**
  * Remove everything this module wrote on a `<tr>`: the active attribute and
- * current-state exposure, the eligibility attribute, plus the bar from
+ * current-state exposure, the press-taking cursor gate, plus the bar from
  * whichever cell carries it. The wash and cursor classes stay: they are
  * stamped on every transformed row and their rules key off the attributes
- * removed here. Cleanup paths call this rather than only unsubscribing, so a
- * row that becomes ineligible, loses its plugin, or loses `idKey` while
- * mounted never keeps stale active paint. Only the `aria-current="true"`
- * this module wrote is removed; a competing owner's value stays untouched.
+ * and variables the subscriber maintains. Cleanup paths call this rather
+ * than only unsubscribing, so a row that becomes ineligible, loses its
+ * plugin, or loses `idKey` while mounted never keeps stale active paint.
+ * Only the `aria-current="true"` this module wrote is removed; a competing
+ * owner's value stays untouched.
  */
 function clearRowActivationStyle(row: HTMLTableRowElement): void {
   row.removeAttribute('data-active');
-  row.removeAttribute('data-activation-eligible');
-  // Only the exposure this module wrote comes off: the marker tracks it, so
-  // a competing owner's value survives cleanup.
-  if (row.hasAttribute('data-activation-current')) {
-    row.removeAttribute('data-activation-current');
+  if (row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== '') {
+    row.style.removeProperty(ELIGIBLE_CURSOR_VAR);
+  }
+  // Only the exposure this module wrote comes off: the set tracks it, so a
+  // competing owner's value survives cleanup.
+  if (rowsWithModuleCurrentState.has(row)) {
+    rowsWithModuleCurrentState.delete(row);
     if (row.getAttribute('aria-current') === 'true') {
       row.removeAttribute('aria-current');
     }
   }
-  const barCell = row.querySelector<HTMLTableCellElement>(
-    '[data-activation-bar="true"]',
-  );
+  const barCell = barCells.get(row);
   if (barCell != null) {
+    barCells.delete(row);
     clearBarCell(barCell);
-    barCell.removeAttribute('data-activation-bar');
   }
 }
 
 /** Clear every bar style the module may have written on a bar cell. */
 function clearBarCell(cell: HTMLTableCellElement): void {
   cell.style.boxShadow = '';
-  cell.style.outline = '';
-  cell.style.outlineOffset = '';
-  cell.style.removeProperty('--table-row-overlay-inset');
-}
-
-/** Whether the forced-colors media query currently matches. */
-function forcedColorsActive(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(forced-colors: active)').matches
-  );
+  cell.style.removeProperty('--_table-row-overlay-inset');
 }
 
 // =============================================================================
@@ -404,17 +406,18 @@ function shouldSuppressActivation(
 
 const activationStyles = stylex.create({
   /**
-   * Press-target cursor, gated on the eligibility attribute rather than on
+   * Press-target cursor, gated on the private cursor variable rather than on
    * class presence. These classes are stamped on every transformed row and
    * stay in `className` across re-renders, so a `TableRow` re-render from a
    * `TableContext` change (stripes, dividers, hover) that reuses stale
    * transform props cannot strand or steal the cursor: only the live
-   * attribute paints it.
+   * variable paints it. An unset variable makes the declaration invalid at
+   * computed-value time, which falls back to the default cursor.
    */
   clickableRow: {
     cursor: {
       default: null,
-      [`${ELIGIBLE_ROW}:not(:disabled,[aria-disabled="true"])`]: 'pointer',
+      ':where(:not(:disabled,[aria-disabled="true"]))': `var(${ELIGIBLE_CURSOR_VAR})`,
     },
   },
   /**
@@ -441,6 +444,26 @@ const activationStyles = stylex.create({
       [ACTIVE_ROW]: activeWash,
       [ACTIVE_HOVER_ROW]: {
         '@media (hover: hover)': activeWash,
+      },
+    },
+  },
+  /**
+   * Forced-colors bar. The inline shadow below maps to nothing under forced
+   * colors, so the marker needs a rule that follows the mode by itself: an
+   * outline branch that only matches `forced-colors: active`, keyed off the
+   * active row's first cell. The width reuses the module bar constant.
+   */
+  forcedColorsBar: {
+    outline: {
+      default: null,
+      [ACTIVE_FIRST_CELL]: {
+        '@media (forced-colors: active)': `${ACTIVE_BAR_WIDTH_PX}px solid CanvasText`,
+      },
+    },
+    outlineOffset: {
+      default: null,
+      [ACTIVE_FIRST_CELL]: {
+        '@media (forced-colors: active)': `-${ACTIVE_BAR_WIDTH_PX}px`,
       },
     },
   },
@@ -472,6 +495,20 @@ export function getClickableRowClassNames(): ReadonlyArray<string> {
     );
   }
   return clickableRowClassNames;
+}
+
+/** Stylesheet classes for the forced-colors bar, resolved once and stamped on every transformed row. */
+let forcedColorsBarClassNames: ReadonlyArray<string> | null = null;
+
+export function getForcedColorsBarClassNames(): ReadonlyArray<string> {
+  if (forcedColorsBarClassNames == null) {
+    forcedColorsBarClassNames = Object.freeze(
+      (stylex.props(activationStyles.forcedColorsBar).className ?? '')
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  }
+  return forcedColorsBarClassNames;
 }
 
 // =============================================================================
@@ -549,11 +586,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
       rowModel: 'flat',
       // Whole-row ownership: this plugin owns the row's primary press path.
       // A second claim (including a repeated activation entry) neutralizes
-      // activation in the parent pipeline with a diagnostic.
+      // activation in the parent pipeline with a diagnostic. The claim also
+      // publishes canonical identity on the row context (see
+      // `TableRowContext`); no separate opt-in is declared.
       wholeRowOwner: 'activation',
-      // Canonical identity opt-in: Table publishes the resolved key and its
-      // status on the row context (see `TableRowContext`).
-      usesCanonicalRowKey: true,
       transformBodyRow(
         props: BodyRowRenderProps,
         item: T,
@@ -637,21 +673,18 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // restoring it later never strands or steals another plugin's focus
           // ownership, whichever side of activation declared it.
           //
-          // Ownership follows observed writes, not values. The shared
-          // observer below adopts every write it delivers, and the cleanup
-          // hands the baseline to the next attach in the same commit, so a
-          // plugin that starts declaring `tabIndex={0}` after this module
-          // wrote its default is recorded as the owner even though the live
-          // value equals the last write. An explicit declaration read in the
-          // transform seeds ownership too, so equality with the default
-          // never implies ownership by itself.
+          // The shared observer adopts every write it delivers. The cleanup
+          // hands the baseline to the next attach in the same commit. A late
+          // `tabIndex={0}` is then another owner's, even when it equals this
+          // module's last write. A declaration read in the transform seeds
+          // ownership too.
           //
           // The ref re-attaches whenever the transform re-renders the row. A
           // re-attach in the same commit claims the handed-off baseline, so
           // no new snapshot is taken; a row the record does not know (or one
           // recycled for another key) snapshots fresh.
-          // `data-activation-eligible` is exempt: it is namespaced to this
-          // module, so no other plugin writes it.
+          // The press-taking cursor variable is exempt: only this module's
+          // subscriber writes it, so no other plugin's value needs tracking.
           const liveTabIndex = row.getAttribute('tabindex');
           const liveShortcuts = row.getAttribute('aria-keyshortcuts');
           const handoff = pendingHandoffs.get(row);
@@ -795,19 +828,23 @@ export function useTableActivation<T extends Record<string, unknown>>(
             }
             lastInteractive = interactive;
             lastActive = active;
-            // Paint first: clearing inactive paint also clears the
-            // eligibility attribute, which the liveness update below
-            // re-applies for rows that keep it.
+            // Paint first: clearing inactive paint also clears the cursor
+            // gate, which the liveness update below re-applies for rows that
+            // keep it.
             applyRowActivationStyle(row, active);
-            // Press-taking liveness rides the eligibility attribute, and the
-            // tab stop and key announcements follow it: a row a later plugin
-            // marked current, or one the caller predicate now excludes, is
-            // not a tab stop, shows no pointer, and announces no key
-            // affordances. Classes stay untouched: the wash and cursor rules
-            // key off live attributes, so a `className` rewrite from stale
-            // transform props cannot strand or steal them.
+            // Press-taking liveness rides the private cursor variable, and
+            // the tab stop and key announcements follow it: a row a later
+            // plugin marked current, or one the caller predicate now
+            // excludes, is not a tab stop, shows no pointer, and announces
+            // no key affordances. Classes stay untouched: the wash and cursor
+            // rules key off the live variable, so a `className` rewrite from
+            // stale transform props cannot strand or steal them.
             if (interactive) {
-              row.setAttribute('data-activation-eligible', 'true');
+              if (
+                row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== 'pointer'
+              ) {
+                row.style.setProperty(ELIGIBLE_CURSOR_VAR, 'pointer');
+              }
               // The owned tab stop stays untouched; only a row with none
               // takes this module's default. A live value this module did
               // not write is adopted, so a later plugin's imperative update
@@ -832,7 +869,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
                 baseline.writtenShortcuts = next;
               }
             } else {
-              row.removeAttribute('data-activation-eligible');
+              if (row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== '') {
+                row.style.removeProperty(ELIGIBLE_CURSOR_VAR);
+              }
               // Restore the owned baseline, never blank it: a row the
               // predicate excludes keeps its owner's tab stop and key
               // announcements, whichever side of activation declared them.
@@ -907,25 +946,32 @@ export function useTableActivation<T extends Record<string, unknown>>(
           ...props,
           htmlProps: {
             ...props.htmlProps,
-            // The wash and cursor classes ride every transformed row,
-            // unconditionally: their rules key off the `data-active` and
-            // `data-activation-eligible` attributes the subscriber maintains,
-            // so a row re-render (a TableContext change rewrites the
-            // className React owns without re-running this transform) keeps
-            // paint and cursor from the live attributes instead of stale
-            // render-time values.
+            // The wash, cursor, and forced-colors classes ride every
+            // transformed row, unconditionally: their rules key off the
+            // `data-active` attribute and the cursor variable the subscriber
+            // maintains, so a row re-render (a TableContext change rewrites
+            // the className React owns without re-running this transform)
+            // keeps paint and cursor from the live row state instead of
+            // stale render-time values.
             className: [
               props.htmlProps.className,
               ...getActiveWashClassNames(),
               ...getClickableRowClassNames(),
+              ...getForcedColorsBarClassNames(),
             ]
               .filter(Boolean)
               .join(' '),
             ...(activeNow ? {'data-active': 'true' as const} : null),
             // Seeded from the render-time eligibility; the subscriber
-            // corrects it against competing owners and later flips.
+            // corrects it against competing owners and later flips. Merged
+            // over earlier plugins' row style, which the spread preserves.
             ...(eligible
-              ? {'data-activation-eligible': 'true' as const}
+              ? {
+                  style: {
+                    ...props.htmlProps.style,
+                    [ELIGIBLE_CURSOR_VAR]: 'pointer',
+                  } as React.CSSProperties,
+                }
               : null),
             // No declarative tab stop or key announcements: the subscriber
             // owns the mounted values from the plugins' baseline (above), so
