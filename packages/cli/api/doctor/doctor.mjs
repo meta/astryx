@@ -115,10 +115,11 @@ import {
   outsideProject,
   releaseFacts,
   builtIntegrationPackages,
+  AUTHORING_AUDIT,
+  authoringAuditData,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 import {storedSelfAudit} from '../../foundation/discovery/stored-self-audit.mjs';
-import {AUTHORING_AUDIT, authoringAuditData} from './_authoring-audit.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
