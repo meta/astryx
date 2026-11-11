@@ -928,6 +928,146 @@ describe('private Table shared-geometry controller', () => {
     viewport.remove();
     vi.unstubAllGlobals();
   });
+  describe('rows that all change height together', () => {
+    // Ten mounted rows whose height the test sets, in a 100px viewport.
+    function setup(heightOf: (index: number) => number) {
+      const viewport = document.createElement('div');
+      const table = document.createElement('table');
+      const body = document.createElement('tbody');
+      const rows = Array.from({length: 10}, () => {
+        const row = document.createElement('tr');
+        row.append(document.createElement('td'));
+        body.append(row);
+        return row;
+      });
+      table.append(body);
+      viewport.append(table);
+      document.body.append(viewport);
+      Object.defineProperty(viewport, 'clientHeight', {value: 100});
+      rows.forEach((row, index) =>
+        vi
+          .spyOn(row, 'getBoundingClientRect')
+          .mockImplementation(() => ({height: heightOf(index)}) as DOMRect),
+      );
+      // The body holds every logical row at the rows' own height.
+      vi.spyOn(body, 'getBoundingClientRect').mockImplementation(
+        () => ({height: data.length * heightOf(0)}) as DOMRect,
+      );
+      const measured = {viewportHeight: 100, startOffset: 0, isMeasured: true};
+      const geometry = source({
+        ...measured,
+        scrollTop: 0,
+        revision: 1,
+        layoutRevision: 1,
+      });
+      const hook = renderHook(() =>
+        useTableWindow({
+          capability: useTableRowsVirtualization({
+            rowHeight: 20,
+            initialViewportHeight: 100,
+          }),
+          data,
+          keys,
+          isAdmitted: true,
+          viewport: {current: viewport},
+          body: {current: body},
+          table: {current: table},
+          geometry: geometry.store,
+        }),
+      );
+      const relayout = (layoutRevision: number) =>
+        act(() =>
+          geometry.publish({
+            ...measured,
+            scrollTop: 0,
+            revision: layoutRevision,
+            layoutRevision,
+          }),
+        );
+      return {
+        ...hook,
+        relayout,
+        cleanup: () => {
+          hook.unmount();
+          viewport.remove();
+        },
+      };
+    }
+    function extent(segments: ListWindowSegment[], pitch: number) {
+      return segments.reduce(
+        (total, segment) =>
+          total +
+          (segment.type === 'gap'
+            ? segment.height
+            : (segment.end - segment.start) * pitch),
+        0,
+      );
+    }
+
+    it('keep windowing at the height they share, and return to rowHeight when they do', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      let pitch = 40;
+      const {result, relayout, cleanup} = setup(() => pitch);
+      // Every row is 40px, as after doubling the text size: the window plans
+      // at 40px instead of falling back to every row.
+      expect(result.current.isWindowed).toBe(true);
+      expect(extent(result.current.segments, 40)).toBe(data.length * 40);
+      expect(mounted(result.current.segments).length).toBeLessThan(data.length);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Rows measure 40px, not rowHeight 20px. Windowing uses the measured height.',
+        ),
+      );
+      // The text returns to its size: the rows are 20px again, and so is the pitch.
+      pitch = 20;
+      relayout(2);
+      expect(result.current.isWindowed).toBe(true);
+      expect(extent(result.current.segments, 20)).toBe(data.length * 20);
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Rendering all rows'),
+      );
+      cleanup();
+      warn.mockRestore();
+    });
+
+    it('keep windowing when every row is a fraction of a pixel off the pitch', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Each row is within tolerance of rowHeight, but 100 rows of 20.5px do
+      // not fit a 20px extent, so the shared 20.5px becomes the pitch.
+      const {result, cleanup} = setup(() => 20.5);
+      expect(result.current.isWindowed).toBe(true);
+      expect(extent(result.current.segments, 20.5)).toBe(data.length * 20.5);
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Rendering all rows'),
+      );
+      cleanup();
+      warn.mockRestore();
+    });
+
+    it('still check the extent when one row is off the pitch but their shared height is not', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Nine rows at 20.1px and one at 20.8px share a 20.17px height, within
+      // tolerance of rowHeight, but the 20.8px body extent does not fit.
+      const {result, cleanup} = setup(index => (index === 0 ? 20.8 : 20.1));
+      expect(result.current.isWindowed).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('cannot represent the declared body extent'),
+      );
+      cleanup();
+      warn.mockRestore();
+    });
+
+    it('fall back when the mounted rows do not share one height', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const {result, cleanup} = setup(index => (index % 2 === 0 ? 40 : 44));
+      expect(result.current.isWindowed).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Mounted rows have different heights.'),
+      );
+      cleanup();
+      warn.mockRestore();
+    });
+  });
   it('cleans the parent source subscription across StrictMode replay', () => {
     const geometry = source();
     const refs = {

@@ -347,14 +347,14 @@ export const DIALS = {
       'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
   },
   accent: {
-    help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1, the fill until the text on it reads. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
+    help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave, in dark mode too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses the shade nearest your color that passes both, and the result says so. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1, the fill until the text on it reads. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
     values: '<color>',
     examples: ['set my accent "#7c3aed"', 'set my accent rebeccapurple'],
     words:
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s, so a tinted gray never tints the page; set --color-background-body for it. From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -462,7 +462,7 @@ export const DIALS = {
     words: 'base start starting built-in extends foundation',
   },
   mode: {
-    help: "Which color modes the theme supports. light-only / dark-only: colors get one value and previews render in that mode. both (default): colors without --mode apply to both; --mode light|dark sets one side, and the other side keeps the base theme's value.",
+    help: "Which color modes the theme supports. light-only / dark-only: the colors the theme sets get one value, its mode's shade; settings saved for the other mode stay saved but do not apply (the result names them); the in-app preview starts in that mode with no switch. both (default): colors without --mode apply to both; --mode light|dark sets one side, and the other side keeps the base theme's value.",
     values: 'both|light-only|dark-only',
     examples: ['set my mode dark-only'],
     words: 'mode light dark only night day scheme',
