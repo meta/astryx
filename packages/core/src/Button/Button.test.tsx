@@ -1159,6 +1159,38 @@ describe('Button tooltip description (FR12)', () => {
 });
 
 describe('Button tooltip mount on the first interaction', () => {
+  it('follows a new element: a link Button that becomes disabled still shows its tooltip', async () => {
+    const showPopover = withPopover();
+    const {rerender} = render(
+      <Button label="Docs" href="/docs" tooltip="Read the docs" />,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Docs'});
+    fireEvent.pointerEnter(link, {pointerType: 'mouse'});
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+    fireEvent.pointerLeave(link, {pointerType: 'mouse'});
+    fireEvent.mouseLeave(link);
+    // Let the tooltip close, so the next hover must open it again.
+    await waitFor(
+      () => expect(window.HTMLElement.prototype.hidePopover).toHaveBeenCalled(),
+      {timeout: 8000},
+    );
+    rerender(
+      <Button label="Docs" href="/docs" tooltip="Read the docs" isDisabled />,
+    );
+    const button = screen.getByRole('button', {name: 'Docs'});
+    expect(button).toHaveAccessibleDescription('Read the docs');
+    const shownBefore = showPopover.mock.calls.length;
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(button);
+    await waitFor(
+      () => expect(showPopover.mock.calls.length).toBeGreaterThan(shownBefore),
+      {timeout: 8000},
+    );
+  }, 20000);
+
   it("a touch tap activates the button and shows no tooltip, though the tap's compatibility mouseenter fires", async () => {
     const showPopover = withPopover();
     const onClick = vi.fn();
