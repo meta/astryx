@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * The CLI turns on Node's compile cache, in Node's default folder in the
- * system temp folder. It never changes what a command prints or whether it
- * succeeds: not when the cache is off, cold, warm, or cannot be written.
+ * The CLI turns on Node's compile cache in the user's own folder in the
+ * system temp folder (node-compile-cache-<uid>), once that folder exists and
+ * only while no one else can reach it. It never changes what a command prints
+ * or whether it succeeds: not when the cache is off, cold, warm, refused, or
+ * cannot be written. Systems without user ids (Windows) keep it off.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -14,7 +16,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 
 /** The user's own cache folder's name in the temp folder. */
-const CACHE_NAME = `node-compile-cache${process.getuid ? `-${process.getuid()}` : ''}`;
+const CACHE_NAME = `node-compile-cache-${process.getuid?.()}`;
 const BIN = path.join(CLI_ROOT, 'clients', 'cli', 'bin', 'astryx.mjs');
 const SANDBOX = path.resolve(CLI_ROOT, '..', '..', 'apps', 'sandbox');
 
@@ -57,7 +59,7 @@ function run(tmp, env = {}) {
   return {status: result.status, stdout: result.stdout, stderr: result.stderr};
 }
 
-describe("Node's compile cache", () => {
+describe.skipIf(process.platform === 'win32')("Node's compile cache", () => {
   it('is not used on the first run, which only makes its folder', () => {
     const tmp = path.join(work, 'first');
     fs.mkdirSync(tmp);
@@ -80,8 +82,25 @@ describe("Node's compile cache", () => {
     const written = fs.readdirSync(path.join(tmp, CACHE_NAME));
     expect(written.length).toBeGreaterThan(0);
     const warm = run(tmp);
+    // Node read the cache back: it reports each entry it accepted.
+    const debug = run(tmp, {NODE_DEBUG_NATIVE: 'COMPILE_CACHE'});
+    expect(debug.stderr).toMatch(/was accepted/);
     expect(off.status).toBe(0);
     for (const result of [cold, warm]) expect(result).toEqual(off);
+  });
+
+  it('stays off, making no folder, where the system has no user ids', () => {
+    const tmp = path.join(work, 'no-uid');
+    fs.mkdirSync(tmp);
+    // As on Windows: no process.getuid, so a folder's owner cannot be checked.
+    const preload = path.join(work, 'no-uid.cjs');
+    fs.writeFileSync(preload, 'delete process.getuid;\n');
+    const off = run(path.join(work, 'off-no-uid'), {
+      NODE_DISABLE_COMPILE_CACHE: '1',
+    });
+    const noUid = run(tmp, {NODE_OPTIONS: `--require ${preload}`});
+    expect(noUid).toEqual(off);
+    expect(fs.readdirSync(tmp)).toEqual([]);
   });
 
   it('is off with NODE_DISABLE_COMPILE_CACHE, which makes no folder either', () => {
