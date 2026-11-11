@@ -94,8 +94,8 @@
       "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/Markdown/parser.ts:incrementalStateMode": {
-      "status": "allowed",
-      "reason": "A type-only brand (declare const) with no runtime value, so no copy can split it at runtime."
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
     },
     "packages/core/src/Markdown/parser.ts:listMarkerShapes": {
       "status": "allowed",
