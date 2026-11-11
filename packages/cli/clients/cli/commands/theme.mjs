@@ -95,6 +95,18 @@ import {doc as themeTargetsFn} from '../../../api/theme/themeTargets.doc.mjs';
 import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGenerate.doc.mjs';
 
 /**
+ * The words a theme command is run with: `theme build` here, and the copies
+ * under `experimental theme`, where `build` is called `compile`. The actions
+ * and API calls are the same; only these words and the docs differ.
+ * @typedef {object} ThemeCommandWords
+ * @property {string} group - The group's command path: `theme` or `experimental theme`.
+ * @property {string} build - The build subcommand's name: `build` or `compile`.
+ */
+
+/** @type {ThemeCommandWords} */
+const THEME_WORDS = {group: 'theme', build: 'build'};
+
+/**
  * Path to this CLI's real entry (clients/cli/bin/astryx.mjs), resolved from
  * this module's location (clients/cli/commands/theme.mjs → ../bin/
  * astryx.mjs). Used to re-invoke `theme build` as a child process in watch mode.
@@ -115,14 +127,16 @@ function resolveCliBin() {
  *   level the user chose.
  * @param {(child: import('node:child_process').ChildProcess) => void} [onSpawn] -
  *   Receives the child, so a watcher that stops can stop it too.
+ * @param {ThemeCommandWords} [words]
  * @returns {Promise<number>}
  */
-function runThemeBuildOnceChild(file, options, onSpawn) {
+function runThemeBuildOnceChild(file, options, onSpawn, words = THEME_WORDS) {
   const cliBin = resolveCliBin();
+  const command = [...words.group.split(' '), words.build];
   // A detail level the user chose applies to every rebuild.
   const args = options.detail
-    ? [cliBin, '--detail', options.detail, 'theme', 'build', file]
-    : [cliBin, 'theme', 'build', file];
+    ? [cliBin, '--detail', options.detail, ...command, file]
+    : [cliBin, ...command, file];
   if (options.out) args.push('--out', options.out);
   if (options.iconsSpecifier)
     args.push('--icons-specifier', options.iconsSpecifier);
@@ -150,9 +164,10 @@ function runThemeBuildOnceChild(file, options, onSpawn) {
  * @param {Array<{file: string, filePath: string}>} entries - The theme file
  *   arguments as the user passed them, with their resolved absolute paths.
  * @param {{out?: string, iconsSpecifier?: string, detail?: string}} options - Parsed command options, plus the detail level the user chose.
+ * @param {ThemeCommandWords} [words]
  * @returns {Promise<void>} Resolves when the watcher is stopped (Ctrl-C).
  */
-async function runThemeBuildWatch(entries, options) {
+async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
   const rel = (/** @type {string} */ filePath) =>
     path.relative(process.cwd(), filePath);
   const watchingLine = `\nWatching ${entries
@@ -161,7 +176,7 @@ async function runThemeBuildWatch(entries, options) {
 
   // Initial build.
   for (const entry of entries) {
-    await runThemeBuildOnceChild(entry.file, options);
+    await runThemeBuildOnceChild(entry.file, options, undefined, words);
   }
 
   let building = false;
@@ -185,9 +200,14 @@ async function runThemeBuildWatch(entries, options) {
     }
     building = true;
     emit(text(`\nChange detected — rebuilding ${rel(entry.filePath)}...`));
-    const done = runThemeBuildOnceChild(entry.file, options, child => {
-      rebuildChild = child;
-    });
+    const done = runThemeBuildOnceChild(
+      entry.file,
+      options,
+      child => {
+        rebuildChild = child;
+      },
+      words,
+    );
     rebuildDone = done.then(() => {});
     await done;
     rebuildChild = null;
@@ -268,8 +288,9 @@ async function warnOnThemeIntegrationIssues(json) {
  * Print cleanup-stage `theme add --list`. Its JSON stays the released
  * `theme.list`; its text names the cleanup commands (AST-050 FR12).
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
+ * @param {ThemeCommandWords} [words]
  */
-function printThemeAddList(themes) {
+function printThemeAddList(themes, words = THEME_WORDS) {
   const run = getCliInvocation();
   // `theme list` shows what this project can add now. Themes in packages it
   // has not installed are `discover`'s.
@@ -289,7 +310,7 @@ function printThemeAddList(themes) {
         return theme.description ? [head, theme.description] : head;
       }),
     ),
-    text(themeNextSteps(run)),
+    text(themeNextSteps(run, words)),
     more,
   );
 }
@@ -298,13 +319,14 @@ function printThemeAddList(themes) {
  * What to do with a listed theme. Outside a project there is no app to add one
  * to, so only the fork step is named (spec AST-081 FR3).
  * @param {string} run the CLI invocation
+ * @param {ThemeCommandWords} [words]
  * @returns {string}
  */
-function themeNextSteps(run) {
-  const fork = `Fork source: ${run} theme eject <slug> [target-path]`;
+function themeNextSteps(run, words = THEME_WORDS) {
+  const fork = `Fork source: ${run} ${words.group} eject <slug> [target-path]`;
   return isOutsideProject()
     ? fork
-    : `Import one: ${run} theme add <slug> [--package <package>]\n${fork}`;
+    : `Import one: ${run} ${words.group} add <slug> [--package <package>]\n${fork}`;
 }
 
 /**
@@ -312,8 +334,9 @@ function themeNextSteps(run) {
  * because each record names its owner.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
  * @param {import('../../../api/theme/theme.type.mjs').ThemeUnmigratedCopy[]} [unmigratedCopies]
+ * @param {ThemeCommandWords} [words]
  */
-function printThemeList(themes, unmigratedCopies = []) {
+function printThemeList(themes, unmigratedCopies = [], words = THEME_WORDS) {
   const run = getCliInvocation();
   const more = text(
     `More themes in packages you could add: ${run} discover theme`,
@@ -341,7 +364,7 @@ function printThemeList(themes, unmigratedCopies = []) {
           default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
         },
       }),
-      text(themeNextSteps(run)),
+      text(themeNextSteps(run, words)),
       more,
     );
   }
@@ -420,8 +443,9 @@ function printThemeApp(result) {
 /**
  * Print every field in a source-fork receipt.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} result
+ * @param {ThemeCommandWords} [words]
  */
-function printThemeEject(result) {
+function printThemeEject(result, words = THEME_WORDS) {
   const {data} = result;
   emit(
     section('Ejected theme'),
@@ -439,10 +463,39 @@ function printThemeEject(result) {
       layout: 'stacked',
     }),
     text(
-      `This is a local fork. Build it with ${getCliInvocation()} theme build ${path.join(data.outputDir, data.entry)}.`,
+      `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${path.join(data.outputDir, data.entry)}.`,
     ),
   );
 }
+
+/**
+ * The CommandDocs one copy of the theme subcommands is built from.
+ * @typedef {object} ThemeCommandDocs
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} [palette] - With `paletteGenerate`; a copy without them has no palette commands.
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} [paletteGenerate]
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} build
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} list
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} add
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} remove
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} use
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} eject
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} template
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} targets
+ */
+
+/** @type {ThemeCommandDocs} */
+const THEME_DOCS = {
+  palette: themePaletteGroup,
+  paletteGenerate: themePaletteGenerateCommand,
+  build: themeBuildCommand,
+  list: themeListCommand,
+  add: themeAddCommand,
+  remove: themeRemoveCommand,
+  use: themeUseCommand,
+  eject: themeEjectCommand,
+  template: themeTemplateCommand,
+  targets: themeTargetsCommand,
+};
 
 /**
  * @param {import('commander').Command} program
@@ -487,7 +540,47 @@ export function registerTheme(program) {
       `  ${getCliInvocation()} docs theme               How component overrides work\n`,
   );
 
-  const palette = defineCommand(theme, themePaletteGroup, {
+  registerThemeSubcommands(theme, program, THEME_DOCS, THEME_WORDS);
+}
+
+/**
+ * Register the theme subcommands under a group: palette (generate) when its
+ * docs are given, build, list, add, remove, use, eject, template and targets. `astryx theme` and the
+ * copies under `astryx experimental theme` share these actions and their API
+ * calls; `docs` and `words` give each copy its own names.
+ * @param {import('commander').Command} theme the group to register under
+ * @param {import('commander').Command} program the root program
+ * @param {ThemeCommandDocs} docs
+ * @param {ThemeCommandWords} words
+ */
+export function registerThemeSubcommands(theme, program, docs, words) {
+  if (docs.palette && docs.paletteGenerate)
+    registerPaletteCommands(
+      theme,
+      program,
+      docs.palette,
+      docs.paletteGenerate,
+      words,
+    );
+  registerThemeCommands(theme, program, docs, words);
+}
+
+/**
+ * Register `palette` and `palette generate` under a theme group.
+ * @param {import('commander').Command} theme
+ * @param {import('commander').Command} program
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} paletteDoc
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} generateDoc
+ * @param {ThemeCommandWords} words
+ */
+function registerPaletteCommands(
+  theme,
+  program,
+  paletteDoc,
+  generateDoc,
+  words,
+) {
+  const palette = defineCommand(theme, paletteDoc, {
     action: (
       /** @type {unknown} */ options,
       /** @type {import('commander').Command} */ cmd,
@@ -499,7 +592,7 @@ export function registerTheme(program) {
           reason: 'available subcommand',
         }));
         return cliError(
-          `unknown subcommand 'theme palette ${String(extras[0])}'`,
+          `unknown subcommand '${words.group} palette ${String(extras[0])}'`,
           {
             suggestions,
             code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
@@ -511,7 +604,7 @@ export function registerTheme(program) {
     },
   });
 
-  defineCommand(palette, themePaletteGenerateCommand, {
+  defineCommand(palette, generateDoc, {
     fn: themePaletteGenerateFn,
     action: (
       /** @type {string} */ configPath,
@@ -575,8 +668,17 @@ export function registerTheme(program) {
       return NO_RESULT_SET;
     },
   });
+}
 
-  defineCommand(theme, themeBuildCommand, {
+/**
+ * Register build, list, add, remove, use, eject, template and targets.
+ * @param {import('commander').Command} theme
+ * @param {import('commander').Command} program
+ * @param {ThemeCommandDocs} docs
+ * @param {ThemeCommandWords} words
+ */
+function registerThemeCommands(theme, program, docs, words) {
+  defineCommand(theme, docs.build, {
     fn: themeBuildFn,
     action: async (
       /** @type {string[]} */ files,
@@ -605,7 +707,7 @@ export function registerTheme(program) {
           suggestions: looksGlobby
             ? [
                 {
-                  name: `astryx theme build ${entry.file.replace(/['"]/g, '')}`,
+                  name: `astryx ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
                   reason:
                     'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                 },
@@ -665,7 +767,7 @@ export function registerTheme(program) {
             code: ERROR_CODES.ERR_THEME_INVALID,
           });
         }
-        await runThemeBuildWatch(entries, {...options, detail});
+        await runThemeBuildWatch(entries, {...options, detail}, words);
         return NO_RESULT_SET;
       }
 
@@ -817,7 +919,7 @@ export function registerTheme(program) {
     },
   });
 
-  defineCommand(theme, themeListCommand, {
+  defineCommand(theme, docs.list, {
     fn: themeListFn,
     action: async (/** @type {{package?: string}} */ options) => {
       const json = program.opts().json || false;
@@ -847,12 +949,12 @@ export function registerTheme(program) {
         return answered;
       }
 
-      printThemeList(result.data, result.meta?.unmigratedCopies);
+      printThemeList(result.data, result.meta?.unmigratedCopies, words);
       return answered;
     },
   });
 
-  const themeAddCli = defineCommand(theme, themeAddCommand, {
+  const themeAddCli = defineCommand(theme, docs.add, {
     fn: themeAddFn,
     action: async (
       /** @type {string | undefined} */ slug,
@@ -893,7 +995,7 @@ export function registerTheme(program) {
         return answered;
       }
       if (result.type === 'theme.list') {
-        printThemeAddList(result.data);
+        printThemeAddList(result.data, words);
         return answered;
       }
       printThemeApp(result);
@@ -903,7 +1005,7 @@ export function registerTheme(program) {
   // Reject the removed target-path argument in Commander's standard parse path.
   themeAddCli.allowExcessArguments(false);
 
-  defineCommand(theme, themeRemoveCommand, {
+  defineCommand(theme, docs.remove, {
     fn: themeRemoveFn,
     action: async (/** @type {string} */ slug) => {
       const json = program.opts().json || false;
@@ -926,7 +1028,7 @@ export function registerTheme(program) {
     },
   });
 
-  defineCommand(theme, themeUseCommand, {
+  defineCommand(theme, docs.use, {
     fn: themeUseFn,
     action: async (/** @type {string} */ slug) => {
       const json = program.opts().json || false;
@@ -949,7 +1051,7 @@ export function registerTheme(program) {
     },
   });
 
-  defineCommand(theme, themeEjectCommand, {
+  defineCommand(theme, docs.eject, {
     fn: themeEjectFn,
     action: async (
       /** @type {string} */ slug,
@@ -976,12 +1078,12 @@ export function registerTheme(program) {
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
-      else printThemeEject(result);
+      else printThemeEject(result, words);
       return NO_RESULT_SET;
     },
   });
 
-  defineCommand(theme, themeTemplateCommand, {
+  defineCommand(theme, docs.template, {
     fn: themeTemplateFn,
     action: (
       /** @type {string | undefined} */ targetPath,
@@ -1026,13 +1128,13 @@ export function registerTheme(program) {
           'It documents every defineTheme field, the token families, and the component override syntax. ' +
             'Copy what you need into your own theme file, then delete it.',
         ),
-        code(`${invocation} theme build ${result.data.path}`),
+        code(`${invocation} ${words.group} ${words.build} ${result.data.path}`),
       );
       return NO_RESULT_SET;
     },
   });
 
-  defineCommand(theme, themeTargetsCommand, {
+  defineCommand(theme, docs.targets, {
     fn: themeTargetsFn,
     action: async (/** @type {string | undefined} */ filter) => {
       const json = program.opts().json || false;

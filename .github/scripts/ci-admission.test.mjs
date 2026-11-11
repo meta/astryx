@@ -175,7 +175,7 @@ describe('where runs wait', () => {
     const ADMITTED =
       /needs\.(admission|run-labels)\.result == 'success'|needs\.run-labels\.outputs\./;
     const DISPATCH_ONLY =
-      /^(always\(\) && )?\(?github\.event_name == 'workflow_dispatch' && inputs\.operation == 'release-check'/;
+      /^(always\(\) && )?\(?github\.event_name == 'workflow_dispatch' && inputs\.operation == '(release-check|webkit-weekly)'/;
     // Its every step after the runner pick reads native-swift-runner's
     // `applies`, empty when that job skipped behind admission.
     const NO_WORK_ALONE = ['test-native-swift'];
@@ -219,6 +219,8 @@ describe('where runs wait', () => {
       'pr-interaction-webkit',
       'pr-touched-components',
       'pr-visual',
+      'release-specs',
+      'release-specs-plan',
       'typecheck',
     ]);
   });

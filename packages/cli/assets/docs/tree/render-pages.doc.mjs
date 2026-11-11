@@ -67,7 +67,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Each warning names something that may look different from what you meant, and what to change. The most common is a component that ignores its children: `<ListItem>Save</ListItem>` renders an empty row because ListItem takes `label="Save"`. Others flag remote images (a sandboxed viewer cannot load them; save the image next to the page and import it), a `<script>`, `<link>` or `<iframe>` the page itself renders (the file promises to run and load nothing, so remove them), missing images, and output the page printed while rendering.',
+          text: 'Each warning names something that may look different from what you meant, and what to change. The most common is a component that ignores its children: `<ListItem>Save</ListItem>` renders an empty row because ListItem takes `label="Save"`. Others flag remote images (a sandboxed viewer cannot load them; save the image next to the page and import it), a `<script>`, `<link>` or `<iframe>` the page itself renders (the file promises to run and load nothing, so remove them), missing images, and output the page printed while rendering. A `node-crash` warning names a Node build that crashes in `Intl.Segmenter` (its version and path). The page rendered without it, so the output may differ slightly: initials and character counts (such as Avatar initials) can split a joined emoji, a flag, or a letter written with a separate accent mark. Names in ordinary composed letters (`José`, `Zoë`, `李小龙`) come out the same. Render with an official Node.js build to remove the difference.',
         },
       ],
     },
