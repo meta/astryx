@@ -107,7 +107,27 @@ export const renderDir = project =>
  */
 export async function renderGenerated(project, file, source, extra = []) {
   const dir = renderDir(project);
+  // A lookup in an app with no themes must not leave a themes/ folder.
+  const themes = path.dirname(dir);
+  // A themes/ folder that holds only other renders was made by another
+  // lookup running beside this one, so it is ours to remove too.
+  const madeThemes =
+    !fs.existsSync(themes) ||
+    (() => {
+      const names = fs.readdirSync(themes);
+      return (
+        names.length > 0 && names.every(n => n.startsWith('.astryx-render-'))
+      );
+    })();
   fs.mkdirSync(dir, {recursive: true});
+  // Stopped by a signal, the render folder still goes.
+  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
+  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
+    cleanup();
+    process.kill(process.pid, sig);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   const entry = path.join(dir, file);
   fs.writeFileSync(entry, source);
   for (const x of extra) {
@@ -136,9 +156,14 @@ export async function renderGenerated(project, file, source, extra = []) {
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
-    removeEmpty(dir);
+    removeEmpty(madeThemes ? themes : dir);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
   }
 }
+
+/** @param {unknown} v @returns {v is Record<string, unknown>} */
+const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * Remove `dir` and the folders under it when no file is left in them.
@@ -164,9 +189,14 @@ export async function partData(project) {
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // A file that parses but has the wrong shape (a hand edit, a cut-off
+    // write) is built again, as a file that does not parse is.
     if (
       cached.version === PART_DATA_VERSION &&
-      cached.coreKey === project.coreKey
+      cached.coreKey === project.coreKey &&
+      isRecord(cached.map) &&
+      Object.values(cached.map).every(isRecord) &&
+      Array.isArray(cached.pairs)
     )
       return cached;
   } catch {
@@ -175,7 +205,10 @@ export async function partData(project) {
   const data = await buildPartData(project);
   try {
     fs.mkdirSync(project.cacheDir, {recursive: true});
-    fs.writeFileSync(file, JSON.stringify(data));
+    // Write beside it and rename, so a reader never sees half a file.
+    const part = `${file}.${RUN}`;
+    fs.writeFileSync(part, JSON.stringify(data));
+    fs.renameSync(part, file);
   } catch {
     // A read-only node_modules: build it again next time.
   }

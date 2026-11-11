@@ -10,9 +10,19 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {officialCitation} from './_palette.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
+
+/**
+ * Whether a token is a color by its name, as Core's color groups and the
+ * token table type it: `--color-*`, `--syntax-*` and `--focus-outline-color`.
+ * Settings are checked by it where no installed Core is read.
+ * @param {string} name
+ */
+export const isColorToken = name =>
+  /^--color-|^--syntax-|^--focus-outline-color$/.test(name);
 
 /** Tokens a component may read only in some states: never refused globally. */
 /**
@@ -25,10 +35,12 @@ const SOFT =
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
 /** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
+/** @typedef {import('./_parts.mjs').PartData} PartData */
+/** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
 /**
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {import('./_parts.mjs').PartData} parts
+ * @param {PartData} parts
  */
 export function makeCompiler(project, parts) {
   const {core} = project;
@@ -58,11 +70,10 @@ export function makeCompiler(project, parts) {
   put(groupVars(core.easeVars), 'easing');
   for (const k of Object.keys(core.tokenDefaults ?? {})) {
     if (TYPE[k]) continue;
-    if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
+    if (isColorToken(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
     else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
-    else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (
       /^--(radius|spacing|size|text-.*-size|border-width|focus-outline-(width|offset))/.test(
         k,
@@ -262,17 +273,11 @@ export function makeCompiler(project, parts) {
           : g === 'background'
             ? ['background-color', 'background', 'background-image']
             : null;
-      if (!wanted || !fed.length || fed.some(f => wanted.includes(f.prop)))
-        return null;
-      const direct = g === 'text' ? 'color' : 'background-color';
-      return {
-        message: `${target} reads ${token} only for ${fmtFeeds(fed, target)}, not for its ${g}, so this would not change what you expect.`,
-        run: [
-          `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
-          `${HOW} ${target}`,
-        ],
-        also: [],
-      };
+      // The part reads the token the user named: it is set as asked, and
+      // the result names what it feeds.
+      void wanted;
+      void fed;
+      return null;
     }
     const reads = g ? partReads(target, g) : [];
     const v = quote(value);
@@ -287,9 +292,23 @@ export function makeCompiler(project, parts) {
               `${P} set ${theme} ${r.token} ${v} --on ${target}${fmtWhen(r.when) ? `   #${fmtWhen(r.when)}` : ''}`,
           ),
       );
-    if (g && DIRECT[g])
+    // The property that takes this kind of value: a size goes to
+    // font-size, never to font-weight.
+    const direct =
+      g === 'font'
+        ? /-(size)$|font-size-/.test(token)
+          ? 'font-size'
+          : /-leading$/.test(token)
+            ? 'line-height'
+            : /-tracking$/.test(token)
+              ? 'letter-spacing'
+              : /family/.test(token)
+                ? 'font-family'
+                : 'font-weight'
+        : g && DIRECT[g];
+    if (direct)
       run.push(
-        `${P} set ${theme} ${DIRECT[g]} ${v} --on ${target}   # sets it directly, whatever token it uses`,
+        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
       );
     const kids = g
       ? (MAP[target]?.contains ?? [])
@@ -322,10 +341,10 @@ export function makeCompiler(project, parts) {
   /**
    * Whether a whole-theme token is read by any part.
    * @param {string} token
-   * @param {string} P
+   * @param {string} _P the command prefix (unused: the result is a note)
    * @returns {CheckFailure | null}
    */
-  function checkTokenGlobal(token, P) {
+  function checkTokenGlobal(token, _P) {
     if (anyReader(token).length || SOFT.test(token)) return null;
     const g = groupOfToken(token);
     const near = g
@@ -336,15 +355,8 @@ export function makeCompiler(project, parts) {
       : [];
     return {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
-      run: near.length
-        ? near.slice(0, 3).map(t => `${P} set <theme> ${t} <value>`)
-        : [`${HOW} "<what you want>"`],
-      also:
-        g === 'shadow'
-          ? [
-              `shadows are set per part: ${P} set <theme> box-shadow "0 2px 6px rgb(0 0 0 / 0.3)" --on card`,
-            ]
-          : [],
+      run: [`${HOW} ${quote(token)}`],
+      also: [],
     };
   }
 
@@ -374,8 +386,8 @@ export function makeCompiler(project, parts) {
    * in each mode, below 4.5:1 now but not as low in the base theme. Also
    * the values this theme set that have no fixed color to check (a
    * `color-mix()`, a `var()`), so the result can say what it skipped.
-   * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
-   * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
+   * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
+   * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
    * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
@@ -398,9 +410,7 @@ export function makeCompiler(project, parts) {
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
-        bgAlpha === 0
-          ? ground
-          : back && compositeOver(back, bgAlpha, ground);
+        bgAlpha === 0 ? ground : back && compositeOver(back, bgAlpha, ground);
       const top = parseColor(fg);
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
@@ -438,6 +448,21 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
+        // Citation text on the accent tint is held to the bar the color
+        // mapping picks the tint by: what the official neutral theme's own
+        // pair reads (under 4.5:1 in dark), so a tint it picked is never
+        // reported against it.
+        if (
+          p.fg.tokens[0] === '--color-text-secondary' &&
+          p.bg.tokens[0] === '--color-accent-muted' &&
+          r >=
+            Math.min(
+              4.5,
+              officialCitation(m === 'dark' ? 'dark' : 'light') ?? 4.5,
+            ) -
+              0.005
+        )
+          continue;
         const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;
