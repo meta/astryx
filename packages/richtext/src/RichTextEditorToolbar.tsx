@@ -115,6 +115,15 @@ type BlockType =
 // A vertical Divider's default 100% height needs a definite parent height.
 // Toolbar slots are sized by their controls instead, so let flexbox stretch
 // these group separators across the slot's resolved height.
+// The link popover's anchor: a box around the Link button that takes no
+// space of its own.
+const linkAnchorStyles = stylex.create({
+  wrapper: {
+    display: 'inline-flex',
+    flexShrink: 0,
+  },
+});
+
 const toolbarDividerStyles = stylex.create({
   vertical: {
     alignSelf: 'stretch',
@@ -598,8 +607,9 @@ export function RichTextEditorToolbar({
   const [canRedo, setCanRedo] = useState(false);
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
   const linkButtonRef = useRef<HTMLButtonElement>(null);
+  const linkAnchorRef = useRef<HTMLSpanElement>(null);
   const link = useToolbarLink(editor, {
-    anchorRef: linkButtonRef,
+    buttonRef: linkButtonRef,
     hasNewTabLinks,
     promptForUrl,
   });
@@ -820,20 +830,26 @@ export function RichTextEditorToolbar({
               />
             ))}
             {hasLink && (
-              <ToggleButton
+              // The popover anchors to this wrapper, which a press never
+              // scales, and finds the button inside it for its handlers.
+              <span
                 key="link"
-                ref={linkButtonRef}
-                label={t('@astryx.richTextEditor.toolbar.link')}
-                icon={icon('link')}
-                size={size}
-                isIconOnly
-                isPressed={isLink || link.isOpen}
-                isDisabled={!isEditable}
-                onMouseDown={event => event.preventDefault()}
-                // The link popover owns a press on the button, and with it
-                // the button's popup state; `promptForUrl` replaces both.
-                onPressedChange={promptForUrl ? toggleLink : undefined}
-              />
+                ref={linkAnchorRef}
+                {...stylex.props(linkAnchorStyles.wrapper)}>
+                <ToggleButton
+                  ref={linkButtonRef}
+                  label={t('@astryx.richTextEditor.toolbar.link')}
+                  icon={icon('link')}
+                  size={size}
+                  isIconOnly
+                  isPressed={isLink || link.isOpen}
+                  isDisabled={!isEditable}
+                  onMouseDown={event => event.preventDefault()}
+                  // The link popover owns a press on the button, and with it
+                  // the button's popup state; `promptForUrl` replaces both.
+                  onPressedChange={promptForUrl ? toggleLink : undefined}
+                />
+              </span>
             )}
             {isRenderable(endContent) && (
               <>
@@ -847,7 +863,7 @@ export function RichTextEditorToolbar({
       {/* A sibling of the toolbar, not inside it: the toolbar is one roving
           tab stop, which would leave the form's controls out of Tab. */}
       {hasLink && promptForUrl == null && (
-        <ToolbarLinkPopover link={link} anchorRef={linkButtonRef} size={size} />
+        <ToolbarLinkPopover link={link} anchorRef={linkAnchorRef} size={size} />
       )}
     </>
   );
