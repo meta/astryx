@@ -583,12 +583,26 @@ describe('useFocusTrap chorded Tab', () => {
     expect(first).toHaveFocus();
   });
 
-  it('still wraps Alt+Tab, which moves focus in Safari', () => {
+  it('still wraps Alt+Tab and Alt+Shift+Tab, which move focus in Safari', () => {
     const {first, last} = renderEnds();
     last.focus();
 
     expect(fireEvent.keyDown(last, {key: 'Tab', altKey: true})).toBe(false);
     expect(first).toHaveFocus();
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', altKey: true, shiftKey: true}),
+    ).toBe(false);
+    expect(last).toHaveFocus();
+  });
+
+  it('still wraps a plain Tab and Shift+Tab at either end', () => {
+    const {first, last} = renderEnds();
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(last).toHaveFocus();
   });
 });
 
