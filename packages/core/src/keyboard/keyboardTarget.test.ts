@@ -13,7 +13,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act} from '@testing-library/react';
 import {animatorFor} from '../motion/animator';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
-import {watchRevealPan} from './keyboardHeight';
+import {getResizedRoom, watchRevealPan} from './keyboardHeight';
 import {
   FIELD_OFFSET,
   coveredBy,
@@ -548,6 +548,21 @@ describe('keepFieldAboveKeyboard', () => {
       viewport.dispatchEvent(new Event('resize'));
     });
     runFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+  });
+
+  it('takes no room from a window that gets shorter at the same width with nothing focused, as in Android\u2019s split screen', () => {
+    const scrollBy = vi.fn();
+    vi.stubGlobal('scrollBy', scrollBy);
+    const input = element('input', {top: 600, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    expect(getResizedRoom(window)).toBe(0);
+    // Split screen in portrait: the window is 300 px shorter at the same
+    // width, and no field has focus.
+    resizeForKeyboard(300);
+    runFrames();
+    expect(getResizedRoom(window)).toBe(0);
     expect(scrollBy).not.toHaveBeenCalled();
   });
 

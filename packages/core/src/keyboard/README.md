@@ -30,7 +30,9 @@ that times motion with it. Everything here is internal to
   browser has made the inset (FR8). `getResizedRoom(window)` reads that room,
   measured once per report against the tallest root box at the same width, so
   a focused field still sits 10 px clear of the layout viewport's new bottom,
-  revealed by its nearest scroller. A width Core has not measured with the
+  revealed by its nearest scroller. The room counts only while a text-entry
+  control has focus: a shorter window with nothing focused, as in Android's
+  split screen, makes none. A width Core has not measured with the
   keyboard closed, as after a turn of the phone, reads no room until the keyboard
   closes (`spec:AST-099` Gap 15).
   `getResizedRoomWidth(window)` reads the width from that same read, so the

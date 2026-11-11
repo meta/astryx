@@ -25,6 +25,7 @@ import {
   isTouchOnScreen,
   subscribeInput,
 } from '../utils/inputStream';
+import {deepActiveElement} from '../utils/flatTree';
 import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
@@ -197,8 +198,13 @@ function measureResizedRoom(
   if (keyboardHeight > KEYBOARD_EPSILON) {
     return 0;
   }
+  // A window that gets shorter with no text entry focused, as in Android's
+  // split screen, makes no room for a keyboard.
   const room = tallest - height;
-  return room > KEYBOARD_EPSILON ? room : 0;
+  return room > KEYBOARD_EPSILON &&
+    isTextEntryControl(deepActiveElement(win.document))
+    ? room
+    : 0;
 }
 
 function attach(win: Window, store: KeyboardStore): () => void {
