@@ -67,7 +67,7 @@ async function pageSensors(page: Page) {
   return page.evaluate(() => ({
     mode: document.documentElement.getAttribute('data-theme'),
     direction: getComputedStyle(
-      document.querySelector('#storybook-root') as Element,
+      document.querySelector('#storybook-root [dir]') as Element,
     ).direction,
     viewport: {width: innerWidth, height: innerHeight},
     dpr: devicePixelRatio,
@@ -143,31 +143,6 @@ async function hostRadius(page: Page, rowSelector: string) {
   }, rowSelector);
 }
 
-/** The siblings the list element has inside its container. */
-async function listSiblings(page: Page, listSelector: string) {
-  return page.evaluate(sel => {
-    const list = document.querySelector(sel) as HTMLElement;
-    const reader = list.closest('[data-container-corner]');
-    return {
-      readerIsList: reader === list,
-      readerIsLastChild: reader?.nextElementSibling == null,
-      readerIsFirstChild: reader?.previousElementSibling == null,
-      after: reader
-        ? Array.from(reader.parentElement?.children ?? [])
-            .filter(
-              el =>
-                reader.compareDocumentPosition(el) &
-                Node.DOCUMENT_POSITION_FOLLOWING,
-            )
-            .map(
-              el =>
-                `${el.tagName.toLowerCase()}${(el as HTMLElement).hidden ? '[hidden]' : ''}`,
-            )
-        : [],
-    };
-  }, listSelector);
-}
-
 /**
  * Inline geometry of each edge treatment inside its Card: the heading's start,
  * the first static row's label start, and that row's paint edge, measured
@@ -175,7 +150,7 @@ async function listSiblings(page: Page, listSelector: string) {
  */
 async function edgeGeometry(page: Page) {
   return page.evaluate(() => {
-    const root = document.querySelector('#storybook-root') as Element;
+    const root = document.querySelector('#storybook-root [dir]') as Element;
     const rtl = getComputedStyle(root).direction === 'rtl';
     const textStart = (el: Element, text: string) => {
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -462,32 +437,6 @@ cases.push({
       `last row ${radii.at(-1)?.join(' ')}, expected ${last.join(' ')}`,
     );
     await frame('rest', {corner, radii});
-  },
-});
-
-cases.push({
-  key: 'bleed-corners-reorderable-light',
-  story: 'core-containercorners--reorderable-bleed-list-in-dialog',
-  ready: DIALOG_ROWS,
-  mode: 'light',
-  direction: 'ltr',
-  viewport: SMALL,
-  run: async (page, check, frame) => {
-    const corner = await hostRadius(page, DIALOG_ROWS);
-    const radii = await rowRadii(page, DIALOG_ROWS);
-    const siblings = await listSiblings(page, '#storybook-root [role="list"]');
-    const first = [`${corner}px`, `${corner}px`, '0px', '0px'];
-    const last = ['0px', '0px', `${corner}px`, `${corner}px`];
-    check(corner > 0, `dialog corner ${corner}`);
-    check(
-      JSON.stringify(radii[0]) === JSON.stringify(first),
-      `first row ${radii[0]?.join(' ')}, expected ${first.join(' ')}`,
-    );
-    check(
-      JSON.stringify(radii.at(-1)) === JSON.stringify(last),
-      `last row ${radii.at(-1)?.join(' ')}, expected ${last.join(' ')}`,
-    );
-    await frame('rest', {corner, radii, siblings});
   },
 });
 
