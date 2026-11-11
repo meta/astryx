@@ -246,6 +246,15 @@ export interface PopoverProps extends Pick<
   anchor?: PopoverAnchor;
 
   /**
+   * What the popover does while its anchor is out of view (scrolled out of
+   * the viewport or a scrolling panel, or removed): `'hold'` keeps its place
+   * until the anchor returns; `'hide'` hides it, without closing it, until
+   * the anchor returns.
+   * @default 'hold'
+   */
+  anchorOutOfView?: 'hold' | 'hide';
+
+  /**
    * Content to display inside the popover.
    */
   content: ReactNode;
@@ -537,6 +546,7 @@ export function Popover({
   children,
   anchorRef,
   anchor,
+  anchorOutOfView,
   content,
   placement = 'below',
   alignment = 'start',
@@ -595,6 +605,7 @@ export function Popover({
 
   const popover = usePopoverInternal({
     anchor,
+    anchorOutOfView,
     dialogLabel: label,
     role,
     isModal,
