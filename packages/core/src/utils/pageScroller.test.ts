@@ -12,7 +12,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {scrollEventTarget, scrollportTop, scrollsPage} from './pageScroller';
 
 describe('page scroller rules', () => {
-  const restore: Array<() => void> = [];
+  const restore: (() => void)[] = [];
   afterEach(() => {
     for (const undo of restore.splice(0)) {
       undo();
