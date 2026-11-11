@@ -947,6 +947,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`
   FR11).
+- The shared pager's loop arithmetic: `hooks/usePager.ts` exports `mod` and
+  `nearestLoopCopy`, and DateInput's looping picker wheel imports both
+  (`component:DateInput` DEC-3).
 - `architecture:react-component-runtime` INV13: gestures attach for every
   pointer, within FR24's listener budget.
 - `design:user-states` DR1, DR3 and `family:buttons`: press timing follows

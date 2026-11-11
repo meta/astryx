@@ -151,7 +151,8 @@ export const docs = {
     {
       name: 'hasEntriesOnFocus',
       type: 'boolean',
-      description: 'Show bootstrap results on focus before typing.',
+      description:
+        'Show bootstrap results on focus before typing. After a pick from that list, the input keeps focus and the list stays open with the next choice active, while another choice remains.',
       default: 'false',
     },
     {
@@ -190,7 +191,8 @@ export const docs = {
     {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
-      description: 'Input and token size.',
+      description:
+        "Input and token size. Inside an InputGroup the group's size applies instead.",
       default: "'md'",
     },
     {
@@ -344,6 +346,11 @@ export const docs = {
         guidance: true,
         description:
           'Show validation status with the status prop so users know immediately when a selection is missing or invalid.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
       },
       {
         guidance: false,
@@ -545,7 +552,7 @@ export const docsZh = {
       name: 'hasEntriesOnFocus',
       type: 'boolean',
       description:
-        '\u805a\u7126\u65f6\u5728\u8f93\u5165\u524d\u663e\u793a\u5f15\u5bfc\u7ed3\u679c\u3002',
+        '\u805a\u7126\u65f6\u5728\u8f93\u5165\u524d\u663e\u793a\u5f15\u5bfc\u7ed3\u679c\u3002从该列表中选择一项后，只要还有其他选项，输入框保持焦点，列表保持打开，并激活下一项。',
       default: 'false',
     },
     {
@@ -585,7 +592,7 @@ export const docsZh = {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
       description:
-        '\u8f93\u5165\u6846\u548c\u6807\u8bb0\u7684\u5c3a\u5bf8\u3002',
+        '\u8f93\u5165\u6846\u548c\u6807\u8bb0\u7684\u5c3a\u5bf8\u3002\u5728 InputGroup \u5185\u5219\u4f7f\u7528\u8be5\u7ec4\u7684\u5c3a\u5bf8\u3002',
       default: "'md'",
     },
     {
@@ -705,6 +712,11 @@ export const docsZh = {
           'Show validation status with the status prop so users know immediately when a selection is missing or invalid.',
       },
       {
+        guidance: true,
+        description:
+          'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
+      },
+      {
         guidance: false,
         description:
           "Don't use Tokenizer for single-item selection; use Typeahead instead. Tokenizer is for building sets of two or more items.",
@@ -800,6 +812,11 @@ export const docsDense = {
         description: 'status prop for immediate validation feedback.',
       },
       {
+        guidance: true,
+        description:
+          'Use inside InputGroup only for a short prefix or suffix addon; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior.',
+      },
+      {
         guidance: false,
         description:
           "Don't use for single-item selection; use Typeahead instead.",
@@ -854,7 +871,8 @@ export const docsDense = {
     isRequired: 'Marks field required.',
     isOptional: 'Shows optional indicator on label.',
     labelTooltip: 'Tooltip on label.',
-    hasEntriesOnFocus: 'Show bootstrap results on focus before typing.',
+    hasEntriesOnFocus:
+      'Show bootstrap results on focus before typing; a pick keeps the list open with the next choice active while choices remain.',
     maxMenuItems:
       'Max search results shown; the hasCreate entry sits on top of them.',
     menuWidth: 'Fixed dropdown width in pixels.',
@@ -862,7 +880,7 @@ export const docsDense = {
       'Min query length before searching. Menu stays closed below it, except the hasCreate entry.',
     emptySearchText: 'Content when the query matched nothing. ReactNode.',
     hasAutoFocus: 'Auto-focus input on mount.',
-    size: 'Input+token size.',
+    size: 'Input+token size; the group size applies inside InputGroup.',
     debounceMs: 'Search debounce delay ms. 0 for sync sources.',
     onChangeQuery: 'Fired on search query text change.',
     startIcon:

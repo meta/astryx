@@ -16,6 +16,7 @@ import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {themeBuildForReport} from '../theme/build/build.mjs';
 import {
   AUTO_SPREAD,
@@ -33,7 +34,13 @@ import {
   TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
-import {accentSet, parseColor, ratio} from './_color.mjs';
+import {alphaOf, compositeOver, parseColor, ratio} from './_color.mjs';
+import {
+  PALETTE_DIALS,
+  paletteFiles,
+  paletteMapping,
+  syncPalette,
+} from './_palette.mjs';
 import {MODAL} from './_compiler.mjs';
 import {baseResolved, baseThemeFile} from './_project.mjs';
 
@@ -43,7 +50,7 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string} thing - A dial, a token (`--color-accent`), or a CSS property.
  * @property {string} value
  * @property {'dial' | 'token' | 'property'} source
- * @property {string} [on] - A part, a family, or a typography role (font).
+ * @property {string} [on] - A part, a group, or a typography role (font).
  * @property {string} [when] - `<prop>:<value>`.
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
@@ -62,7 +69,7 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string[]} [lifted] - Variant keys the last build repeated a part setting on.
  */
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null}} Ctx */
 
 /** @param {string} s */
 export const slugOk = s => /^[a-z][a-z0-9-]*$/.test(s ?? '');
@@ -102,24 +109,6 @@ export function themeFiles(cwd, slug) {
 export const shown = (cwd, f) =>
   path.relative(cwd, f).split(path.sep).join('/');
 
-/** @param {string} a @param {string} b */
-function lev(a, b) {
-  const d = Array.from({length: a.length + 1}, (_, i) => [
-    i,
-    ...Array(b.length).fill(0),
-  ]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++)
-      d[i][j] = Math.min(
-        d[i - 1][j] + 1,
-        d[i][j - 1] + 1,
-        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-  }
-  return d[a.length][b.length];
-}
-
 /**
  * Up to `n` names close to `x`.
  * @param {string} x
@@ -133,7 +122,7 @@ export function nearest(x, list, n = 3) {
       c =>
         /** @type {[string, number]} */ ([
           c,
-          c.includes(x) || x.includes(c) ? 1 : lev(x, c),
+          c.includes(x) || x.includes(c) ? 1 : levenshteinDistance(x, c),
         ]),
     )
     .filter(([, s]) => s <= Math.max(2, Math.floor(x.length / 3)))
@@ -232,8 +221,8 @@ export function describe(s) {
 }
 
 /**
- * The parts a setting styles: the family when `--on` names one, the whole
- * family of an always-alike member unless `--only`, else the one part.
+ * The parts a setting styles: the group when `--on` names one, the whole
+ * group of an always-alike member unless `--only`, else the one part.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'only' | 'thing'>} s
  * @returns {string[]}
@@ -352,6 +341,11 @@ export function compileTheme(ctx, data, base) {
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
   const putTok = (name, v, mode) => {
     const t = (tok[name] ??= {});
+    // A one-mode theme writes the value of its mode to both sides.
+    if (Array.isArray(v) && modeOnly) {
+      t.light = t.dark = v[modeOnly === 'light' ? 0 : 1];
+      return;
+    }
     if (Array.isArray(v)) {
       if (!mode || mode === 'light') t.light = v[0];
       if (!mode || mode === 'dark') t.dark = v[1];
@@ -391,10 +385,23 @@ export function compileTheme(ctx, data, base) {
           : `light-dark(${prev ? split(prev, 1) : other}, ${v})`;
     } else b[prop] = v;
   };
+  // Palette stops go first, so an exact token setting always wins over them.
+  const pal = paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS);
+  for (const [k, v] of Object.entries(pal?.tokens ?? {}))
+    putTok(k, [v.light.color, v.dark.color]);
+  // `headings` owns heading weight and tracking whatever the order: `type`
+  // sets them only where no `headings` setting does.
+  const headingsAxis = (/** @type {'weight' | 'tracking'} */ axis) =>
+    data.settings.some(
+      x => x.thing === 'headings' && (x.axis ?? 'weight') === axis,
+    );
   const headingWeightTokens = Object.keys(TOKENS).filter(k =>
     /^--text-(heading|display)-\d-weight$/.test(k),
   );
   for (const s of data.settings) {
+    // A setting for the mode a one-mode theme does not have stays saved but
+    // does not apply (maskedSettings names it).
+    if (modeOnly && s.mode && s.mode !== modeOnly) continue;
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
@@ -416,24 +423,8 @@ export function compileTheme(ctx, data, base) {
             px >= 9999 ? '32px' : `${Math.round(px * 2.5)}px`,
           );
         }
-      } else if (s.thing === 'accent') {
-        for (const [k, v] of Object.entries(accentSet(s.value))) {
-          if (parts.length)
-            for (const t of parts)
-              putComp(s, t, k, Array.isArray(v) ? v[0] : v);
-          else
-            putTok(
-              k,
-              s.mode
-                ? Array.isArray(v)
-                  ? s.mode === 'light'
-                    ? v[0]
-                    : v[1]
-                  : v
-                : v,
-              s.mode,
-            );
-        }
+      } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
+        // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
         const f = fontOf(s.value);
         theme.typography ??= {};
@@ -474,12 +465,19 @@ export function compileTheme(ctx, data, base) {
       } else if (s.thing === 'type') {
         const T = TYPE_STYLES[s.value];
         theme.typography ??= {};
+        // The base is text-size's wherever it sits in the settings.
+        const size = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'text-size' && !x.on);
         theme.typography.scale = {
-          base: theme.typography.scale?.base ?? 14,
+          base: size
+            ? textPx(size.value)
+            : (theme.typography.scale?.base ?? 14),
           ratio: T.ratio,
         };
-        if (T.weight) for (const k of headingWeightTokens) putTok(k, T.weight);
-        if (T.tracking)
+        if (T.weight && !headingsAxis('weight'))
+          for (const k of headingWeightTokens) putTok(k, T.weight);
+        if (T.tracking && !headingsAxis('tracking'))
           block({...s, mode: undefined}, 'heading').letterSpacing = T.tracking;
       } else if (s.thing === 'headings') {
         if (s.axis === 'tracking')
@@ -490,9 +488,15 @@ export function compileTheme(ctx, data, base) {
             putTok(k, HEADING_WEIGHTS[s.value]);
       } else if (s.thing === 'text-size') {
         theme.typography ??= {};
+        // The ratio is type's wherever it sits in the settings.
+        const type = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'type');
         theme.typography.scale = {
           base: textPx(s.value),
-          ratio: theme.typography.scale?.ratio ?? 1.2,
+          ratio: type
+            ? TYPE_STYLES[type.value].ratio
+            : (theme.typography.scale?.ratio ?? 1.2),
         };
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
@@ -516,6 +520,16 @@ export function compileTheme(ctx, data, base) {
       for (const t of parts) putComp(s, t, camel(s.thing), s.value);
     }
   }
+  // A scale steeper than the standard one enlarges the headings; the steps
+  // below the base text size keep the standard ratio, so small text stays
+  // readable. An exact token setting still wins.
+  const scale = theme.typography?.scale;
+  if (scale && scale.ratio > STANDARD_RATIO)
+    for (const [k, step] of SMALL_STEPS)
+      if (
+        !data.settings.some(x => x.source === 'token' && x.thing === k && !x.on)
+      )
+        putTok(k, `${Math.round(scale.base * STANDARD_RATIO ** step) / 16}rem`);
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? base.light[k] ?? TOKENS[k];
     const d = dark ?? base.dark[k] ?? TOKENS[k];
@@ -524,6 +538,59 @@ export function compileTheme(ctx, data, base) {
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
+}
+
+/** Core's default type scale ratio. */
+const STANDARD_RATIO = 1.2;
+/** The font-size tokens below the base, with their step on the scale. */
+const SMALL_STEPS = /** @type {Array<[string, number]>} */ ([
+  ['--font-size-sm', -1],
+  ['--font-size-xs', -2],
+  ['--font-size-2xs', -3],
+  ['--font-size-3xs', -4],
+  ['--font-size-4xs', -5],
+]);
+
+/**
+ * Settings whose effect a later or stronger setting hides, with why: `type`
+ * loses heading weight and tracking to `headings`.
+ * @param {ThemeData} data
+ * @returns {Map<Setting, string>}
+ */
+export function maskedSettings(data) {
+  /** @type {Map<Setting, string>} */
+  const out = new Map();
+  const axes = new Set(
+    data.settings
+      .filter(x => x.thing === 'headings')
+      .map(x => x.axis ?? 'weight'),
+  );
+  const only =
+    data.mode === 'light-only'
+      ? 'light'
+      : data.mode === 'dark-only'
+        ? 'dark'
+        : null;
+  for (const s of data.settings)
+    if (only && s.mode && s.mode !== only)
+      out.set(
+        s,
+        `saved for ${s.mode} mode, which a ${data.mode} theme does not have, so it does not apply`,
+      );
+  for (const s of data.settings) {
+    if (s.thing !== 'type' || !axes.size) continue;
+    const T = TYPE_STYLES[s.value];
+    const hidden = [
+      ...(T?.weight && axes.has('weight') ? ['weight'] : []),
+      ...(T?.tracking && axes.has('tracking') ? ['tracking'] : []),
+    ];
+    if (hidden.length)
+      out.set(
+        s,
+        `type still sets the heading sizes and line heights; heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings`,
+      );
+  }
+  return out;
 }
 
 /**
@@ -567,9 +634,54 @@ export function findOverrides(cssText, theme) {
   return extra;
 }
 
-/** The generated theme source. @param {string} slug @param {ThemeData} data @param {any} theme */
-function settingsSource(slug, data, theme) {
+/**
+ * The generated theme source. A token the palette mapping set, and no exact
+ * token setting replaced, reads its palette stop from the generated palette
+ * module, so a regenerated palette moves the theme with it.
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @param {any} theme
+ * @param {import('./_palette.mjs').PaletteMapping | null} pal
+ */
+function settingsSource(slug, data, theme, pal) {
   const like = data.like;
+  const REF = '@@palette:';
+  /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
+  const refOf = (family, m, r) =>
+    `${REF}${family}.${r.from ?? m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
+  const out = {...theme, name: `${slug}-settings`};
+  const only =
+    data.mode === 'light-only'
+      ? 'light'
+      : data.mode === 'dark-only'
+        ? 'dark'
+        : null;
+  if (pal && theme.tokens) {
+    out.tokens = {...theme.tokens};
+    for (const [k, v] of Object.entries(pal.tokens)) {
+      const now = theme.tokens[k];
+      // A one-mode theme reads one shade, its mode's, on both sides.
+      if (only) {
+        if (now === v[only].color)
+          out.tokens[k] = refOf(v.family, only, v[only]);
+        continue;
+      }
+      const [l, d] = Array.isArray(now) ? now : [now, now];
+      if (l !== v.light.color || d !== v.dark.color) continue;
+      out.tokens[k] = [
+        refOf(v.family, 'light', v.light),
+        refOf(v.family, 'dark', v.dark),
+      ];
+    }
+  }
+  let usesPalette = false;
+  const body = JSON.stringify(out, null, 2).replace(
+    /"@@palette:([a-z][a-z0-9-]*)\.(light|dark)\.(\d+)(?:\+([0-9a-f]{2}))?"/g,
+    (_, family, m, stop, alpha) => {
+      usesPalette = true;
+      return `palette${/^[a-z]\w*$/.test(family) ? `.${family}` : `[${JSON.stringify(family)}]`}.${m}[${stop}]${alpha ? ` + '${alpha}'` : ''}`;
+    },
+  );
   return [
     `// Generated by \`${P}\` from ${slug}.settings.json on every change: do not edit.`,
     `// Change it with \`${P} set ${slug} ...\`; your own changes go in ${slug}.theme.ts.`,
@@ -579,12 +691,13 @@ function settingsSource(slug, data, theme) {
           `import {${like}Theme as base} from '@astryxdesign/theme-${like}/built';`,
         ]
       : []),
+    ...(usesPalette
+      ? [`import {palette} from '${paletteFiles(slug).importPath}';`]
+      : []),
     '',
     `export const ${camel(slug)}Settings = defineTheme({`,
     ...(like ? ['  extends: base,'] : []),
-    ...JSON.stringify({...theme, name: `${slug}-settings`}, null, 2)
-      .split('\n')
-      .slice(1, -1),
+    ...body.split('\n').slice(1, -1),
     '});',
     '',
   ].join('\n');
@@ -623,13 +736,18 @@ export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   if (data.like) baseThemeFile(ctx.project, data.like);
-  const theme = compileTheme(
-    ctx,
+  const base = await baseResolved(ctx.project, data.like);
+  const theme = compileTheme(ctx, data, base);
+  const pal = paletteMapping(
+    cwd,
+    slug,
     data,
-    await baseResolved(ctx.project, data.like),
+    base,
+    ctx.project.core.tokenDefaults,
   );
   fs.mkdirSync(f.dir, {recursive: true});
-  fs.writeFileSync(f.settingsTs, settingsSource(slug, data, theme));
+  syncPalette(cwd, slug, data);
+  fs.writeFileSync(f.settingsTs, settingsSource(slug, data, theme, pal));
   if (!fs.existsSync(f.ts)) fs.writeFileSync(f.ts, themeModuleSource(slug));
   let receipt = await runBuild(ctx, slug);
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
@@ -643,7 +761,7 @@ export async function buildTheme(ctx, slug, data) {
       (t[x.key] ??= {})[x.prop] ??= x.value;
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
-    fs.writeFileSync(f.settingsTs, settingsSource(slug, data, theme));
+    fs.writeFileSync(f.settingsTs, settingsSource(slug, data, theme, pal));
     receipt = await runBuild(ctx, slug);
   }
   // Font notices are reported by the font dial itself, once.
@@ -683,9 +801,39 @@ async function runBuild(ctx, slug) {
  */
 export async function resolvedTokens(ctx, slug) {
   const f = themeFiles(ctx.project.cwd, slug);
-  const mod = await import(
-    `${pathToFileURL(f.js).href}?t=${Date.now()}${Math.random()}`
-  );
+  // The built module is ESM in a .js file, and an app's package.json may not
+  // say "type": "module": an .mjs copy loads as ESM with no Node warning,
+  // and the query keeps it out of the module cache. The copy goes in the
+  // project's cache folder, where package imports still resolve; only a
+  // module with relative imports is copied beside itself. (The shared theme
+  // loader caches a .js module of an ESM app by URL, so a second read in one
+  // command would return the first build.)
+  const source = fs.readFileSync(f.js, 'utf8');
+  // Each copy has its own name, so two commands at once never share one; a
+  // read-only cache folder falls back to the theme folder.
+  const name = `.${slug}.load-${process.pid}-${Math.random().toString(36).slice(2, 8)}.mjs`;
+  let copy = path.join(f.dir, name);
+  if (!/\bfrom\s+['"]\.\.?\//.test(source))
+    try {
+      fs.mkdirSync(ctx.project.cacheDir, {recursive: true});
+      fs.writeFileSync(path.join(ctx.project.cacheDir, name), source);
+      copy = path.join(ctx.project.cacheDir, name);
+    } catch {
+      // The cache folder is not writable: use the theme folder.
+    }
+  if (copy.startsWith(f.dir)) fs.writeFileSync(copy, source);
+  /** @type {Record<string, any>} */
+  let mod;
+  try {
+    mod = await import(
+      `${pathToFileURL(copy).href}?t=${Date.now()}${Math.random()}`
+    );
+  } catch (e) {
+    if (e instanceof Error) e.message = e.message.split(copy).join(f.js);
+    throw e;
+  } finally {
+    fs.rmSync(copy, {force: true});
+  }
   const t = Object.values(mod).find(
     v => v && typeof v === 'object' && typeof v.name === 'string',
   );
@@ -742,13 +890,70 @@ export async function contrastProblems(ctx, data, res) {
       ? base[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
       : s.raw;
   };
-  return ctx.C.contrast(value, baseValue, modesOf(data), {
-    parseColor,
-    ratio,
-  }).map(
-    x =>
-      `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}); text needs 4.5:1`,
+  const {problems, more, unchecked} = ctx.C.contrast(
+    value,
+    baseValue,
+    modesOf(data),
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page: m =>
+        res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
+    },
   );
+  return [
+    ...problems.map(
+      x =>
+        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}); text needs 4.5:1`,
+    ),
+    ...(more
+      ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
+      : []),
+    ...(unchecked.length
+      ? [
+          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which ${unchecked.length === 1 ? 'is' : 'are'} not a fixed color`,
+        ]
+      : []),
+  ];
+}
+
+/**
+ * Settings file text as data, or null when there is none or it is damaged.
+ * @param {string | null} text
+ * @returns {ThemeData | null}
+ */
+function parseSettings(text) {
+  if (text == null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A theme's undo history: the settings text before each change, oldest
+ * first. Empty when there is none; null when the file is damaged.
+ * @param {string} file
+ * @returns {string[] | null}
+ */
+export function readHistory(file) {
+  if (!fs.existsSync(file)) return [];
+  try {
+    const h = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (
+      Array.isArray(h) &&
+      h.every(
+        x => typeof x === 'string' && Array.isArray(JSON.parse(x).settings),
+      )
+    )
+      return h;
+  } catch {
+    // Damaged: reported by the caller.
+  }
+  return null;
 }
 
 /**
@@ -766,13 +971,36 @@ export async function commitTheme(ctx, slug, data, {history}) {
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
+  /** @type {string[]} */
+  const notes = [];
+  // The history is read and checked before anything is written.
+  const past = history ? readHistory(f.history) : [];
+  if (past == null)
+    notes.push(
+      `${path.basename(f.history)} was damaged, so a new undo history starts with this change (earlier steps cannot be undone)`,
+    );
+  // A change that leaves the settings as they were builds nothing and adds
+  // no undo step.
+  const same = (/** @type {ThemeData | null} */ a) =>
+    a != null &&
+    JSON.stringify({...a, lifted: undefined}) ===
+      JSON.stringify({...data, lifted: undefined});
+  if (history && same(parseSettings(snapBefore)) && fs.existsSync(f.js))
+    return {
+      changed: [],
+      res: {light: {}, dark: {}},
+      problems: [],
+      warnings: [],
+      lifted: [],
+      notes,
+      unchanged: true,
+    };
   const resBefore =
     snapBefore && fs.existsSync(f.js)
       ? await resolvedTokens(ctx, slug).catch(() => null)
       : null;
-  const liftedBefore = new Set(
-    snapBefore ? (JSON.parse(snapBefore).lifted ?? []) : [],
-  );
+  const before = parseSettings(snapBefore);
+  const liftedBefore = new Set(before?.lifted ?? []);
   fs.mkdirSync(f.dir, {recursive: true});
   /** @type {{warnings: string[], lifted: string[]}} */
   let built;
@@ -781,7 +1009,7 @@ export async function commitTheme(ctx, slug, data, {history}) {
   } catch (e) {
     if (snapBefore) {
       fs.writeFileSync(f.settings, snapBefore);
-      await buildTheme(ctx, slug, JSON.parse(snapBefore)).catch(() => null);
+      if (before) await buildTheme(ctx, slug, before).catch(() => null);
     } else fs.rmSync(f.dir, {recursive: true, force: true});
     if (e instanceof AstryxError && e.code === ERROR_CODES.ERR_UNKNOWN_THEME)
       throw e;
@@ -795,44 +1023,55 @@ export async function commitTheme(ctx, slug, data, {history}) {
   data.lifted = built.lifted;
   fs.writeFileSync(f.settings, `${JSON.stringify(data, null, 2)}\n`);
   if (snapBefore && history) {
-    const h = fs.existsSync(f.history)
-      ? JSON.parse(fs.readFileSync(f.history, 'utf8'))
-      : [];
+    const h = past ?? [];
     h.push(snapBefore);
     fs.writeFileSync(f.history, JSON.stringify(h.slice(-80)));
   }
-  const res = await resolvedTokens(ctx, slug);
+  // The change is saved from here on: a failure to check it is reported
+  // as "saved, not checked", never as a failed change.
+  /** @type {Record<'light' | 'dark', Record<string, string>>} */
+  let res = {light: {}, dark: {}};
   /** @type {string[]} */
   const changed = [];
-  const modes = modesOf(data);
-  if (resBefore) {
-    for (const m of modes) {
-      for (const k of Object.keys(res[m])) {
-        if (resBefore[m][k] === res[m][k]) continue;
-        const modal = MODAL.has(ctx.C.typeOf(k));
-        if (!modal && m === 'dark' && modes.length > 1) continue;
-        changed.push(
-          `${k}${modal && modes.length > 1 ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
-        );
+  /** @type {string[]} */
+  let problems = [];
+  try {
+    res = await resolvedTokens(ctx, slug);
+    const modes = modesOf(data);
+    if (resBefore) {
+      for (const m of modes) {
+        for (const k of Object.keys(res[m])) {
+          if (resBefore[m][k] === res[m][k]) continue;
+          const modal = MODAL.has(ctx.C.typeOf(k));
+          if (!modal && m === 'dark' && modes.length > 1) continue;
+          changed.push(
+            `${k}${modal && modes.length > 1 ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
+          );
+        }
       }
     }
+    problems = await contrastProblems(ctx, data, res);
+  } catch (e) {
+    ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   return {
     changed,
     res,
-    problems: await contrastProblems(ctx, data, res),
+    problems,
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
+    notes,
+    unchanged: false,
   };
 }
 
 /** @param {Ctx} ctx @param {ThemeData} data */
 export function fontPackages(ctx, data) {
-  /** @type {Array<{pkg: string, installed: boolean}>} */
+  /** @type {Array<{pkg: string, family: string, installed: boolean}>} */
   const out = [];
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
-    const pkg = fontOf(s.value).pkg;
+    const {pkg, family} = fontOf(s.value);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     let installed = true;
     try {
@@ -840,7 +1079,7 @@ export function fontPackages(ctx, data) {
     } catch {
       installed = false;
     }
-    out.push({pkg, installed});
+    out.push({pkg, family: family.replace(/["']/g, ''), installed});
   }
   return out;
 }

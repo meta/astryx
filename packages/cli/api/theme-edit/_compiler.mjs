@@ -4,27 +4,12 @@
  * @file The type checker behind `astryx experimental theme`: the type of
  * every token (from Core's own token groups), what each part reads (from the
  * part data), and the checks that refuse a change that cannot take effect.
- * Also `explain`, and contrast problems the theme caused versus its base.
+ * Also `how` lookups, and contrast problems the theme caused versus its base.
  *
  * @position api/theme-edit — compile-time knowledge over the part data
  */
 
-import {DIRECT, GROUPS} from './_tables.mjs';
-
-/**
- * Whether a color is see-through: its contrast depends on what is under it,
- * so it is not judged alone.
- * @param {unknown} v
- */
-function hasAlpha(v) {
-  const s = String(v ?? '').trim();
-  const h = /^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i.exec(s);
-  if (h) return s.length === 5 ? !/f$/i.test(s) : !/ff$/i.test(s);
-  const m = /\/\s*([\d.]+%?)\s*\)$|^rgba\([^)]*,\s*([\d.]+)\s*\)$/i.exec(s);
-  if (!m) return /^transparent$/i.test(s);
-  const a = m[1] ?? m[2];
-  return a.endsWith('%') ? parseFloat(a) < 100 : parseFloat(a) < 1;
-}
+import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
@@ -219,13 +204,18 @@ export function makeCompiler(project, parts) {
     return out;
   }
 
-  /** One line for where a token feeds. @param {ReturnType<typeof feeds>} list */
-  const fmtFeeds = list =>
+  /**
+   * One line for where a token feeds. A part inside `target` (a button in a
+   * toast) is named as inside it, so the line never reads as every button.
+   * @param {ReturnType<typeof feeds>} list
+   * @param {string} [target]
+   */
+  const fmtFeeds = (list, target) =>
     [
       ...new Set(
         list.map(
           f =>
-            `${f.prop}${f.part ? ` on ${f.part}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
+            `${f.prop}${f.part ? ` on ${f.part}${target && f.part !== target ? ` inside ${target}` : ''}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
         ),
       ),
     ]
@@ -270,10 +260,10 @@ export function makeCompiler(project, parts) {
         return null;
       const direct = g === 'text' ? 'color' : 'background-color';
       return {
-        message: `${target} reads ${token} only for ${fmtFeeds(fed)}, not for its ${g}, so this would not change what you expect.`,
+        message: `${target} reads ${token} only for ${fmtFeeds(fed, target)}, not for its ${g}, so this would not change what you expect.`,
         run: [
           `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
-          `${P} explain ${target}`,
+          `${HOW} ${target}`,
         ],
         also: [],
       };
@@ -317,7 +307,7 @@ export function makeCompiler(project, parts) {
       run,
       also: kids.length
         ? [
-            `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${P} explain ${kids[0]})`,
+            `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${HOW} ${kids[0]})`,
           ]
         : [],
     };
@@ -342,7 +332,7 @@ export function makeCompiler(project, parts) {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
       run: near.length
         ? near.slice(0, 3).map(t => `${P} set <theme> ${t} <value>`)
-        : [`${P} explain "<what you want>"`],
+        : [`${HOW} "<what you want>"`],
       also:
         g === 'shadow'
           ? [
@@ -374,59 +364,46 @@ export function makeCompiler(project, parts) {
   }
 
   /**
-   * What a part reads, one line per aspect.
-   * @param {string} target
-   * @param {string} P
-   * @param {string} [theme]
-   */
-  function explain(target, P, theme = '<theme>') {
-    const t = TARGET.get(target);
-    const lines = [`${target}  (part of ${t?.component ?? '?'})`];
-    for (const [p, vals] of Object.entries(variantValues(target)))
-      lines.push(`  --when ${p}:${vals.length ? vals.join('|') : '<value>'}`);
-    if (t?.states?.length)
-      lines.push(
-        `  --state ${t.states.join('|')} (also hover, active, focus-visible)`,
-      );
-    if (!MAP[target]) {
-      lines.push(
-        '  (no compiled record of what it reads: it did not render in the catalog)',
-      );
-      return lines;
-    }
-    for (const g of Object.keys(GROUPS)) {
-      const r = partReads(target, g);
-      if (!r.length) continue;
-      lines.push(
-        `  ${g.padEnd(10)} ${r
-          .slice(0, 5)
-          .map(x => x.token + fmtWhen(x.when) + statusNote(target, x.token))
-          .join(', ')}${r.length > 5 ? `, ... (${r.length - 5} more)` : ''}`,
-      );
-    }
-    const kids = MAP[target].contains ?? [];
-    if (kids.length)
-      lines.push(
-        `  contains   ${kids.slice(0, 10).join(', ')}  (tokens set --on ${target} reach these too)`,
-      );
-    lines.push(
-      `  any CSS property works directly, e.g. ${P} set ${theme} background "#fafafa" --on ${target}`,
-    );
-    return lines;
-  }
-
-  /**
    * Text that this theme made unreadable: every real text-on-background pair,
-   * in each mode, below 4.5:1 now but not as low in the base theme.
+   * in each mode, below 4.5:1 now but not as low in the base theme. Also
+   * the values this theme set that have no fixed color to check (a
+   * `color-mix()`, a `var()`), so the result can say what it skipped.
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => number[] | null, ratio: (a: number[], b: number[]) => number}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   *   `page` is the page color in a mode: a see-through background is drawn
+   *   over it, and see-through text over that background, before measuring.
    */
-  function contrast(value, baseValue, modes, {parseColor, ratio}) {
+  function contrast(
+    value,
+    baseValue,
+    modes,
+    {parseColor, ratio, alphaOf, compositeOver, page},
+  ) {
+    /**
+     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * @param {unknown} fg @param {unknown} bg @param {string} m
+     */
+    const drawn = (fg, bg, m) => {
+      /** @type {[number, number, number]} */
+      const ground =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const bgAlpha = alphaOf(bg);
+      const back = parseColor(bg);
+      const under =
+        bgAlpha === 0
+          ? ground
+          : back && compositeOver(back, bgAlpha, ground);
+      const top = parseColor(fg);
+      if (!under || !top) return null;
+      return [compositeOver(top, alphaOf(fg), under), under];
+    };
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
     const out = [];
     const seen = new Set();
+    /** @type {Set<string>} */
+    const unchecked = new Set();
     for (const p of parts.pairs) {
       if (
         p.fg.target !== p.bg.target &&
@@ -438,15 +415,25 @@ export function makeCompiler(project, parts) {
         const fg = value(p, 'fg', m);
         const bg = value(p, 'bg', m);
         if (/gradient|url\(/.test(String(bg))) continue;
-        if (hasAlpha(fg) || hasAlpha(bg)) continue;
-        const a = parseColor(fg);
-        const b = parseColor(bg);
-        if (!a || !b) continue;
-        const r = ratio(a, b);
+        const pair = drawn(fg, bg, m);
+        if (!pair) {
+          for (const [v, side] of /** @type {const} */ ([
+            [fg, 'fg'],
+            [bg, 'bg'],
+          ]))
+            if (
+              v &&
+              !parseColor(v) &&
+              alphaOf(v) !== 0 &&
+              v !== baseValue(p, side, m)
+            )
+              unchecked.add(String(v));
+          continue;
+        }
+        const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const a0 = parseColor(baseValue(p, 'fg', m));
-        const b0 = parseColor(baseValue(p, 'bg', m));
-        if (a0 && b0 && ratio(a0, b0) <= r + 0.05) continue;
+        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -461,7 +448,11 @@ export function makeCompiler(project, parts) {
         });
       }
     }
-    return out.slice(0, 8);
+    return {
+      problems: out.slice(0, 8),
+      more: Math.max(0, out.length - 8),
+      unchecked: [...unchecked],
+    };
   }
 
   /**
@@ -514,7 +505,6 @@ export function makeCompiler(project, parts) {
     checkTokenOn,
     checkTokenGlobal,
     variantValues,
-    explain,
     contrast,
   };
 }

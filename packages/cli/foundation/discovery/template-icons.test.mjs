@@ -728,6 +728,96 @@ describe('a main set with backups', () => {
   });
 });
 
+describe("a set that wraps the template's library", () => {
+  /** A set generated from `@acme/library`, the library the template imports. */
+  const WRAPPER = /** @type {any} */ ({
+    name: 'wrapper',
+    package: '@acme/wrapper',
+    license: 'MIT',
+    data: {
+      schemaVersion: 1,
+      module: '@acme/wrapper',
+      source: {package: '@acme/library', version: '1.0.0'},
+      map: {close: 'close'},
+      icons: [{id: 'close', export: 'CloseIcon', words: ['close']}],
+    },
+  });
+  const SOURCE = [
+    "import {CloseGlyph, FrameGlyph, ScissorsGlyph} from '@acme/library';",
+    '',
+    'export const A = () => <><CloseGlyph /><FrameGlyph size={16} /><ScissorsGlyph /></>;',
+    '',
+  ].join('\n');
+  const DECLARED = {
+    CloseGlyph: 'close',
+    FrameGlyph: 'frame',
+    ScissorsGlyph: 'cut',
+  };
+
+  it('keeps an icon no set maps when a backup set wraps its library, instead of a placeholder', () => {
+    /** @type {any} */
+    const choice = {
+      status: 'selected',
+      set: SET,
+      configured: 'glyphs',
+      order: [SET, WRAPPER],
+      reason: 'list',
+    };
+    const {source, icons} = map(SOURCE, DECLARED, choice, [SET, WRAPPER]);
+    // glyphs maps close; nobody maps frame or cut, and wrapper wraps the library.
+    expect(source).toContain("import {XIcon} from '@acme/glyphs';");
+    expect(source).toContain(
+      "import {FrameGlyph, ScissorsGlyph} from '@acme/library';",
+    );
+    expect(source).toContain('<FrameGlyph size={16} />');
+    expect(source).not.toContain('MissingIcon');
+    expect(icons?.placeholder).toEqual([]);
+    expect(icons?.kept.map(each => [each.export, each.reason])).toEqual([
+      [
+        'FrameGlyph',
+        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+      ],
+      [
+        'ScissorsGlyph',
+        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+      ],
+    ]);
+  });
+
+  it("keeps every icon from the main set's own library as written", () => {
+    /** @type {any} */
+    const choice = {
+      status: 'selected',
+      set: WRAPPER,
+      configured: 'wrapper',
+      order: [WRAPPER, SET],
+      reason: 'list',
+    };
+    const {source, icons} = map(SOURCE, DECLARED, choice, [WRAPPER, SET]);
+    expect(source).toBe(SOURCE);
+    expect(icons?.mapped).toEqual([]);
+    expect(icons?.placeholder).toEqual([]);
+    expect(icons?.kept.map(each => each.export)).toEqual([
+      'CloseGlyph',
+      'FrameGlyph',
+      'ScissorsGlyph',
+    ]);
+    expect(icons?.kept[0].reason).toBe(
+      'it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+    );
+  });
+
+  it('still draws a placeholder for an icon from a library no listed set wraps', () => {
+    const {source} = map(
+      SOURCE.replace("'@acme/library'", "'@acme/other'"),
+      DECLARED,
+      SELECTED,
+      [SET, WRAPPER],
+    );
+    expect(source).toContain('MissingIcon /* missing icon: frame */');
+  });
+});
+
 describe('the local placeholder', () => {
   const SOURCE = [
     "import {Text} from '@astryxdesign/core/Text';",

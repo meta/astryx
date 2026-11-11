@@ -56,31 +56,30 @@ const nextConfig = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
   },
-  // The search API (app/api/search) runs `astryx search` itself. The CLI stays
-  // an external module (see webpack below), so its code and dependencies are
-  // traced as installed; these are the files it reads from disk at run time:
-  // its docs and templates, and each documented package's docs and sources.
+  // The search API (app/api/search) ranks with the CLI's own search. The CLI
+  // stays an external module (see webpack below), so its code and dependencies
+  // are traced as installed; these are the files it reads from disk at run
+  // time: its version, and the cards and weights its ranker reads. The
+  // candidates it ranks are in the route's own bundle
+  // (generated/searchIndex.ts), so the function carries no docs, templates or
+  // package sources.
   outputFileTracingIncludes: {
     '/api/search': [
-      './astryx.config.mjs',
       '../../packages/cli/package.json',
-      '../../packages/cli/{api,assets,authoring,clients,foundation,host}/**/*',
-      '../../packages/core/package.json',
-      '../../packages/core/src/**/*',
-      // Integrations resolve through the site's node_modules, so they are
-      // traced at that path.
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{package.json,astryx.integration.mjs}',
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{src,blocks,docs,dist}/**/*',
+      '../../packages/cli/api/**/*.json',
     ],
   },
   // Packages the CLI imports for other commands but a search never loads
-  // (bundlers, compilers, browsers, test runners), and built output it never
-  // reads. Leaving them out keeps the search function small; the parity test
-  // and a traced-files-only build hold it to `astryx search`.
+  // (bundlers, compilers, browsers, test runners), and built output and Core's
+  // folder, which it never reads: the tracer adds that whole folder for a path
+  // the CLI builds at run time. Leaving them out keeps the search function
+  // small; the parity test and a traced-files-only build hold it to
+  // `astryx search`.
   outputFileTracingExcludes: {
     '/api/search': [
       '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
       '../../packages/*/dist/**',
+      '../../packages/core/**',
       './src/**',
     ],
   },
@@ -189,9 +188,22 @@ const nextConfig = {
     }
 
     if (previewIconSet) {
+      // A cached module keeps the icons of the set it was built with, so a
+      // build with another set must not reuse it.
+      if (typeof config.cache?.version === 'string') {
+        config.cache.version += `|DOCSITE_ICON_SET=${previewIconSet}`;
+      }
       config.module.rules.push({
         test: templateSources,
         enforce: 'pre',
+        // The sets are installed in the docsite, but template sources live
+        // outside it, so their rewritten imports also resolve from here.
+        resolve: {
+          modules: [
+            ...(config.resolve.modules ?? ['node_modules']),
+            resolve(import.meta.dirname, 'node_modules'),
+          ],
+        },
         use: [
           {
             loader: resolve(
