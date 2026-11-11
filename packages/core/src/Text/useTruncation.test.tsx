@@ -7,10 +7,10 @@
 
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
-import {useCallback, useEffect} from 'react';
+import {useCallback} from 'react';
 import type * as layoutEffects from '../hooks/useIsomorphicLayoutEffect';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {useHeldTruncation, useTruncation} from './useTruncation';
+import {useTruncation} from './useTruncation';
 
 // The shipped layout effect, observable: a test counts who runs one.
 vi.mock('../hooks/useIsomorphicLayoutEffect', async importOriginal => {
@@ -198,29 +198,24 @@ describe('useTruncation', () => {
     });
   });
 
-  describe('useHeldTruncation', () => {
-    // The caller measures after each commit, as Lightbox does after layout.
-    function HeldProbe({
-      isHeld,
+  describe('isExpanded', () => {
+    function ExpandingProbe({
+      isExpanded,
       height,
-      measures = true,
+      hasText = true,
     }: {
-      isHeld: boolean;
+      isExpanded?: boolean;
       height: number;
-      measures?: boolean;
+      hasText?: boolean;
     }) {
-      const truncation = useHeldTruncation({maxLines: 2, isHeld});
-      const {measure} = truncation;
-      useEffect(() => {
-        if (measures) {
-          measure();
-        }
-      });
+      const truncation = useTruncation({maxLines: 2, isExpanded});
       return (
         <>
-          <span ref={truncation.ref} data-height={height}>
-            text
-          </span>
+          {hasText && (
+            <span ref={truncation.ref} data-height={height}>
+              text
+            </span>
+          )}
           <output data-testid="truncated">
             {String(truncation.isTruncated)}
           </output>
@@ -247,48 +242,50 @@ describe('useTruncation', () => {
       };
     }
 
-    // Text and Heading run plain useTruncation in every instance, so only the
-    // held variant may add a step to each render.
-    it('adds a layout effect only to the held variant, never to useTruncation', () => {
+    // Text and Heading run useTruncation in every instance, so the option
+    // adds no step to each render.
+    it('adds no layout effect, expanded or not', () => {
       const layoutEffect = vi.mocked(useIsomorphicLayoutEffect);
       layoutEffect.mockClear();
       render(<Probe text="a status line" />);
+      render(<ExpandingProbe isExpanded={false} height={40} />);
+      render(<ExpandingProbe isExpanded={true} height={40} />);
       expect(layoutEffect).not.toHaveBeenCalled();
-      render(<HeldProbe isHeld={false} height={40} />);
-      expect(layoutEffect).toHaveBeenCalled();
     });
 
-    it('reads nothing by itself: its caller measures', () => {
+    it('drops its answer when its element goes, as it does without the option', async () => {
       const restore = stubHeights();
-      const reads = vi.mocked(
-        Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')!
-          .get!,
-      );
       try {
-        reads.mockClear();
-        render(<HeldProbe isHeld={false} height={120} measures={false} />);
-        expect(reads).not.toHaveBeenCalled();
-        expect(screen.getByTestId('truncated')).toHaveTextContent('false');
+        const {rerender} = render(<ExpandingProbe height={120} />);
+        await waitFor(() =>
+          expect(screen.getByTestId('truncated')).toHaveTextContent('true'),
+        );
+        rerender(<ExpandingProbe height={120} hasText={false} />);
+        await waitFor(() =>
+          expect(screen.getByTestId('truncated')).toHaveTextContent('false'),
+        );
       } finally {
         restore();
       }
     });
 
-    it('keeps its last answer while held, and its caller measures it again on release', async () => {
+    it('keeps its clamped answer while the text is shown in full, and measures again after', async () => {
       const restore = stubHeights();
       try {
-        const {rerender} = render(<HeldProbe isHeld={false} height={120} />);
+        const {rerender} = render(
+          <ExpandingProbe isExpanded={false} height={120} />,
+        );
         await waitFor(() =>
           expect(screen.getByTestId('truncated')).toHaveTextContent('true'),
         );
-        // Held, the text shows every line: no measurement changes the answer.
-        rerender(<HeldProbe isHeld={true} height={48} />);
+        // Shown in full, the text fits: the answer stays the clamped one.
+        rerender(<ExpandingProbe isExpanded={true} height={48} />);
         await act(async () => {
           await Promise.resolve();
         });
         expect(screen.getByTestId('truncated')).toHaveTextContent('true');
-        // Released over text that now fits, it measures again.
-        rerender(<HeldProbe isHeld={false} height={40} />);
+        // Clamped again over text that now fits, it measures again.
+        rerender(<ExpandingProbe isExpanded={false} height={40} />);
         await waitFor(() =>
           expect(screen.getByTestId('truncated')).toHaveTextContent('false'),
         );

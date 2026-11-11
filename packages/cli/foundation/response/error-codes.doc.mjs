@@ -410,7 +410,7 @@ export const doc = {
       value: 'ERR_THEME_NOT_SET',
       stability: 'experimental',
       description:
-        '`reset` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by the experimental theme command.',
+        '`editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by the experimental theme command.',
     },
     {
       value: 'ERR_THEME_NOTHING_TO_UNDO',
