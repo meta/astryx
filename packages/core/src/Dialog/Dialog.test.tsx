@@ -1173,6 +1173,10 @@ describe('Dialog', () => {
         fireEvent.pointerDown(document.body);
         opener.focus();
         rerender(<SecondDocumentDialog isOpen={true} />);
+        // A modal dialog holds focus while it is open, as showModal() makes it.
+        within(secondDocument.body)
+          .getByRole('button', {name: 'Inside', hidden: true})
+          .focus();
         fireEvent.keyDown(secondDocument.body, {key: 'Escape'});
         const focus = vi.spyOn(
           secondDocument.defaultView!.HTMLElement.prototype,

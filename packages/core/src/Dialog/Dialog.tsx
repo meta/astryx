@@ -89,11 +89,17 @@ import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
+  cancelLayerFocus,
   focusForLastInput,
-  prepareFocusReturnOnRemoval,
-  returnFocusForLastInput,
+  focusForLastInputTemporarily,
+  isLayerFocusStranded,
+  prepareFocusRepairOnRemoval,
+  restoreLayerFocus,
+  trackLayerFocus,
+  type LayerFocusRecord,
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
+import {isHTMLElement} from '../utils/nodeType';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
@@ -603,6 +609,8 @@ export function Dialog({
   // Capture the element that was focused when the dialog opened, for
   // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  // The shared layer focus return for the current opening.
+  const focusRecordRef = useRef<LayerFocusRecord | null>(null);
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
@@ -630,6 +638,20 @@ export function Dialog({
       const dialogDocument = dialogRef.current?.ownerDocument ?? document;
       const doc = dialogDocument.hasFocus() ? dialogDocument : document;
       triggerElementRef.current = doc.activeElement as HTMLElement | null;
+      // The shared layer focus return starts here, with the same opener.
+      if (focusRecordRef.current != null) {
+        cancelLayerFocus(focusRecordRef.current);
+      }
+      const opener = triggerElementRef.current;
+      focusRecordRef.current = trackLayerFocus({
+        getLayer: () => dialogRef.current,
+        opener: isHTMLElement(opener) ? opener : null,
+        doc,
+        isFocusMovedInOnOpen: true,
+        // The ring follows the last input in the opener's own document.
+        focus: element =>
+          focusForLastInputTemporarily(element, {preventScroll: true}),
+      });
     }
     wasOpenRef.current = isOpenNow;
   }, [isOpen, isInline]);
@@ -703,14 +725,20 @@ export function Dialog({
       // unmount.
       return holdEntranceInput(dialog) ?? undefined;
     } else {
+      // The page stays inert until `close()`, so focus can return only after
+      // it. Whether focus would be stranded is read first. The browser's own
+      // restore reaches only an opener that is still there, with a ring
+      // whatever the last input was; the shared return then picks the opener
+      // or its nearest stand-in, with the ring the last input calls for.
+      const record = focusRecordRef.current;
+      focusRecordRef.current = null;
+      const wasStranded = record != null && isLayerFocusStranded(record);
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog, with the ring
-      // the last input in that element's own document calls for.
-      const trigger = triggerElementRef.current;
-      if (trigger) {
-        returnFocusForLastInput(trigger);
+      if (record != null) {
+        restoreLayerFocus(record, {wasStranded});
+        cancelLayerFocus(record);
       }
       triggerElementRef.current = null;
     }
@@ -724,8 +752,23 @@ export function Dialog({
     if (isInline || dialog == null) {
       return;
     }
-    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
-    return () => returnFocusOnRemoval(triggerElementRef.current);
+    const repairOnRemoval = prepareFocusRepairOnRemoval(dialog);
+    return () => {
+      const record = focusRecordRef.current;
+      if (record == null) {
+        return;
+      }
+      repairOnRemoval(() => {
+        restoreLayerFocus(record, {warnsWhenNothingQualifies: false});
+      });
+      // After the repair's own check: a dialog StrictMode only pretended to
+      // unmount is still in the document and keeps its record.
+      queueMicrotask(() => {
+        if (!dialog.isConnected) {
+          cancelLayerFocus(record);
+        }
+      });
+    };
   }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so

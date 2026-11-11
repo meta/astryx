@@ -3985,17 +3985,20 @@ describe('DropdownMenu focus return after a pointer pick', () => {
       expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
     });
 
-    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+    it('returns focus without a ring after a pointer pick, before the browser can draw one', async () => {
       const user = userEvent.setup();
       const trigger = renderCustomMenu();
       await user.click(trigger);
-      // WebKit's own popover focus restoration can focus the trigger, with a
-      // ring, before the menu moves focus, and focusing the focused element
-      // changes nothing.
+      // The browser's own popover focus restoration focuses the trigger, with
+      // a ring, while focus is still inside the closing popover. The menu
+      // returns focus as it starts to close, so that restore has nothing to do.
       const hidePopover = HTMLElement.prototype.hidePopover;
       HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        const hadFocus = this.contains(document.activeElement);
         hidePopover.call(this);
-        trigger.focus();
+        if (hadFocus) {
+          trigger.focus();
+        }
       });
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -4003,19 +4006,16 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         selector: string,
       ) {
         return selector === ':focus-visible'
-          ? this === trigger
+          ? this === trigger && document.activeElement === trigger
           : matches.call(this, selector);
       });
       const blur = vi.spyOn(trigger, 'blur');
       const focus = vi.spyOn(trigger, 'focus');
       await user.click(item('Edit'));
-      expect(blur).toHaveBeenCalledTimes(1);
+      expect(blur).not.toHaveBeenCalled();
       expect(focus.mock.calls.at(-1)).toEqual([
         {preventScroll: true, focusVisible: false},
       ]);
-      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
-        focus.mock.invocationCallOrder.at(-1) ?? 0,
-      );
       expect(trigger).toHaveFocus();
     });
   });
