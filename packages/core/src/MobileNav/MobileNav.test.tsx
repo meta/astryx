@@ -328,15 +328,17 @@ describe('MobileNav', () => {
       </MobileNav>,
     );
 
-    expect(dialog).toHaveAttribute('open');
+    expect(screen.getByTestId('mobile-nav')).toHaveAttribute('open');
   });
 
   it.each([
-    ['ltr', 'end'],
-    ['rtl', 'start'],
+    ['ltr', 'start', 100],
+    ['ltr', 'end', 700],
+    ['rtl', 'start', 700],
+    ['rtl', 'end', 100],
   ] as const)(
     'resolves auto side before the first modal open in %s',
-    (direction, expectedSide) => {
+    (direction, expectedSide, left) => {
       const previousDirection = document.documentElement.dir;
       const previousWidth = window.innerWidth;
       document.documentElement.dir = direction;
@@ -373,14 +375,15 @@ describe('MobileNav', () => {
       try {
         render(<Harness />);
         const trigger = screen.getByRole('button', {name: 'Open navigation'});
+        trigger.style.direction = direction;
         vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
-          left: 700,
+          left,
           width: 100,
           top: 0,
-          right: 800,
+          right: left + 100,
           bottom: 40,
           height: 40,
-          x: 700,
+          x: left,
           y: 0,
           toJSON: () => ({}),
         });

@@ -84,6 +84,7 @@ import {matchesMediaQuery} from '../utils/coarsePointer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
+import {isRtlElement} from '../hooks/isRtlElement';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -576,11 +577,7 @@ export function MobileNav({
       if (trigger && trigger !== document.body) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
-        const direction = window.getComputedStyle(trigger).direction;
-        const isRtl =
-          direction === 'rtl' ||
-          trigger.closest('[dir="rtl"]') != null ||
-          document.documentElement.dir === 'rtl';
+        const isRtl = isRtlElement(trigger);
         // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
         setResolvedSide(
           triggerCenter < window.innerWidth / 2 !== isRtl ? 'start' : 'end',
@@ -715,13 +712,20 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
+  const mergedDialogRef = useMergedRefs(ref, dialogRef);
+  // Do not mount an auto-side dialog for the opening commit. The layout effect
+  // above resolves the trigger's side first; mounting after that state update
+  // makes the first browser frame use the correct entrance transform.
+  if (isOpen && side === 'auto' && !autoSideResolved) {
+    return null;
+  }
   const navigationLabel =
     label ??
     (typeof header === 'string' ? header : t('@astryx.mobileNav.navigation'));
 
   return (
     <dialog
-      ref={useMergedRefs(ref, dialogRef)}
+      ref={mergedDialogRef}
       id={dialogId}
       {...mergeProps(
         themeProps('mobile-nav', {side: resolvedSide}),
