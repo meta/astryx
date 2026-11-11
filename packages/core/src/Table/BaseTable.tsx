@@ -1058,9 +1058,16 @@ function BaseTableInner<T extends Record<string, unknown>>({
       parentAppearance == null ? null : {...parentAppearance, textOverflow},
     [parentAppearance, textOverflow],
   );
+  // A Table asked to window keeps its parent-sized scroll area when it falls
+  // back, so a fallback costs rendering time, not layout. A caller-provided
+  // scroll wrapper keeps its own sizing.
+  const isBlockViewport =
+    config != null &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
   const runtimeValue = useMemo(
-    () => ({...runtime, isBlockViewport: windowPlan.isWindowed}),
-    [runtime, windowPlan.isWindowed],
+    () => ({...runtime, isBlockViewport}),
+    [runtime, isBlockViewport],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

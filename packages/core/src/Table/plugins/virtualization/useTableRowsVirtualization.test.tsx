@@ -180,6 +180,39 @@ describe('actual Table virtualization', () => {
     expect(await mountedRows()).toBe(data.length);
     restore();
   });
+  it('keeps the parent-sized scroll area when windowing falls back', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    function Wrapped() {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 48,
+        initialViewportHeight: 240,
+      });
+      // Wrapped text is not fixed-height, so every row renders.
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+          textOverflow="wrap"
+        />
+      );
+    }
+    const {container} = render(<Wrapped />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    expect(bodyRows).toHaveLength(data.length);
+    const viewport = screen.getByRole('table').closest('[role="group"]');
+    expect(getComputedStyle(viewport as Element).height).toContain('100%');
+    cleanup();
+    // A Table never asked to window keeps its content height.
+    render(<Table data={data} columns={columns} idKey="id" />);
+    const plain = screen.getByRole('table').parentElement as Element;
+    expect(getComputedStyle(plain).height).not.toContain('100%');
+    cleanup();
+    warn.mockRestore();
+  });
   it('falls back for an initialViewportHeight that is not a positive finite size', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {container} = render(<Fixture initialViewportHeight={0} />);
