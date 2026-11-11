@@ -345,6 +345,7 @@ interface LiftState {
   releaseGrowHold: (() => void) | null;
   releaseHold: (() => void) | null;
   isSourceLifted: boolean;
+  isDropping: boolean;
 }
 
 const px = (value: string | undefined) => Number.parseFloat(value ?? '') || 0;
@@ -901,6 +902,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       releaseGrowHold: null,
       releaseHold: null,
       isSourceLifted: true,
+      isDropping: false,
     };
     state = current;
     // Taps on the backdrop count only for a pointer that went down on the
@@ -1002,9 +1004,11 @@ export function createLiftFromTrigger(): LiftFromTrigger {
 
   const drop = () => {
     const current = state;
-    if (current == null || !current.isSourceLifted) {
+    // A second drop would retarget the return and settle it at once.
+    if (current == null || !current.isSourceLifted || current.isDropping) {
       return;
     }
+    current.isDropping = true;
     releaseGrowHold(current);
     const {layer, motion, source, sourceRect, lifted} = current;
     // The tint clears from what it shows now, with its velocity.
