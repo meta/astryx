@@ -6,19 +6,12 @@
 /**
  * @file privateAttributes/press.stylex.ts
  * @input StyleX, the overlay color tokens, the touch press strength
- *   (`pressVars`) and the theme's exit motion tokens
- * @output `rowPressLayerStyles`, the compositor press layer for list rows,
- *   which Button also composes. Its styles: `cell`, and `cellOnImage` for a
- *   `backgroundImage` row. `cellOnImagePressOnly` is for a row whose fill is
- *   the hover tone, and `overDividers` for a row of a List with dividers. Also
- *   `controlPressLayerStyles`, what Button adds to that layer (`control`),
- *   `rowPressPaintStyles`, a CheckboxList or RadioList row's press paint for
- *   its box, and `indicatorPressPaintStyles`, the paint of the layer over
- *   CheckboxInput's box and a RadioList option's circle.
+ *   (`pressVars`), the theme's exit motion tokens and the indicator scope
+ *   marker
+ * @output Ready-made press styles for list rows, Button and the layer over a
+ *   selection control's box. No package entry exports them.
  * @position Owner module of the private press attribute: the press controller
- *   (utils/pressFeedback.ts) writes it, and this file reads it. No package
- *   entry exports it. Item, ListItem, TreeList, Button, CheckboxInput,
- *   CheckboxListItem and RadioListItem compose its styles;
+ *   (utils/pressFeedback.ts) writes it, and this file reads it.
  *   utils/interactionOverlay.cell.test.ts tests the row layer.
  */
 
