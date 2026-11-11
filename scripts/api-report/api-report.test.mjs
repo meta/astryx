@@ -21,12 +21,19 @@ import {
   diffReports,
   parseReport,
   renderChanges,
-  staleReportWarnings,
   usageFor,
 } from './changes.mjs';
-import {chooseBase, publishedPackages} from './cli.mjs';
+import {
+  chooseBase,
+  publishedPackages,
+  uncomparedChanges,
+} from './cli.mjs';
 import {generateReport} from './generate.mjs';
 
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
 const FIXTURE_ROOT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '__fixtures__/repo',
@@ -234,282 +241,41 @@ describe('API changes', () => {
     ]);
   });
 
-  it('renders one summary line, keeps the rows in a closed disclosure, and flags a stale report in one line', () => {
+  it('renders one summary line and keeps the rows in a closed disclosure', () => {
     const md = renderChanges(
       computeChanges([
         {
           pkg: '@astryxdesign/demo',
           base: report,
           head: resize(report),
-          committed: report,
           baseSource: 'build',
         },
       ]),
     );
-    expect(md.split('\n').slice(0, 3)).toEqual([
-      '**API changes:** `demo` +0 · ~1 · −0',
-      '',
-      'Committed API report behind this build: `demo` 1 row; run `pnpm api:report`.',
-    ]);
+    expect(md.split('\n')[0]).toBe('**API changes:** `demo` +0 · ~1 · −0');
     expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
     expect(md).toContain('`<Chip size="sm" />`');
   });
 
-  // Main changed the API without regenerating its report; this pull request
-  // adds one type. Only the type is this pull request's.
-  const addTone = text =>
-    text.replace(
-      '### Types\n\n```text\n',
-      "### Types\n\n```text\ntype ChipTone = 'neutral' | 'accent'\n",
-    );
-
-  it("lists only the pull request's rows when the committed report is behind main", () => {
-    const [change] = computeChanges([
-      {
-        pkg: '@astryxdesign/demo',
-        base: resize(report),
-        head: addTone(resize(report)),
-        committed: report,
-        baseSource: 'build',
-      },
-    ]);
-    expect(change.rows.map(r => r.line)).toEqual([
-      "type ChipTone = 'neutral' | 'accent'",
-    ]);
-    expect(change).toMatchObject({stale: true, staleRows: 2});
-    const md = renderChanges([change]);
-    expect(md).toContain('**API changes:** `demo` +1 · ~0 · −0\n');
-    expect(md).toContain(
-      'Committed API report behind this build: `demo` 2 rows; run `pnpm api:report`.',
-    );
-    expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
-    expect(md).not.toContain("prop size?: ChipSize = 'sm'");
-  });
-
-  describe('a warning when this pull request leaves its own rows out of the report', () => {
-    const file = () => 'packages/demo/api-report.md';
-    const warn = input => staleReportWarnings(computeChanges([input]), file);
-
-    it('warns when the pull request changes a row and does not regenerate the report', () => {
-      const [change] = computeChanges([
+  it('ignores the stale-report fields an older head wrote', () => {
+    expect(
+      renderChanges([
         {
           pkg: '@astryxdesign/demo',
-          base: report,
-          head: resize(report),
-          committed: report,
-          baseSource: 'build',
-        },
-      ]);
-      expect(change.staleOwnRows).toBe(1);
-      expect(staleReportWarnings([change], file)).toEqual([
-        '::warning file=packages/demo/api-report.md,title=API report not regenerated::' +
-          "This pull request changes 1 row of @astryxdesign/demo's public API " +
-          'that its committed api-report.md does not show. Run pnpm api:report and commit the report.',
-      ]);
-    });
-
-    it('counts only its own rows when the report was already behind main', () => {
-      const [change] = computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: resize(report),
-          head: addTone(resize(report)),
-          committed: report,
-          baseSource: 'build',
-        },
-      ]);
-      expect(change).toMatchObject({
-        stale: true,
-        staleRows: 2,
-        staleOwnRows: 1,
-      });
-      expect(staleReportWarnings([change], file)[0]).toContain(
-        'changes 1 row of',
-      );
-    });
-
-    it('counts a wholly added component as one row, as the pull request report does', () => {
-      const withChip2 = text =>
-        text.replace(
-          '### Components\n\n```text\n',
-          '### Components\n\n```text\ncomponent Chip2\n  prop a?: string\n  prop b?: string\n  prop c?: string\n  prop d?: string\n  prop e?: string\n',
-        );
-      const head = withChip2(report);
-      expect(head).not.toBe(report);
-      const [change] = computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: report,
-          head,
-          committed: report,
-          baseSource: 'build',
-        },
-      ]);
-      expect(change.counts.added).toBe(1);
-      expect(change).toMatchObject({staleRows: 1, staleOwnRows: 1});
-      expect(staleReportWarnings([change], file)[0]).toContain(
-        'changes 1 row of',
-      );
-    });
-
-    // Small hand-written reports: one component with two props.
-    const tiny = ({
-      item = 'component Chip',
-      size = "'md'",
-      tone = "'neutral'",
-      chip = true,
-    } = {}) =>
-      '## `.`\n\n### Components\n\n```text\n' +
-      (chip
-        ? `${item}\n  prop size?: ChipSize = ${size}\n  prop tone?: ChipTone = ${tone}\n`
-        : '') +
-      '```\n';
-
-    it('warns for a prop change to a component the committed report lacks entirely', () => {
-      const [change] = computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: tiny(),
-          head: tiny({size: "'sm'"}),
-          committed: tiny({chip: false}),
-          baseSource: 'build',
-        },
-      ]);
-      expect(change.rows.map(r => r.member)).toEqual(['size']);
-      expect(change.staleOwnRows).toBe(1);
-    });
-
-    it('does not count a changed item line the report already shows, when another member is behind', () => {
-      const head = tiny({item: 'component Chip<T>'});
-      const [change] = computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: tiny(),
-          head,
-          committed: tiny({item: 'component Chip<T>', tone: "'accent'"}),
-          baseSource: 'build',
-        },
-      ]);
-      expect(change.rows.map(r => [r.item, r.member])).toEqual([
-        ['component Chip', null],
-      ]);
-      expect(change).toMatchObject({
-        stale: true,
-        staleRows: 1,
-        staleOwnRows: 0,
-      });
-    });
-
-    it('does not warn for a report that was stale before the pull request', () => {
-      expect(
-        warn({
-          pkg: '@astryxdesign/demo',
-          base: resize(report),
-          head: resize(report),
-          committed: report,
-          baseSource: 'build',
-        }),
-      ).toEqual([]);
-    });
-
-    it('does not warn when the pull request regenerated its report', () => {
-      expect(
-        warn({
-          pkg: '@astryxdesign/demo',
-          base: report,
-          head: resize(report),
-          committed: resize(report),
-          baseSource: 'build',
-        }),
-      ).toEqual([]);
-    });
-
-    it("does not warn against the merge base's committed report, which cannot tell the rows apart", () => {
-      expect(
-        warn({
-          pkg: '@astryxdesign/demo',
-          base: report,
-          head: resize(report),
-          committed: report,
-          baseSource: 'committed',
-        }),
-      ).toEqual([]);
-    });
-
-    it('does not warn for a new package with no report at the merge base', () => {
-      expect(
-        warn({
-          pkg: '@astryxdesign/demo',
-          base: null,
-          head: report,
-          committed: null,
-          baseSource: 'build',
-        }),
-      ).toEqual([]);
-    });
-  });
-
-  it('renders a stale report with no API change as one line', () => {
-    const md = renderChanges(
-      computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: resize(report),
-          head: resize(report),
-          committed: report,
-          baseSource: 'build',
-        },
-        {
-          pkg: '@astryxdesign/other',
-          base: report,
-          head: report,
-          committed: report,
-          baseSource: 'build',
+          baseline: false,
+          stale: true,
+          missing: false,
+          staleRows: 2,
+          counts: {added: 0, changed: 0, removed: 0},
+          rows: [],
         },
       ]),
-    );
-    expect(md).toBe(
-      '**API changes:** none in this pull request\n\nCommitted API report behind this build: `demo` 1 row; run `pnpm api:report`.\n',
-    );
+    ).toBe('');
   });
 
-  it("says when rows were compared with the merge base's committed report", () => {
-    const md = renderChanges(
-      computeChanges([
-        {
-          pkg: '@astryxdesign/demo',
-          base: report,
-          head: resize(report),
-          committed: resize(report),
-          baseSource: 'committed',
-        },
-      ]),
-    );
-    expect(md.split('\n')[0]).toBe(
-      "**API changes:** `demo` +0 · ~1 · −0 (against the merge base's committed report)",
-    );
-    expect(md).not.toContain('Committed API report behind');
-  });
-
-  it('renders version 1 changes as before', () => {
-    const md = renderChanges([
-      {
-        pkg: '@astryxdesign/demo',
-        baseline: false,
-        stale: true,
-        missing: false,
-        counts: {added: 0, changed: 0, removed: 0},
-        rows: [],
-      },
-    ]);
-    expect(md).toBe(
-      '**API changes:** `demo` no changes (report stale: run `pnpm api:report`)\n',
-    );
-  });
-
-  it('summarizes a package with no report at the merge base as a new report', () => {
+  it("summarizes a package the merge base's surface lacks", () => {
     const [change] = computeChanges([
-      {pkg: '@astryxdesign/demo', base: null, head: report, committed: report},
+      {pkg: '@astryxdesign/demo', base: null, head: report},
     ]);
     expect(change).toMatchObject({
       baseline: true,
@@ -517,79 +283,47 @@ describe('API changes', () => {
       counts: {added: 0, changed: 0, removed: 0},
     });
     expect(renderChanges([change])).toBe(
-      '**API changes:** `demo` new report\n',
+      "**API changes:** `demo` not in the merge base's build\n",
     );
   });
 
   it.each([
     [
       'its built surface',
-      {surface: 'S', haveSurface: true, unchanged: false},
+      {surface: 'S', unchanged: false},
       {base: 'S', baseSource: 'build'},
     ],
     [
       'this build for a package the built merge base lacks and this pull request leaves unchanged',
-      {surface: null, haveSurface: true, unchanged: true},
+      {surface: null, unchanged: true},
       {base: 'H', baseSource: 'head'},
     ],
     [
-      'the committed report for a changed package the built merge base lacks',
-      {surface: null, haveSurface: true, unchanged: false},
-      {base: 'C', baseSource: 'committed'},
+      'nowhere for a changed package the built merge base lacks',
+      {surface: null, unchanged: false},
+      {base: null, baseSource: 'build'},
     ],
     [
-      'the committed report when no build of the merge base was kept',
-      {surface: null, haveSurface: false, unchanged: true},
-      {base: 'C', baseSource: 'committed'},
-    ],
-    [
-      'no report for a changed package that a merge base this run built could not surface',
-      {
-        surface: null,
-        haveSurface: true,
-        unchanged: false,
-        selfBuilt: true,
-        listed: true,
-      },
+      'no report for a changed package the surface lists but could not build',
+      {surface: null, unchanged: false, listed: true},
       {base: null, baseSource: 'unknown', baseUnknown: true},
     ],
     [
-      'its committed report (none: a new package) for a package the self-built merge base does not list',
-      {
-        surface: null,
-        haveSurface: true,
-        unchanged: false,
-        selfBuilt: true,
-        listed: false,
-      },
-      {base: 'C', baseSource: 'committed'},
-    ],
-    [
-      'this build for an unchanged package that a merge base this run built could not surface',
-      {
-        surface: null,
-        haveSurface: true,
-        unchanged: true,
-        selfBuilt: true,
-        listed: true,
-      },
+      'this build for an unchanged package the surface lists but could not build',
+      {surface: null, unchanged: true, listed: true},
       {base: 'H', baseSource: 'head'},
     ],
   ])("takes the merge base's report from %s", (_label, input, expected) => {
-    expect(chooseBase({...input, head: 'H', committedAtBase: 'C'})).toEqual(
-      expected,
-    );
+    expect(chooseBase({...input, head: 'H'})).toEqual(expected);
   });
 
-  it('marks a package whose merge-base surface is unavailable as unknown, with no rows, even when its committed report is stale', () => {
-    const stalePast = report.replace(/^.*resetChips.*$/m, '');
+  it('marks a package whose merge-base surface is unavailable as unknown, with no rows', () => {
     const [change] = computeChanges([
       {
         pkg: '@astryxdesign/demo',
         base: null,
         baseSource: 'unknown',
         head: report,
-        committed: stalePast,
       },
     ]);
     // merge-guard reads `baseline` as an unknown base for a package the pull
@@ -603,6 +337,16 @@ describe('API changes', () => {
     });
     expect(renderChanges([change]).split('\n')[0]).toBe(
       '**API changes:** unknown (base surface unavailable): `demo`',
+    );
+    expect(
+      renderChanges([
+        change,
+        computeChanges([
+          {pkg: '@astryxdesign/other', base: report, head: resize(report)},
+        ])[0],
+      ]).split('\n')[0],
+    ).toBe(
+      '**API changes:** `other` +0 · ~1 · −0; unknown (base surface unavailable): `demo`',
     );
   });
 
@@ -637,17 +381,90 @@ describe('API changes', () => {
       expect(usageFor('@astryxdesign/demo', row)).toBe('<Badge … />');
   });
 
-  it('renders nothing when the API is unchanged and the committed report is current', () => {
+  it('renders nothing when the API is unchanged', () => {
     const changes = computeChanges([
-      {
-        pkg: '@astryxdesign/demo',
-        base: report,
-        head: report,
-        committed: report,
-      },
+      {pkg: '@astryxdesign/demo', base: report, head: report},
     ]);
     expect(renderChanges(changes)).toBe('');
   });
+
+  it('renders nothing when nothing was compared and no published package changed', () => {
+    expect(renderChanges([], {compared: false})).toBe('');
+  });
+
+  it('names each changed package as unknown when nothing was compared', () => {
+    const changes = uncomparedChanges(
+      [
+        {name: '@astryxdesign/demo', dir: 'packages/demo'},
+        {name: '@astryxdesign/quiet', dir: 'packages/quiet'},
+      ],
+      dir => dir === 'packages/quiet',
+    );
+    expect(changes).toEqual([
+      {
+        pkg: '@astryxdesign/demo',
+        baseline: true,
+        baseUnknown: true,
+        baseSource: 'unknown',
+        counts: {added: 0, changed: 0, removed: 0},
+        rows: [],
+      },
+    ]);
+    expect(renderChanges(changes, {compared: false})).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `demo`\n',
+    );
+  });
+});
+
+describe('--changes without a merge-base surface', () => {
+  const changes = (...args) => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.mjs'),
+          '--changes',
+          ...args,
+          '--out',
+          out,
+        ],
+        {encoding: 'utf8'},
+      );
+      return {
+        json: JSON.parse(
+          fs.readFileSync(path.join(out, 'api-changes.json'), 'utf8'),
+        ),
+        md: fs.readFileSync(path.join(out, 'api-changes.md'), 'utf8'),
+      };
+    } finally {
+      fs.rmSync(out, {recursive: true, force: true});
+    }
+  };
+
+  it('writes no empty delta: with no merge base to read, every published package is unknown', () => {
+    const {json, md} = changes();
+    const published = publishedPackages(REPO_ROOT).map(p => p.name);
+    expect(json.version).toBe(2);
+    expect(json.baseRecord).toBeNull();
+    expect(json.packages.map(p => p.pkg).sort()).toEqual(published.sort());
+    for (const p of json.packages)
+      expect(p).toMatchObject({
+        baseline: true,
+        baseUnknown: true,
+        baseSource: 'unknown',
+        rows: [],
+      });
+    expect(md.split('\n')[0]).toMatch(
+      /^\*\*API changes:\*\* not compared: no built surface of the merge base; unknown: /,
+    );
+  }, 60_000);
+
+  it('lists no package and renders nothing when no published package changed since the merge base', () => {
+    const {json, md} = changes('--base', 'HEAD');
+    expect(json).toMatchObject({version: 2, baseRecord: null, packages: []});
+    expect(md).toBe('');
+  }, 60_000);
 });
 
 describe('--surface', () => {
@@ -687,7 +504,7 @@ describe('--surface', () => {
       expect(
         fs.readFileSync(path.join(out, 'packages/demo/api-report.md'), 'utf8'),
       ).toBe(report);
-      // The checkout's committed reports are left alone.
+      // Nothing is written into the checkout.
       expect(
         fs.existsSync(path.join(repo, 'packages/demo/api-report.md')),
       ).toBe(false);

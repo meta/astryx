@@ -99,6 +99,18 @@
  *   | 'ERR_RENDER_FAILED'
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_THEME_BAD_VALUE'
+ *   | 'ERR_THEME_NO_MODE'
+ *   | 'ERR_THEME_UNKNOWN_PART'
+ *   | 'ERR_THEME_UNKNOWN_VARIANT'
+ *   | 'ERR_THEME_UNKNOWN_STATE'
+ *   | 'ERR_THEME_PRIVATE_TOKEN'
+ *   | 'ERR_THEME_UNKNOWN_TOKEN'
+ *   | 'ERR_THEME_NO_EFFECT'
+ *   | 'ERR_THEME_NOT_CHECKED'
+ *   | 'ERR_THEME_UNKNOWN_THING'
+ *   | 'ERR_THEME_NOT_SET'
+ *   | 'ERR_THEME_NOTHING_TO_UNDO'
  * )} ErrorCode
  */
 
@@ -315,6 +327,54 @@ export const ERROR_CODES = Object.freeze({
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_BAD_VALUE: 'ERR_THEME_BAD_VALUE',
+  /**
+   * `--mode light|dark` was given for something that cannot differ between light and dark: a size, a number, a font, or a property that is not a plain color, or a theme that has only one mode. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NO_MODE: 'ERR_THEME_NO_MODE',
+  /**
+   * `--on` names something that is not a themeable part or a family. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_PART: 'ERR_THEME_UNKNOWN_PART',
+  /**
+   * `--when` names a prop the part does not have, or a value that prop does not take. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_VARIANT: 'ERR_THEME_UNKNOWN_VARIANT',
+  /**
+   * `--state` names a state the part does not have. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_STATE: 'ERR_THEME_UNKNOWN_STATE',
+  /**
+   * The setting names a variable private to a component (`--_...`), which a theme cannot set. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_PRIVATE_TOKEN: 'ERR_THEME_PRIVATE_TOKEN',
+  /**
+   * The setting names a design token that does not exist. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_TOKEN: 'ERR_THEME_UNKNOWN_TOKEN',
+  /**
+   * The change could not take effect: neither the part nor any part inside it reads the token (or, for the whole theme, no part reads it). The suggestions name the token the part really reads and the property that sets it directly. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NO_EFFECT: 'ERR_THEME_NO_EFFECT',
+  /**
+   * Not an error: the change is saved, but the components could not be rendered, so it was not checked and has no preview. The result's `notChecked` carries this code and the cause, such as two copies of React. Reported only by `experimental theme`.
+   */
+  ERR_THEME_NOT_CHECKED: 'ERR_THEME_NOT_CHECKED',
+  /**
+   * The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_THING: 'ERR_THEME_UNKNOWN_THING',
+  /**
+   * `reset` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NOT_SET: 'ERR_THEME_NOT_SET',
+  /**
+   * `undo` found no earlier change to step back to. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NOTHING_TO_UNDO: 'ERR_THEME_NOTHING_TO_UNDO',
 });
 
 /**
