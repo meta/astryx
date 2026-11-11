@@ -26,6 +26,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -2178,6 +2179,23 @@ async function runComputerChecks(cwd) {
 }
 
 /**
+ * Where `search` and `build` keep their gathered catalog between runs, and
+ * how much it holds. Left out of a checkout, which keeps none.
+ * @returns {DoctorCheck | null}
+ */
+export function checkGatherCache() {
+  const summary = gatherCacheSummary();
+  if (summary == null) return null;
+  const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return {
+    id: 'gather-cache',
+    label: 'Search catalog cache',
+    status: 'info',
+    message: `search and build keep the catalogs they gather in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size}); a catalog is used only while nothing it read has changed, and deleting the folder clears it.`,
+  };
+}
+
+/**
  * Ordered list of synchronous check functions. Append here to add a check.
  * (checkConfig is async and is awaited separately by {@link runChecks}.)
  * A check that returns null does not apply to the project and is left out.
@@ -2197,6 +2215,7 @@ export const SYNC_CHECKS = [
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkGatherCache,
 ];
 
 /**

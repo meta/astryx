@@ -327,6 +327,10 @@ const RUNNERS = {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
   },
+  'foundation/fs/gather-cache.mjs': {
+    runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
+    sites: ['module.registerHooks'],
+  },
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
