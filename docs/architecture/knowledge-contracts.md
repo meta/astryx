@@ -313,6 +313,10 @@ Every record is either:
   individual run inventories. Accepted visual baselines, reusable stories and
   test fixtures, shipped documentation media, and repository-owned receipts
   explicitly permitted by their current owner remain versioned with the code.
+  A device or emulator clip that a verification row needs is kept by the
+  maintainers who checked it; the pull request states it in text (device or
+  emulator, browser, head, animation scale or slow-device profile, result) and
+  does not attach or link it.
 - **INV23 — Cleanup preserves historical evidence.** Removing disposable assets
   from the current tree MUST NOT rewrite history or break existing commit-pinned
   evidence links. Before deletion, every removed file has a verified public
