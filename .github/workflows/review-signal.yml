@@ -382,7 +382,9 @@ jobs:
                 core.info(`@${author} is the review app — trainer pass ${passed ? 'given' : 'pending'}.`);
                 await publishReviewGate(
                   !passed,
-                  passed ? 'Trainer pass: an engineering owner approved this exact head.' : reviewDecision.TRAINER_WAITING_TEXT,
+                  passed
+                    ? reviewDecision.OWNER_CLEARED_TEXT
+                    : reviewDecision.TRAINER_WAITING_TEXT,
                 );
                 return;
               }

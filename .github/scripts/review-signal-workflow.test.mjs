@@ -580,9 +580,8 @@ describe('a pull request the review app opens waits for a trainer pass (spec:AST
   it('passes once an engineering owner approves the exact head', async () => {
     const {last} = await gate({reviews: [review('engineer', 'APPROVED')]});
     expect(last.state).toBe('success');
-    expect(last.description).toContain(
-      'Trainer pass: an engineering owner approved this exact head.',
-    );
+    // review-clear's own text, so it re-gates a later withdrawal.
+    expect(last.description).toContain('Cleared by code-owner approval.');
   });
 
   it('still exempts other bots, and every bot when no review app is set', async () => {

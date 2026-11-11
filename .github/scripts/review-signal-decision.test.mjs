@@ -14,6 +14,7 @@ const {
   TRAINER_WAITING_TEXT,
   needsTrainerPass,
   trainerPassed,
+  OWNER_CLEARED_TEXT,
 } = require('./review-signal-decision.cjs');
 
 const head1 = '1111111111111111111111111111111111111111';
@@ -354,6 +355,14 @@ describe("a trainer pass for the review app's own pull requests", () => {
         review('engineer', 'CHANGES_REQUESTED'),
       ]),
     ).toBe(false);
+  });
+
+  it('clears with the text review-clear owns, so review-clear re-gates a withdrawn trainer pass', () => {
+    const clear = readFileSync(
+      fileURLToPath(new URL('../workflows/review-clear.yml', import.meta.url)),
+      'utf8',
+    );
+    expect(clear).toContain(`const OWNER_CLEARED = '${OWNER_CLEARED_TEXT}';`);
   });
 
   it('waits with a code-review description that review-clear owns', () => {

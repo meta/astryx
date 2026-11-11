@@ -124,6 +124,10 @@ function resolveReviewApprovals({
 // A pull request the review app opens is the app's own work, which it cannot
 // approve: its code review is a trainer pass, an engineering owner's approval
 // of its exact head. Other bots stay exempt.
+// The success text an engineering owner's exact-head approval leaves. It is
+// review-clear's own, so review-clear re-gates it when that approval is
+// withdrawn or dismissed.
+const OWNER_CLEARED_TEXT = 'Cleared by code-owner approval.';
 const TRAINER_WAITING_TEXT =
   "Waiting on code review: a trainer pass, an engineering owner's approval of this exact head.";
 
@@ -305,6 +309,7 @@ module.exports = {
   SPEC_MIRROR_PREFIX,
   SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
+  OWNER_CLEARED_TEXT,
   TRAINER_WAITING_TEXT,
   classifyReviewSignalPaths,
   composeReviewGate,
