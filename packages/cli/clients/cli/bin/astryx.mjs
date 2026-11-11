@@ -22,16 +22,48 @@
 // the bin is invoked (symlink, copy, or Windows shim). Uses only built-ins, so
 // the version gate below still runs first.
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {realpathSync} from 'node:fs';
 import {dirname, join} from 'node:path';
+import * as nodeModule from 'node:module';
+import {existsSync, lstatSync, mkdirSync, realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+
+// Node's compile cache keeps the compiled form of the CLI's modules between
+// runs, so a run skips most of their compiling. It lives in a folder of the
+// user's own in the system temp folder (node-compile-cache-<uid>). It is used
+// only once that folder exists, so a machine's first run just makes it and a
+// one-off run never pays to write the cache; and only while it is a real
+// folder the user owns that no one else can reach, since a shared folder
+// could hold planted cache files. Where the system has no user ids
+// (Windows), ownership cannot be checked, so the cache stays off.
+// NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
+// cannot read or write is skipped, and nothing about it is printed.
+try {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
+    const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
+    if (!existsSync(cacheDir)) {
+      mkdirSync(cacheDir, {mode: 0o700});
+    } else {
+      const stat = lstatSync(cacheDir);
+      const own =
+        stat.isDirectory() &&
+        !stat.isSymbolicLink() &&
+        stat.uid === uid &&
+        (stat.mode & 0o077) === 0;
+      if (own) nodeModule.enableCompileCache?.(cacheDir);
+    }
+  }
+} catch {
+  // A run without the cache is the same run, only slower.
+}
 
 const binDir = dirname(realpathSync(fileURLToPath(import.meta.url)));
 /** @param {string} rel */
-const importSrc = rel =>
-  import(pathToFileURL(join(binDir, '..', rel)).href);
+const importSrc = rel => import(pathToFileURL(join(binDir, '..', rel)).href);
 
-const {isNodeVersionSupported, unsupportedNodeMessage} =
-  await importSrc('../../foundation/env/node-version.mjs');
+const {isNodeVersionSupported, unsupportedNodeMessage} = await importSrc(
+  '../../foundation/env/node-version.mjs',
+);
 
 if (!isNodeVersionSupported(process.versions.node)) {
   const msg = unsupportedNodeMessage(process.versions.node);

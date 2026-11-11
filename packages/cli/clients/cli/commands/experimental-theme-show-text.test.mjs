@@ -126,3 +126,41 @@ describe('experimental theme editor new with setting flags', () => {
     expect(fs.existsSync(path.join(cwd, 'themes', 'nope'))).toBe(false);
   }, 120_000);
 });
+
+describe('experimental theme editor how --list', () => {
+  it('is a switch: the first word is what to list, the rest filters it', async () => {
+    const kinds = await runCli(
+      ['--json', 'experimental', 'theme', 'editor', 'how', '--list'],
+      {cwd},
+    );
+    expect(JSON.parse(kinds.stdout).data.list).toBe('kinds');
+    const tokens = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'editor',
+        'how',
+        '--list',
+        'tokens',
+        'accent',
+      ],
+      {cwd},
+    );
+    const data = JSON.parse(tokens.stdout).data;
+    expect(data.list).toBe('tokens');
+    expect(data.subject).toBe('accent');
+    expect(
+      data.items.every((/** @type {any} */ x) => x.name.includes('accent')),
+    ).toBe(true);
+  }, 120_000);
+
+  it('reads the built theme without leaving a file in the theme folder', async () => {
+    await runCli(['experimental', 'theme', 'editor', 'show', 'brand'], {cwd});
+    expect(
+      fs
+        .readdirSync(path.join(cwd, 'themes', 'brand'))
+        .filter(f => /\.load[-.]/.test(f)),
+    ).toEqual([]);
+  }, 120_000);
+});

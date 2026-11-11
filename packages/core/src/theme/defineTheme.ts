@@ -601,7 +601,6 @@ export interface DefinedTheme {
   /**
    * Component icon slot values with their functions, present when any value
    * is a function. Only component slot resolution reads it.
-   * @internal
    */
   __componentIcons?: Partial<Record<string, StoredComponentIconValue>>;
   /** Indicator overrides for stateful control visuals, keyed by name */

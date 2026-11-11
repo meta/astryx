@@ -15,6 +15,8 @@ verified_by:
     scripts/touch-support-bundle.test.mjs,
     scripts/lazy-sheet-bundle.test.mjs,
     scripts/core-single-bundle.test.mjs,
+    scripts/check-component-import-boundaries.mjs,
+    scripts/check-component-import-boundaries.test.mjs,
   ]
 deciding_specs: []
 ---
@@ -178,16 +180,17 @@ one pending load per module, caches a success, and resets after a failure.
 | Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
 | ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
 | `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.4 KB                | INV1       | Button's tooltip layer code is lazy                                      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 17.5 KB                | INV1       | Link's tooltip layer code is lazy                                        |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.0 KB                | INV1       | cells without actions reach no menu module                               |
+| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                      |
+| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                        |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
 | `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
 
-Costs are the check's own printout: each crossing's removal from the entry
-with every other crossing kept, in the entry build above. Rows share modules,
-so they do not add up. The truncation tooltip's touch code costs Button,
+Costs are the check's own printout in CI: each crossing's removal from the
+entry with every other crossing kept, in the entry build above. A local run
+on another platform or Node version can print gzip sizes a few tenths of a KB
+apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
 IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 123.0 KB eager.
+crossings brings the same module. Table carries 123.5 KB eager.
 
 ## Current-state impact
 
@@ -202,12 +205,12 @@ crossings brings the same module. Table carries 123.0 KB eager.
   five are not in INV9's entry list, so the check does not hold them; it
   holds only the listed entries.
 - INV1 gap: Button's and IconButton's imports reach the tooltip hook and the
-  layer runtime, 15.4 KB gzip, with or without a `tooltip` prop. Through
+  layer runtime, 15.5 KB gzip, with or without a `tooltip` prop. Through
   Button, Link, or their own code, 32 of Core's 95 component imports that are
   not surfaces carry 17–24 KB of tooltip code, and 52 carry at least 1 KB.
 - INV1 gap: Link's import reaches the Tooltip component and the layer
-  runtime, 17.5 KB gzip, with or without a `tooltip` prop.
-- INV1 gap: Table's import reaches the cell context menu, 78.0 KB gzip, for
+  runtime, 17.6 KB gzip, with or without a `tooltip` prop.
+- INV1 gap: Table's import reaches the cell context menu, 78.2 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
 - INV7 gap: Table's import reaches the window controller and the shared
@@ -217,9 +220,11 @@ crossings brings the same module. Table carries 123.0 KB eager.
   their description.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
-- INV9 gap: no check fails a new static import of a surface module or a
-  capability module from an entry; the size report prints sizes and fails on
-  none of them.
+- INV9 gap: the check does not measure INV7's wiring allowance. An entry's
+  wiring for a capability it does not import can exceed 0.3 KB gzip, and the
+  check does not fail.
+- INV9 gap: the check holds no capability boundary for swipe recognition,
+  which has no module of its own.
 
 ## Change coupling
 
