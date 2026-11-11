@@ -607,16 +607,18 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV15 — One lift-from-trigger module, opt-in per surface.** Lift-from-trigger presentation lives in one
   internal module separate from the layer runtime: the lift from the trigger,
   using the real trigger or a clone, whichever keeps the motion on the
-  compositor (`spec:AST-094` FR5);
+  compositor (`spec:AST-094` FR5); and
   the grow from the trigger's rectangle through the shared rectangle morph
-  (one Core animation from one rectangle to another); and
-  the exit, played through the runtime's exit copy (INV14). A clone of the
+  (one Core animation from one rectangle to another). A surface beside the
+  lift keeps its own exit. A clone of the
   trigger is the one transient copy `architecture:component-style-authoring`
   INV7 allows: inert, hidden from assistive technology, and removed when the
   lift settles. Surfaces opt in;
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
-  (`spec:AST-017` FR21).
+  (`spec:AST-017` FR21). Its entry points are `createLiftFromTrigger`, which
+  lifts a source, presents a surface beside it, drops and ends, and
+  `surfacePlacement`, which picks the surface's side.
 - **INV17 — A click inside a layer stops at the layer root.** A pointer,
   mouse, touch, or click event that starts inside a layer root (both
   `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
