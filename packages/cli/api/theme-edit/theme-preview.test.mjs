@@ -113,6 +113,11 @@ beforeAll(async () => {
     ...FIXTURE_PACKAGES,
     '@types/react',
     '@types/react-dom',
+    // The template pages' packages are installed, not only named.
+    '@heroicons/react',
+    '@stylexjs/stylex',
+    'lucide-react',
+    'recharts',
   ]);
   // CI builds only Core, so the base theme is a fixture, not a built package.
   writeFixtureBaseTheme(cwd, 'neutral');
@@ -131,8 +136,8 @@ describe('preview add', () => {
   it('refuses with no routes folder, naming --path and preview app', async () => {
     const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.join(' ')).toContain('add --path <dir>');
-    expect(r.run.join(' ')).toContain('preview app <dir>');
+    expect(r.run.join(' ')).toContain('add --path app/theme-preview');
+    expect(r.run.join(' ')).toContain('preview app theme-app');
   });
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
@@ -149,7 +154,7 @@ describe('preview add', () => {
     expect(route).toContain('<SegmentedControlItem value="system"');
     expect(route).toContain('brandTheme as theme');
     expect(route).not.toMatch(/<html|<body/);
-    expect(read('src/app/theme-preview/pages/components.tsx')).toContain(
+    expect(read('src/app/theme-preview/_pages/components.tsx')).toContain(
       'export default function ComponentsPage',
     );
     const data = JSON.parse(read('src/app/theme-preview/theme-preview.json'));
@@ -165,18 +170,18 @@ describe('preview add', () => {
     expect(filesUnder(dir)).toEqual(
       expect.arrayContaining([
         'page.tsx',
-        'pages/overview.tsx',
-        'pages/components.tsx',
+        '_pages/overview.tsx',
+        '_pages/components.tsx',
       ]),
     );
-    for (const f of ['pages/overview.tsx', 'pages/components.tsx'])
+    for (const f of ['_pages/overview.tsx', '_pages/components.tsx'])
       expect(read(`src/app/theme-preview/${f}`)).not.toMatch(/__element|<XDS/);
     expect(typeErrors(dir)).toEqual([]);
   }, 120_000);
 
   it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
     const dir = path.join(cwd, 'src/app/theme-preview');
-    const page = 'src/app/theme-preview/pages/colors.tsx';
+    const page = 'src/app/theme-preview/_pages/colors.tsx';
     await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
     const r = await themeEditPreviewAdd(undefined, {cwd});
     expect(r.data.added).toEqual(['colors']);
@@ -202,7 +207,7 @@ describe('preview add', () => {
   }, 240_000);
 
   it('writes a components page whose parts work on their own and survive leaving the page', () => {
-    const page = read('src/app/theme-preview/pages/components.tsx');
+    const page = read('src/app/theme-preview/_pages/components.tsx');
     // A typeahead with no search source throws as it unmounts, past every
     // boundary, so leaving the page would crash the production route.
     for (const tag of page.match(
@@ -231,7 +236,7 @@ describe('preview add', () => {
     expect(page).not.toContain('<Safe name="DropdownMenuRadioItem">');
     expect(page).toMatch(/<C\.ButtonGroup [^>]*>\s*<C\.Button /);
     expect(page).toContain('could not render here');
-    expect(read('src/app/theme-preview/pages/overview.tsx')).not.toContain(
+    expect(read('src/app/theme-preview/_pages/overview.tsx')).not.toContain(
       'AppShell',
     );
   });
@@ -242,7 +247,9 @@ describe('preview add', () => {
     const set = await themeEditSet('brand', 'font', 'inter', {cwd});
     const note = set.data.notes.join(' ');
     expect(note).toContain('Inter is not installed, so it does not load');
-    expect(note).toMatch(/(npm install|pnpm add|yarn add|bun add) @fontsource\/inter/);
+    expect(note).toMatch(
+      /(npm install|pnpm add|yarn add|bun add) @fontsource\/inter/,
+    );
     const route = 'src/app/theme-preview/page.tsx';
     expect(read(route)).not.toContain('@fontsource/inter');
     fs.mkdirSync(pkgDir, {recursive: true});
@@ -269,9 +276,11 @@ describe('preview add', () => {
     expect(r.data.added).toHaveLength(1);
     const id = r.data.added[0];
     expect(
-      fs.existsSync(path.join(cwd, 'src/app/theme-preview/pages', `${id}.tsx`)),
+      fs.existsSync(
+        path.join(cwd, 'src/app/theme-preview/_pages', `${id}.tsx`),
+      ),
     ).toBe(true);
-    expect(read('src/app/theme-preview/page.tsx')).toContain(`./pages/${id}`);
+    expect(read('src/app/theme-preview/page.tsx')).toContain(`./_pages/${id}`);
     const list = await themeEditPreviewList({cwd});
     expect(list.data.pages.map(p => p.id)).toEqual([
       'overview',
@@ -346,7 +355,7 @@ describe('preview options and errors', () => {
     expect(one.data.added).toEqual(['table']);
     expect(one.data.theme).toBe('brand');
     expect(one.data.skipped).toEqual([]);
-    expect(read('src/app/opts/pages/table.tsx')).toContain('export default');
+    expect(read('src/app/opts/_pages/table.tsx')).toContain('export default');
     const two = await themeEditPreviewAdd('an analytics dashboard', {
       cwd,
       path: 'src/app/opts',
@@ -444,7 +453,12 @@ describe('preview options and errors', () => {
     fs.writeFileSync(path.join(bare, 'package.json'), '{"name": "bare"}\n');
     try {
       const r = await themeEditPreviewList({cwd: bare});
-      expect(r.data).toEqual({folder: null, theme: null, pages: []});
+      expect(r.data).toEqual({
+        folder: null,
+        theme: null,
+        pages: [],
+        notes: [],
+      });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -457,11 +471,11 @@ describe('preview remove', () => {
     expect(one.data.pages).not.toContain('components');
     expect(
       fs.existsSync(
-        path.join(cwd, 'src/app/theme-preview/pages/components.tsx'),
+        path.join(cwd, 'src/app/theme-preview/_pages/components.tsx'),
       ),
     ).toBe(false);
     expect(read('src/app/theme-preview/page.tsx')).not.toContain(
-      './pages/components',
+      './_pages/components',
     );
     fs.writeFileSync(
       path.join(cwd, 'src/app/theme-preview/notes.md'),
@@ -544,8 +558,8 @@ describe('preview app', () => {
       'src/app/providers.tsx',
       'src/app/page.tsx',
       'src/app/theme-preview/page.tsx',
-      'src/app/theme-preview/pages/overview.tsx',
-      'src/app/theme-preview/pages/components.tsx',
+      'src/app/theme-preview/_pages/overview.tsx',
+      'src/app/theme-preview/_pages/components.tsx',
       'src/app/theme-preview/theme-preview.json',
     ]) {
       expect(fs.existsSync(path.join(cwd, 'fresh', f)), f).toBe(true);
@@ -645,9 +659,9 @@ describe('preview app', () => {
       expect(r.message).toContain('mine exists and is not empty');
       expect(r.run[0]).toMatch(/preview app mine-preview$/);
       expect(read('mine/src/app/layout.tsx')).toBe('MY LAYOUT\n');
-      expect(
-        (await refusal(() => themeEditPreviewApp('.', {cwd}))).code,
-      ).toBe('ERR_FILE_EXISTS');
+      expect((await refusal(() => themeEditPreviewApp('.', {cwd}))).code).toBe(
+        'ERR_FILE_EXISTS',
+      );
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
     }
