@@ -1302,6 +1302,20 @@ export function useSwipeAction({
         // The drag moves the row: text selection and the touch callout stay
         // off for the press it holds.
         selectionLock: lockSelection,
+        // The host offers each touch here once, with its target, as it lands.
+        // A press on the outermost entry of a row open on that side is noted.
+        shouldReceiveTouch: (_pan, touch) => {
+          const current = stateRef.current;
+          const {target} = touch;
+          landedOnRef.current =
+            touch.scrollType == null &&
+            isSwipeOpen(current) &&
+            target instanceof Node &&
+            panels[current.side].outer?.contains(target) === true
+              ? current.side
+              : null;
+          return true;
+        },
         shouldBegin: (pan: PanGestureRecognizer) => {
           // A finger that is not the only one down is part of a pinch, even
           // when the first finger is off the row. The page zooms.
@@ -1323,20 +1337,7 @@ export function useSwipeAction({
       model: {begin, move: track, release, cancel},
     });
     snapRef.current = snap;
-    const onPointerDown = (event: PointerEvent) => {
-      const {target} = event;
-      const current = stateRef.current;
-      const {side} = current;
-      landedOnRef.current =
-        isSwipeOpen(current) &&
-        target instanceof Node &&
-        panels[side].outer?.contains(target) === true
-          ? side
-          : null;
-    };
-    root.addEventListener('pointerdown', onPointerDown, true);
     return () => {
-      root.removeEventListener('pointerdown', onPointerDown, true);
       snapRef.current = null;
       snap.destroy();
       // The root outlives the swipe: it gets its own styles back.
