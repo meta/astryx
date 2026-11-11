@@ -337,6 +337,10 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - The action-group tracker (INV13) — the one press tracker for action groups
   outside menus and Selector's and MultiSelector's options, with its one-axis
   tracking (INV14); not exported.
+- `useTapStop` in `Layer/useTouchTrigger.ts` — swallows the click or mousedown
+  that follows a touch press on a control that must not act on taps; not
+  exported. Tokenizer wraps it so that only a finger's press on a token's remove
+  button arms it; a pen's press keeps its default, as a mouse's does.
 
 ## Deciding specs
 
