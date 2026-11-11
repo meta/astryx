@@ -53,6 +53,7 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
   PressGroupBandContext,
   PressGroupContext,
@@ -758,6 +759,13 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // Server markup has no click guard until it hydrates, and a native submit
+  // or reset button acts on its form without one.
+  const isHydrating = useIsHydrating();
+  const renderedType =
+    buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
+      ? 'button'
+      : type;
   // The group draws one band for all its members: a ButtonGroup, or a
   // tracking group that says so. A disabled or busy-only button takes no tap.
   const groupDrawsBand = use(PressGroupBandContext);
@@ -1009,7 +1017,7 @@ export function Button({
     element = (
       <button
         ref={mergedButtonRef}
-        type={type}
+        type={renderedType}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}

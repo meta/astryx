@@ -26,6 +26,7 @@ import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
 import {createJiti} from 'jiti';
 import {findPresentFiles} from './present-files.mjs';
+import {importUrl} from './import-url.mjs';
 
 export {findPresentFiles};
 
@@ -231,12 +232,15 @@ async function importModule(file, fresh) {
     return await getJiti().import(file);
   }
   const url = pathToFileURL(file);
-  if (!fresh) return await readInTurn(file, () => import(url.href));
+  // The node test project loads import-url.mjs natively. An import from here
+  // would be a request to the test runner, and a theme build reads every Core
+  // doc through it.
+  if (!fresh) return await readInTurn(file, () => importUrl(url.href));
   // Node chooses the format again, as for the first import: a package's
   // "type", the extension, or the source's syntax. The query names a new ES
   // module. A CommonJS module also needs its cache entry gone.
   url.searchParams.set('astryx-fresh', String(++freshImportNonce));
-  return await readFreshInTurn(file, () => import(url.href));
+  return await readFreshInTurn(file, () => importUrl(url.href));
 }
 
 /**
@@ -299,7 +303,6 @@ export function readFreshInTurn(file, read) {
     return read();
   });
 }
-
 
 /**
  * Import a user-authored module, take its default export, and validate it

@@ -13,11 +13,13 @@ export {render} from './render/render.mjs';
 export {
   themeEditNew,
   themeEditSet,
-  themeEditReset,
   themeEditShow,
   themeEditUndo,
-  themeEditPreview,
-  themeEditExplain,
+  themeEditPreviewAdd,
+  themeEditPreviewApp,
+  themeEditPreviewList,
+  themeEditPreviewRemove,
+  themeEditHow,
 } from './theme-edit/theme-edit.mjs';
 
 // Types (runtime no-ops; tsc carries them into api/experimental.d.mts).
