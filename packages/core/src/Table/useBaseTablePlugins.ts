@@ -91,15 +91,7 @@ function sortPluginEntries<T extends Record<string, unknown>>(
 // Plugin Validation (dev mode only)
 // ======================================================================
 /** Known declaration fields on the TablePlugin interface. */
-<<<<<<< HEAD
-const VALID_DECLARATION_KEYS = new Set(['rowModel', 'renderState']);
-=======
-const VALID_DECLARATION_KEYS = new Set([
-  'rowModel',
-  'usesCanonicalRowKey',
-  'wholeRowOwner',
-]);
->>>>>>> bf9324542f (feat(table): add useTableActivation row-activation plugin)
+const VALID_DECLARATION_KEYS = new Set(['rowModel', 'renderState', 'wholeRowOwner']);
 
 /** Known transform method names on the TablePlugin interface. */
 const VALID_TRANSFORM_KEYS = new Set([

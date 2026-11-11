@@ -39,6 +39,13 @@ export interface RowPressGuardOptions {
    * check those separately. @default 'intersect'
    */
   readonly selection?: 'intersect' | 'contain' | 'none';
+  /**
+   * A press whose target renders outside the row (portalled content) belongs
+   * to that content: the guard suppresses the row's press. Expansion and
+   * tree keep their released toggle behavior until their owners decide by
+   * passing `false`. @default true
+   */
+  readonly portal?: boolean;
 }
 
 /**
@@ -115,7 +122,10 @@ export function shouldSuppressRowPress(
   if (!(target instanceof Element)) {
     return true;
   }
-  if (!row.contains(target)) {
+  // Portalled content renders outside the row, so its press belongs to that
+  // content. Expansion and tree pass `false` to keep released behavior until
+  // their owners decide.
+  if (options?.portal !== false && !row.contains(target)) {
     return true;
   }
   if (options?.nestedRow !== false && target !== row) {
