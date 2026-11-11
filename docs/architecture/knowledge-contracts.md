@@ -9,7 +9,16 @@ superseded_by: null
 approved_by: cixzhang
 approved_at: 2026-08-30
 owners: [cixzhang]
-applies_to: [AGENTS.md, .github/PULL_REQUEST_TEMPLATE/, docs/, packages/]
+applies_to:
+  [
+    AGENTS.md,
+    .github/PULL_REQUEST_TEMPLATE/,
+    .github/pull_request_template.md,
+    .github/scripts/api-tagalong.mjs,
+    scripts/lib/knowledge-status-phrases.mjs,
+    docs/,
+    packages/,
+  ]
 verified_by:
   [
     scripts/check-knowledge.test.mjs,
@@ -22,6 +31,8 @@ verified_by:
     .github/scripts/review-signal-decision.test.mjs,
     .github/scripts/review-signal-workflow.test.mjs,
     .github/scripts/spec-owner-decision.test.mjs,
+    .github/scripts/api-tagalong.test.mjs,
+    scripts/lib/knowledge-status-phrases.test.mjs,
     apps/docsite/src/__tests__/example-coverage.test.ts,
   ]
 deciding_specs: []
@@ -51,7 +62,8 @@ deciding_specs: []
       "DEC-12",
       "DEC-13",
       "DEC-15",
-      "INV28"
+      "INV28",
+      "INV31"
     ]
   }
 }
@@ -80,7 +92,10 @@ Astryx keeps different facts in different places:
 - Component contracts describe aggregate behavior one component promises.
 - Module contracts describe an independently contractible public hook, plugin,
   utility, or subsystem owned by one component. Private implementation helpers do
-  not require records.
+  not require records. A new internal module or hook that another component can
+  import, such as a package `internal/` export or a hook used outside the
+  component that owns it, is not a private helper: until a record defines it, it
+  needs an owner decision (contract before escalation step 5, DEC-22).
 - An optional `Design decisions` table inside a component or module contract
   records durable visual intent local to that owner. It does not hold exact pixel
   tuning or rules shared across components.
@@ -353,11 +368,13 @@ Every record is either:
 
 ### Consumer docs
 
-- **INV28 — Every public hook has a minimal, runnable example that
-  demonstrates it.** A public hook is a hook that a package's committed API
-  report lists. Its documentation includes at least one realistic, runnable
-  example: a live template block that names the hook as its example target
-  (`exampleFor`, or `alsoExampleFor` when the block also serves another page).
+- **INV28 — Every public hook has a minimal, runnable example that demonstrates
+  it.** A public hook is a hook that a published package exports from a
+  published entry point, as the built API surface lists it
+  (`architecture:public-component-api` INV24). Its documentation includes at
+  least one realistic, runnable example: a live template block that names the
+  hook as its example target (`exampleFor`, or `alsoExampleFor` when the block
+  also serves another page).
   The example:
   - shows the hook inside a component solving the use case its docs state;
   - imports the package's own code only through its public entry points;
@@ -463,6 +480,54 @@ the rest:
     reserved example domains are not external links for this rule.
   - **a human owner** is `cixzhang` or a DESIGNOWNER, approving the exact head.
 
+### Approval lines
+
+- **INV31 — A record's approval lines are append-only.** A pull request that
+  changes or removes an existing decision's Decider line, or replaces a
+  record's `approved_by` with a different account, needs that original
+  decider's approval at its exact head; `cixzhang`'s own pull request counts as
+  hers. Adding a decision or an approver needs nothing extra (DEC-18). In this
+  rule:
+  - **the original decider** is the account the existing line names.
+  - **approval** is an approving review at the exact head, or a
+    `/approve-spec <full head SHA>` comment, from that account. Any decider
+    other than `cixzhang` approves the exact head, also on their own pull
+    request.
+  - **a change** is an edit to or removal of the line, a removed decision
+    included. A line that only moves, text added after an unchanged Decider
+    line, and a placeholder decider that a real decider replaces are not
+    changes.
+
+### Record status
+
+- **INV32 — Records state behavior and decisions, not project status.** A
+  record states intended behavior, boundaries, owners, evidence, and
+  decisions. It does not state how far the work behind it has got or the
+  order in which that work happens (DEC-20). This holds in every section, a
+  gap or current-state section included. In this rule:
+  - **build status** is a statement of what is written, built, or shipped so
+    far: "the build has not started", "no code yet", "no module exists yet",
+    "not built", "not yet implemented", "follow-up work".
+  - **sequencing** is a statement of work order: "first consumer", "first
+    adopter", "adoption order", "Table adopts it first", "lands before",
+    "phase 1". An order the system itself follows, such as a release rule that
+    a deprecation ships before a removal, is behavior, not sequencing.
+  - **a requirement gap** is allowed in the form
+    `<FR or INV id> gap: <observable mismatch>`. It names what the system does
+    today that the requirement forbids, and it states no build status or
+    sequencing.
+  - **a status line** is allowed: at most one line, such as
+    `Status: in progress`, that says only that the record is still in
+    progress.
+  - **a lifecycle field** is allowed: a field a knowledge template requires,
+    such as a system spec's `phase` or the `Released default preserved`
+    line, states the record's own lifecycle, not build progress, and stays.
+  - Implementation plans (`plan.md`) track work and are outside this rule.
+
+### Public API scope
+
+- **INV33 — Every public API row a pull request adds or changes is named in its scope.** A pull request names the components and modules it changes, and lists its public API rows by component. A row outside that named scope that no current owner-approved record decides is sent to an owner with the row listed, and the pull request doesn't merge until the row is named and owner-approved, or split into its own pull request. A row outside the scope that a current record decides needs no further step (INV25), but the status still lists it as outside the scope, so a reviewer sees it. A behavior handler (a public event or callback prop, such as `onClick`, that makes a component act on input) added outside the scope warns.
+
 ## Path applicability
 
 Use this optional block when a record governs paths that its placement, path
@@ -558,15 +623,15 @@ Before writing:
 Begin each component or module contract with this reader-first projection after its
 title:
 
-| Area                    | Contract                                                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | State the exact public API, concept, or syntax delta; write `None` when none changes.                                           |
-| Behavior                | State the observable governing behavior, including the decisive default, boundary, or precedence rule.                          |
-| End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                          |
-| Builder impact          | Name migration work and every new caller choice; write `None` when there is no new burden.                                      |
-| Compatibility/readiness | State default compatibility, additive/breaking status, authority and implementation state, and material evidence still pending. |
-| Review checks           | List the few concrete conditions that make an implementation or proposal rejectable under this contract.                        |
-| Governing rules         | Link the canonical owner and only the current clauses needed to justify the projection.                                         |
+| Area                    | Contract                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | State the exact public API, concept, or syntax delta; write `None` when none changes.                                            |
+| Behavior                | State the observable governing behavior, including the decisive default, boundary, or precedence rule.                           |
+| End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                           |
+| Builder impact          | Name migration work and every new caller choice; write `None` when there is no new burden.                                       |
+| Compatibility/readiness | State default compatibility, additive/breaking status, authority, requirement gaps (INV32), and material evidence still pending. |
+| Review checks           | List the few concrete conditions that make an implementation or proposal rejectable under this contract.                         |
+| Governing rules         | Link the canonical owner and only the current clauses needed to justify the projection.                                          |
 
 Architecture records use the same position and footer with architecture-specific
 rows:
@@ -577,7 +642,7 @@ rows:
 | System behavior         | State shipped system behavior, including the decisive invariant, boundary, or precedence rule.                                 |
 | End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                         |
 | Builder impact          | Name the implementation decisions, coordination work, or workarounds this architecture removes or adds.                        |
-| Compatibility/readiness | State compatibility effect, authority and implementation state, and material evidence still pending.                           |
+| Compatibility/readiness | State compatibility effect, authority, requirement gaps (INV32), and material evidence still pending.                          |
 | Review checks           | List boundary violations, product-API mechanism leaks, or lost invariants/evidence distinctions that make a change rejectable. |
 | Governing rules         | Link the deciding specs and only the current clauses needed to justify the projection.                                         |
 
@@ -595,6 +660,11 @@ Then write the authoritative body:
   `docs/contributing/spec-writing.md` turns this rule and INV10 into a rubric;
   a pull request that creates or changes a record reports that rubric's results
   in its description before review.
+- State intended behavior and decisions, not project status: no build status
+  and no work order (INV32). A requirement gap reads
+  `<FR or INV id> gap: <observable mismatch>`, one line such as
+  `Status: in progress` may say the record is still in progress, and the
+  lifecycle fields a template requires stay.
 - Use familiar words and short, direct sentences.
 - State each rule fully once, beside the conditions and exceptions that control it.
   Later sections cite its ID or canonical owner instead of restating the prose.
@@ -711,7 +781,7 @@ Before any component, module, family, design, theme, or architecture record beco
    then continue reviewing the remaining change. A `novel-human` delta enters a
    private human hold only when it is the primary intent, is inseparable from it,
    or the author or owner explicitly chooses to pursue it. An added or changed
-   row of a pull request's public API changes
+   row of a pull request's public API delta
    (`architecture:public-component-api` INV24) that is `novel-human` instead
    sends the pull request to human review with that row listed, whether or not
    it is separable; an owner of that record accepts, splits, or removes it, and
@@ -749,8 +819,9 @@ Review and build should converge on the smallest ideal change that can land:
    change without asking the contributor to solve adjacent system design. An
    undeclared public API row is the exception: it goes to human review for an
    owner to accept, split, or remove (change coupling step 6).
-5. Escalate only a surviving, intentional `novel-human` delta or an undeclared
-   public API row. Record only the
+5. Escalate only a surviving, intentional `novel-human` delta, an undeclared
+   public API row, or a new internal module or hook that no record defines
+   (System model, DEC-22). Record only the
    exact decision needed for that delta; adjacent module behavior may stay
    uncontracted.
 
@@ -1316,6 +1387,57 @@ automation (INV30). Automated approval must not publish links an outside
 contributor added without a person checking them. Team-authored links follow
 the normal gates.
 
+### DEC-18 — A record's approval lines are append-only
+
+**Reference:** `architecture:knowledge-contracts/DEC-18`
+**Decider:** `cixzhang`, `2026-11-08`
+
+An existing decision's Decider line and a record's `approved_by` change only
+with the original decider's approval at the exact head (INV31). An approval line
+records who decided, so a rewrite without that person names someone who did not
+make the decision. Only `cixzhang`'s own pull request counts as approval of her
+own lines; every other decider approves the exact head. New decisions and added
+approvers follow the normal gates.
+
+### DEC-19 — A Lab-only pull request needs no owner decision
+
+**Reference:** `architecture:knowledge-contracts/DEC-19`
+**Decider:** `cixzhang`, `2026-11-04`
+
+The owner said: "Anything lab only gets an ok". A Lab-only pull request, as `spec:AST-030` FR26 defines it, needs no owner decision (INV4) for its Lab behavior or Lab API. A Lab record it changes still takes an engineering owner's `/approve-spec` at the pull request's head (DEC-14). A pull request that is not Lab-only under FR26 follows the normal owner rules for every part it changes; splitting out the non-Lab part makes the rest Lab-only.
+
+Rejected: treating a pull request that also changes Core or another package as Lab-only.
+
+### DEC-20 — Records state behavior and decisions, not project status
+
+**Reference:** `architecture:knowledge-contracts/DEC-20`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "Let’s also put in writing guidelines that specs should avoid including temporary status of projects like what’s been written or what goes first. It can have a statement like it’s still in progress though". A record states intended behavior and decisions (INV32). Build status and work order go stale as the work moves, and a later reader cannot tell a stale status line from a requirement. A requirement gap stays, in the form `<FR or INV id> gap: <observable mismatch>`, because it names behavior the system must change. One status line, such as `Status: in progress`, may say the record is still in progress. Implementation plans and pull requests carry the work's progress and order.
+
+Rejected: a check that fails on status phrases, because the same words also describe behavior ("focus lands", "while the Action is pending").
+
+### DEC-21 — A public API row outside a pull request's scope needs a decision
+
+**Reference:** `architecture:knowledge-contracts/DEC-21`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "I think for big prs like 3280 we need better guard rails around preventing tagalongs". A single large import once carried Item's row `onClick` and container click with no decision recorded. The rule above makes such a tag-along visible before merge. Rejected: relying on review to catch tag-alongs in large pull requests.
+
+### DEC-22 — An undefined internal module or hook needs an owner decision
+
+**Decider:** `cixzhang`, `2026-11-10`
+
+The owner said: "essentially we should not be approving anything where the api
+is ambiguous and undefined by the spec. Those got onhuman review". An
+undeclared public API row already goes to owner review. A new internal module
+or hook that other components can import is API between components too, so
+review requests changes for one that no record defines until an owner decides
+it, with the delta shown as usage, why it is needed, and why existing modules
+are not enough.
+
+Rejected: treating every internal module or hook as a private helper.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -1336,15 +1458,18 @@ the normal gates.
 | DEC-14 (design owner's own PR)    | `.github/scripts/spec-owner-reconcile.test.mjs` "accepts a DESIGNOWNER author's own /approve-spec on a design record"; the accessibility-requirement and deprecation limit has no gate check (the Current gap in DEC-14) | A DESIGNOWNER author's own `/approve-spec` does not approve a current design record on their own pull request; the accessibility-requirement and deprecation limit has no failure signal because the gate does not check it (Current gap)                                                                                                                                                                                                                                                                                                                                                                                           |
 | DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                               | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                                                                                                                                                       |
 
-| Invariant            | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                                                                                                                                                                                                                                                   | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
-| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                          | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
-| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
-| INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
-| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
-| INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                              |
-| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
+| Invariant            | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                                                                                                                                                                                                                                                   | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                                                          |
+| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                          | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                                                |
+| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                                                     |
+| INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` over the built surface's hook rows and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                           | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                                                        |
+| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                                                   |
+| INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                                                           |
+| INV31, DEC-18        | `scripts/check-knowledge.test.mjs` "approval line history"; `pnpm check:knowledge --base <base>` lists each changed approval line with its original decider; review and merge tooling outside the repository require that decider's exact-head approval (the INV31 enforcement gap below)                                                                                                                                                  | A pull request that changes or removes an existing Decider or `approved_by` line is approved or merged without the original decider's exact-head approval, or a pull request that only adds a decision or an approver is held                                                                                                                                                                                                                                   |
+| INV32, DEC-20        | `scripts/lib/knowledge-status-phrases.test.mjs`; `pnpm check:knowledge` warns on each build-status or sequencing phrase in a spec or architecture record and does not fail (DEC-20); review of each changed record against rubric item R7 in `docs/contributing/spec-writing.md`, reported under `## Writing rubric results`                                                                                                               | A changed record states build status or work order outside a requirement gap or one status line, with no R7 finding; or a requirement gap in the `<FR or INV id> gap:` form, a single status line, or a template-required lifecycle field is reported as an R7 finding                                                                                                                                                                                          |
+| INV33, DEC-21        | `.github/scripts/api-tagalong.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                    | An added or changed row whose component is outside the title scope and the `Components:` line, not named in a code span or the `Components:` line under `## Scope`, and not decided by a current record, is not listed as a tag-along; an in-scope, named, removed, or decided row is listed as a tag-along; a decided row outside the scope is missing from the summary; a row matches another package's components; or an unreadable API changes file exits 0 |
+| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate                              |
 
 Evidence placement is enforced by contributors and reviewers. The local
 `docs/pr-assets/` ignore prevents accidental staging; it is not a blocking CI
@@ -1371,9 +1496,9 @@ paths exist. Its theme-target block has no core theming contract to check
 against. The spec-owner gate and `pnpm specs:for` treat a platform record like
 the core record beside it.
 
-Current enforcement gap: no checked-in gate yet proves the open-pull-request
-search. Until one exists, the pull-request summary records the search terms,
-canonical owner/path, and overlapping open work inspected.
+Review enforces the open-pull-request search (INV13): the pull-request
+summary records the search terms, canonical owner/path, and overlapping open
+work inspected.
 
 Current enforcement gap: the example-coverage report lists each public hook
 that has no hook doc or no example block naming it, but it cannot see whether
@@ -1383,3 +1508,20 @@ docs gap under INV28, tracked in the repository's issue queue.
 Current enforcement gap: no repository CI check detects a new external URL in a
 pull request from an author outside the team (INV30). Review and merge tooling
 outside the repository enforces this.
+
+Current enforcement gap: no repository check reads approvals (INV31).
+`pnpm check:knowledge --base <base>` reports each changed approval line as a
+warning and does not fail. Review and merge tooling outside the repository
+requires the original decider's approval.
+
+Current enforcement gap: `.github/scripts/api-tagalong.mjs` lists each added or
+changed public API row outside a pull request's named scope (INV33), and lists
+a row a current record decides as outside the scope without counting it as a
+tag-along when its caller supplies those rows. No CI job runs the script yet,
+so review sends an undecided row to an owner. The script reads API rows only:
+review checks owner approval of a named row and a behavior handler change
+outside the scope that adds no API row.
+
+Current enforcement gap: `pnpm check:knowledge` warns on each build-status
+or sequencing phrase in a spec or architecture record (INV32) and does not
+fail (DEC-20). Review against rubric item R7 decides each line.
