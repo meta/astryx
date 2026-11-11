@@ -8,6 +8,7 @@
     "dev": "pnpm generate && node ../../scripts/generate-i18n-runtime.mjs --watch -- pnpm --parallel --filter @astryxdesign/core --filter @astryxdesign/docsite dev:i18n",
     "dev:i18n": "next dev --webpack",
     "build": "pnpm generate && next build --webpack && node scripts/check-template-gallery-bundle.mjs && node scripts/check-function-size.mjs",
+    "capture:landing-previews": "node scripts/capture-landing-template-previews.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

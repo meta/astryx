@@ -1,7 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Shows a decorative grid of page-template previews on a feature card.
+ * @input Uses the tile rows and pre-generated light and dark preview images.
+ * @output Renders lazy-loaded preview images; `?template-previews=live` renders the live templates instead.
+ * @position Landing and community feature cards; the live mode is the source for the capture script.
+ */
+
 'use client';
 
+import {useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   spacingVars,
@@ -9,16 +17,17 @@ import {
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {TemplateThumbnail} from '../../../components/TemplateThumbnail';
+import {useThemeMode} from '../../providers';
+import {
+  LANDING_PREVIEW_SIZE,
+  LANDING_TEMPLATE_ROWS,
+  landingPreviewSrc,
+} from './landingTemplatePreviews';
 
-// A representative set of the real page templates (storefront, IDE, payment,
-// login, settings, AI chat, product detail). Live scaled-down renders via
-// TemplateThumbnail so they re-theme for dark mode. Grouped into rows; the
-// middle row holds three so the centered (login) template sits in the middle.
-const TEMPLATE_ROWS: string[][] = [
-  ['product-gallery', 'ide'],
-  ['payment-form', 'login-split', 'settings-sidebar'],
-  ['ai-chat-landing', 'product-detail'],
-];
+// A live render of seven templates costs seconds of main-thread work and
+// megabytes of template images. The card is decorative, so it shows
+// screenshots of those renders. Run `pnpm capture:landing-previews` in the
+// docsite after a change to one of these templates.
 
 // On small screens the rows flow into a single 3-column grid; 7 templates would
 // leave a lone 7th tile, so this one is dropped there to keep a clean 3 + 3.
@@ -39,6 +48,20 @@ const TILE_RATIO = '16/11.5';
 // rows dissolve into a single 3-per-line grid so the tiles aren't huge and use
 // the width better. Keyed to the CARD width via a container query, not viewport.
 const WIDE_CARD = '@container templatesPreview (min-width: 400px)';
+
+const LIVE_PREVIEWS_QUERY = 'template-previews=live';
+
+function subscribeToNothing() {
+  return () => {};
+}
+
+function useLivePreviews(): boolean {
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => window.location.search.includes(LIVE_PREVIEWS_QUERY),
+    () => false,
+  );
+}
 
 const styles = stylex.create({
   // Query container — a plain wrapper whose width the layout below responds to.
@@ -108,6 +131,14 @@ const styles = stylex.create({
   // Hidden on a wide card (small screens): with 7 templates the dissolved
   // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
   // to keep a clean 3 + 3. It still shows in the narrow-card desktop layout.
+  previewImage: {
+    display: 'block',
+    width: '100%',
+    height: 'auto',
+    aspectRatio: TILE_RATIO,
+    objectFit: 'cover',
+    objectPosition: 'top left',
+  },
   hideOnWide: {
     display: {
       default: 'block',
@@ -115,6 +146,37 @@ const styles = stylex.create({
     },
   },
 });
+
+function TemplatePreviewImage({slug}: {slug: string}) {
+  const {themeMode} = useThemeMode();
+  const light = landingPreviewSrc(slug, 'light');
+  const dark = landingPreviewSrc(slug, 'dark');
+  if (!light || !dark) {
+    return null;
+  }
+  const image = (
+    <img
+      src={themeMode === 'dark' ? dark : light}
+      alt=""
+      width={LANDING_PREVIEW_SIZE.width}
+      height={LANDING_PREVIEW_SIZE.height}
+      loading="lazy"
+      decoding="async"
+      {...stylex.props(styles.previewImage)}
+    />
+  );
+  // Before the site resolves its color mode, the OS preference selects the
+  // image, as it selects the site colors.
+  if (themeMode !== 'system') {
+    return image;
+  }
+  return (
+    <picture>
+      <source srcSet={dark} media="(prefers-color-scheme: dark)" />
+      {image}
+    </picture>
+  );
+}
 
 export function TemplatesPreview({
   maxRows,
@@ -125,8 +187,11 @@ export function TemplatesPreview({
    */
   maxRows?: number;
 }) {
+  const isLive = useLivePreviews();
   const rows =
-    maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
+    maxRows != null
+      ? LANDING_TEMPLATE_ROWS.slice(0, maxRows)
+      : LANDING_TEMPLATE_ROWS;
   return (
     <div {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>
@@ -140,20 +205,25 @@ export function TemplatesPreview({
             {row.map(slug => (
               <div
                 key={slug}
+                data-template-slug={slug}
                 {...stylex.props(
                   styles.tile,
                   slug === HIDE_ON_SMALL && styles.hideOnWide,
                 )}>
-                {/* borderRadius="0" so the thumbnail fills the tile's rounded
-                    corners flush — the tile already rounds + clips, so the
-                    thumbnail's own --radius-container would otherwise nest a
-                    second, mismatched radius. */}
-                <TemplateThumbnail
-                  slug={slug}
-                  aspectRatio={TILE_RATIO}
-                  renderWidth={RENDER_WIDTH}
-                  borderRadius="0"
-                />
+                {isLive || !landingPreviewSrc(slug, 'light') ? (
+                  // borderRadius="0" so the thumbnail fills the tile's rounded
+                  // corners flush — the tile already rounds + clips, so the
+                  // thumbnail's own --radius-container would otherwise nest a
+                  // second, mismatched radius.
+                  <TemplateThumbnail
+                    slug={slug}
+                    aspectRatio={TILE_RATIO}
+                    renderWidth={RENDER_WIDTH}
+                    borderRadius="0"
+                  />
+                ) : (
+                  <TemplatePreviewImage slug={slug} />
+                )}
               </div>
             ))}
           </div>

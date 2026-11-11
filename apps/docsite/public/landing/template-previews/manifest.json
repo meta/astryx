@@ -1,0 +1,41 @@
+{
+  "width": 550,
+  "height": 396,
+  "previews": {
+    "product-gallery": {
+      "source": "2e14bd4c8827967134a193e3fdffe9640bc6c73b82fda8e4f2a9de2e70794225",
+      "light": "product-gallery-light.55dc80938e.webp",
+      "dark": "product-gallery-dark.42f8169c4e.webp"
+    },
+    "ide": {
+      "source": "8354880301b272793e8462f5f410d5faa090747c00faa54cdf4f2b021990e00a",
+      "light": "ide-light.c756b21309.webp",
+      "dark": "ide-dark.9766dde875.webp"
+    },
+    "payment-form": {
+      "source": "f6d4abc43b82a1919e5fcd2b61bacb819ea413a3453c6ab559104bc92da78b3b",
+      "light": "payment-form-light.a0b3c3e684.webp",
+      "dark": "payment-form-dark.0022aee61b.webp"
+    },
+    "login-split": {
+      "source": "45baab104c60555e0cd1d3a139780e5f941b5d9003a4101aeb593b9c7773bd87",
+      "light": "login-split-light.73f2a39e0a.webp",
+      "dark": "login-split-dark.7b0e18d198.webp"
+    },
+    "settings-sidebar": {
+      "source": "9186834e947fee0b9f8e4bec1237e976ed77ff4ea419ed29bf25fcb000d77a7a",
+      "light": "settings-sidebar-light.d73721cb63.webp",
+      "dark": "settings-sidebar-dark.0c3b335894.webp"
+    },
+    "ai-chat-landing": {
+      "source": "2625a11719c758e760267ab6342c85e57ec5fe237dd1801b00168d4000ce5876",
+      "light": "ai-chat-landing-light.d7a36dc876.webp",
+      "dark": "ai-chat-landing-dark.931bf27038.webp"
+    },
+    "product-detail": {
+      "source": "2ed63f6a0b9406092e32f6722ac1fe8824a3901b277e3389741e054e8badc7bf",
+      "light": "product-detail-light.458ef3be59.webp",
+      "dark": "product-detail-dark.e1d602dd6f.webp"
+    }
+  }
+}
