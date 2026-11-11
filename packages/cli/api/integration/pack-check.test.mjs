@@ -2243,7 +2243,7 @@ describe('integrationPackCheck', () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
     const weirdDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), '.astryx-;touch astryx-pack-check-injected;#-'),
+      path.join(os.tmpdir(), '.astryx-;touch astryx-pack-check-injected;-'),
     );
     try {
       const pkg = {name: 'safe-pkg', version: '1.0.0'};
@@ -2257,6 +2257,7 @@ describe('integrationPackCheck', () => {
       );
       const result = await integrationPackCheck({cwd: weirdDir});
       expect(result.type).toBe('integration.pack-check');
+    expect(result.data.packable).toBe(true);
       expect(fs.existsSync(marker)).toBe(false);
     } finally {
       fs.rmSync(weirdDir, {recursive: true, force: true});
