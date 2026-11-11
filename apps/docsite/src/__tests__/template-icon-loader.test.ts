@@ -182,7 +182,8 @@ describe('next.config', () => {
 
   it('adds the loader for template sources when the setting names a set', async () => {
     const rules = await rulesWith('glyphs');
-    expect(rules).toHaveLength(1);
+    // The template loader, then the set library's per-icon import rewrite.
+    expect(rules).toHaveLength(2);
     const test = rules[0].test as RegExp;
     expect(
       test.test('/repo/packages/cli/assets/templates/pages/ai-chat/page.tsx'),
