@@ -174,7 +174,7 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
-    process.versions.pnp ||
+    runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null
   ) {
@@ -558,6 +558,17 @@ function evict(dir) {
  * keeps no gathers (a checkout) or has no usable folder.
  * @returns {{dir: string, bytes: number, entries: number} | null}
  */
+/**
+ * Whether this run is under Yarn Plug'n'Play's loader (`yarn astryx` in a PnP
+ * project): Node's module hooks hand PnP's resolver options it refuses, so
+ * such a run keeps and uses no catalogs. The plain `astryx` command in the
+ * same project keeps them.
+ * @returns {boolean}
+ */
+export function runsUnderPnp() {
+  return Boolean(process.versions.pnp);
+}
+
 export function gatherCacheSummary() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
@@ -577,5 +588,5 @@ export function gatherCacheSummary() {
   } catch {
     return null;
   }
-  return {dir, bytes, entries};
+  return {dir, bytes, entries, pnp: runsUnderPnp()};
 }

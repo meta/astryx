@@ -2180,28 +2180,19 @@ async function runComputerChecks(cwd) {
 
 /**
  * Where `search` and `build` keep their gathered catalog between runs, and
- * how much it holds; under Yarn Plug'n'Play, that they keep none. Left out of
- * a checkout, which keeps none.
+ * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
+ * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
  * @returns {DoctorCheck | null}
  */
 export function checkGatherCache() {
   const summary = gatherCacheSummary();
   if (summary == null) return null;
-  if (process.versions.pnp) {
-    return {
-      id: 'gather-cache',
-      label: 'Search catalog cache',
-      status: 'info',
-      message:
-        "not used in Yarn Plug'n'Play projects: search and build gather their catalogs on every run here.",
-    };
-  }
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
   return {
     id: 'gather-cache',
     label: 'Search catalog cache',
     status: 'info',
-    message: `search and build keep the catalogs they gather in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size}); a catalog is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search and build keep the catalogs they gather in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; a catalog is used only while nothing it read has changed, and deleting the folder clears it.`,
   };
 }
 

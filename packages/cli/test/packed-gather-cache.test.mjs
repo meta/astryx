@@ -523,7 +523,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(entries(pnp).size).toBe(0);
   }, 120_000);
 
-  it("is listed by doctor, as not used under Plug'n'Play", () => {
+  it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
     const tmp = keptTmp('doctor');
     /** @param {Record<string, string>} [env] */
     const row = env => {
@@ -532,11 +532,16 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
         (/** @type {{id: string}} */ check) => check.id === 'gather-cache',
       );
     };
-    expect(row().message).toContain(path.join(tmp, CACHE_NAME));
+    const plain = row().message;
+    expect(plain).toContain(path.join(tmp, CACHE_NAME));
+    expect(plain).not.toContain("Plug'n'Play");
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
-    expect(row({NODE_OPTIONS: `--require ${pnp}`}).message).toMatch(
-      /^not used in Yarn Plug'n'Play projects/,
+    const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
+    // The folder and its size, and that this run keeps none.
+    expect(underPnp).toContain(path.join(tmp, CACHE_NAME));
+    expect(underPnp).toContain(
+      "but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`",
     );
   }, 120_000);
 
