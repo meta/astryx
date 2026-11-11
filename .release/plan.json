@@ -1,0 +1,1381 @@
+{
+  "schemaVersion": 2,
+  "version": "0.7.14",
+  "branch": "release/v0.7.14",
+  "cutSha": "d303fa28bdba94a49b3cc21e268e3be27b141237",
+  "changesets": [
+    {
+      "path": ".changeset/appshell-main-id-swizzle-shared.md",
+      "sha256": "0e74d6a94d866b912e6080d1ef62d2b3f61925fef207b3f69b2e56fd2451fc20",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "When a page mounts both the package's AppShell and a swizzled AppShell as outermost shells, only the first now keeps the fixed main-region id; the other takes a generated id, as two package shells already did. Before, each copy kept its own claim list, so both shells used `astryx-app-shell-main` and the page had a duplicate id. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/appshell-sidenav-name-docs.md",
+      "sha256": "be79aeb6f8875fc81c931a6faa0689ce810b92b62e613918689274a709d19216",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "AppShell's guidance on naming its navigation landmarks now says to pass `label` to TopNav and `aria-label` to SideNav. SideNav has no `label` prop; it has a translated default name, and `aria-label` renames it.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-content-pull-touch-path.md",
+      "sha256": "c57c10874fb36f670ea2317a32690a019e1c9ae63e8b651ab6611839b507dddc",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: a finger's pull down on the sheet's content is handled by the sheet's touch listeners alone, and it releases at the speed of the whole pull. Before, the content's pointer handlers, which serve a mouse or a pen, began the same drag first and took pointer capture, and the capture change cancelled that drag one move later. The touch listeners then began the drag again, or, in Chromium, the content's own pan could start under it. The release speed counted only the moves after the drag began, so a fast flick on the content that the page received as two or three moves read as no speed and sprang back, where the same flick on the grab handle closed the sheet. A flick on the content now closes the sheet as a flick on the grab handle does. This also applies to the sheets that Tokenizer and PowerSearch open. A mouse or pen pull from the content also releases at the speed of the whole pull. No release threshold changes.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-drag-restyle.md",
+      "sha256": "8670055434fcdd6064494b086c1e055da1adaac94f29b9f00ceef21ead81afe5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: a move of a touch drag no longer restyles the sheet's content. Each move writes the scrim's opacity on the dialog as a custom property, and the property inherited into the sheet, so the browser restyled every element in the sheet on every move: 51 elements a move in a Tall sheet with a short list, 84 in PowerSearch's Filters sheet with three filters, and more with more content. The sheet's panel now ends that inheritance, and a move restyles the dialog, its backdrop, the panel and the edge tint. The scrim follows the drag as before. This applies to the sheet that owns the scrim: a single BottomSheet, or the first sheet of a stack, such as PowerSearch's Filters sheet and Tokenizer's sheet.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-fitting-content-slow-pull.md",
+      "sha256": "ea2fa3145f183128947665eee088fe54317dda7be49575d16a47496b98eb7162",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: in Safari, and in every browser on iPhone and iPad, a swipe on the sheet's content that starts slowly now moves the sheet, so a slow swipe down can close it. Before, on content that fits, when the finger's first move was 8 px or less, in either direction, the sheet stopped answering that swipe: it stayed open, or moved a few pixels and fell back. Fast swipes and swipes on the grab bar already worked, and Chromium browsers were not affected. The fix applies wherever the touched content has nothing to scroll: a sheet whose content fits, and the fixed header or footer around a list. That includes the PowerSearch and Tokenizer sheets. At the top of a list that scrolls, a pull down now also moves the sheet when the finger first wobbles up by less than 5 px; a move up of 5 px or more still scrolls the list. In every browser, the sheet now decides who owns a touch on its content once, at the first move past 8 px. A mostly vertical pull at a scroll edge is the sheet's. A mostly sideways move, such as a swipe along a row of chips, is not the sheet's for the rest of that touch. Before, at the top of a list, a sideways swipe that drifted more than 8 px down, or a pull that began more sideways than down, also moved the sheet.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/button-disabled-submit-before-hydration.md",
+      "sha256": "88795759473f95c380d43ef970cdb34f7ee7c1241bab696f5954f10038455e01",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Button: a disabled or loading submit or reset Button, including one in a disabled ButtonGroup or InputGroup, no longer submits or resets its form when clicked in server-rendered HTML before the page hydrates or when JavaScript fails to load. It renders as a plain button until hydration, then takes its own type again, with no change to what people see or hear.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/calendar-guide-names.md",
+      "sha256": "f290be9487abb4f8545ced8a40c9aab514a4f6d98cd43236f7638c9def816967",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The calendars guide names every calendar by its CLDR name, such as Minguo, Dangi, Hijri, and Ethiopic, with its identifier beside it.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/carousel-buttons-inside-ring.md",
+      "sha256": "3befea8ae459cf36368bae5ef93e42ee3d44d3abe141461c64634117c30f2b76",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A Carousel's scroll buttons no longer cover the scroller's keyboard focus ring. Each button now sits just inside the ring instead of straddling the carousel's edge, so the whole ring stays visible while the scroller has focus (#10722).",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/carried-pending-animation-in-step.md",
+      "sha256": "6efefb407eec0a754ab7cc729e5ca5fc751c7465b6268297ae8cf13bc76a155e",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A transient copy that carries an animation still waiting for its first frame now runs it in step with the original. On a busy page, the SideNav rail's leaving copy could start the toggle's press fade a frame or more after the toggle's own.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-component-example-block-hint.md",
+      "sha256": "97a4332b955b6203d5445f853ab65d0cb5e359f0147a69f9cc9554ceea907ae2",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx component <ExampleName>`, given an example block, still fails with `ERR_UNKNOWN_COMPONENT` and the same name suggestions, but its message now says the name is an example block, that `astryx template <ExampleName>` prints its source, and which `astryx component <Parent> --blocks` lists it.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-module-loader-native-import.md",
+      "sha256": "7113f578d952b062b89373d37f781a1d6ce7a0ba5d9f701162c5410a28b9357d",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the module loader imports a user module through the same small module the doc importers use, which the CLI's own test project loads natively, so a theme build's doc reads no longer time out its tests on a busy machine. No change to any command's output.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-token-tables-core-defaults.md",
+      "sha256": "36d824c7dfbb9a07a9df9f674483cf1ac4c92b14540fa0058015d2060735abd7",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The token tables in `astryx docs` say that their values are Core's defaults, which a theme replaces: the columns read \"Core default\", \"Core default (light)\" and \"Core default (dark)\". The Color topic also says that each theme defines its own values and that `astryx theme list` shows the themes that are available.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/command-palette-refresh-source.md",
+      "sha256": "a058f351b22d47b2243bff5678165455a8801abbdbf1f0d7d3f963d310d53d0a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`CommandPalette`: refresh results when its `searchSource` changes while it is open.",
+      "contributors": [
+        "whispering3"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/complexselector-disabled-message.md",
+      "sha256": "c1106ce3baf3eabd2a69769ac56d93d91705568b2481602b6d8d907c8231f137",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "ComplexSelector: `disabledMessage` explains why a disabled selector is disabled. With `isDisabled`, a tooltip shows the reason on hover and keyboard focus, and the reason describes the trigger through `aria-describedby`. The disabled trigger keeps its tab stop, and pointer, keyboard and the imperative handle still cannot open the popup. With `renderTrigger`, the caller owns the control, and `disabledMessage` works with it too: the tooltip and the description go to that control. Drop the control's own tooltip while the selector is disabled, for example `tooltip={isDisabled ? undefined : 'Filter'}`, so it never shows two. Separately, a caller's own `aria-disabled` now reaches an enabled built-in trigger.",
+      "contributors": [
+        "AKnassa"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/create-iso-time-string-rejects-non-digit-fields.md",
+      "sha256": "63c9437a735ebe0438c01ac9e653c601816070a7d5eb56f506813ba8f0e49889",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "createISOTimeString answers null unless the trimmed string is H:M or H:M:S with one or two digits per field (a seconds fraction is still accepted and dropped), instead of reading \"2:30 PM\" as 02:30 (12 hours off) and \"14:30abc\" as 14:30",
+      "contributors": [
+        "bstcoc"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/discover-lists-weighted-svg-icon.md",
+      "sha256": "b995365345ce5b00960e79f283b3751b0f2043564324d1feec6312a476cd8b8a",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx discover` lists `WeightedSVGIcon` among `@astryxdesign/lab`'s components: an experimental SVG icon whose drawing follows the surrounding font-weight.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-after.md",
+      "sha256": "4c4702f887408783906f7c46378046a15bc1ae03df4141b3e194da91b661e5f6",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor how` answers a question that names the background (\"a yellow background\") for the background, with its tokens first, instead of as a color question. The preview's Overview page shows its open popover and tooltip first, below their anchors in space kept free for them, so they no longer cover the table.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-colors-generator.md",
+      "sha256": "082d5d548551791ba657caebead0ce7b506a81f2abfbdfa8fa8755b63988115f",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor`: colors are generated the way the official themes are.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- An exact color you give stays exactly as given. In light it never moves: when no text reads on it, the text changes, and a pale fill that does not stand out from the page is reported. In dark it is kept too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1, so the dark shades around it follow it; otherwise dark mode starts at shade 70, as the official themes do, and the result says why. A dark side never uses a light shade.\n- `set <theme> neutral <color>`: your exact color sits at its own shade in light and dark, and the shades around it follow it.\n- Text on accent and status fills comes from the neutral color's white or near-black (near-black first on warning), or pure black or white without a neutral color. Status tints are see-through in dark, and their text is measured over the surface; the accent tint is dark shade 30, or the nearest darker shade that citation text reads on; a tint is never the fill's own shade.\n- An exact `--color-accent` (or another main color token) wins over the color it would replace: the text on it is picked to read on your color, the focus ring keeps following it, a pale one is reported, and the result says so.\n- Text, icons and the focus ring take the nearest shade that reads, lighter or darker, so bases with dark light-mode surfaces get readable colors too.\n- Hand edits to `palette.config.json` are kept: your own anchors, names, `kind`, `neutralProfile`, vibrancy written by hand, and colors of your own. One-mode themes generate one mode. A stop layout maps by its own shades, half stops included; one without black and white, with too few shades or with a wide gap is refused. Fields the generator does not read are named. What the editor replaced is named when a color change touches the config.\n- A hand-edited generated color file is never overwritten, receipt or not; formatting is not an edit. Only color changes wait, and the refusal says how to keep or discard the edit; other changes go ahead. A file from another generator version is generated again. No unresolved color ever reaches the built CSS.\n- The theme imports only the shades it uses, from `tokens/<theme>.palette-refs.ts`.\n- Colors are read as browsers read them: negative hues, out-of-range saturation and chroma, `color(srgb …)` and `color(display-p3 …)`. Malformed functions, system colors and see-through colors are refused with the reason and a command that works, such as the color with its `#`, without quotes, opaque, or the nearest color name. A dial named another way (`gray`, `brand`, `error`, `saturation`, `Accent`) suggests the dial; a color dial with `--on` suggests what the part really reads.\n- `vibrancy more` at 100 and `less` at 0 are refused, a number out of range suggests the nearest one, undoing the last color removes vibrancy too, a vibrancy edited by hand into something invalid can be fixed with `undo` or `set`, and a replaced color shows what it was. A wide-gamut color says it is used as its nearest sRGB color."
+    },
+    {
+      "path": ".changeset/experimental-theme-colors.md",
+      "sha256": "bbac9b5707333b9ae3f996fae19057a4289a5eaec533cad954e354c6b6da8357",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor`: colors without palette commands. Colors come only from `editor set <theme> accent|neutral|success|warning|danger|info <color>`, which generates the light and dark shades and points the color tokens at them, as before. The new `vibrancy <0-100>` setting (`more`/`less` step by 10) sets how saturated the generated colors are; it needs a color and applies to the whole theme. `editor new <theme>` now takes any setting as a flag (`--accent \"#7c3aed\" --font inter --corners round --vibrancy 60`), checked the same way as `set` and applied in one build. The experimental copy `experimental theme palette generate` is gone; `theme palette generate` is unchanged, and `editor set` lists it as the command it replaces. Help, results and errors say \"colors\" and \"shades\" instead of palette, family and stop; `show` lists each color with its seed and the shade each token uses, with the generated files last (`colors`, `colorNotes`, `vibrancy` and `colorFiles` replace `palette`). Component families are now groups: `how --list groups`, and the `group` field in `set` and `how` results. `how colors` (or `how palette`) explains how colors are made, and plain-words color questions (\"brand color\", \"make it more colorful\", \"dark mode colors\", \"error red\", \"see all shades\", \"exact color for one token\") answer with the commands. `preview add` with no description adds a Colors page when the theme sets a color: every shade in light and dark with its number, hex and the tokens that use it, kept in step with each change.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-command.md",
+      "sha256": "e519853b66693e5ff547c2c5ad172492757af9968990545b34fcb734c43d1f06",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: make and change a theme one checked change at a time (`editor`), and preview it on real pages in your app (`preview`). Only the new experimental command group changes; `astryx theme` and its output stay as they were.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- **Checked changes.** `editor set <theme> <thing> <value>` takes a dial (corners, spacing, accent, neutral, success, warning, danger, info, font, headings, surfaces, buttons, type, text-size, base, mode), a design token, or a CSS property on a part, with `--on <part|family>`, `--when <prop>:<value>`, `--state`, `--mode light|dark` and `--only`. Each change is checked against what the installed Core's parts really read and against the token's type. A change that cannot take effect is refused (exit 1, an `ERR_THEME_*` code, nothing written), and the error leads with the command that works.\n- **What parts read.** It is derived from the installed Core itself, version for version: a catalog of every component renders on the server with the project's own React, joined to Core's stylesheet. The result is cached under `node_modules/.cache/astryx-theme/`. No new dependency.\n- **An ordinary local theme.** `<theme>.settings.json` holds the settings; `<theme>.settings.ts` is generated from it; `<theme>.theme.ts` extends it, is written once, and keeps your own edits; the CSS and JS are built by the same build as `astryx theme build`. A plain part setting that a more specific base-theme rule would beat is repeated on those variant keys, and the result says so.\n- **Families, modes, contrast.** Styling one input or check styles its whole family unless `--only`; `--on containers` and `--on menus` style every member. Only colors and shadows take `--mode`. Text this theme makes unreadable (below 4.5:1, and not that low in the base theme) is reported.\n- **Editor commands.** `editor new`, `editor set`, `editor undo` (one step back; with a thing, removes that one setting so it goes back to the base theme's value), `editor show` (every setting, key values, contrast problems, and two self-contained HTML pages: the sample app page and every component; PNG pictures only with `--png`, using a Playwright or Chrome found on the machine), and `editor how` (what a part reads, a family, a setting or aspect, a question in plain words answered with exact commands, a PNG picture's colors, or `--list dials|tokens|parts|families|properties`).\n- **Preview in your app.** `preview add` writes one route into the app's routes folder (`theme-preview/` in `app/` or `src/app/`, or `--path`): a normal page that keeps your layout and providers, in an app shell with a nav item per page and, when it wears a theme made by `editor`, a light, dark and system switch. With no description it adds the sample app page and every component; with a description it adds the page templates the `build` ranking picks for it (`--top`); `--template` adds one. `preview list` and `preview remove` manage the pages; only files the preview wrote are replaced or deleted, only inside its folder, and every check runs before the first write. A template page that needs a package the app lacks is skipped, with the install command. With no app, `preview app <dir>` writes a starter Next.js app with the preview in it (`--theme` copies a theme in for the pages to wear) and prints the install and dev commands.\n- **Experimental copies of `astryx theme`.** `compile` (the copy of `theme build`), `list`, `add`, `remove`, `use`, `eject`, `template`, `targets` and `palette generate` run the same functions with the same flags and JSON. Each experimental command doc names the stable command it will replace in a new `replaces` field, shown in its help as \"Will replace: astryx theme build\"."
+    },
+    {
+      "path": ".changeset/experimental-theme-how-answers-2.md",
+      "sha256": "311dccfa923d84994c22a76f956343c3ed351f2f56300dcc1c758fb5017c5cb8",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor how`: questions read the way people write them.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- Negation and \"too\" read the right way round: \"shouldn't\", \"turn off\", \"never\", \"stop\", \"unbold\", \"too sharp\" (rounder) and \"too heavy\" (lighter). \"Everything except X\", \"but not in X\" and \"all but X\" keep X as it is now. \"Without\" is read in the shipped languages, and \"sans\" means a typeface only before serif or font.\n- A typed value always wins. A hex beats a color word. A hex with the wrong number of digits is refused by name and never replaced with a sample. The sign, multi-value padding, `%` opacity, `em` tracking, numeric weights, written-out shadows and \"40px tall\" are kept. No color is picked when the question gives none.\n- \"In dark mode\" carries `--mode dark` to every color command, parts included. A change that is the same in both modes, or a dark-mode ask on a light-only theme, says so instead of changing light.\n- Better parts and properties: side nav items, focus rings as outlines, tab underlines, icons, border colors (darker, subtler, contrast), the overlay, transparent backgrounds, progress bar thickness, smaller headings, underlines, line height and body weight. A question about what something is (\"what does --color-accent do\") gets the lookup.\n- Typos with swapped letters and short forms (`bttn`, `brdr`) are corrected. Portuguese, Italian and Korean words for buttons and rounded are read.\n- Sequences drop repeated and overwritten steps and stop at 12. Two asks that contradict each other are offered as choices, not run in turn. Changes come before lookups.\n- Text output prints each command on its own line and never wraps one. A sequence prints as one line.\n- `--theme \"\"` and a repeated `--theme` are refused, for every subject. The default theme is the one an editor command changed last, not the newest settings file, and `themeChosenBy` says how it was picked.\n- Pictures: every pixel is read up to 4 million, so 1-pixel lines count. tRNS is honored for gray and RGB pictures. A 0x0 picture names its size. 16-bit pictures are capped at 20 million pixels.\n- Parallel lookups in an app with no themes leave no empty `themes/` folder. A refusal's commands start the same way as the answer's."
+    },
+    {
+      "path": ".changeset/experimental-theme-how-answers.md",
+      "sha256": "5f4b19b2f24b4b3955b023a08f148d3c569ace4eed80d7f810b9cb548cc141d7",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor how`: answers that are safe, bounded and right.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- Every command `how` suggests names your theme (the only one, the one changed last, or `--theme <name>`; with no theme, `my-theme`, made first), has a real value instead of a `<placeholder>`, carries no shell comment, and is checked as `set` checks it: a command that `set` would refuse, or that changes nothing, is left out, and the answer says why.\n- Plain-words questions read negations and more or less (\"remove shadows from cards\" gives `box-shadow none`, \"less rounded cards\" gives `corners less`), the values you type (hex, rgb(), lengths, dashed), states (hover, focus, checked, selected, disabled, pressed, invalid), dark or light mode, several changes in one question, a few words in other languages, and small typos. A question with no answer says so in JSON too, with the next commands to try.\n- `how <part>` writes each condition as the `--when` and `--state` flags `set` takes, or says why no flag reaches it; lists every state `set` accepts; and says when a part has no recorded reads, with commands that still apply.\n- `how <token>` says when no part in the part data reads a token but Core's stylesheet does.\n- Lookups take any case, plurals and token names without dashes; `--list` takes the kind anywhere, singular or plural, `--list=tokens` and a filter that starts with `--`, and refuses `--list` given twice.\n- Pictures: a header bigger than 40 million pixels or pixel data shorter than the header says is refused at once; damaged files are refused; see-through pixels are skipped; `--at` gives each point's alpha and refuses points it cannot read exactly or that fall outside the picture; any file name works, and other formats are refused by their bytes.\n- `set` refuses a value that holds a `<placeholder>` or a `#` comment.\n- A damaged part-data cache is built again, the cache is written whole, and a lookup in an app with no themes leaves no `themes/` folder.\n- Text and JSON start commands the same way, and text output escapes control characters in what you typed."
+    },
+    {
+      "path": ".changeset/experimental-theme-hunt1.md",
+      "sha256": "295f47c0b62f37eb0619e64aebf3446fae2e00c3b8a03b8c46b138f5bc0fc883",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: data safety and value checks.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- A refused change puts back only the files that command wrote in that run, each whole, and only while they still hold what it wrote; a file changed by someone else meanwhile, or one it cannot restore, is left and named. The settings and undo history are written inside that rollback, and a refused `new` leaves no trace. A link anywhere in `themes/` or the theme folder is refused, and never followed or removed. A palette.config.json the editor did not write is kept. `show` finds a build that does not match the settings (a command stopped mid-build, a hand edit) and builds it again, saying so. Temp files have their own editor names and are removed by the write that made them; nothing else is ever removed. Run from a subfolder, a command acts on the Astryx project above it, found as `upgrade` finds it: the search stops at a repository root and never takes the home folder. A package without Astryx inside that project is refused with the folder to run from, a package.json that does not parse is never walked past, and reply paths are absolute when the project is above the current folder. Yarn Plug'n'Play and a package.json without Core get their own messages. A full or read-only disk is `ERR_WRITE_FAILED`.\n- Commands on one theme run one after the other, so no change is lost. The lock lives in the project's `node_modules/.cache` (a folder that cannot be written is refused with `ERR_WRITE_FAILED`); a lock left by a stopped command, or by one on another computer that stopped, is taken over. A command that waits more than 30 seconds is refused with the new code `ERR_THEME_BUSY`, naming the lock.\n- Every name the name check accepts builds (`brand-2`). Names are at most 64 characters. `new` refuses a link or a file where the theme goes, a stray word, a flag given two values, and an empty `--like`; `--headings` takes a weight and a tracking; a refused flag suggests a `new` command.\n- Settings edited by hand are checked on load, and so is the step `undo` goes back to. A saved value the editor no longer accepts names the `undo <theme> <thing>` that removes it, and that command works; a step `undo` goes back to that holds one is passed with that value left out, and the result says so. A damaged undo step drops only itself and the steps before it. A quoted string or a data URL may hold a semicolon.\n- Token values are checked by their type: time, easing, font, shadow and outline style too, and heading weights as numbers. A value that would break the CSS, read itself, or name a placeholder such as `<color>` is refused. Only colors take `--mode`; a shadow per mode would remove it in both.\n- Code highlighting, display text sizes and colored icon tokens can be set.\n- An exact font family applies on phones too; phones keep their own reading sizes.\n- A text size or type scale keeps the base theme's ratio and the theme's heading weights (an exact weight token still feeds them), on phones too.\n- `text-size` takes 10 to 32 pixels. `font` refuses values that would not build. `vibrancy` is refused when every color is a gray.\n- `undo <theme> <token>` names the dial that still writes the token.\n- Reading a built theme writes no copy into the theme folder."
+    },
+    {
+      "path": ".changeset/experimental-theme-hunt2.md",
+      "sha256": "3e87d81a47a229f4a17c321ef6196efc44bfe2305e14721d20159d75a32f073b",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor`: settings that do what they say.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- An exact token or part property always wins over a dial, whatever the order. A changed setting moves last, so it wins over what came before it. A shorthand set after its longhands says it replaces them. A setting for both modes replaces the one-mode settings it would sit under.\n- One mode on a part whose variants each have their own value is refused, with the command that names the variant. A setting saved for a mode a one-mode theme does not have can still be removed. A base theme package that is gone no longer blocks moving off it.\n- `--when` must be one property and value, and on a group it must belong to a member, as `--state` must. An empty or repeated `--on`, `--when`, `--state` or `--mode` is refused, and so are extra words after `undo` and `show`.\n- `undo <theme> <thing> <value>` removes the setting only when that is its value. Scope flags without a thing are refused. `undo <theme> base` and `undo <theme> mode` set them back to their defaults. A stored setting this Core does not know can still be removed.\n- `show` builds the theme again when its settings were edited by hand or built by another CLI; `--section` writes `sheet-<section>.html`, not over the full sheet, and takes any case. A setting listed twice is refused.\n- `spacing` scales the base theme's spacing; a corners step starts from the base theme's radius or the whole-theme setting; `corners pill` keeps checkboxes square; `headings` refuses `--mode`; `font` refuses `--when` and `--state` and takes a preset in any case.\n- A change that shows nothing says so. A switch of base or mode lists the parts it restyles and the color notes. A misspelled token in `var()` and a typed path or capital letter for a theme get a did-you-mean. Text contrast that is not measured (one variant or state, the soft or outline button) is listed as not checked. The colors in `show` give each mode its own exact value.\n- The copied `theme` commands name `experimental theme` commands in their refusals. `editor new` and `editor how` no longer claim to replace stable commands their copies replace. A package.json without Core gets the install command.\n\n- A whole-theme token that no rendered part was seen reading is set with a note saying so, not refused. A part that reads the token the user named takes it for whatever property it feeds. A token named for another variant value (`--color-error-muted` with `--when status:error` on a banner, `--color-icon-pink` on an icon) is taken. A part name such as `constructor` is an unknown part, not a crash.\n- A font for one role keeps its font after a whole-theme font, whatever the order.\n- Easings, font family lists, `light-dark()` and `color-mix()` colors, shadows and times are checked the way the browser reads them. A shadow may use a token color, any length unit or a stacked shadow token. `var()` with a fallback, relative colors and system colors are taken. A time is at most 60 seconds. A font name may hold an apostrophe. `var( --x )` with spaces is checked for cycles.\n- Saved exact tokens are checked on every command; one the rules no longer take names the `undo` that removes it.\n- A size change says that phones keep the base theme's reading sizes, and names scale steps outside 9 to 200 pixels. A refusal that suggests setting a property directly names the property that takes the value. Every suggestion `set`, `undo` and `show` give names the theme and a value it takes, never a placeholder.\n- The theme lock lives beside the Core the command reads, and a command outside a project takes none. When `show` builds again, it says why: a file missing, another CLI version, settings changed after the build, or a build that did not finish."
+    },
+    {
+      "path": ".changeset/experimental-theme-palette-colors.md",
+      "sha256": "e2fbec6e52556fc9d98243f8d68300db19b457cfc4f5ece7ae4992ee77ecebbc",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor`: theme colors now come from the palette generator. `set <theme> accent <color>` (and the new `neutral`, `success`, `warning`, `danger` and `info` dials) writes the color as a family in `themes/<theme>/palette.config.json`, in the shape `theme palette generate` reads, and runs the same generator to write `tokens/<theme>.palette.ts` and its receipt. The theme's color tokens point at stops of that palette, light and dark from one color, following the stops the official themes use. A token moves to a nearer stop of the same family when it must read (text at 4.5:1, the focus ring at 3:1); the editor no longer mixes colors of its own. `show` reports the palette, which stop feeds each token, and the contrast behind each choice; `how palette` explains it; `undo <theme> accent` removes the family and its tokens. An exact token (`set <theme> --color-accent <color>`) still wins over the palette. Color dials apply to the whole theme: `--on` and `--mode` are refused, with the exact-token command to use instead.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-preview-checks.md",
+      "sha256": "a632ec126796f50f56207579b4913a813c184deb3b68938301852ef508c9c9c7",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`experimental theme preview add` checks the theme before it writes any page, and skips a StyleX template page in an app with no StyleX compiler (the result says why). `experimental theme preview app` checks the folder before it builds a `--theme`, so a refusal writes nothing.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-preview-fixes.md",
+      "sha256": "4f97a31d932e3f9f4278ab6c972435f8bde4ba01fe58bf1afaacd8f4d6f5251d",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme preview`: the preview pages work in a production build. Leaving the Components page no longer crashes the route: a typeahead part (Tokenizer, CommandPalette) gets a small sample search source. On the Components page, a part renders inside the parent its playground names (Step in a Stepper, a SegmentedControlItem in a SegmentedControl, a RadioListItem in a RadioList), a part that only works deeper inside its parent is left out, a status variant is passed as `{type}`, ButtonGroup shows three buttons, and layers that stay closed are left out. A component that still throws shows a short note instead of a blank cell. The Overview page is the sample page's content, without a second app shell. Font: `editor set <theme> font <name>` and `editor show` say near the top when the font's package is not installed, with the exact install line; once it is installed, the next `set` or `show` makes the preview route import its stylesheet.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-preview-hardening-2.md",
+      "sha256": "52df3e47ea4bc274a1342ec7d78c3be47bbfdada2c2c235587f8d8d1125eda88",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme preview`: safer refusals and recovery.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- No refusal suggests deleting or moving files: a damaged theme-preview.json, a page changed by hand, or a file in the way gets plain instructions instead.\n- `--path` at the project root, in `src/` or at the routes folder itself is refused: those folders hold the app. An older preview found there is named, with the remove that clears it.\n- A whole `remove` stops, deleting nothing, when `page.tsx` was changed by hand, since it imports the pages.\n- A formatter run no longer counts as a change by hand. `editor set` and `show` name the preview files they left as they were (`previewStale`).\n- A recorded page whose file is gone is written again, or left out of the nav, so the route always builds. Moved pages get a hash. A failed write leaves no temp file or empty folder, and says which step failed. A read-only file keeps its mode.\n- `preview app --theme` waits for other commands changing that theme, and its retry suggestion keeps `--theme`."
+    },
+    {
+      "path": ".changeset/experimental-theme-preview-hardening.md",
+      "sha256": "976485ae80293dbd9da1b31d1107c09d449efa8183434b3de526d68c1d3c82c5",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme preview`: safer adds, removes and starter apps.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- Preview pages go in `_pages/`, a folder Next never routes, so a preview at the project root or in `src/` no longer turns on the Pages Router. A preview an older release wrote into `pages/` is moved on the next add or remove.\n- A refusal deletes nothing: `remove <page>` loads the theme before it deletes a file, and names the whole-preview remove when the theme does not load. A theme that is gone is replaced by the app's own theme, with a note.\n- Only files the preview wrote are replaced or deleted, and never one changed by hand since (theme-preview.json records a hash of each). `remove` names the files it kept, the ones already gone, and the ones it wrote again.\n- Files are staged and renamed into place together; a failed write puts every file back and is refused with `ERR_WRITE_FAILED`.\n- A damaged theme-preview.json is refused with `ERR_THEME_INVALID`, naming the file and the way out, in add, list and remove.\n- `--path` is refused when it is a file, in `themes/`, `node_modules/` or a Pages Router folder, in a folder Next does not route, or written with Windows separators, `~` or white space at either end. The open line drops route groups and encodes each folder name.\n- Without `--path`, list and remove find a preview recorded for a theme.\n- `add`: an empty `--template` is refused; a block passed to `--template` says it is not a page and suggests page templates as commands; `--top` is taken as typed and only with a description; a description may be several words without quotes, and only its first 40 different words are ranked; a package that is named but not installed counts as missing; a changed theme writes the default pages again; a page file an interrupted run left behind with the same text is taken over.\n- Suggested commands are shell-safe, and a wrong `--theme` names the closest editor theme.\n- `list`, `remove` and `preview app` refuse extra arguments.\n- `preview app`: the app is written into a temp folder and moved into place, so a failure leaves nothing; folders inside the routes, `themes/` or `node_modules/`, files, dangling links and odd names are refused; a folder with only `.git` counts as empty; every open font the theme names is added with a pinned range; the Colors page is included; a one-mode theme starts in its mode; a stale theme build is rebuilt first; the home page links to the preview, the `.gitignore` covers `node_modules`, and the open line is quoted."
+    },
+    {
+      "path": ".changeset/experimental-theme-review-fixes.md",
+      "sha256": "d1651adcb0419b78705fea29409617dab60057313dd1369a4563466f0ca40f02",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor how --list` is now a switch, as `--list` is everywhere else in the CLI: the first word says what to list and any words after it filter the list (`how --list tokens accent`), and `--list` alone lists the kinds. Reading a built theme no longer writes a temporary file into `themes/<theme>/`; it uses the project's cache folder.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-round3.md",
+      "sha256": "69644283134f9c78b21a3952d8f1ece92710d08fd3f1fede3d4833d6b77fd391",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: fixes from a third theming round. `preview add \"<description>\"` adds the closest page when no page is exactly the one described, and `matched` says which words of the description it covers; only a description no page relates to is refused, and its suggestions repeat `--theme` and `--path`. A page the app cannot show is skipped and the next match is taken, from the ranking and then the template search. A page's nav label is its template's name, however it was added. The accent and status fills keep your exact color in dark mode too when text on them reads at 4.5:1; otherwise dark mode uses the nearest shade that reads, and the result says why. Setting `vibrancy` names the status colors the theme does not set, which keep the base theme's colors (and so do info-tinted surfaces such as colored cards), with the commands that bring them in. `new` lists the mode it applied with the other settings. `show` prints your exact value where an exact token setting wins, and sizes, numbers and fonts once instead of per mode. Notes name a part inside the part a token is set on (\"button inside toast\"). A token no part reads says it changes nothing you see now. `how` names the resting border (`border … --when variant:secondary`), answers a part's fill and text together (\"light gray button with dark text\"), and answers a status background (\"the error background\") with the status color. The Overview page's tabs and other controlled samples no longer throw when clicked, and its open popover and tooltip keep clear of each other at narrow widths too.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-round4.md",
+      "sha256": "57d0baf920179000232ec3b5dd660f2780abc7ed04619a1f22340cc8a5f5f4eb",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: fixes from a fourth theming round. `preview add \"<description>\"` adds an app page when the description names one (an issue tracker, a board, a dashboard, an app screenshot) instead of a hero, takes the side hero for a left-aligned or split hero, says that no page has a top nav of its own, and always says why it picked a page. A base `preview add` says which pages were there already and are written again (`refreshed`). `how` gives each token a value of its own type (`--color-border \"<color>\"`, `--border-width 1px`; only the `border` property takes a whole border), keeps the fill for a named tint (\"light blue tint with blue text\"), and no longer reads \"border color\" as a fill. `undo <theme> <thing>` names the setting it removed (`removed`) instead of printing it as the value in effect. A light-only or dark-only theme lists only its own mode's shades and notes. `show` lists corners or spacing set on a part or group, with what its parts get beside the whole-theme value (`partValues`). `neutral` names the base theme's page background and the command for a white page. `type` says what it still sets when `headings` sets weight or tracking; `type` and `text-size` keep each other's part of the scale in any order. A token no part reads says which tokens are built from it instead of claiming it changes nothing. An installed font says it is installed. A color's text switching between white and near-black says why.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-round4b.md",
+      "sha256": "34e018bb69a561132caf7a97f47c808079568e82271124d0d4b5050a667cdcf5",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: an accent or status fill keeps your exact color in dark mode only when it also stands out from the dark page (3:1) besides text reading on it; otherwise dark mode uses the nearest shade that does both, and the result says why. The preview's Colors page marks such a fill under the shade it really uses, for dark mode too. Suggestions from `preview add` quote the options they repeat, such as a `--path` with a space.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-round5.md",
+      "sha256": "b103467428b9147736fcaca754e80ae7a7c8c8ecc6c9ec53ff6e812c3f8ead11",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: `preview add \"<description>\"` picks an app page only when the description names the app in a phrase (an issue tracker, an issue detail, a kanban board), so a page with a \"buy tickets\" button or a landing page for an AI tool no longer gets an app page; a detail view comes before its list, and the ranked page stays first when it already is that app. `how` keeps the fill when a color word belongs to it (\"a dark card with a thin border\", \"colored buttons with a border\"). `show` names the radius token each part's corners really read. The `neutral` note offers a white page only in a theme with a light mode. When your exact accent or status color cannot be the dark fill, dark mode uses the shade nearest your color where text reads at 4.5:1 and the fill stands out from the dark page at 3:1. `undo <theme> <thing>` prints `setting` and `removed` as its JSON does.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-self-review.md",
+      "sha256": "0a35fa0790c80924a2c5d9fdce8b697bbae8ab56a580dc67048fb09070d282a9",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: fixes from a full review.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- `preview app --theme` copies the whole theme folder, generated colors included, byte for byte, so the new app type-checks.\n- `preview app <dir>` writes only into a new or empty folder (its `--overwrite` option is gone): a folder that is not empty is refused, with a free folder name to use.\n- Translucent text and backgrounds are measured as drawn: each is laid over what is under it before contrast is checked.\n- Two commands can run at once: each render uses a folder of its own.\n- A change that is saved but cannot be checked says \"saved, not checked\" and exits 0.\n- A light-only or dark-only theme applies only its own mode's settings and names the others, writes one value for the colors it sets, and its in-app preview starts in that mode with no switch.\n- A damaged undo history no longer breaks `set` (a new history starts, with a note), and `undo` says how to fix it.\n- Colors are picked against the theme's own exact page and surface colors.\n- A change that changes nothing builds nothing and adds no undo step.\n- `undo <theme> <thing>` says what applies now (`now`).\n- `show` names the radius token each part reads, or says it is unknown.\n- `how` answers border-only questions without a fill.\n- The preview picker matches app and article pages by phrase: a news story or blog post gets an article page, never a record page; a description no page relates to (no phrase, and fewer than three words or two fifths of them matched) is refused.\n- A preview outside the routes folder says the app does not serve it.\n- More than eight contrast problems end with \"and N more\"."
+    },
+    {
+      "path": ".changeset/experimental-theme-show-text.md",
+      "sha256": "913dc6b16b2c2c2f3821d5f44aa17fcf967f71b6019117873202999185437048",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme editor show`: the text output prints the palette paths and contrast notes whole instead of one character per line, and keeps one line for each token a palette family feeds.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/experimental-theme-stress-fixes.md",
+      "sha256": "6d78f26b8de87f9be9bfbfb13ede9977dd61468a9e38ad5ba75c8250ce36433e",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx experimental theme`: fixes from a real theming round. `headings` now keeps heading weight and letter spacing whatever order it and `type` are set in; `type` says what it no longer sets, and `show` marks a setting another one partly hides. A steep `type` scale (editorial, display) keeps text below the base size at its standard sizes, so small text stays readable. `show` lists every setting with its whole scope (`--on`, `--when`, `--state`, `--mode`). A gray color (`accent #171717`) makes gray shades in light and dark instead of inventing a hue. `neutral` no longer tints the page background (`--color-background-body` stays the base theme's). `set` accepts every token a color, `type`, `headings`, `corners`, `spacing` or `text-size` writes, so a dial's notes never name a token `set` refuses. When the components cannot be rendered (two copies of React, say), `new`, `set` and `undo` save the change and say \"saved, not checked\" with the cause and the code `ERR_THEME_NOT_CHECKED`, instead of failing after writing; `how` says what it could not check instead of listing no readers. A font that is not installed names the closest font that needs no install. `how` answers each aspect once, turns sizes in the question into `--when size:…`, takes each color from the word it belongs to, says when text takes the page's text color, and `how --list` with no kind lists the kinds. `preview add \"<description>\"` says what it matched and why, leaves app frames out, refuses with the closest pages to name when no page really matches, and takes the next match when a page cannot be shown here. The preview fills the whole window with the theme, shell and edges included; the Overview page now shows what themes most often break, and each cell of the Components page names the command that changes it most. `show --group` is now `show --section`: it picks a section of the theme-building sheet, so \"group\" only means a group of parts (`--on inputs`).",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/fileinput-dropzone-status-default-detached.md",
+      "sha256": "f188b91e6cbe08bf2e728c5584d30e5ad4427de2c7be23015a7e4cc3a8d4d894",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "FileInput's dropzone shows its status message below the drop area by default, so it no longer covers the drop area; an explicit `statusVariant=\"attached\"` still renders as before.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/finger-scroll-document-ref.md",
+      "sha256": "aa835f9d3cb46e9182e10d186c9af14d0431ba84c8afbb16820bdeca6dc664fc",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: Core's internal finger-scroll reader accepts a ref that names the document, so Lab's ChatVirtualizer can watch the page's own scroll when it attaches to `document.scrollingElement`. Apps import nothing new.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/fling-over-page-keeps-layer-open.md",
+      "sha256": "84ec60743981d4cb38a883151bc948abb63265a654cd25798599fd5490f77235",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A pan over the page that the browser doesn't take as a scroll no longer closes an open popover or selector list, and no longer taps the page element under the finger.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/focus-keyboard-swizzle-shared.md",
+      "sha256": "79dc19d050d5cb5755f3ba1e3b44f674417726e5391603e95c4b716fb06426df",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled overlay and the package's components now share one set of focus regions and one mobile keyboard model: nested focus regions from the package and a copy no longer both answer the same Tab, and package and copied fields agree on the keyboard's height, its layout guide and which elements ride it. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hit-area-scroll-quiet.md",
+      "sha256": "964f898d43764e5bfb78c342941264888d1dc791d506b0775c849ba2bbe93052",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "On a phone, a press on a control at rest no longer measures the page, so a scroll that starts there does not wait. Hit areas no longer measure while the page scrolls or while a parent's animation moves them, such as a screen that slides in. A press on a control that a parent moves still measures the page. When a parent starts to move after the last measurement, the browser's own hit test decides the tap. No API changes.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hook-doc-use-truncation.md",
+      "sha256": "9c320d44e1a80bd9b3981d3b2012e0f7983e7a05e754893b608a417a7e6c5c64",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Add hook documentation and interactive table cell truncation example block for `useTruncation`, demonstrating responsive string truncation and accessibility tooltips.",
+      "contributors": [
+        "utkarshpatwa393-sys"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/i18n-provider-example-order.md",
+      "sha256": "5d63a27c1938bb6ef90d12c80ae1fcebb48d06d2b80ba90937243c31dacdd2bf",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "InternationalizationProvider shows its examples in reading order: load a shipped locale, mirror the layout for right-to-left text (a new code example), override one string, then the calendar examples. Each live example is titled after its code example, so the two lists match.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-sets-authoring-coverage.md",
+      "sha256": "866280d50a3b116a2a13b1c79b22f28ec9424f1aebd47c4d7d7b2c83cc912d4a",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "Icon sets: authoring a set is easier. An author sees which icon meanings the bundled templates use that the set does not map yet, such as `document` and `share`; a copied template shows a placeholder for each. Only the experimental icon commands, the icon-set lists in `integration check` and Doctor, two icon definitions' search words, and the icon-set guide change.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- **Authoring receipts.** `experimental icon new-set`, `add`, and `map` end with one line when the set leaves template meanings unmapped: how many there are, the most used first with their template counts, and the `map` command to run. The JSON adds `templateMeanings: {unmapped: [{definition, templates}]}`. A dry run adds nothing.\n- **`experimental icon --definitions`.** Each definition shows how many bundled templates use it (`templates`) and whether the set maps it (`mapped`). The set is the one `--set` names, else the project's main set, else the only set of the icon-set package you run it in. `--set` is now accepted with `--definitions`.\n- **`integration check`.** Each set's `iconSets` entry adds `templateMeanings`, printed under \"Template icon meanings not mapped\". It is never counted and never fails a check, even with `--strict`.\n- **`new-set --adapter ./<path>#<export>`.** Declares the adapter a library of icon data objects or SVG strings needs, so the set wraps it with no hand edit to the data file.\n- **Clearer receipts.** The first `new-set --from` into a set with no icons says the set was created, not refreshed. `add --variant <look> --all` names the first ten icons the module lacks and how many more; the JSON still lists every one. The command that adds unlisted sets as backups (from `icon use` and Doctor) names every set the same way: by its name, or as `<package>/<set>` when two packages ship that name.\n- **Better suggestions.** A suggested icon whose id only starts with the definition's name and adds another thing (`delete-left`, a backspace key) comes after the icons the definition's words name (`trash`), and a word two definitions share (`store`) comes after the words only one has. `save` adds the word \"floppy disk\", and `bank` reads \"building library\" instead of \"library\"."
+    },
+    {
+      "path": ".changeset/icon-sets-template-meanings-wrapped-library.md",
+      "sha256": "2b915cd79b98c7ca1d60fba82328b5d2f3309b3788e742878f24d91557dd950b",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "Icon sets: copied templates draw the right icons in more sets, once a set maps the five new icon definitions. Only the experimental icon-set rewrite of `astryx template`, five new icon definitions, the bundled templates' `icons` declarations, and the icon-set guide change.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": "- **Distinct icons keep distinct meanings.** Some bundled templates gave two different icons one meaning, so both drew the same icon in every set. The Settings Dialog's \"Keyboard shortcuts\" and \"Developer\" rows, and its paintbrush and swatch, now draw different icons, and so do the icon pairs in Table Filter, Theme Showcase, and the Button Group showcase block. New icon definitions: `keyboard`, `paintBrush`, `documentSearch`, `bookmarkAdd`, and `wallet`. No set released before this change maps them, so with such a set the Settings Dialog's \"Keyboard shortcuts\", \"Color theme\" and \"Verbose logging\" rows, Table Filter's save-view button, and Theme Showcase's wallet draw the placeholder. A set draws these icons once it maps the new definitions (`astryx experimental icon map <definition> <icon> --set <main>`); until then each draws the placeholder, unless a set in your list wraps the template's library.\n- **An icon from a set's own library stays.** When a set in your list wraps the library a template imports an icon from, the icon is one your project chose. With the main set's own library, the icon keeps its import as written. With a backup set's library, an icon that no set maps keeps its import instead of becoming a placeholder. The report lists each one under `kept` with the reason."
+    },
+    {
+      "path": ".changeset/keyboard-hint-escape-and-persistence.md",
+      "sha256": "08c7f97e69461ca41519890a6cc583996b58a469e535bbe486a8053c019e1f37",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "The arrow-key hint that Toolbar, TabList and SegmentedControl show on first keyboard focus now stays until you press an arrow key or Escape, or move focus out of the group (WCAG 2.2 SC 1.4.13 Content on Hover or Focus). It used to disappear after 3 seconds, sometimes before it could be read, and Escape did not close it. Escape now closes only the hint, through the shared layer dismissal stack, and keeps focus where it is. `useKeyboardHint`'s `dismissAfterMs` no longer defaults to 3000; leave it unset.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/layer-entrance-lands-side.md",
+      "sha256": "c0006f769b220ea7cf2dca273a0ffa383639111da8b96b56102623e7aa674184",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "An anchored layer's entrance now slides from, and scales about, the side the layer lands on. Before, a layer that flipped because its requested side had no room still slid from that requested side, onto its trigger. The entrance also scales about the point where the layer meets its trigger, not the center of its box. A Selector list that opens over its selected item scales about the trigger's center and does not slide. This applies to Popover, DropdownMenu and its submenus, ContextMenu, Selector, ComplexSelector, Tooltip, HoverCard, Breadcrumbs and PowerSearch menus, and any layer that uses the shared entrance. Built-in layers have no option that keeps the old entrance. The public `layerAnimations` styles now also set `transform-origin`; a caller's own `transformOrigin` listed after them still wins.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/lightbox-pause-on-close.md",
+      "sha256": "b0e2538ec9baf3e247a1a70c2835727e29c6112e3a0b3ad42ef7e26b43edcef9",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Closing a Lightbox stops a video that was playing. The viewer stays mounted, so the picture and its sound would otherwise continue after Close, Escape, or a tap outside. A viewer that is already closed does not start playback either. Opening it again plays the current video when `hasAutoPlay` is set. A video inside the caption stays stopped.",
+      "contributors": [
+        "SebTardif"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/link-provider-docs.md",
+      "sha256": "3f24d99e2758b02dbb79f164e703c87e876fc205421e1a45a4ceead1ece373f0",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "`LinkProvider` docs say what `component` receives, including the `to` prop that router components read, that a link's own `as` or a nearer provider wins over it, and that a disabled Link does not use it.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/list-layout-swizzle-shared.md",
+      "sha256": "9c86cae42526ed2efd185257890193ccb6091398e96f863ebc888b52b8996aee",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled ListItem inside the package's List (or a package ListItem inside a swizzled List) now leaves the way a package row does: it keeps what it showed on screen, such as a swipe's travel, for its exit. Before, the List and the ListItem kept separate records of the rows the List reported and of the presentation a leaving row kept, so the row's exit lost that presentation. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/make-onclick-only-topnav-items-keyboard-accessib-7ru9.md",
+      "sha256": "6bc00aae7fe2426034a72a8f5f7f624309e91c112cb4fad9de8a6430efd45337",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Make onClick-only TopNav items keyboard accessible",
+      "contributors": [
+        "korkt-kim"
+      ],
+      "body": "Previously, onClick-only TopNav actions could be skipped by Tab or could not be activated from the keyboard. TopNavItem now provides button semantics and Enter/Space activation while preserving its anchor ref/event types and custom link rendering. Desktop TopNavMegaMenuItem actions and drawer TopNavMenu actions now use non-submitting native buttons.\n\nThis restores keyboard operation and action semantics for WCAG 2.2 A criteria 2.1.1 and 4.1.2. Disabled TopNavItem actions remain focusable but cannot activate; href navigation and the existing desktop menu keyboard model are unchanged."
+    },
+    {
+      "path": ".changeset/markdown-fence-swizzle-shared.md",
+      "sha256": "cb1c6cd94005d0a643429c0a2510e2712bbdc71937eacd5ac237a9fb96bb2a9c",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A fence plugin made with the package's `createMarkdownFenceTransform` now renders its node in a swizzled Markdown, and the reverse. Before, the copy described the plugin to its transform under its own keys, so the package's fence transform refused to run and the fence fell back to a plain code block. No new props, exports or defaults.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/menu-press-public-default.md",
+      "sha256": "2f289b267726c4dbbb71b871c81d486dc8d2c1326d3bb8317ce83456729651b6",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`useMenuPress` with no `longPressDelayMs` now follows DropdownMenu's finger rules on every device (`spec:AST-094` FR25, FR29, FR43): a finger or a pen opens the menu as it presses (inside a scroll view, once the 150 ms content-touch delay has passed), and the finger that opened it picks a row only after moving 10 px. To keep the previous behavior, a 500 ms hold and a pick at the opening finger's lift, pass `longPressDelayMs: 500`.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/menu-press-uimenu.md",
+      "sha256": "eb396da63a3a2d6def2e4f65576f9cd5f6f0cfddfbb5e3dd00395aecfb4dd36c",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Under a finger or a pen, on every device, the trigger of an anchored DropdownMenu or MoreMenu now opens its menu as it is pressed, instead of after a 500 ms hold (`spec:AST-094` FR29, FR43). Inside a scroll view it opens once the 150 ms content-touch delay has passed with no scroll, so a scroll that starts on it still scrolls. To keep the previous behavior, a tap that opens at the lift and a 500 ms hold, pass `presentation=\"popover\"`. A menu shown as a bottom sheet, and a mouse, are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/mixed-direction-text-order.md",
+      "sha256": "3ff60ef0e8852f020e0ccfef80c9df2bd9a0677510f1345ca2315080b992ec9a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Under right-to-left, plain text in `InputGroupText`, a `Badge` label and a `Token` label keeps the character order it was written in. Text with no right-to-left letter, such as a URL scheme (`https://`), a domain suffix (`.com`), a count (`+3`), `C++`, a handle (`@alice`) or a tag (`#design`), used to show reordered (`//:https`, `com.`, `3+`); it now lays out left to right. Text that contains a right-to-left letter keeps the page's direction, isolated from its neighbours, so `iPhone جديد` still reads right to left. A rich (non-string) label or child is isolated but keeps the page's direction: mark mixed directions on your own content. Plain `InputGroupText` text with no right-to-left letter sits in an inner `span`. Left-to-right pages are unchanged.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/mobilenav-presentation-hold.md",
+      "sha256": "06bd717164b003c8097fd5ecbc710cee99a612c10dc311c2480566bef09b0eb1",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: MobileNav keeps its dialog rendered from the open until its delayed close has run through the layer runtime's presentation hold (Layer/presentationHold.ts). No behavior change.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/motion-frame-swizzle-shared.md",
+      "sha256": "a00651a3c1cdca94a7e4bcbc00d27d0be468b875f6f217b56c08a772f584f18d",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled component that carries its own copy of Core's layout motion, spinner rotor or gesture sync now shares the package's: a layout change in one copy starts at the frame the other copy's change started in, so their glides land together; spinners from both copies are pinned to the timeline in one batch, so rings mounted together cost one style recalculation instead of one per copy; and a gesture sync running in one copy holds the other copy's gesture callbacks too. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/node-compile-cache.md",
+      "sha256": "998ccba10fd5e6173e4e6a609c92e408c297c6bf01c54fb852a8247e903c5d44",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "The CLI turns on Node's compile cache, so a run skips most of compiling the CLI's modules again. The cache sits in the user's own folder in the system temp folder (`node-compile-cache-<uid>`), used only once it exists (the first run on a machine just makes the folder, so a one-off run pays nothing for it) and only while it is a real folder the user owns and no one else can reach. Where the system has no user ids (Windows), that cannot be checked, so the cache stays off. `NODE_DISABLE_COMPILE_CACHE=1` turns it off. A cache that cannot be read or written is skipped without a word, and every command prints the same output.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/page-scroller-owner.md",
+      "sha256": "384204bfcc49aa3b2d2fc57af2081911ee14bb6f632d38d469cfebd5e04873fb",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: `useChatStreamScroll`'s page-scroller rules move to one owner module: whether a container scrolls the page, where its visible area starts, and where its scroll events fire. The hook behaves as before, and the undocumented `@astryxdesign/core/internal/page-scroller` entry gives the same rules to Lab's ChatVirtualizer. Internal entries are outside the public API and its compatibility promise.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/popover-focus-document-order.md",
+      "sha256": "700562e80ae6e2a02af6734dcc016f004afd93ddfb3575fce48f5c1a8eb3f346",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Popover: initial focus takes the first content control in document order everywhere. This changes the focused control only where `querySelectorAll` does not return document order, as in jsdom; browsers focus the same control as before.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/public-registries-swizzle-shared.md",
+      "sha256": "12371364bd7e84d4fad439426dc2affce3880b9c9b0a552a348b7af907fd21cf",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Icons registered with `registerIcons()` now reach swizzled `Icon`, `CodeBlock`, `Table` and `Timestamp` copies on the same React. Themes registered by name are now shared by every Core bundle loaded on one React. Each registry is one per React, so a second React on the page never renders the first one's elements. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/reorder-controller-rows-reader.md",
+      "sha256": "0e8c7f1df74285f96614f4a003838071e686d79c0cf1f25ba63c655c4f6032d0",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: Core's reorder controller finds a collection's rows through an internal rows reader, so a later change can reorder plain elements. List behaves as before, and apps import nothing new.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/resizable-swizzle-shared.md",
+      "sha256": "48f7f83ef73a11b115e76b041a12acddddadc3abaddef58e43a2f4c54ce38d2b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A swizzled ResizeHandle or LayoutPanel now finds the package's panel or handle beside it, and the reverse. When the region collapses, focus inside the panel moves to the handle and the panel goes inert. Before, each copy kept its own records of lent panels and handles, so the panel resized, but focus could drop to the page as it collapsed. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/root-entry-server-module.md",
+      "sha256": "63e3d12acbb052405ee0b130f358f38e481f9afcd356a4b7607a708b4cd079cd",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "The package root and the component barrels no longer carry `'use client'`. Inside a React Server Component, `import {Card, Stack, Badge, Code} from '@astryxdesign/core'` now renders the components that need no client code on the server, as their own modules intend; components that need the client stay client references. A Server Component that imports from the package root now builds with Next.js webpack. Client code renders the same as before. No API changes. To pass one of these components itself as a prop to a Client Component (for example `components={{inlineCode: Code}}` on `Markdown`), pass it from a `'use client'` module.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/scroll-edge-pan-tap-wobble.md",
+      "sha256": "ef191c2d1f4b3d13fef73550b3c569b0865a16fffe031a0d0f41e0dccef0ccac",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "In iOS Safari, a tap that wobbles less than 5 px on content under a scroll-edge pan keeps its click. The pan now holds the finger only once it has moved 5 px along its axis. In Lab, in iOS Safari, a tap on a pushed NavigationStack screen that drifts less than 5 px toward the back swipe now runs; one that drifts 5 px or more toward it still loses its click.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/scrollable-area-focus-move-no-commit.md",
+      "sha256": "c2aa0dd70df66699136045d3eaaebe14ae2a7174904d3cb5a973a32cd663f953",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A component built on useScrollableArea, such as ScrollableArea or BottomSheet, no longer renders again when focus moves between two descendants of a fitting viewport just after the component's own update.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/search-keyword-names-another-entry.md",
+      "sha256": "8baa4960e23444228f15dafb586c96f0d401b171cf4295f93b88162e9cafc24e",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx search` no longer counts a component or hook keyword that is another entry's name as a match for that entry, so `spinner` lists Spinner without NumberInput beside it. A keyword still counts when the entry's own description uses the word, or when it names the entry's own family member or its hook. `build` reads keywords as before.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/segmented-control-drift-keeps-choosing.md",
+      "sha256": "747757b8013f1a79ead669bafafc51c936218a7df1e3bece7b071185da331ec5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "SegmentedControl: a drag that drifts off the control keeps choosing by its horizontal position, clamped to the end segments, and the lift commits that segment. A mouse or a pen drags the same way. Escape or a browser cancel takes the press back, and the highlight returns at once.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/shared-id-sequences.md",
+      "sha256": "5ccc0c80905669e25d168533a10ad506c199b6f0342f653085d70caf5e1f4f35",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Toast ids are now one sequence across the package and a swizzled copy of `useToast`. Before, each copy counted from 1, so a toast from a swizzled Toast and a toast from the package could share an id in the same queue, and dismissing one removed the other. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/stored-command-list.md",
+      "sha256": "ac0d3c1981365f78f80a0d24d01bfa75c29024610fb06324210522885f4ea829",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "`astryx --help`, `-h` and `help` print the root help from a command list stored in the package when it is published, instead of loading every command first. The list holds the terms and descriptions the fully loaded CLI prints, so while every command loads the help reads the same. A command whose module fails to load is listed in the published root help under its normal description, instead of being marked as failed; running that command still reports the failure.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/stored-shipped-docs.md",
+      "sha256": "6bea2f9215a746ac6d897b669b073a10622810f53a599c91fd696526fef14158",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "Commands that read the docs Astryx ships (`search`, `build`, `docs`, `template`) read each shipped doc that holds only plain data from a copy of its exports stored in the package when it is published, instead of importing the file. The copy is keyed by the file's text, so an edited doc, a doc that imports or calls anything as it loads, and every integration's docs are imported as before. Every command prints the same output.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/table-windowing-measured-pitch.md",
+      "sha256": "aab9b327cd348beb72659bbd1f6044513c4de72c305b6d7d53d8f73aa813f79a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A windowed Table keeps windowing when a text-size, zoom or theme change makes every row taller than `rowHeight`. It windows at the height the rows measure, instead of rendering every row, and warns in development. Rows of unequal height still render every row.",
+      "contributors": [
+        "humbertovirtudes"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/template-components-stored.md",
+      "sha256": "7c6cc94fb8f53207cc4d88645e3d14f19e44ef3f18b0c01d1effea3db3ccb614",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "`search` and `build` read the components of a template Astryx ships from a list stored in the package when it is published, instead of parsing the template's source on every call; `template` does too when it leaves a template's demo content unchanged. The list holds exactly what parsing returns, keyed by the source text, so a changed source or an integration's template is parsed as before. Every command prints the same output.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/template-needs-real-imports.md",
+      "sha256": "0009b83aa8ffec6354163f24401ee713c4852974c14fd1ca9eccce30763a84e8",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx template` and `astryx build` read a template's needs from its real imports only. Words in comments, strings and JSX text no longer count as packages, so templates such as `form-wizard`, `form-wizard-vertical` and `table-tree` no longer ask you to install `Next`, `Distribution` or `canvas-editor`. A path alias such as `~/lib` or `#internal`, or a name npm does not accept, is not reported as a package to install.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/template-placeholder-dark-mode.md",
+      "sha256": "41b4b7cb7c30917cbf74bf28b7986d87d0c39d522784b687dab84c746749d594",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Template placeholder images follow dark mode. The placeholder a copied template page shows in place of its demo pictures is now a soft gray at low opacity that takes its tone from the surface behind it, so it no longer shows as a bright light-gray block in a dark theme. The gallery-hero, side-gallery and lightbox gallery examples no longer warn about duplicate keys when every picture is the placeholder.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-commands-refuse-unsafe-overwrites.md",
+      "sha256": "bf9c0fd649f0a18dbad8ecc9e5bf76169d01424ed9bf2dcc6ed140d3c218b2a4",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Theme commands no longer replace files they do not own, and they report the right errors. `theme template --overwrite` replaces only an earlier copy of the template or a theme source file, and refuses folders, blank paths and paths that are not `.ts`. `theme eject --overwrite` never writes into another theme's folder or a theme the theme editor made, and the result names the packages the fork needs (`missingPackages`, `installCommand`). `theme build --out <folder>` writes `<name>.css` into the folder; a build never replaces its source, or a file at a path `--out` names that it did not write, and two themes with one name in one run are refused (a header-less output of a CLI before 0.6.7 at the default paths, family outputs included, is still replaced). When `--out` names a file that a CLI before 0.6.7 wrote, the build says so: delete that file and run the same build again. Two `theme add`, `use` or `remove` commands at once keep both changes. A theme whose local folder or package is gone no longer blocks `use`, `add` or `remove` of other themes; it is left out with a note; one broken local theme folder no longer hides every other theme from `list` and `add`. `add` says which owner it chose when a local theme shadows a package theme. An option without its value is `ERR_MISSING_ARGUMENT` with the command's usage, and `astryx help <group> <command>` prints that command's help.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-showcase-sign-in-dialog.md",
+      "sha256": "11a17e022ddc020bf36ada73378dc63da4c48b3f085a9744d84ca0d4e923647b",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Open a sign-in dialog from the theme showcase's Sign in button, which was an inert link, so a theme's dialog header, close control, fields and footer buttons can be reviewed together.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-showcase-sign-in-reopens-empty.md",
+      "sha256": "4c5c67c5b284873e9cdec3035c6498dcf176e07ea99bab6264ae1de8f7980c66",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "The theme showcase's Sign in dialog opens empty each time, not with what was typed before a Cancel.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-targets-reused-scan.md",
+      "sha256": "6371718eb038151c96e5185b537469ff004096b84611b63ba7c48d1486d5436c",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "A process that calls `themeTargets()` more than once scans Core's component docs once. It reuses that scan while every folder and doc it read is unchanged, as the docs and search catalogs do. A Core reached through a symlink, as a project's node_modules reaches it, shares the scan of its real path. A one-shot `astryx theme targets` and the theme build's target check still scan once. Every command reports the same targets.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/toast-fallback-swizzle-shared.md",
+      "sha256": "f9afbbf7d11b5aaf3063715e5156fd6e5e2714129fed1d3cba6b35801c08fe72",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Without a `LayerProvider`, toasts from a swizzled `useToast` and from the package now show in one fallback stack. Before, each copy mounted its own fallback container, so the page showed two toast stacks that overlapped. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-focus-list-stays-open.md",
+      "sha256": "ec9f55959d8dce6f823d627267ad947d2a760b077c308592b970eafa4d38feba",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Tokenizer: with `hasEntriesOnFocus`, picking a choice from the list shown on focus keeps the input focused and the list open, with the next choice active, so you can pick several in a row. The list closes when no choice remains, at `maxEntries`, or when you press elsewhere, Tab away or press Escape. A pick from typed search results still closes the list.",
+      "contributors": [
+        "fullstackhacker",
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-input-group.md",
+      "sha256": "6b8041b6b6e79fba01803e0ee0d7a8f1ba24bc658574e0b9086d84d9c9406372",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Tokenizer is now an InputGroup-compatible control (#3520). Inside an `InputGroup` it consumes `InputGroupContext` instead of rendering its own `Field`, so the group owns the single label, description, and status chrome — no more duplicated label or nested field wrapper. The typeahead input is named by the group label plus the Tokenizer's own label (composed with `getInputARIA`, so `aria-describedby` merges the group's description/status with the input-local disabled reason rather than replacing it), and the control adopts the shared `groupStyles.inGroup` border/radius treatment so it joins the group's seam. The group also owns size, the disabled state, and validation: a disabled group disables its Tokenizer, a grouped Tokenizer takes the group's `size` (an explicit larger `size` no longer escapes the row), and its local `description`/`status` are neither referenced from `aria-describedby` nor painted beside the group's status. Because the group is a fixed-height single-line surface, a grouped Tokenizer keeps its tokens on one scrolling row instead of wrapping past the shared border — cap selections with `maxEntries` or summarize them with `tokenOverflowBehavior`. Its end controls (the clear button, `endContent`, and the busy indicator) hold the end of that row: tokens scroll beside them, never underneath. The row hides its native scrollbar and fades whichever edge hides tokens instead; forced colors bring back a thin native scrollbar. Keyboard users reach hidden tokens through their remove buttons (Shift+Tab from the input), and a disabled Tokenizer's row becomes its own Tab stop while it overflows, named by the Tokenizer's label, so the arrow keys can scroll it.",
+      "contributors": [
+        "AKnassa"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/typeahead-dismissed-pending-search.md",
+      "sha256": "a0cba039160d9d1d4b2a69d6555ae86eea9220581ded0ef6aedae3b0252f9be5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Typeahead and Tokenizer keep a dismissed menu closed when a search or focus bootstrap that was still running answers afterwards. Closing the menu with Escape, an outside click, Tab, or moving focus away also clears the busy indicator and drops a search still waiting on its debounce. A late answer for the same text is kept and shown the next time the menu opens, without searching again (reopening while that search still runs waits for its answer); an answer for text the person has since changed is dropped. Previously the late answer reopened the menu after it had been dismissed.",
+      "contributors": [
+        "hurrymaplelad"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-looping.md",
+      "sha256": "03ab7bc5c30ae4a34472aa21053a09e45da93b0e1dca5d94d58cdf7bcc6bf859",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "TimeInput, DateTimeInput: under a finger, the bottom sheet's minute wheel loops, as UIDatePicker's does: past 59 comes 00, and the hour stays, as on iOS. A drag, a fling, a tap or an arrow key passes the seam. Home, End and a click on a minute never pass it. The hour wheel does not loop yet. Each minute is still listed once for assistive technology.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    }
+  ]
+}
