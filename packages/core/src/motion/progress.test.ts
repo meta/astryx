@@ -200,13 +200,33 @@ describe('easedProgress', () => {
       easedProgress(0.2, x => x * x, {jumps: true}).velocity(0.1),
     ).toBeCloseTo(5, 1);
   });
+
+  // Popover and SegmentedControl read these numbers. Near an end the slope is
+  // the mean over the first or last millisecond, not the slope at that time.
+  it('reads its slope over one step of 1 ms, held inside the curve at its ends', () => {
+    const easeIn = easedProgress(0.1, cubicBezier([0.42, 0, 1, 1]));
+    expect(easeIn.velocity(1e-4)).toBeCloseTo(0.2053, 4);
+    const standard = easedProgress(0.1, cubicBezier([0.2, 0, 0, 1]));
+    expect(standard.velocity(1e-4)).toBeCloseTo(0.9761, 4);
+    const after = 1e-4 + 1e-3;
+    expect(standard.velocity(1e-4)).toBe(
+      (standard.at(after) - standard.at(0)) / after,
+    );
+    const before = 0.1 - 1e-4 - 1e-3;
+    expect(standard.velocity(0.1 - 1e-4)).toBe(
+      (standard.at(0.1) - standard.at(before)) / (0.1 - before),
+    );
+  });
 });
 
-describe('easedProgress with a retargeted velocity', () => {
-  const EASE = cubicBezier([0.25, 0.1, 0.25, 1]);
+describe('timedCurve', () => {
+  const EASING = [0.25, 0.1, 0.25, 1] as const;
+  const EASE = cubicBezier(EASING);
+  const progressOver = (durationMs: number, velocity?: number) =>
+    timedCurve({from: 0, to: 1, durationMs, easing: EASING, velocity});
 
   it('runs from 0 to 1 over the duration on the easing, then holds 1', () => {
-    const curve = easedProgress(0.3, EASE);
+    const curve = progressOver(300);
     expect(curve.duration).toBeCloseTo(0.3, 9);
     expect(curve.at(0)).toBeCloseTo(0, 9);
     expect(curve.at(0.15)).toBeGreaterThan(0.5);
@@ -217,7 +237,7 @@ describe('easedProgress with a retargeted velocity', () => {
   });
 
   it('starts at a retargeted velocity and still lands on time, at rest', () => {
-    const curve = easedProgress(0.3, EASE, {velocity: 6});
+    const curve = progressOver(300, 6);
     expect(curve.velocity(0)).toBe(6);
     const h = 1e-4;
     expect((curve.at(h) - curve.at(0)) / h).toBeCloseTo(6, 1);
@@ -233,31 +253,28 @@ describe('easedProgress with a retargeted velocity', () => {
   });
 
   it('from rest is the eased curve itself', () => {
-    const curve = easedProgress(0.3, EASE, {});
+    const curve = progressOver(300);
     for (const t of [0, 0.05, 0.15, 0.25]) {
       expect(curve.at(t)).toBe(EASE(t / 0.3));
     }
   });
 
   it('lands at once for a zero duration', () => {
-    const curve = easedProgress(0, EASE, {velocity: 6});
+    const curve = progressOver(0, 6);
     expect(curve.duration).toBe(0);
     expect(curve.at(0)).toBe(1);
+    expect(curve.velocity(0)).toBe(0);
   });
-});
 
-describe('timedCurve', () => {
-  it('is easedProgress on its values, with the velocity in those units', () => {
+  it('carries the velocity in the units of its values', () => {
     const curve = timedCurve({
       from: 100,
       to: 400,
       durationMs: 300,
-      easing: [0.25, 0.1, 0.25, 1],
+      easing: EASING,
       velocity: 1800,
     });
-    const progress = easedProgress(0.3, cubicBezier([0.25, 0.1, 0.25, 1]), {
-      velocity: 6,
-    });
+    const progress = progressOver(300, 6);
     for (const t of [0, 0.05, 0.15, 0.3]) {
       expect(curve.at(t)).toBeCloseTo(100 + 300 * progress.at(t), 9);
     }
