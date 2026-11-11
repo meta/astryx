@@ -99,6 +99,13 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
   `width`, else the trigger's minimum width), conditional internal scrolling,
   and the measurement lifecycle needed to support them.
 - The current fallback close control appended by the hook.
+- The touch presentation's surface motion (`usePopoverSurfaceMotion`,
+  `popoverSurfaceMotion.ts`). `createRectMorphSurfaceMotion`, exported from
+  `popoverSurfaceMotion.ts`, plays the same grow and shrink on the shared rect
+  morph. Popover never calls it. DropdownMenu passes it as the hook's
+  `createMotion` option, with `holdUntilFirstFrame`, which holds taps from the
+  open until the grow's first frame. A `present` call's `isTouch` decides the
+  touch presentation from the open's own input. Popover passes none of these.
 
 **Does not own / non-goals**
 
