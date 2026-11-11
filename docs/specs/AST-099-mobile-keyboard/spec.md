@@ -357,7 +357,8 @@ app to turn on.
 ### Implementation gaps
 
 TextInput, TextArea, and NumberInput meet FR9 apart from the missing scroll
-range (Gap 11). Each other gap below is open.
+range (Gap 11) and a modal BottomSheet shorter than `tall` (Gap 19). Each other
+gap below is open.
 
 - **Gap 1 — The keyboard module.** Partly met: the keyboard module
   (`packages/core/src/keyboard/`) measures the keyboard, keeps focus from
@@ -368,8 +369,9 @@ range (Gap 11). Each other gap below is open.
   yet (Gaps 3–8).
 - **Gap 2 — TextInput, TextArea, and NumberInput.** Met: each passes its input
   to the keyboard module, which keeps the focused field above the keyboard as
-  FR9 describes, apart from the missing scroll range (Gap 11) and the rise in
-  Chrome on Android (Gap 13).
+  FR9 describes, apart from the missing scroll range (Gap 11), the rise in
+  Chrome on Android (Gap 13), and a modal BottomSheet shorter than `tall`
+  (Gap 19).
 - **Gap 3 — The typed fields of DateInput, DateTimeInput, and TimeInput.** No
   keyboard handling. Their touch picker fields are read-only with no
   input mode and bring up no keyboard, so they are outside FR9.
