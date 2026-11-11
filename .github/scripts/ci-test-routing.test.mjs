@@ -527,6 +527,7 @@ describe('ci.yml RTL package sharding', () => {
         'pr-rtl-shard',
         'pr-touched-components',
         'pr-visual',
+        'release-specs-plan',
         'visual-scout',
       ].sort(),
     );
@@ -891,8 +892,9 @@ describe('ci.yml interaction proofs', () => {
         candidate.uses?.startsWith('actions/checkout@') &&
         candidate.with?.path === undefined,
     );
+    // Main's nightly full run checks the commit it runs on.
     expect(checkout?.with?.ref).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     const run = step('Run interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');

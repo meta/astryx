@@ -134,7 +134,7 @@ describe('useTableRowIndex', () => {
       const rowIndex = useTableRowIndex({data: rows});
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 320,
+        initialViewportHeight: 320,
       });
       return (
         <Table
@@ -169,7 +169,7 @@ describe('useTableRowIndex', () => {
       const rowIndex = useTableRowIndex({data: rows, getRowKey});
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 320,
+        initialViewportHeight: 320,
       });
       return (
         <Table

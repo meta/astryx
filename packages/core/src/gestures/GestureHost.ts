@@ -179,6 +179,7 @@ import {
   disarmClickGuard,
   withoutClickGuard,
 } from '../utils/clickGuard';
+import {clockOf, type EventClock} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
 import {
@@ -662,19 +663,33 @@ function panTakesMove(
 }
 
 /**
- * An event's time on the arena's clock (`performance.now()`). Some engines
- * and DOM emulators stamp events in epoch milliseconds instead.
+ * An event's time on the arena's clock: `timing.now()`, with `timing` the
+ * clock of the event's own window. Some engines and DOM emulators stamp
+ * events in epoch milliseconds instead.
  */
-function eventTime(event: Event): number {
+function eventTime(event: Event, timing: EventClock | null): number {
   const time = event.timeStamp;
-  if (
-    time > 1e12 &&
-    typeof performance !== 'undefined' &&
-    performance.timeOrigin > 0
-  ) {
-    return time - performance.timeOrigin;
+  if (time > 1e12 && timing != null && timing.timeOrigin > 0) {
+    return time - timing.timeOrigin;
   }
   return time;
+}
+
+/**
+ * The arena clock for `doc`. The page's own document keeps the page's clock.
+ * A same-origin iframe or a Picture-in-Picture window stamps its events from
+ * its own start, so its clock reads that window's `performance`. A page can
+ * replace that object after the host exists, so each reading looks it up.
+ */
+function documentClock(doc: Document): GestureClock {
+  const view = doc.defaultView;
+  if (view == null || view === globalThis) {
+    return browserClock;
+  }
+  return {
+    ...browserClock,
+    now: () => clockOf(doc)?.now() ?? browserClock.now(),
+  };
 }
 
 /** A touch list as an array; a synthetic event may carry none. */
@@ -812,6 +827,13 @@ export class GestureHost {
   private claimedLiftTimer: unknown = null;
   /** The arena's clock, which the claimed lifts' timer runs on too. */
   private readonly clock: GestureClock;
+  /**
+   * The clock of the document's own window, which stamps its events. A page
+   * can replace it after the host exists, so each read looks it up.
+   */
+  private get timing(): EventClock | null {
+    return clockOf(this.doc);
+  }
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   private readonly isPrimaryPointerCoarse: () => boolean;
@@ -910,7 +932,7 @@ export class GestureHost {
         return {left, top, width, height};
       },
     };
-    this.clock = options.clock ?? browserClock;
+    this.clock = options.clock ?? documentClock(doc);
     this.arena = new GestureArena({
       clock: this.clock,
       environment,
@@ -2285,7 +2307,7 @@ export class GestureHost {
       return;
     }
     this.wheelsSeen.add(wheel);
-    const time = eventTime(wheel);
+    const time = eventTime(wheel, this.timing);
     const kind = wheel.ctrlKey ? 'pinch' : 'pan';
     let gesture = this.wheel;
     if (
@@ -2986,7 +3008,7 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
-    this.endWheel(eventTime(event));
+    this.endWheel(eventTime(event, this.timing));
     this.noteFingersDown(event);
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
@@ -2996,7 +3018,7 @@ export class GestureHost {
     if (this.fingerTargets.length > 1) {
       this.failUnclaimedLoneFingerPans();
     }
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const inputs: ArenaBeganInput[] = [];
     const untracked: TouchBeganInput[] = [];
     const stale: number[] = [];
@@ -3117,7 +3139,7 @@ export class GestureHost {
       return;
     }
     this.dropFingersNotDown(event);
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const ids: number[] = [];
     const inputs: TouchInput[] = [];
     for (const touch of touchesOf(event.changedTouches)) {
@@ -3225,7 +3247,7 @@ export class GestureHost {
    */
   private readonly onClaimedTouchEnd = (event: Event): void => {
     const end = event as TouchEvent;
-    const time = eventTime(end);
+    const time = eventTime(end, this.timing);
     for (let i = this.claimedLifts.length - 1; i >= 0; i--) {
       if (time - this.claimedLifts[i].time > CLAIMED_LIFT_MS) {
         this.claimedLifts.splice(i, 1);
@@ -3308,7 +3330,7 @@ export class GestureHost {
       return;
     }
     this.dropFingersNotDown(event);
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const inputs: TouchInput[] = [];
     const retargetedEnds: {
       id: number;
@@ -3428,7 +3450,7 @@ export class GestureHost {
       }
     }
     if (ids.length > 0) {
-      this.arena.cancelled(ids, eventTime(event));
+      this.arena.cancelled(ids, eventTime(event, this.timing));
     }
   };
 
@@ -3491,7 +3513,7 @@ export class GestureHost {
       }
     }
     if (ids.length > 0) {
-      this.arena.cancelled(ids, eventTime(event));
+      this.arena.cancelled(ids, eventTime(event, this.timing));
     }
   }
 
@@ -3703,7 +3725,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    this.endWheel(eventTime(event));
+    this.endWheel(eventTime(event, this.timing));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
     if (!isPointerKind(event.pointerType)) {
@@ -3760,7 +3782,7 @@ export class GestureHost {
         id,
         x: event.clientX,
         y: event.clientY,
-        time: eventTime(event),
+        time: eventTime(event, this.timing),
         pointerType: event.pointerType,
         target,
         scroll: createNativeScrollProbe(target),
@@ -3803,8 +3825,8 @@ export class GestureHost {
             id,
             x: event.clientX,
             y: event.clientY,
-            time: eventTime(event),
-            history: coalescedHistory(event),
+            time: eventTime(event, this.timing),
+            history: coalescedHistory(event, this.timing),
           },
         ]);
       }
@@ -3817,8 +3839,8 @@ export class GestureHost {
           id,
           x: event.clientX,
           y: event.clientY,
-          time: eventTime(event),
-          history: coalescedHistory(event),
+          time: eventTime(event, this.timing),
+          history: coalescedHistory(event, this.timing),
         },
       ]);
       return;
@@ -3835,7 +3857,7 @@ export class GestureHost {
         this.liftStamps.set(id, {
           x: event.clientX,
           y: event.clientY,
-          time: eventTime(event),
+          time: eventTime(event, this.timing),
         });
       }
       this.fingerPointers.delete(event.pointerId);
@@ -3855,7 +3877,12 @@ export class GestureHost {
     const hold = this.claimHolds.get(id);
     this.unlockSelection(id);
     const dispositions = this.arena.ended([
-      {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
+      {
+        id,
+        x: event.clientX,
+        y: event.clientY,
+        time: eventTime(event, this.timing),
+      },
     ]);
     // A selection the lift's own handlers made stays, as a click's does.
     hold?.keepLiftSelection();
@@ -3903,7 +3930,7 @@ export class GestureHost {
       x: event.clientX,
       y: event.clientY,
       target: landedOn(event),
-      time: eventTime(event),
+      time: eventTime(event, this.timing),
     });
     if (this.claimedLifts.length > CLAIMED_LIFT_LIMIT) {
       this.claimedLifts.shift();
@@ -3954,7 +3981,7 @@ export class GestureHost {
         // browser scrolls with it): its touch events, now the only channel,
         // sample it, as a watcher following the scroll to the lift needs.
         this.pointerFed.delete(id);
-        this.browserTook([id], eventTime(event));
+        this.browserTook([id], eventTime(event, this.timing));
       }
       return;
     }
@@ -3966,7 +3993,7 @@ export class GestureHost {
       this.pointerKinds.delete(event.pointerId);
       this.unlockSelection(id, true);
       this.retargeted.delete(id);
-      this.arena.cancelled([id], eventTime(event));
+      this.arena.cancelled([id], eventTime(event, this.timing));
     }
   };
 
@@ -4083,7 +4110,7 @@ export class GestureHost {
   }
 
   private readonly onScroll = (event: Event): void => {
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const scroller = event.target === this.doc ? this.doc : event.target;
     if (!isNode(scroller) || this.ownedScrolls.has(scroller)) {
       return;
@@ -4271,7 +4298,10 @@ function needsSuppression(
   return false;
 }
 
-function coalescedHistory(event: PointerEvent): TouchSample[] {
+function coalescedHistory(
+  event: PointerEvent,
+  timing: EventClock | null,
+): TouchSample[] {
   if (typeof event.getCoalescedEvents !== 'function') {
     return [];
   }
@@ -4279,7 +4309,7 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
   return coalesced.slice(0, -1).map(sample => ({
     x: sample.clientX,
     y: sample.clientY,
-    time: eventTime(sample),
+    time: eventTime(sample, timing),
   }));
 }
 

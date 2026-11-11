@@ -137,6 +137,11 @@ const STRUCTURAL_VARS = new Set([
   // Also beside it: how far above the viewport's bottom a layer ends while the
   // keyboard is up. Runtime geometry, never authored by a theme.
   '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
 ]);
 
 /**
@@ -315,6 +320,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   '--_list-corner-start-end',
   '--_list-corner-end-start',
   '--_list-corner-end-end',
+  // Table FR19 and the container-padding record's block-edge geometry: a
+  // windowed Table includes the parent padding that it bleeds across.
+  '--_table-bleed-block-start',
+  '--_table-bleed-block-end',
   // The container-padding record's corner geometry: a rounded Card, Dialog,
   // or BottomSheet hands its block-edge radius to the shared corner
   // publication beside container().
