@@ -3,11 +3,11 @@
 /**
  * @file tooltipReason.test.tsx
  * @input Uses vitest, @testing-library/react, useTooltipInternal, Button,
- *   IconButton, Link, Avatar and Tooltip
- * @output Tests that a control never shows two tooltips: while a reason
- *   tooltip covers a control, the control's own label tooltip neither shows
- *   nor adds to its accessible description, and both return when the reason
- *   turns off
+ *   IconButton, Link, Avatar, Tooltip, TextInput and ComplexSelector
+ * @output Tests that a disabled reason is the only tooltip its control shows:
+ *   while a reason tooltip covers a control, the control's own label tooltip
+ *   neither shows nor adds to its accessible description, and it returns
+ *   when the reason turns off
  * @position Testing; validates useTooltip's `isReason` option and the
  *   tooltip-reason mark
  */
@@ -15,7 +15,7 @@
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import type {ReactNode} from 'react';
-import {useTooltipInternal} from './useTooltip';
+import {useTooltip, useTooltipInternal} from './useTooltip';
 import {Tooltip} from './Tooltip';
 import {Button} from '../Button/Button';
 import {IconButton} from '../IconButton/IconButton';
@@ -23,6 +23,7 @@ import {Link} from '../Link/Link';
 import {Avatar} from '../Avatar/Avatar';
 import {Icon} from '../Icon/Icon';
 import {TextInput} from '../TextInput/TextInput';
+import {ComplexSelector} from '../ComplexSelector/ComplexSelector';
 
 const originalMatches = HTMLElement.prototype.matches;
 const openPopovers = new WeakSet<HTMLElement>();
@@ -161,7 +162,7 @@ const cases: [string, (label: string) => ReactNode, () => HTMLElement][] = [
   ],
 ];
 
-describe('a control never shows two tooltips', () => {
+describe('a disabled reason is the only tooltip its control shows', () => {
   it.each(cases)(
     '%s: under a reason, its label tooltip neither shows nor describes it; both return when the reason turns off',
     async (_name, renderControl, getControl) => {
@@ -223,4 +224,73 @@ describe('a control never shows two tooltips', () => {
     expect(shownTooltips()).toContain(LABEL);
     expect(shownTooltips()).not.toContain(REASON);
   });
+
+  it('a Tooltip around a ComplexSelector disabled with a reason shows only the reason', async () => {
+    vi.useFakeTimers();
+    const LABEL = 'Pick the columns to show';
+    render(
+      <Tooltip content={LABEL}>
+        <ComplexSelector
+          label="View options"
+          value={[]}
+          isDisabled
+          disabledMessage={REASON}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>
+      </Tooltip>,
+    );
+    await act(async () => {});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
+    await hoverAndWait(trigger);
+    expect(shownTooltips()).toContain(REASON);
+    expect(shownTooltips()).not.toContain(LABEL);
+    expect(trigger).not.toHaveAccessibleDescription(
+      expect.stringContaining(LABEL),
+    );
+  });
+
+  it("keeps a controlled label tooltip's isOpen under a reason, and shows it once the reason ends", async () => {
+    vi.useFakeTimers();
+    const LABEL = 'Saved a minute ago';
+    const onOpenChange = vi.fn();
+    function ControlledLabel() {
+      const label = useTooltip({isOpen: true, onOpenChange});
+      return (
+        <button type="button" ref={label.ref}>
+          Status
+          {label.renderTooltip(LABEL)}
+        </button>
+      );
+    }
+    const {rerender} = render(
+      <ReasonContainer isOn>
+        <ControlledLabel />
+      </ReasonContainer>,
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(shownTooltips()).not.toContain(LABEL);
+    expect(
+      screen.getByRole('button', {name: 'Status'}),
+    ).not.toHaveAccessibleDescription(expect.stringContaining(LABEL));
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    rerender(
+      <ReasonContainer isOn={false}>
+        <ControlledLabel />
+      </ReasonContainer>,
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(shownTooltips()).toContain(LABEL);
+  });
+
+  // Known limit (Tooltip FR14): coverage is read when a tooltip renders or
+  // would show. A child that never re-renders when a reason turns on later
+  // keeps its label in the description until it renders again.
+  it.todo(
+    "drops a memoized child's label description when a reason turns on later without re-rendering the child",
+  );
 });

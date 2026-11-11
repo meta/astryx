@@ -339,11 +339,13 @@ export function useTooltipInternal(
 
   const popoverXstyle = styles.container;
 
-  // A control never shows two tooltips. While a reason tooltip covers this
-  // tooltip's trigger, this one renders no text, so it neither shows nor adds
-  // to the control's accessible description. Read when the tooltip would show
-  // and after each render, which a reason that turns on or off causes.
+  // A disabled reason is the only tooltip its control shows. While a reason
+  // tooltip covers this tooltip's trigger, this one renders no layer, so it
+  // neither shows nor adds to the control's accessible description. Read when
+  // the tooltip would show and after each render, which a reason that turns
+  // on or off causes.
   const [isCovered, setIsCovered] = useState(false);
+  const isCoveredRef = useRef(false);
 
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -924,10 +926,16 @@ export function useTooltipInternal(
   }, [isReason, isEnabled]);
 
   // Syncs whether a reason tooltip covers this tooltip's trigger, read from
-  // the DOM after each render; an open tooltip a reason now covers closes.
+  // the DOM after each render. State changes only when coverage changes. An
+  // uncontrolled open tooltip that a reason now covers closes; a controlled
+  // one keeps the caller's `isOpen` and renders no layer until the reason ends.
   useEffect(() => {
     const next = isCoveredNow();
-    if (next && isLayerOpen) {
+    if (next === isCoveredRef.current) {
+      return;
+    }
+    isCoveredRef.current = next;
+    if (next && isLayerOpen && isOpen === undefined) {
       hideLayer();
     }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the reason mark, which only the DOM holds
@@ -956,14 +964,16 @@ export function useTooltipInternal(
     }
     if (isOpen) {
       clearTimeouts();
-      showLayer();
+      // The caller's value stands under a reason too; renderTooltip renders
+      // no layer while a reason covers the trigger.
+      showLayerNow();
     } else {
       clearTimeouts();
       // A hold ends when the consumer closes the tooltip.
       dropHold();
       hideLayer();
     }
-  }, [isOpen, clearTimeouts, showLayer, hideLayer, dropHold]);
+  }, [isOpen, clearTimeouts, showLayerNow, hideLayer, dropHold]);
 
   // Dismiss on Escape (WCAG 1.4.13 — dismissible) through the shared layer
   // stack. A visible tip is the top-most layer, so it takes the press and
@@ -1019,6 +1029,9 @@ export function useTooltipInternal(
       children: ReactNode,
       props?: Omit<ContextRenderProps, 'positioning'>,
     ): ReactNode => {
+      if (isCovered) {
+        return null;
+      }
       const renderPlacement = props?.placement ?? placement;
       const renderProps = {
         placement: renderPlacement,
@@ -1043,7 +1056,7 @@ export function useTooltipInternal(
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {isCovered ? null : children}
+          {children}
         </div>,
         renderProps,
       );
